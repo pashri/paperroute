@@ -546,6 +546,22 @@ class RaisingObserver:
         """
         raise RuntimeError(f'pins {pins} {shown}')
 
+    def device_settings_seen(self, *, settings: DeviceSettings) -> None:
+        """
+        Fail.
+
+        Parameters
+        ----------
+        settings : DeviceSettings
+            Ignored.
+
+        Raises
+        ------
+        RuntimeError
+            Always.
+        """
+        raise RuntimeError(f'device settings {settings}')
+
     def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
         """
         Fail.
@@ -668,6 +684,16 @@ class CallRecorder:
             Index of the pin shown, or None when the unpinned place is.
         """
         self.pins.append((pins, shown))
+
+    def device_settings_seen(self, *, settings: DeviceSettings) -> None:
+        """
+        Ignore the device settings.
+
+        Parameters
+        ----------
+        settings : DeviceSettings
+            Ignored.
+        """
 
     def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
         """

@@ -17,13 +17,7 @@ ZONE: Final[ZoneInfo] = ZoneInfo('Australia/Sydney')
 CREDENTIAL: Final[Credential] = Credential(
     label='Demo key', refusal='Bad demo key.', not_saved='Demo key not saved.',
 )
-APP_FACTS: Final[str] = 'app facts'
 LINK: WifiStatus = WifiStatus(managed=True, ssid='Home', dbm=-60)
-
-
-async def no_app() -> object:
-    """Find nothing for the app to report."""
-    return None
 
 
 def probe_of(*, root: Path, version_file: Path | None) -> SystemProbe:
@@ -52,7 +46,6 @@ def probe_of(*, root: Path, version_file: Path | None) -> SystemProbe:
                 display_name='Demo',
             ),
         ),
-        app_probe=no_app,
         last_error=LastError(zone=ZONE),
         data_dir=root,
         version_file=version_file,
@@ -105,33 +98,6 @@ async def test_probe_reads_system_files(tmp_path: Path) -> None:
     assert facts.last_error is None
 
 
-async def app_facts() -> object:
-    """
-    Find what the app reports.
-
-    Returns
-    -------
-    object
-        A marker.
-    """
-    return APP_FACTS
-
-
-async def test_probe_carries_the_apps_facts(tmp_path: Path) -> None:
-    """What the app's probe finds is the facts' app part."""
-    probe = SystemProbe(
-        wifi=FakeWifi(link=LINK),
-        keys=(),
-        app_probe=app_facts,
-        last_error=LastError(zone=ZONE),
-        data_dir=tmp_path,
-        version_file=None,
-        root=tmp_path,
-    )
-    facts = await probe.probe()
-    assert facts.app == APP_FACTS
-
-
 async def test_probe_without_files_gives_none(tmp_path: Path) -> None:
     """Missing files give None, and no version file gives 'dev'."""
     facts = await probe_of(root=tmp_path, version_file=None).probe()
@@ -164,7 +130,6 @@ async def test_probe_without_data_dir(tmp_path: Path) -> None:
                 display_name='Demo',
             ),
         ),
-        app_probe=no_app,
         last_error=LastError(zone=ZONE),
         data_dir=tmp_path / 'gone',
         version_file=None,
@@ -194,7 +159,6 @@ async def test_probe_reports_each_missing_key(tmp_path: Path) -> None:
     probe = SystemProbe(
         wifi=FakeWifi(),
         keys=keys,
-        app_probe=no_app,
         last_error=LastError(zone=ZONE),
         data_dir=tmp_path,
         version_file=None,

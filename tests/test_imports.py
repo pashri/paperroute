@@ -234,7 +234,6 @@ MOVED: Final[tuple[str, ...]] = (
     'render.strip_view',
     'render.trip_marks',
     'summary',
-    'web_observer',
 )
 SCREEN_IMPORTS: Final[str] = (
     'import paperroute_device.screen, sys; '

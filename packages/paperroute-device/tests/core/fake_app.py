@@ -1,5 +1,6 @@
 """A small app that records what the kit hands it, for the kit's tests."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Final
@@ -27,6 +28,7 @@ from paperroute_hardware.core.knob_events import (
 START: Final[datetime] = datetime(2026, 11, 10, 8, 0, tzinfo=UTC)
 ZONE: Final = UTC
 HELD: Final[str] = 'held'
+ASK: Final[str] = 'ask'
 BOTH: Final[KnobsHeld] = KnobsHeld()
 DOWN: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)
 UP: Final[KnobPressed] = KnobPressed(knob=Knob.TOP)
@@ -82,10 +84,91 @@ class FakeState:
 
 
 class FakeApp(App[FakeState]):
-    """An app whose hooks read and record its state."""
+    """
+    An app whose hooks read and record its state.
+
+    Parameters
+    ----------
+    early : object | None
+        The event `before_tick` gives before each tick, or None.
+    crash : bool
+        Whether `perform` raises.
+    """
 
     offline_phrase = 'cached times'
     menu_rows = (DO_IT,)
+
+    def __init__(
+        self, *, early: object | None = None, crash: bool = False,
+    ) -> None:
+        self.early = early
+        self.crash = crash
+        self.performed: list[object] = []
+        self.observed: list[object] = []
+
+    async def perform(
+        self, *, effect: object, post: Callable[[object], None],
+    ) -> None:
+        """
+        Record an effect; the ``'work'`` effect posts ``'worked'``.
+
+        Parameters
+        ----------
+        effect : object
+            The effect.
+        post : Callable[[object], None]
+            Posts an event.
+
+        Raises
+        ------
+        RuntimeError
+            When the app was made to crash.
+        """
+        self.performed.append(effect)
+        if self.crash:
+            raise RuntimeError('perform broke')
+        if effect == 'work':
+            post('worked')
+
+    async def before_tick(self) -> object | None:
+        """
+        Give the early event.
+
+        Returns
+        -------
+        object | None
+            `early`.
+        """
+        return self.early
+
+    async def probe(self) -> object:
+        """
+        Find the app's part of the facts.
+
+        Returns
+        -------
+        object
+            ``'probed'``.
+        """
+        return 'probed'
+
+    def observe(
+        self, *, before: FakeState, after: FakeState, event: object,
+    ) -> None:
+        """
+        Record the event of each step.
+
+        Parameters
+        ----------
+        before : FakeState
+            Ignored.
+        after : FakeState
+            Ignored.
+        event : object
+            The event.
+        """
+        del before, after
+        self.observed.append(event)
 
     def start(
         self, *, section: object | None, stored: bool, device: DeviceState,
@@ -228,7 +311,8 @@ class FakeApp(App[FakeState]):
         device : DeviceState
             Ignored.
         event : object
-            A string names the view; anything else does nothing.
+            A string names the view; ``'ask'`` asks for ``'work'``
+            instead; anything else does nothing.
 
         Returns
         -------
@@ -236,6 +320,8 @@ class FakeApp(App[FakeState]):
             State showing the view, and ``'held'`` and ``'kept'``.
         """
         del device
+        if event == ASK:
+            return state, ('work',)
         if not isinstance(event, str):
             return state, ()
         return replace(state, view=event), (HELD, 'kept')

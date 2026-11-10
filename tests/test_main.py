@@ -81,6 +81,7 @@ from paperroute_transit.app_render import MapRenderer
 from paperroute_transit.board import (
     CityParts,
     board_display,
+    board_observer,
     builder_for,
     device_for,
     device_pages_for,
@@ -112,7 +113,6 @@ from paperroute_transit.observers import Timings
 from paperroute_transit.ports import FeedsClient
 from paperroute_transit.render.map_base import draw_map_base
 from paperroute_transit.summary import Summary
-from paperroute_transit.web_observer import web_observer
 
 if TYPE_CHECKING:
     from paperroute_device.adapters.tk_monitor import TkMonitor
@@ -1070,7 +1070,7 @@ def test_live_feeds_count_into_the_summary_given(
 def test_web_observer_feeds_frames_and_ticks_to_the_summary() -> None:
     """The web app's observers include the run summary and the timings."""
     timings, summary = Timings(), Summary()
-    observer = web_observer(timings=timings, summary=summary)
+    observer = board_observer(timings=timings, summary=summary)
     observer.frame_drawn(render_ms=4.0)
     assert summary.report()['frames'] == 1
     assert timings.frames == 1
@@ -1177,7 +1177,6 @@ async def test_device_for_probes_and_resets_every_key(
     last_error = LastError(zone=SYDNEY_ZONE)
     device = device_for(
         args=args,
-        tiles=NullTiles(),
         last_error=last_error,
         parts=parts_with(keys=keys),
     )
@@ -1189,7 +1188,6 @@ async def test_device_for_probes_and_resets_every_key(
     assert device.resets.erased == (args.timetable,)
     keyless = device_for(
         args=args,
-        tiles=NullTiles(),
         last_error=last_error,
         parts=parts_with(keys=()),
     )

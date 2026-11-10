@@ -2,7 +2,7 @@
 
 import asyncio
 import shutil
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Final
 
@@ -138,9 +138,6 @@ class SystemProbe:
         Reports the Wi-Fi link.
     keys : Sequence[DeviceKey]
         Each says whether it is set.
-    app_probe : Callable[[], Awaitable[object]]
-        Finds out what the app wants reported; its answer is the facts'
-        `app` part.
     last_error : LastError
         Holds the latest error logged.
     data_dir : Path
@@ -156,7 +153,6 @@ class SystemProbe:
         *,
         wifi: WifiControl,
         keys: Sequence[DeviceKey],
-        app_probe: Callable[[], Awaitable[object]],
         last_error: LastError,
         data_dir: Path,
         version_file: Path | None,
@@ -164,7 +160,6 @@ class SystemProbe:
     ) -> None:
         self._wifi = wifi
         self._keys = tuple(keys)
-        self._app_probe = app_probe
         self._last_error = last_error
         self._data_dir = data_dir
         self._version_file = version_file
@@ -199,7 +194,7 @@ class SystemProbe:
             return None
         return (directory / 'synchronized').exists()
 
-    def read(self, *, wifi: WifiStatus, app: object) -> DeviceFacts:
+    def read(self, *, wifi: WifiStatus) -> DeviceFacts:
         """
         Read the device's facts from files, blocking.
 
@@ -207,13 +202,12 @@ class SystemProbe:
         ----------
         wifi : WifiStatus
             The Wi-Fi link, found already.
-        app : object
-            What the app's probe found, already.
 
         Returns
         -------
         DeviceFacts
-            What was found; a file that can't be read gives None.
+            What was found, with no `app` part; a file that can't be read
+            gives None.
         """
         meminfo = read_text(path=self._root / MEMINFO) or ''
         return DeviceFacts(
@@ -226,7 +220,6 @@ class SystemProbe:
             version=self.version(),
             last_error=self._last_error.text(),
             missing_keys=missing_keys(keys=self._keys),
-            app=app,
         )
 
     async def probe(self) -> DeviceFacts:
@@ -236,8 +229,8 @@ class SystemProbe:
         Returns
         -------
         DeviceFacts
-            What was found; a file that can't be read gives None.
+            What was found, with no `app` part; the kit's device work
+            adds the app's. A file that can't be read gives None.
         """
         wifi = await self._wifi.status()
-        app = await self._app_probe()
-        return await asyncio.to_thread(self.read, wifi=wifi, app=app)
+        return await asyncio.to_thread(self.read, wifi=wifi)

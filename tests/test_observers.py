@@ -71,6 +71,10 @@ class _DeviceRecorder:
         """Record a status."""
         self.events.append(f'{self.prefix}status_seen')
 
+    def device_settings_seen(self, *, settings: DeviceSettings) -> None:
+        """Record the device settings."""
+        self.events.append(f'{self.prefix}device_settings_seen')
+
     def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
         """Record a refresh."""
         self.events.append(f'{self.prefix}panel_refreshed')
@@ -131,6 +135,10 @@ class _Failing:
     def pins_seen(self, *, pins: tuple[Pin, ...], shown: int | None) -> None:
         """Raise."""
         raise RuntimeError(pins, shown)
+
+    def device_settings_seen(self, *, settings: DeviceSettings) -> None:
+        """Raise."""
+        raise RuntimeError(settings)
 
     def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
         """Raise."""
@@ -391,7 +399,7 @@ def test_swap_setting_swaps_decoded_knobs() -> None:
 
 
 def test_group_sends_device_events_to_devices() -> None:
-    """Devices get the six device events; observers get all eight."""
+    """Devices get the seven device events; observers get all nine."""
     full = _Recorder()
     device = _DeviceRecorder()
     group = ObserverGroup(observers=[full], devices=[device])
@@ -403,6 +411,7 @@ def test_group_sends_device_events_to_devices() -> None:
     group.status_seen(status=STATUS)
     group.app_seen(status=APP_STATUS)
     group.pins_seen(pins=PINS, shown=0)
+    group.device_settings_seen(settings=DeviceSettings())
     group.panel_refreshed(
         refresh=PanelRefresh(full=False, seconds=0.5, ok=True),
     )
@@ -412,6 +421,7 @@ def test_group_sends_device_events_to_devices() -> None:
         'ticked',
         'status_seen',
         'app_seen',
+        'device_settings_seen',
         'panel_refreshed',
     ]
     assert device.events == device_events
@@ -424,6 +434,7 @@ def test_group_sends_device_events_to_devices() -> None:
         'status_seen',
         'app_seen',
         'pins_seen',
+        'device_settings_seen',
         'panel_refreshed',
     ]
 

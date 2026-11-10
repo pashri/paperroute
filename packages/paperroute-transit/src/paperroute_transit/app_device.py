@@ -17,6 +17,7 @@ from paperroute_device.core.device_model import (
     missing_keys,
 )
 from paperroute_device.ports import DeviceProbe, Resets, WifiControl
+from paperroute_transit.adapters.tiles_db import tiles_facts
 from paperroute_transit.core.device import app_status, device_status
 from paperroute_transit.core.messages import (
     DeviceProbed,
@@ -25,7 +26,6 @@ from paperroute_transit.core.messages import (
     HotspotFailed,
     HotspotStarted,
     JoinWifi,
-    PinEdit,
     ProbeDevice,
     ResetDevice,
     ResetDone,
@@ -35,8 +35,8 @@ from paperroute_transit.core.messages import (
     WifiJoinFailed,
     WifiSetupStopped,
 )
-from paperroute_transit.core.state_model import Places, State
-from paperroute_transit.ports import Observer, TimetableBuilder
+from paperroute_transit.core.state_model import State
+from paperroute_transit.ports import Observer, TileRepository, TimetableBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -90,9 +90,11 @@ class DevicePorts:
     home: HomeWifi = field(default_factory=HomeWifi)
 
 
-async def probe(*, ports: DevicePorts, queue: asyncio.Queue[Event]) -> None:
+async def probe(
+    *, ports: DevicePorts, tiles: TileRepository, queue: asyncio.Queue[Event],
+) -> None:
     """
-    Gather the device's facts and post them.
+    Gather the device's facts, with the tiles' build time, and post them.
 
     The probe holds the radio lock, so it never reads Wi-Fi while setup
     is changing it.
@@ -101,17 +103,45 @@ async def probe(*, ports: DevicePorts, queue: asyncio.Queue[Event]) -> None:
     ----------
     ports : DevicePorts
         Device adapters.
+    tiles : TileRepository
+        The map tiles, whose build time is the facts' `app` part.
     queue : asyncio.Queue[Event]
         Event queue.
     """
-    facts = None if ports.probe is None else await probed(ports=ports)
+    facts = None if ports.probe is None else await probed(
+        ports=ports, tiles=tiles,
+    )
     if facts is None:
         await queue.put(DeviceProbeFailed())
         return
     await queue.put(DeviceProbed(facts=facts))
 
 
-async def probed(*, ports: DevicePorts) -> DeviceFacts | None:
+async def gathered(
+    *, system: DeviceProbe, tiles: TileRepository,
+) -> DeviceFacts:
+    """
+    Gather the system's facts, then the tiles' build time.
+
+    Parameters
+    ----------
+    system : DeviceProbe
+        Reads the system's facts.
+    tiles : TileRepository
+        The map tiles.
+
+    Returns
+    -------
+    DeviceFacts
+        The system's facts with the tiles' facts as the `app` part.
+    """
+    facts = await system.probe()
+    return replace(facts, app=await tiles_facts(tiles=tiles))
+
+
+async def probed(
+    *, ports: DevicePorts, tiles: TileRepository,
+) -> DeviceFacts | None:
     """
     Gather the device's facts under the radio lock.
 
@@ -119,6 +149,8 @@ async def probed(*, ports: DevicePorts) -> DeviceFacts | None:
     ----------
     ports : DevicePorts
         Device adapters; their probe is set.
+    tiles : TileRepository
+        The map tiles.
 
     Returns
     -------
@@ -129,7 +161,7 @@ async def probed(*, ports: DevicePorts) -> DeviceFacts | None:
     try:
         async with ports.radio:
             return await asyncio.wait_for(
-                ports.probe.probe(),
+                gathered(system=ports.probe, tiles=tiles),
                 timeout=PROBE_TIMEOUT,
             )
     except TimeoutError:
@@ -294,12 +326,13 @@ def setup_work(
             return setup_stopped(ports=ports, queue=queue), WifiSetupStopped()
 
 
-def device_work(
+def device_work(  # pylint: disable=too-many-arguments
     *,
     ports: DevicePorts,
     effect: DeviceEffect,
     queue: asyncio.Queue[Event],
     builder: TimetableBuilder,
+    tiles: TileRepository,
 ) -> tuple[Coroutine[Any, Any, None], Event]:
     """
     Make the work for a device effect done in the background.
@@ -314,6 +347,8 @@ def device_work(
         Event queue.
     builder : TimetableBuilder
         Rebuilds the timetable; a reset stops it first.
+    tiles : TileRepository
+        The map tiles, whose build time a probe reports.
 
     Returns
     -------
@@ -322,7 +357,8 @@ def device_work(
     """
     match effect:
         case ProbeDevice():
-            return probe(ports=ports, queue=queue), DeviceProbeFailed()
+            work = probe(ports=ports, tiles=tiles, queue=queue)
+            return work, DeviceProbeFailed()
         case ResetDevice(kind=kind):
             return (
                 reset(
@@ -424,46 +460,3 @@ def report_status(
     if app != reported.app:
         observer.app_seen(status=app)
         reported.app = app
-
-
-def report_pins(
-    *, observer: Observer, before: Places, state: State, event: Event
-) -> None:
-    """
-    Report the pins when the places changed or a pin was edited.
-
-    An edit the reducer refused is reported too, so a page waiting on
-    it is released.
-
-    Parameters
-    ----------
-    observer : Observer
-        Receives the pins.
-    before : Places
-        The places before the event.
-    state : State
-        State after the event.
-    event : Event
-        The event handled.
-    """
-    places = state.places
-    if places != before or isinstance(event, PinEdit):
-        pins_shown(observer=observer, places=places)
-
-
-def pins_shown(*, observer: Observer, places: Places) -> None:
-    """
-    Report the pins and which one is on screen.
-
-    Parameters
-    ----------
-    observer : Observer
-        Receives the pins.
-    places : Places
-        The pins and which place is shown.
-    """
-    on_screen = places.unpinned is None and bool(places.pins)
-    observer.pins_seen(
-        pins=places.pins,
-        shown=places.current if on_screen else None,
-    )

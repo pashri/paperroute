@@ -5,6 +5,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from paperroute_device.core.device_model import DeviceStatus
+from paperroute_device.core.device_settings import DeviceSettings
 from paperroute_hardware.ports import PanelRefresh
 
 logger = logging.getLogger(__name__)
@@ -81,6 +82,16 @@ class ActLed:
         ----------
         status : DeviceStatus
             The status.
+        """
+
+    def device_settings_seen(self, *, settings: DeviceSettings) -> None:
+        """
+        Ignore the device settings.
+
+        Parameters
+        ----------
+        settings : DeviceSettings
+            The settings.
         """
 
     def panel_refreshed(self, *, refresh: PanelRefresh) -> None:

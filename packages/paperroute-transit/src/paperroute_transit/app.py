@@ -11,8 +11,6 @@ from paperroute_device.core.kit_events import QuitRequested
 from paperroute_transit.app_device import (
     key_known,
     leftover_stopped,
-    pins_shown,
-    report_pins,
     report_status,
 )
 from paperroute_transit.app_effects import StateSaver, VersionWatch, filled
@@ -21,14 +19,15 @@ from paperroute_transit.app_ports import Ports
 from paperroute_transit.app_render import MapRenderer
 from paperroute_transit.app_work import perform
 from paperroute_transit.core.city import City
-from paperroute_transit.core.messages import Event, Tick
+from paperroute_transit.core.messages import Event, PinEdit, Tick
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.refresh import quick_now
 from paperroute_transit.core.saved import seeded
 from paperroute_transit.core.state import initial_state, step
-from paperroute_transit.core.state_model import State
+from paperroute_transit.core.state_model import Places, State
 from paperroute_transit.core.tiles import TileVariant
 from paperroute_transit.observers import ObserverGroup
+from paperroute_transit.ports import Observer
 
 __all__ = [
     'MapRenderer',
@@ -473,3 +472,46 @@ async def stop(*, tasks: set[asyncio.Task[None]]) -> None:
     for task in tasks:
         task.cancel()
     await asyncio.gather(*tasks, return_exceptions=True)
+
+
+def report_pins(
+    *, observer: Observer, before: Places, state: State, event: Event
+) -> None:
+    """
+    Report the pins when the places changed or a pin was edited.
+
+    An edit the reducer refused is reported too, so a page waiting on
+    it is released.
+
+    Parameters
+    ----------
+    observer : Observer
+        Receives the pins.
+    before : Places
+        The places before the event.
+    state : State
+        State after the event.
+    event : Event
+        The event handled.
+    """
+    places = state.places
+    if places != before or isinstance(event, PinEdit):
+        pins_shown(observer=observer, places=places)
+
+
+def pins_shown(*, observer: Observer, places: Places) -> None:
+    """
+    Report the pins and which one is on screen.
+
+    Parameters
+    ----------
+    observer : Observer
+        Receives the pins.
+    places : Places
+        The pins and which place is shown.
+    """
+    on_screen = places.unpinned is None and bool(places.pins)
+    observer.pins_seen(
+        pins=places.pins,
+        shown=places.current if on_screen else None,
+    )

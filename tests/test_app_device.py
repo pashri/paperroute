@@ -3,11 +3,13 @@
 import asyncio
 from dataclasses import replace
 from pathlib import Path
+from typing import Final
 
 import pytest
 
 from paperroute_device.adapters.resets import FileResets
 from paperroute_device.core.device_model import (
+    DeviceFacts,
     DeviceStatus,
     JoinOutcome,
     JoinRequest,
@@ -24,6 +26,7 @@ from paperroute_device_testkit.device_fakes import (
 )
 from paperroute_testkit.fakes import FakeBuilder, WatchingBuilder
 from paperroute_transit import app_device
+from paperroute_transit.adapters.tiles_db import NullTiles
 from paperroute_transit.app_device import (
     DevicePorts,
     Reported,
@@ -46,9 +49,14 @@ from paperroute_transit.core.messages import (
     WifiJoinFailed,
     WifiSetupStopped,
 )
+from paperroute_transit.core.panel_screens import TilesFacts
 from paperroute_transit.core.state import step
 from paperroute_transit.observers import Timings
 from tests.core.test_state import fresh, loaded
+
+TILED: Final[DeviceFacts] = replace(
+    device_facts(), app=TilesFacts(built=None),
+)
 
 
 async def worked(*, ports: DevicePorts) -> tuple[list[Event], Event]:
@@ -67,7 +75,11 @@ async def worked(*, ports: DevicePorts) -> tuple[list[Event], Event]:
     """
     queue: asyncio.Queue[Event] = asyncio.Queue()
     work, fallback = device_work(
-        ports=ports, effect=ProbeDevice(), queue=queue, builder=FakeBuilder(),
+        ports=ports,
+        effect=ProbeDevice(),
+        queue=queue,
+        builder=FakeBuilder(),
+        tiles=NullTiles(),
     )
     await work
     posted: list[Event] = []
@@ -79,7 +91,7 @@ async def worked(*, ports: DevicePorts) -> tuple[list[Event], Event]:
 async def test_probe_effect_posts_facts() -> None:
     """A probe posts the facts it found."""
     posted, fallback = await worked(ports=DevicePorts(probe=FakeProbe()))
-    assert posted == [DeviceProbed(facts=device_facts())]
+    assert posted == [DeviceProbed(facts=TILED)]
     assert fallback == DeviceProbeFailed()
 
 
@@ -115,13 +127,14 @@ async def test_probe_waits_for_the_radio() -> None:
             effect=ProbeDevice(),
             queue=queue,
             builder=FakeBuilder(),
+            tiles=NullTiles(),
         )
         task = asyncio.ensure_future(work)
         for _ in range(5):
             await asyncio.sleep(0)
         assert queue.empty()
     await task
-    assert queue.get_nowait() == DeviceProbed(facts=device_facts())
+    assert queue.get_nowait() == DeviceProbed(facts=TILED)
 
 
 def test_status_ignores_changing_readings() -> None:
@@ -159,6 +172,7 @@ async def test_reset_work_posts_done() -> None:
         effect=ResetDevice(kind=ResetKind.ERASE),
         queue=queue,
         builder=FakeBuilder(),
+        tiles=NullTiles(),
     )
     await work
     assert resets.kinds == [ResetKind.ERASE]
@@ -184,6 +198,7 @@ async def test_reset_stops_rebuild_before_deleting(tmp_path: Path) -> None:
         effect=ResetDevice(kind=ResetKind.ERASE),
         queue=queue,
         builder=builder,
+        tiles=NullTiles(),
     )
     await work
     assert builder.existed == [True]
@@ -209,6 +224,7 @@ async def test_reset_waits_for_join_in_flight(tmp_path: Path) -> None:
             effect=ResetDevice(kind=ResetKind.ERASE),
             queue=queue,
             builder=FakeBuilder(),
+            tiles=NullTiles(),
         )
         task = asyncio.ensure_future(work)
         for _ in range(5):
@@ -247,6 +263,7 @@ async def setup_work(
         effect=effect,
         queue=queue,
         builder=FakeBuilder(),
+        tiles=NullTiles(),
     )
     await work
     posted: list[Event] = []
@@ -309,7 +326,11 @@ async def test_stop_setup_brings_home_wifi_back() -> None:
     queue: asyncio.Queue[Event] = asyncio.Queue()
     for effect in (StartWifiSetup(), StopWifiSetup()):
         work, fallback = device_work(
-            ports=ports, effect=effect, queue=queue, builder=FakeBuilder(),
+            ports=ports,
+            effect=effect,
+            queue=queue,
+            builder=FakeBuilder(),
+            tiles=NullTiles(),
         )
         await work
     assert wifi.calls == ['active', 'scan', 'start', 'stop', 'up u-home']

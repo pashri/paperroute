@@ -14,6 +14,7 @@ from paperroute_device.core.device_model import (
     WifiNetwork,
     WifiStatus,
 )
+from paperroute_device.core.device_settings import DeviceSettings
 from paperroute_hardware.ports import PanelRefresh
 
 if TYPE_CHECKING:
@@ -69,6 +70,16 @@ class DeviceObserver(Protocol):
         ----------
         status : Mapping[str, object]
             The app's readings, at start and after each change.
+        """
+
+    def device_settings_seen(self, *, settings: DeviceSettings) -> None:
+        """
+        Record the device's own settings.
+
+        Parameters
+        ----------
+        settings : DeviceSettings
+            The settings, at start and after each change.
         """
 
     def panel_refreshed(self, *, refresh: PanelRefresh) -> None:

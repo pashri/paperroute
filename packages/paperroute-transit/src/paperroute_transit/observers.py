@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 
 from paperroute_device.core.device_model import DeviceStatus
+from paperroute_device.core.device_settings import DeviceSettings
 from paperroute_device.ports import DeviceObserver
 from paperroute_hardware.ports import PanelRefresh, PanelTimes
 from paperroute_transit.adapters.settings_form import form_values
@@ -232,6 +233,16 @@ class Timings:
         settings = self.settings
         return settings is not None and settings.device.swap_knobs
 
+    def device_settings_seen(self, *, settings: DeviceSettings) -> None:
+        """
+        Ignore the device settings; `settings_seen` keeps them all.
+
+        Parameters
+        ----------
+        settings : DeviceSettings
+            The settings.
+        """
+
     def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
         """
         Record a panel refresh, starting the panel's times if needed.
@@ -415,6 +426,16 @@ class NullObserver:
             Index of the pin on screen, or None.
         """
 
+    def device_settings_seen(self, *, settings: DeviceSettings) -> None:
+        """
+        Ignore the device settings.
+
+        Parameters
+        ----------
+        settings : DeviceSettings
+            The settings.
+        """
+
     def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
         """
         Ignore a panel refresh.
@@ -592,6 +613,20 @@ class ObserverGroup:
         self._each(
             observers=self._observers,
             call=lambda o: o.pins_seen(pins=pins, shown=shown),
+        )
+
+    def device_settings_seen(self, *, settings: DeviceSettings) -> None:
+        """
+        Pass on the device settings.
+
+        Parameters
+        ----------
+        settings : DeviceSettings
+            The settings.
+        """
+        self._each(
+            observers=self._everyone,
+            call=lambda o: o.device_settings_seen(settings=settings),
         )
 
     def panel_refreshed(self, *, refresh: PanelRefresh) -> None:

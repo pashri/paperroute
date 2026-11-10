@@ -287,6 +287,7 @@ def other_work(
             effect=effect,
             queue=queue,
             builder=ports.builder,
+            tiles=ports.tiles,
         )
     call, fallback = work_for(
         timetable=ports.timetable, network=ports.network, effect=effect

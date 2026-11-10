@@ -11,6 +11,7 @@ from paperroute_device.core.kit_state import Step
 from paperroute_device.core.panel_views import KIT_CONFIRM_COPY, PlainSleepView
 from paperroute_device.core.sleep import SLEEP_BAND
 from paperroute_device.ports import Frame
+from paperroute_device.runtime.timings import KitTimings
 from paperroute_hardware.core.knob_events import Knob, KnobEvent, KnobPressed
 from tests.core.fake_app import START
 
@@ -146,3 +147,16 @@ def test_required_hooks_are_abstract() -> None:
     """An app missing a required hook cannot be made."""
     with pytest.raises(TypeError):
         App()  # type: ignore[abstract]
+
+
+async def test_runtime_defaults_are_the_kit_ones() -> None:
+    """The runtime hooks default to nothing to do and the kit's timings."""
+    app = Bare()
+    assert await app.before_tick() is None
+    assert await app.probe() is None
+    assert app.timings() == KitTimings()
+    assert not app.observers()
+    posted: list[object] = []
+    with pytest.raises(ValueError, match="unknown effect 'go'"):
+        await app.perform(effect='go', post=posted.append)
+    assert not posted

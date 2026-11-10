@@ -16,7 +16,8 @@ from paperroute_device.core.panel_views import (
     PlainSleepView,
 )
 from paperroute_device.core.sleep import SLEEP_BAND
-from paperroute_device.ports import Frame
+from paperroute_device.ports import DeviceObserver, Frame
+from paperroute_device.runtime.timings import KitTimings
 from paperroute_hardware.core.knob_events import KnobEvent
 
 KIT_RESET_HINT: Final[str] = (
@@ -132,6 +133,73 @@ class App[S](ABC):
             By default None: the app has no time zone.
         """
         return None
+
+    async def perform(
+        self, *, effect: object, post: Callable[[object], None],
+    ) -> None:
+        """
+        Carry out one of the app's own effects, in the background.
+
+        Parameters
+        ----------
+        effect : object
+            An effect the app's hooks asked for.
+        post : Callable[[object], None]
+            Posts an event to the kit's queue.
+
+        Raises
+        ------
+        ValueError
+            By default for every effect: the app asks for none.
+        """
+        del post
+        raise ValueError(f'unknown effect {effect!r}')
+
+    # pylint: disable-next=useless-return
+    async def before_tick(self) -> object | None:
+        """
+        Find an event to post just before each tick.
+
+        Returns
+        -------
+        object | None
+            The event, or None to post nothing; by default None.
+        """
+        return None
+
+    # pylint: disable-next=useless-return
+    async def probe(self) -> object:
+        """
+        Find out what the app reports with the device's facts.
+
+        Returns
+        -------
+        object
+            The facts' `app` part; by default None.
+        """
+        return None
+
+    def timings(self) -> KitTimings:
+        """
+        Make the one timings object the board reports to.
+
+        Returns
+        -------
+        KitTimings
+            By default the kit's own.
+        """
+        return KitTimings()
+
+    def observers(self) -> tuple[DeviceObserver, ...]:
+        """
+        Give the app's own observers, beside the timings.
+
+        Returns
+        -------
+        tuple[DeviceObserver, ...]
+            By default none.
+        """
+        return ()
 
     @abstractmethod
     def start(

@@ -13,14 +13,15 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime, tzinfo
-from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
 
+from paperroute_device.adapters.act_led import ActLed
 from paperroute_device.adapters.clocks import ReplayClock, SystemClock
 from paperroute_device.adapters.device_probe import SystemProbe
 from paperroute_device.adapters.power import NullPower, SystemctlPower
 from paperroute_device.adapters.resets import FileResets, NullResets
+from paperroute_device.adapters.systemd import SystemdNotifier
 from paperroute_device.adapters.web_device import DevicePages
 from paperroute_device.adapters.web_frame import NavItem
 from paperroute_device.adapters.web_server import BindError, serving
@@ -63,7 +64,6 @@ from paperroute_transit.adapters.state_file import JsonStateRepository
 from paperroute_transit.adapters.tiles_db import (
     NullTiles,
     SqliteTileRepository,
-    tiles_facts,
 )
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.adapters.web_display import (
@@ -77,14 +77,13 @@ from paperroute_transit.core.city import City
 from paperroute_transit.core.messages import Event
 from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.tiles import TileVariant
-from paperroute_transit.observers import Timings
+from paperroute_transit.observers import ObserverGroup, Timings
 from paperroute_transit.ports import (
     FeedsClient,
     TileRepository,
     TimetableBuilder,
 )
 from paperroute_transit.summary import Summary
-from paperroute_transit.web_observer import web_observer
 
 if TYPE_CHECKING:
     from paperroute_device.adapters.tk_monitor import TkMonitor
@@ -490,7 +489,6 @@ def resets_for(
 def device_for(
     *,
     args: argparse.Namespace,
-    tiles: TileRepository,
     last_error: LastError,
     parts: CityParts,
 ) -> DevicePorts:
@@ -501,8 +499,6 @@ def device_for(
     ----------
     args : argparse.Namespace
         Parsed arguments.
-    tiles : TileRepository
-        The map tiles, whose build time is reported.
     last_error : LastError
         Holds the latest error logged.
     parts : CityParts
@@ -522,7 +518,6 @@ def device_for(
     probe = SystemProbe(
         wifi=wifi,
         keys=keys,
-        app_probe=partial(tiles_facts, tiles=tiles),
         last_error=last_error,
         data_dir=args.state.parent,
         version_file=args.version_file,
@@ -941,7 +936,6 @@ def tk_main(
                 power=power_for(args=args),
                 device=device_for(
                     args=args,
-                    tiles=tiles,
                     last_error=last_error or LastError(zone=city.zone),
                     parts=parts,
                 ),
@@ -1110,6 +1104,38 @@ def board_display(
     )
 
 
+def board_observer(
+    *,
+    timings: Timings,
+    summary: Summary,
+    led_root: Path = Path('/sys/class/leds/ACT'),
+) -> ObserverGroup:
+    """
+    Gather the web board's observers.
+
+    Parameters
+    ----------
+    timings : Timings
+        Keeps the latest timings for the status page.
+    summary : Summary
+        Logs the periodic summary.
+    led_root : Path
+        The ACT LED's sysfs directory.
+
+    Returns
+    -------
+    ObserverGroup
+        The timings, the summary, the systemd notifier and the ACT LED.
+    """
+    return ObserverGroup(
+        observers=[timings, summary],
+        devices=(
+            SystemdNotifier.from_environment(),
+            ActLed(root=led_root),
+        ),
+    )
+
+
 def web_main(  # pylint: disable=too-many-locals
     *,
     args: argparse.Namespace,
@@ -1138,7 +1164,7 @@ def web_main(  # pylint: disable=too-many-locals
         Counts frames and the feeds' requests; a new one by default.
     """
     timings = Timings()
-    observer = web_observer(timings=timings, summary=summary or Summary())
+    observer = board_observer(timings=timings, summary=summary or Summary())
     panel = panel_for(
         enabled=args.panel,
         opener=LinuxPanelBus.open,
@@ -1187,7 +1213,6 @@ def web_main(  # pylint: disable=too-many-locals
             power=power_for(args=args),
             device=device_for(
                 args=args,
-                tiles=tiles,
                 last_error=last_error or LastError(zone=city.zone),
                 parts=parts,
             ),

@@ -212,11 +212,10 @@ set_state_aside() {
     printf '%s\n' "$APP_NAME" >"$SHARE/installed-app"
 }
 
-# Installs each tool in the app's root-owned copy as paperroute-NAME,
-# removes any paperroute tool neither the kit nor the app ships, and prints
-# the names it installed. A bad name or a kit tool's name installs nothing.
-install_app_tools() {
-    local path name keep names=
+# Prints the names of the tools in the app's root-owned copy, one per
+# line; refuses a non-file, a bad name or a kit tool's name.
+app_tool_names() {
+    local path name
     for path in "$SHARE"/app/bin/* "$SHARE"/app/bin/.[!.]* \
         "$SHARE"/app/bin/..?*; do
         [[ -e $path || -L $path ]] || continue
@@ -227,14 +226,21 @@ install_app_tools() {
                 "$name" >&2
             exit 1
         fi
-        names+=$name$'\n'
+        printf '%s\n' "$name"
     done
-    for name in $names; do
+}
+
+# Installs the checked TOOLS from the app's root-owned copy as
+# paperroute-NAME and removes any paperroute tool neither the kit nor the
+# app ships.
+install_app_tools() {
+    local tools=$1 path name keep
+    for name in $tools; do
         path=$SHARE/app/bin/$name
         install -m 0755 -o root -g root "$path" "$SBIN/paperroute-$name" \
             || exit 1
     done
-    keep=$'\n'${KIT_TOOLS// /$'\n'}$'\n'$names
+    keep=$'\n'${KIT_TOOLS// /$'\n'}$'\n'$tools$'\n'
     for path in "$SBIN"/paperroute-*; do
         [[ -e $path || -L $path ]] || continue
         name=${path##*/paperroute-}
@@ -242,7 +248,6 @@ install_app_tools() {
             rm -f -- "$path" || exit 1
         fi
     done
-    printf '%s' "$names"
 }
 
 # Succeeds when a rendered line from the KIND (kit or app) sudoers file is
@@ -265,16 +270,15 @@ allowed_sudoers_line() {
         && $'\n'$tools$'\n' == *$'\n'"${BASH_REMATCH[1]}"$'\n'* ]]
 }
 
-# Writes the kit's sudoers file, then the app's, with the deploy user in
+# Prints the kit's sudoers file, then the app's, with the deploy user in
 # place of the shipped default; refuses the lot if any line is not allowed.
-# TOOLS are the app tools install_app_tools installed, one per line.
-install_sudoers() {
+# TOOLS are the app's checked tools, one per line.
+sudoers_text() {
     local tools=$1 kit=$SHARE/deploy/sudoers/paperroute-deploy file kind
     local line text= kit_rule
     kit_rule="$DEPLOY_USER ALL=(root) NOPASSWD:"
     kit_rule+=' /usr/local/sbin/paperroute-install-release,'
     kit_rule+=' /usr/local/sbin/paperroute-install-files ""'
-    rm -f -- "$SUDOERS_NEW"
     for file in "$kit" "$SHARE"/app/sudoers/*; do
         [[ -e $file || -L $file ]] || continue
         kind=app
@@ -298,13 +302,45 @@ install_sudoers() {
         printf 'provision-device: sudoers check failed\n' >&2
         exit 1
     fi
-    (umask 0337 && printf '%s' "$text" >"$SUDOERS_NEW")
+    printf '%s' "$text"
+}
+
+# Prints the app's tool names once they and every sudoers line pass, so a
+# refusal comes before any tool or sudoers file is installed.
+check_app_part() {
+    local tools
+    tools=$(app_tool_names) || exit 1
+    sudoers_text "$tools" >/dev/null || exit 1
+    printf '%s\n' "$tools"
+}
+
+# Writes the sudoers file for the checked TOOLS and checks it with visudo.
+install_sudoers() {
+    local text
+    text=$(sudoers_text "$1") || exit 1
+    rm -f -- "$SUDOERS_NEW"
+    (umask 0337 && printf '%s\n' "$text" >"$SUDOERS_NEW")
     if ! visudo -cf "$SUDOERS_NEW"; then
         rm -f -- "$SUDOERS_NEW"
         printf 'provision-device: sudoers check failed\n' >&2
         exit 1
     fi
     mv -T -- "$SUDOERS_NEW" "$SUDOERS"
+}
+
+# Installs the kit's tools and the checked TOOLS, runs install-files, then
+# writes the sudoers file.
+install_tools() {
+    local tools=$1 name
+    make_dir root 0755 "$SBIN"
+    for name in $KIT_TOOLS; do
+        install -m 0755 -o root -g root "$SHARE/deploy/bin/$name" \
+            "$SBIN/paperroute-$name"
+    done
+    install_app_tools "$tools"
+    "$SBIN/paperroute-install-files"
+    retire_pin
+    install_sudoers "$tools"
 }
 
 [[ $# -eq 2 ]] || fail 'usage: provision-device DIR APP'
@@ -382,18 +418,9 @@ rpi-usb-gadget on
 
 make_dir root 0755 "$SHARE"
 copy_deploy
+tools=$(check_app_part) || exit
 write_contract
 write_manifest
 set_state_aside
-
-make_dir root 0755 "$SBIN"
-for name in $KIT_TOOLS; do
-    install -m 0755 -o root -g root "$SHARE/deploy/bin/$name" \
-        "$SBIN/paperroute-$name"
-done
-tools=$(install_app_tools) || exit
-/usr/local/sbin/paperroute-install-files
-retire_pin
-
-install_sudoers "$tools"
+install_tools "$tools"
 printf 'Provisioned: reboot to apply config.txt\n'

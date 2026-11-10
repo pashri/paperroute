@@ -1649,9 +1649,12 @@ def test_no_unit_reads_m2a_env() -> None:
 
 def test_provision_retires_pin_after_installing_files() -> None:
     """The pin goes only once the new unit is installed and loaded."""
-    lines = script_text(path=BIN / 'provision-device').splitlines()
-    install = lines.index('/usr/local/sbin/paperroute-install-files')
-    assert lines.index('retire_pin') > install
+    lines = script_function(
+        path=BIN / 'provision-device',
+        name='install_tools',
+    ).splitlines()
+    install = lines.index('    "$SBIN/paperroute-install-files"')
+    assert lines.index('    retire_pin') > install
 
 
 def test_provision_refuses_before_m4_saved_the_pin() -> None:
@@ -1662,7 +1665,7 @@ def test_provision_refuses_before_m4_saved_the_pin() -> None:
         " fail 'deploy M4 first so state.json holds the pin'"
     )
     assert gate < lines.index('copy_deploy')
-    assert gate < lines.index('/usr/local/sbin/paperroute-install-files')
+    assert gate < lines.index('install_tools "$tools"')
 
 
 @pytest.mark.parametrize('mode', sorted(LED_PATTERNS))
@@ -3303,7 +3306,7 @@ def install_sudoers(
         f'DEPLOY_USER={user}\ninstall_sudoers {shlex.quote(tools)}\n'
     )
     return provision_functions(
-        names=('allowed_sudoers_line', 'install_sudoers'),
+        names=('allowed_sudoers_line', 'sudoers_text', 'install_sudoers'),
         program=program,
     )
 
@@ -3562,9 +3565,13 @@ def run_app_tools(
         (tree / name).write_text('tree copy\n', encoding='utf-8')
     program = (
         f'{INSTALL_STUB}\nSHARE={root / "share"}\nDIR={root / "tree"}\n'
-        f'SBIN={sbin}\ninstall_app_tools\n'
+        f'SBIN={sbin}\ntools=$(app_tool_names) || exit\n'
+        'install_app_tools "$tools"\nprintf \'%s\\n\' "$tools"\n'
     )
-    return provision_functions(names=('install_app_tools',), program=program)
+    return provision_functions(
+        names=('app_tool_names', 'install_app_tools'),
+        program=program,
+    )
 
 
 KIT_INSTALLED: Final[dict[str, str]] = {
@@ -3584,12 +3591,13 @@ def test_app_tools_come_from_the_provisioned_copy(tmp_path: Path) -> None:
     assert tree_files(root=tmp_path / 'sbin') == KIT_INSTALLED | {
         'paperroute-install-tiles': 'share copy\n',
     }
-    body = script_function(
-        path=BIN / 'provision-device',
-        name='install_app_tools',
+    names, install = (
+        script_function(path=BIN / 'provision-device', name=name)
+        for name in ('app_tool_names', 'install_app_tools')
     )
-    assert '$DIR' not in body
-    assert '"$SHARE"/app/bin/' in body
+    assert '$DIR' not in names + install
+    assert '"$SHARE"/app/bin/' in names
+    assert 'path=$SHARE/app/bin/$name' in install
 
 
 @pytest.mark.parametrize('kit', ('install-release', 'install-files'))
@@ -3640,12 +3648,181 @@ def test_stale_app_tools_are_removed(tmp_path: Path) -> None:
     }
 
 
-def test_provision_installs_app_tools_before_their_sudoers() -> None:
-    """The kit's tools, then the app's, then install-files, then sudoers."""
+INSTALL_MODE_STUB: Final[str] = (
+    'install() { while [[ $1 == -* ]]; do shift 2; done;'
+    ' cp -- "$1" "$2"; chmod 0755 "$2"; }'
+)
+
+
+def install_files_stub(*, root: Path) -> str:
+    """
+    Give the text of a kit install-files that only logs its run.
+
+    Parameters
+    ----------
+    root : Path
+        Pytest's temporary directory, which holds the log.
+
+    Returns
+    -------
+    str
+        The script.
+    """
+    return f'#!/bin/sh\necho install-files >>{root / "calls.log"}\n'
+
+
+def provision_tools(
+    *,
+    root: Path,
+    shipped: dict[str, str],
+    app_lines: str,
+) -> subprocess.CompletedProcess[str]:
+    """
+    Run provision's app checks, then its tool and sudoers installs.
+
+    Parameters
+    ----------
+    root : Path
+        Pytest's temporary directory; ``share``, ``sbin`` and
+        ``sudoers.d`` go here, the last two holding an earlier install.
+    shipped : dict[str, str]
+        Each file in the share's ``app/bin`` and its text.
+    app_lines : str
+        The app's one sudoers file.
+
+    Returns
+    -------
+    subprocess.CompletedProcess[str]
+        The exit status and output; calls are logged to ``calls.log``.
+    """
+    share = root / 'share'
+    shutil.copytree(src=DEPLOY / 'sudoers', dst=share / 'deploy' / 'sudoers')
+    kit_bin = share / 'deploy' / 'bin'
+    kit_bin.mkdir()
+    (kit_bin / 'install-release').write_text('new release\n', encoding='utf-8')
+    (kit_bin / 'install-files').write_text(
+        install_files_stub(root=root),
+        encoding='utf-8',
+    )
+    (kit_bin / 'install-files').chmod(0o755)
+    (share / 'app' / 'bin').mkdir(parents=True)
+    for name, text in shipped.items():
+        (share / 'app' / 'bin' / name).write_text(text, encoding='utf-8')
+    (share / 'app' / 'sudoers').mkdir()
+    (share / 'app' / 'sudoers' / 'paperroute-test').write_text(
+        app_lines,
+        encoding='utf-8',
+    )
+    sbin = root / 'sbin'
+    sbin.mkdir()
+    for name, text in KIT_INSTALLED.items():
+        (sbin / name).write_text(text, encoding='utf-8')
+    sudoers = root / 'sudoers.d' / 'paperroute-deploy'
+    sudoers.parent.mkdir()
+    sudoers.write_text('old rules\n', encoding='utf-8')
+    log = root / 'calls.log'
+    program = (
+        f'{INSTALL_MODE_STUB}\n'
+        f'{MV_STUB}\nmake_dir() {{ :; }}\n'
+        f'retire_pin() {{ echo retire_pin >>{log}; }}\n'
+        f'visudo() {{ echo visudo >>{log}; }}\n'
+        f'SHARE={share}\nSBIN={sbin}\nSUDOERS={sudoers}\n'
+        f'SUDOERS_NEW={sudoers.parent}/.paperroute-deploy.new\n'
+        'DEPLOY_USER=alice\n'
+        'tools=$(check_app_part) || exit\ninstall_tools "$tools"\n'
+    )
+    return provision_functions(
+        names=(
+            'app_tool_names',
+            'allowed_sudoers_line',
+            'sudoers_text',
+            'check_app_part',
+            'install_app_tools',
+            'install_sudoers',
+            'install_tools',
+        ),
+        program=program,
+    )
+
+
+@pytest.mark.parametrize(
+    ('shipped', 'app_lines', 'message'),
+    (
+        (
+            {'install-tiles': 'new tiles\n'},
+            f'{TILES_RULE}\nDefaults !env_reset\n',
+            'sudoers line not allowed: Defaults !env_reset',
+        ),
+        (
+            {'install-tiles': 'new tiles\n', 'Bad Name': 'odd\n'},
+            f'{TILES_RULE}\n',
+            'app tool Bad Name is not allowed',
+        ),
+    ),
+    ids=('sudoers-line', 'tool-name'),
+)
+def test_a_refused_app_part_installs_nothing(
+    tmp_path: Path,
+    shipped: dict[str, str],
+    app_lines: str,
+    message: str,
+) -> None:
+    """A refused line or tool name leaves sbin and the old sudoers as is."""
+    result = provision_tools(
+        root=tmp_path,
+        shipped=shipped,
+        app_lines=app_lines,
+    )
+    assert (result.returncode, result.stderr) == (
+        1,
+        f'provision-device: {message}\n',
+    )
+    assert tree_files(root=tmp_path / 'sbin') == KIT_INSTALLED
+    assert tree_files(root=tmp_path / 'sudoers.d') == {
+        'paperroute-deploy': 'old rules\n',
+    }
+    assert not (tmp_path / 'calls.log').exists()
+
+
+def test_an_allowed_app_part_installs_tools_then_sudoers(
+    tmp_path: Path,
+) -> None:
+    """The kit's tools, the app's, install-files, then the sudoers file."""
+    result = provision_tools(
+        root=tmp_path,
+        shipped={'install-tiles': 'new tiles\n'},
+        app_lines=f'{TILES_RULE}\n',
+    )
+    assert (result.returncode, result.stderr) == (0, '')
+    assert tree_files(root=tmp_path / 'sbin') == {
+        'paperroute-install-release': 'new release\n',
+        'paperroute-install-files': install_files_stub(root=tmp_path),
+        'paperroute-install-tiles': 'new tiles\n',
+    }
+    assert sudoers_rules(
+        path=tmp_path / 'sudoers.d' / 'paperroute-deploy',
+    ) == [
+        SUDOERS_RULE.replace('pashri ', 'alice ', 1),
+        TILES_RULE.replace('pashri ', 'alice ', 1),
+    ]
+    assert (tmp_path / 'calls.log').read_text(encoding='utf-8') == (
+        'install-files\nretire_pin\nvisudo\n'
+    )
+
+
+def test_provision_checks_the_app_part_before_any_root_change() -> None:
+    """The checks run right after the share copy, before state or tools."""
     lines = script_text(path=BIN / 'provision-device').splitlines()
-    assert lines.index('tools=$(install_app_tools) || exit') < lines.index(
-        '/usr/local/sbin/paperroute-install-files',
-    ) < lines.index('install_sudoers "$tools"')
+    order = [
+        lines.index(line)
+        for line in (
+            'copy_deploy',
+            'tools=$(check_app_part) || exit',
+            'set_state_aside',
+            'install_tools "$tools"',
+        )
+    ]
+    assert order == sorted(order)
     assert script_value(path=BIN / 'provision-device', name='SBIN') == (
         '/usr/local/sbin'
     )
@@ -4297,7 +4474,7 @@ def test_provision_writes_contract_and_manifest(
             'write_contract',
             'write_manifest',
             'set_state_aside',
-            '/usr/local/sbin/paperroute-install-files',
+            'install_tools "$tools"',
         )
     ]
     assert steps == sorted(steps)

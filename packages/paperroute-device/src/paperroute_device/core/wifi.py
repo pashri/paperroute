@@ -1,5 +1,8 @@
 """Wi-Fi setup from the panel."""
 
+# An app package keeps a twin of this module until it switches over.
+# pylint: disable=duplicate-code
+
 import math
 from dataclasses import replace
 from datetime import timedelta, tzinfo

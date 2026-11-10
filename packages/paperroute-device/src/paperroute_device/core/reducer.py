@@ -1,5 +1,8 @@
 """The pure function that advances the kit's state, calling the app."""
 
+# An app package keeps a twin of this module until it switches over.
+# pylint: disable=duplicate-code
+
 from dataclasses import replace
 from datetime import tzinfo
 from typing import Final

@@ -1,5 +1,8 @@
 """The effects the kit's reducer asks for."""
 
+# An app package keeps a twin of this module until it switches over.
+# pylint: disable=duplicate-code
+
 from dataclasses import dataclass, field
 
 from paperroute_device.core.device_model import (

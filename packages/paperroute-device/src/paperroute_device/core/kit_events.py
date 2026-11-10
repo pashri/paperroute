@@ -1,5 +1,8 @@
 """The events the kit's reducer takes."""
 
+# An app package keeps a twin of this module until it switches over.
+# pylint: disable=duplicate-code
+
 from dataclasses import dataclass, field
 from datetime import datetime
 

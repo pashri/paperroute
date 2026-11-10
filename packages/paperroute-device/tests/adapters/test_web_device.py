@@ -12,13 +12,10 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute_device.adapters.device_page import ASKED as DEVICE_ASKED
 from paperroute_device.adapters.device_page import ago_text
-from paperroute_device.adapters.web_device import (
-    KIT_RESET_HINT,
-    RESET_MARK,
-    DevicePages,
-)
+from paperroute_device.adapters.web_device import RESET_MARK, DevicePages
 from paperroute_device.adapters.web_live import LiveView
 from paperroute_device.adapters.web_shell import web_app
+from paperroute_device.core.app import KIT_RESET_HINT
 from paperroute_device.core.device_events import (
     ApiKeyChanged,
     ConfirmAsked,

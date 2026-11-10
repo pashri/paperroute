@@ -30,6 +30,7 @@ from paperroute_device.adapters.web_frame import (
     shell_text,
 )
 from paperroute_device.adapters.wifi import valid_password, valid_ssid
+from paperroute_device.core.app import KIT_RESET_HINT
 from paperroute_device.core.device_events import (
     ApiKeyChanged,
     ConfirmAsked,
@@ -60,11 +61,6 @@ KEY_LABEL_MARK: Final[str] = '{{key_label}}'
 FORM_MARK: Final[str] = '{{form}}'
 RESET_MARK: Final[str] = '{{reset_hint}}'
 DATA_LINE: Final[str] = '    {{data}}\n'
-KIT_RESET_HINT: Final[str] = (
-    'Reset settings clears the settings, Wi-Fi and the keys. Erase '
-    'everything also deletes the saved data. Both are confirmed on the '
-    'device.'
-)
 DOWNLOAD_TYPES: Final[dict[str, str]] = {
     'errors.jsonl': 'application/x-ndjson',
     'state.json': 'application/json',

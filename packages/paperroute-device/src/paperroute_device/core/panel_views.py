@@ -205,6 +205,20 @@ class NoticeView:
     detail: str = ''
 
 
+@dataclass(frozen=True)
+class PlainSleepView:
+    """
+    The kit's own sleep screen: blank paper under the sleep band.
+
+    Attributes
+    ----------
+    band : str
+        The band's text.
+    """
+
+    band: str
+
+
 PanelView = MenuView | DeviceView | PhoneView | WifiSetupView | ConfirmView
 
 

@@ -6,8 +6,9 @@ from datetime import timedelta, timezone, tzinfo
 from pathlib import Path
 from typing import Final
 
-from paperroute_device.adapters.web_device import KIT_RESET_HINT, DevicePages
+from paperroute_device.adapters.web_device import DevicePages
 from paperroute_device.adapters.web_frame import KIT_NAV, NavItem
+from paperroute_device.core.app import KIT_RESET_HINT
 from paperroute_device.core.device_events import DeviceRequest
 from paperroute_device.core.device_model import (
     Credential,

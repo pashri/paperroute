@@ -1,11 +1,11 @@
-"""Draw the sleep band over a frame."""
+"""Draw the sleep band over a frame, and the kit's plain sleep screen."""
 
 from typing import Final
 
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute_device.core.panel_views import SLEEP_BAND
+from paperroute_device.core.panel_views import SLEEP_BAND, PlainSleepView
 from paperroute_device.render.canvas import (
     HEIGHT,
     INK,
@@ -52,3 +52,20 @@ def with_sleep_band(
     banded = frame.copy()
     banded[-BAND_H:] = finish(canvas)[-BAND_H:]
     return banded
+
+
+def draw_plain_sleep(*, view: PlainSleepView) -> NDArray[np.uint8]:
+    """
+    Draw the kit's plain sleep screen.
+
+    Parameters
+    ----------
+    view : PlainSleepView
+        The screen.
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        A blank paper frame under the sleep band.
+    """
+    return with_sleep_band(frame=finish(Canvas()), band=view.band)

@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 from datetime import datetime
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from paperroute_device.core.device_model import (
     DeviceFacts,
@@ -15,6 +15,12 @@ from paperroute_device.core.device_model import (
     WifiStatus,
 )
 from paperroute_hardware.ports import PanelRefresh
+
+if TYPE_CHECKING:
+    import numpy as np
+    from numpy.typing import NDArray
+
+type Frame = NDArray[np.uint8]
 
 
 class DeviceObserver(Protocol):

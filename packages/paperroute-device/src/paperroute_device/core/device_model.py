@@ -163,8 +163,8 @@ class DeviceFacts:
         The release installed, or 'dev'.
     last_error : str | None
         The latest error logged, with its time.
-    tiles_built : str | None
-        When the map tiles were built, or None with no tiles.
+    app : object
+        What the app's own probe found, or None with no app probe.
     missing_keys : tuple[str, ...]
         The display names of the keys not set, in declaration order.
     """
@@ -177,24 +177,67 @@ class DeviceFacts:
     mem_free: int | None
     version: str
     last_error: str | None
-    tiles_built: str | None
     missing_keys: tuple[str, ...]
+    app: object = None
 
 
 class MenuRow(StrEnum):
-    """The Settings menu's rows, top to bottom."""
+    """The kit's own rows on the Settings menu."""
 
     WIFI = 'Wi-Fi'
     DEVICE = 'Device'
     PHONE = 'Open on your phone'
     SLEEP = 'Sleep now'
-    REBUILD = 'Rebuild timetable now'
     RESTART = 'Restart'
     SHUT_DOWN = 'Shut down'
     RESET = 'Reset settings'
 
 
-MENU_ROWS: Final[tuple[MenuRow, ...]] = tuple(MenuRow)
+
+
+@dataclass(frozen=True)
+class AppRow:
+    """
+    A row the app adds to the Settings menu.
+
+    Attributes
+    ----------
+    label : str
+        The row's text.
+    """
+
+    label: str
+
+
+KIT_HEAD: Final[tuple[MenuRow, ...]] = (
+    MenuRow.WIFI,
+    MenuRow.DEVICE,
+    MenuRow.PHONE,
+    MenuRow.SLEEP,
+)
+KIT_TAIL: Final[tuple[MenuRow, ...]] = (
+    MenuRow.RESTART,
+    MenuRow.SHUT_DOWN,
+    MenuRow.RESET,
+)
+
+
+def menu_rows(*, app_rows: Sequence[AppRow]) -> tuple[MenuRow | AppRow, ...]:
+    """
+    List the Settings menu's rows, top to bottom.
+
+    Parameters
+    ----------
+    app_rows : Sequence[AppRow]
+        The app's rows.
+
+    Returns
+    -------
+    tuple[MenuRow | AppRow, ...]
+        The kit's first rows, the app's rows, then Restart, Shut down and
+        Reset settings.
+    """
+    return (*KIT_HEAD, *app_rows, *KIT_TAIL)
 
 
 class PanelScreen(StrEnum):
@@ -215,7 +258,7 @@ class Menu:
     screen : PanelScreen
         The screen shown.
     cursor : int
-        Index into `MENU_ROWS` of the chosen row.
+        Index into the menu's rows of the chosen row.
     """
 
     screen: PanelScreen = PanelScreen.MENU
@@ -307,23 +350,13 @@ class WifiSetup:
     error: str | None = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class DeviceStatus:
     """
     What the device reports about itself to observers.
 
     Attributes
     ----------
-    timetable : str | None
-        The timetable version in use.
-    schema : str | None
-        The timetable's schema version.
-    rebuilding : bool
-        Whether a timetable rebuild runs.
-    rebuild_failed : bool
-        Whether the last timetable rebuild failed.
-    calls_today : int
-        API calls made today.
     missing_keys : tuple[str, ...] | None
         The display names of the keys not set; None until known.
     facts : DeviceFacts | None
@@ -334,11 +367,6 @@ class DeviceStatus:
         Wi-Fi setup open on the panel, or None.
     """
 
-    timetable: str | None
-    schema: str | None
-    rebuilding: bool
-    rebuild_failed: bool
-    calls_today: int
     missing_keys: tuple[str, ...] | None
     facts: DeviceFacts | None
     asked: ConfirmAction | None = None

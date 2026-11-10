@@ -342,7 +342,6 @@ def device_facts(*, missing_keys: tuple[str, ...] = ()) -> DeviceFacts:
         mem_free=2_000_000,
         version='dev',
         last_error=None,
-        tiles_built=None,
         missing_keys=missing_keys,
     )
 

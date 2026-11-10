@@ -13,16 +13,19 @@ from paperroute_device.core.device_model import (
     WifiStatus,
 )
 from paperroute_device.core.panel_views import (
-    CONFIRM_COPY,
     ConfirmView,
     InfoRow,
     PhoneView,
     confirm_view,
 )
+from paperroute_device.render.canvas import WIDTH, text_width
+from paperroute_device.render.panel import BODY_FACE, MARGIN
 from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_testkit.core.factories import START
 from paperroute_transit.core.map_view import MapView, Marker
 from paperroute_transit.core.panel_screens import (
+    TRANSIT_CONFIRM_COPY,
+    TilesFacts,
     device_rows,
     panel_view,
     phone_view,
@@ -34,38 +37,39 @@ from paperroute_transit.core.wifi import wifi_escaped, wifi_qr
 from tests.core.test_rebuild import pinned
 
 
-def test_confirm_copy() -> None:
-    """Every confirm says exactly what was agreed."""
-    assert CONFIRM_COPY == {
+def test_transit_confirm_copy_is_todays() -> None:
+    """Every confirm line is the wording agreed before the kit existed."""
+    assert TRANSIT_CONFIRM_COPY == {
         ConfirmAction.RESTART: (
-            'Restart paperroute?',
-            'paperroute starts again. Your pins and settings stay.',
-            'restart',
+            'paperroute starts again. Your pins and settings stay.'
         ),
         ConfirmAction.SHUT_DOWN: (
-            'Shut down paperroute?',
             "paperroute switches off. The screen says when it's safe"
-            ' to unplug.',
-            'shut down',
+            ' to unplug.'
         ),
         ConfirmAction.RESET_SETTINGS: (
-            'Reset settings?',
             'Clears pins, settings, Wi-Fi and the key.'
-            ' The timetable and map stay.',
-            'reset',
+            ' The timetable and map stay.'
         ),
         ConfirmAction.ERASE: (
-            'Erase everything?',
             'Clears pins, settings, Wi-Fi, the key and the timetable.'
-            ' The map stays.',
-            'erase',
+            ' The map stays.'
         ),
         ConfirmAction.JOIN_WIFI: (
-            'Start Wi-Fi setup?',
-            'paperroute leaves its Wi-Fi while you set up the new one.',
-            'start',
+            'paperroute leaves its Wi-Fi while you set up the new one.'
         ),
     }
+
+
+@pytest.mark.parametrize('action', list(ConfirmAction))
+def test_every_transit_confirm_fits(action: ConfirmAction) -> None:
+    """Every line transit says fits the screen without a cut."""
+    view = confirm_view(
+        confirm=Confirm(action=action, origin=Origin.PHONE, asked_at=START),
+        copy=TRANSIT_CONFIRM_COPY,
+    )
+    for line in view.lines:
+        assert text_width(text=line, face=BODY_FACE) <= WIDTH - 2 * MARGIN
 
 
 def test_confirm_view_lines() -> None:
@@ -73,7 +77,7 @@ def test_confirm_view_lines() -> None:
     phone = Confirm(
         action=ConfirmAction.ERASE, origin=Origin.PHONE, asked_at=START,
     )
-    assert confirm_view(confirm=phone) == ConfirmView(
+    assert confirm_view(confirm=phone, copy=TRANSIT_CONFIRM_COPY) == ConfirmView(
         title='Settings',
         question='Erase everything?',
         lines=(
@@ -85,7 +89,7 @@ def test_confirm_view_lines() -> None:
         confirm='Bottom: press to erase',
     )
     panel = replace(phone, action=ConfirmAction.RESTART, origin=Origin.PANEL)
-    assert confirm_view(confirm=panel).lines == (
+    assert confirm_view(confirm=panel, copy=TRANSIT_CONFIRM_COPY).lines == (
         'paperroute starts again. Your pins and settings stay.',
     )
 
@@ -107,7 +111,7 @@ def mocked() -> State:
         ),
         uptime_s=2.5 * 3600,
         version='a0e68ae',
-        tiles_built='2026-10-19T03:00:00+00:00',
+        app=TilesFacts(built='2026-10-19T03:00:00+00:00'),
     )
     return replace(
         state,

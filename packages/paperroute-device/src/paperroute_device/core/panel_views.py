@@ -1,5 +1,6 @@
 """What the panel's settings, notice and Wi-Fi screens show."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Final
 
@@ -20,34 +21,28 @@ PHONE_ASKED: Final[str] = 'Asked for from a phone on your Wi-Fi.'
 CONFIRM_TITLE: Final[str] = 'Settings'
 CANCEL_LINE: Final[str] = 'Top: press to cancel'
 TIMEOUT_LINE: Final[str] = 'Cancels by itself after 60 s'
-CONFIRM_COPY: Final[dict[ConfirmAction, tuple[str, str, str]]] = {
-    ConfirmAction.RESTART: (
-        'Restart paperroute?',
-        'paperroute starts again. Your pins and settings stay.',
-        'restart',
-    ),
+CONFIRM_WORDS: Final[dict[ConfirmAction, tuple[str, str]]] = {
+    ConfirmAction.RESTART: ('Restart paperroute?', 'restart'),
+    ConfirmAction.SHUT_DOWN: ('Shut down paperroute?', 'shut down'),
+    ConfirmAction.RESET_SETTINGS: ('Reset settings?', 'reset'),
+    ConfirmAction.ERASE: ('Erase everything?', 'erase'),
+    ConfirmAction.JOIN_WIFI: ('Start Wi-Fi setup?', 'start'),
+}
+type ConfirmCopy = Mapping[ConfirmAction, str]
+KIT_CONFIRM_COPY: Final[ConfirmCopy] = {
+    ConfirmAction.RESTART: 'paperroute starts again. Your settings stay.',
     ConfirmAction.SHUT_DOWN: (
-        'Shut down paperroute?',
         "paperroute switches off. The screen says when it's safe"
-        ' to unplug.',
-        'shut down',
+        ' to unplug.'
     ),
     ConfirmAction.RESET_SETTINGS: (
-        'Reset settings?',
-        'Clears pins, settings, Wi-Fi and the key.'
-        ' The timetable and map stay.',
-        'reset',
+        'Clears the settings, Wi-Fi and the keys. The saved data stays.'
     ),
     ConfirmAction.ERASE: (
-        'Erase everything?',
-        'Clears pins, settings, Wi-Fi, the key and the timetable.'
-        ' The map stays.',
-        'erase',
+        'Clears the settings, Wi-Fi, the keys and the saved data.'
     ),
     ConfirmAction.JOIN_WIFI: (
-        'Start Wi-Fi setup?',
-        'paperroute leaves its Wi-Fi while you set up the new one.',
-        'start',
+        'paperroute leaves its Wi-Fi while you set up the new one.'
     ),
 }
 
@@ -213,7 +208,7 @@ class NoticeView:
 PanelView = MenuView | DeviceView | PhoneView | WifiSetupView | ConfirmView
 
 
-def confirm_view(*, confirm: Confirm) -> ConfirmView:
+def confirm_view(*, confirm: Confirm, copy: ConfirmCopy) -> ConfirmView:
     """
     Build the screen asking to confirm an action.
 
@@ -221,6 +216,8 @@ def confirm_view(*, confirm: Confirm) -> ConfirmView:
     ----------
     confirm : Confirm
         The question.
+    copy : ConfirmCopy
+        The line saying what happens, for each action.
 
     Returns
     -------
@@ -228,7 +225,8 @@ def confirm_view(*, confirm: Confirm) -> ConfirmView:
         The title, question, the lines under it and the button labels;
         a phone's ask says so first.
     """
-    question, happens, verb = CONFIRM_COPY[confirm.action]
+    question, verb = CONFIRM_WORDS[confirm.action]
+    happens = copy[confirm.action]
     asked = (PHONE_ASKED,) if confirm.origin is Origin.PHONE else ()
     return ConfirmView(
         title=CONFIRM_TITLE,

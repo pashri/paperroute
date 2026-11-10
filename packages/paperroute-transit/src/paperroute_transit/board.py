@@ -8,10 +8,12 @@ import logging
 import os
 import signal
 import sys
+import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime, tzinfo
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
 
@@ -41,7 +43,8 @@ from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages, WaysPlug
 from paperroute_transit.adapters.checked_tiles import CheckedTiles, warn_unfit
 from paperroute_transit.adapters.clocks import ReplayClock, SystemClock
-from paperroute_transit.adapters.device_probe import SystemProbe
+from paperroute_transit.adapters.device_data import data_section
+from paperroute_transit.adapters.device_probe import SystemProbe, tiles_facts
 from paperroute_transit.adapters.feed_files import FileFeedsClient
 from paperroute_transit.adapters.feed_guard import GuardedFeeds
 from paperroute_transit.adapters.leg_cache import LegCache
@@ -517,7 +520,7 @@ def device_for(
     probe = SystemProbe(
         wifi=wifi,
         keys=keys,
-        tiles=tiles,
+        app_probe=partial(tiles_facts, tiles=tiles),
         last_error=last_error,
         data_dir=args.state.parent,
         version_file=args.version_file,
@@ -1032,7 +1035,6 @@ def device_pages_for(
     return DevicePages(
         status=lambda: timings.device,
         panel=lambda: timings.panel,
-        feeds=lambda: timings.last_ok,
         keys=tuple(
             replace(
                 key,
@@ -1040,8 +1042,6 @@ def device_pages_for(
             )
             for key in parts.keys()
         ),
-        feed_label=lambda feed: city.feeds.label(feed=feed),
-        daily_limit=city.feeds.daily_limit,
         post=display.send,
         zone=city.zone,
         error_log=args.error_log,
@@ -1050,6 +1050,15 @@ def device_pages_for(
         nav=parts.nav,
         reset_hint=RESET_HINT,
         sheets=parts.sheets,
+        data=lambda: data_section(
+            status=timings.app or None,
+            facts=None if timings.device is None else timings.device.facts,
+            feeds=timings.last_ok,
+            now=time.time(),
+            label=lambda feed: city.feeds.label(feed=feed),
+            daily_limit=city.feeds.daily_limit,
+            zone=city.zone,
+        ),
     )
 
 

@@ -10,6 +10,7 @@ from hypothesis import strategies as st
 
 from paperroute_device.core.device_events import ConfirmAsked
 from paperroute_device.core.device_model import (
+    AppRow,
     ConfirmAction,
     Menu,
     MenuRow,
@@ -48,6 +49,7 @@ from paperroute_transit.core.messages import (
     SaveState,
     Tick,
 )
+from paperroute_transit.core.rebuild import TRANSIT_ROWS
 from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.stop_view import StopView
@@ -99,13 +101,13 @@ def run(
     return state, effects
 
 
-def opened_at(*, row: MenuRow) -> State:
+def opened_at(*, row: MenuRow | AppRow) -> State:
     """
     Open the menu with the cursor on a row.
 
     Parameters
     ----------
-    row : MenuRow
+    row : MenuRow | AppRow
         The row.
 
     Returns
@@ -113,7 +115,7 @@ def opened_at(*, row: MenuRow) -> State:
     State
         The state with the menu open.
     """
-    index = tuple(MenuRow).index(row)
+    index = TRANSIT_ROWS.index(row)
     state, _ = run(state=pinned(), events=(BOTH, turn(steps=index)))
     return state
 
@@ -417,3 +419,20 @@ def test_menu_invariants(events: list[Event]) -> None:
             assert isinstance(shown, ConfirmView)
         if not state.running or state.power is not None:
             return
+
+
+def test_menu_rows_read_as_before() -> None:
+    """The menu lists today's eight rows in today's order."""
+    assert tuple(
+        row.value if isinstance(row, MenuRow) else row.label
+        for row in TRANSIT_ROWS
+    ) == (
+        'Wi-Fi',
+        'Device',
+        'Open on your phone',
+        'Sleep now',
+        'Rebuild timetable now',
+        'Restart',
+        'Shut down',
+        'Reset settings',
+    )

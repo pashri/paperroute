@@ -53,6 +53,9 @@ KIT_TEXT: Final[frozenset[str]] = frozenset(
 )
 STOP_VIEW: Final[str] = 'paperroute_transit.core.stop_view'
 NSW: Final[re.Pattern[str]] = re.compile(r'(?i)\bnsw')
+TRANSIT_WORDS: Final[re.Pattern[str]] = re.compile(
+    r'(?i)\b(timetable|rebuild|tiles|feeds?|transit|sydney|tfnsw)\b',
+)
 KEY_SCHEME: Final[re.Pattern[str]] = re.compile(r'(?i)\bapikey\b|BASE_URL')
 APP: Final[Path] = (
     ROOT / 'apps' / 'paperroute-sydney' / 'src' / 'paperroute_sydney'
@@ -612,6 +615,24 @@ def test_device_kit_names_no_sydney() -> None:
         if 'SYDNEY' in text or 'Sydney' in text
     ]
     assert not offenders
+
+
+@pytest.mark.xfail(
+    strict=True, reason='until the kit names no transit concept',
+)
+def test_device_kit_names_no_transit() -> None:
+    """No kit file names a timetable, rebuild, tiles, feeds or a city."""
+    hardware = [
+        (path, path.read_text(encoding='utf-8'))
+        for path in sorted(HARDWARE.rglob('*'))
+        if path.is_file() and path.suffix in KIT_TEXT
+    ]
+    offenders = sorted({
+        f'{path.relative_to(ROOT).as_posix()}: {word.group(0)}'
+        for path, text in [*kit_texts(), *hardware]
+        for word in TRANSIT_WORDS.finditer(text)
+    })
+    assert offenders == []
 
 
 def test_device_pages_import_no_feed_config() -> None:

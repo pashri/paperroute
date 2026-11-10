@@ -40,7 +40,7 @@ NOT_RUNNING = (
 @pytest.fixture(name='setup')
 def _setup() -> DeviceSite:
     """A running hotspot with a key already set."""
-    return DeviceSite(status=HOTSPOT, feeds={})
+    return DeviceSite(status=HOTSPOT)
 
 
 async def _start(*, setup: DeviceSite) -> Client:
@@ -259,7 +259,6 @@ async def test_setup_asks_for_the_first_missing_key() -> None:
     second = FakeKeys()
     site = DeviceSite(
         status=replace(NO_KEY_HOTSPOT, missing_keys=('Weather',)),
-        feeds={},
         more_keys=(
             DeviceKey(
                 name='weather',

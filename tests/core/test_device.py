@@ -30,6 +30,7 @@ from paperroute_transit.core.banners import no_key_banner
 from paperroute_transit.core.device import (
     NOTICE,
     PROBE_EVERY,
+    app_status,
     device_status,
     on_reset,
     on_settings,
@@ -374,20 +375,28 @@ def test_probed_facts_are_kept_with_the_key() -> None:
 
 
 def test_device_status() -> None:
-    """The status gathers the timetable, rebuild, calls and facts."""
+    """The status gathers the keys and facts, and nothing of the app's."""
     state, _ = step(loaded(state=fresh()), at(seconds=30))
     state, _ = step(state, DeviceProbed(facts=device_facts()))
     status = device_status(state=state)
-    assert status == DeviceStatus(
-        timetable=state.saving.timetable,
-        schema=None,
-        rebuilding=False,
-        rebuild_failed=False,
-        calls_today=state.quota.calls,
-        missing_keys=(),
-        facts=device_facts(),
-    )
-    assert status.calls_today > 0
+    assert status == DeviceStatus(missing_keys=(), facts=device_facts())
+
+
+def test_app_status() -> None:
+    """The app status gathers the timetable, rebuild and calls, in order."""
+    state, _ = step(loaded(state=fresh()), at(seconds=30))
+    status = app_status(state=state)
+    assert status == {
+        'timetable': state.saving.timetable,
+        'schema': None,
+        'rebuilding': False,
+        'rebuild_failed': False,
+        'calls_today': state.quota.calls,
+    }
+    assert list(status) == [
+        'timetable', 'schema', 'rebuilding', 'rebuild_failed', 'calls_today',
+    ]
+    assert state.quota.calls > 0
 
 
 def resetting(*, kind: ResetKind) -> State:

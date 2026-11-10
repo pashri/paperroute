@@ -13,9 +13,7 @@ from aiohttp import web
 
 from paperroute_device.adapters.device_page import (
     RESETS,
-    data_rows,
     device_notice,
-    feed_rows,
     key_text,
     knob_rows,
     network_rows,
@@ -61,6 +59,7 @@ NOTICE_MARK: Final[str] = '{{notice}}'
 KEY_LABEL_MARK: Final[str] = '{{key_label}}'
 FORM_MARK: Final[str] = '{{form}}'
 RESET_MARK: Final[str] = '{{reset_hint}}'
+DATA_LINE: Final[str] = '    {{data}}\n'
 KIT_RESET_HINT: Final[str] = (
     'Reset settings clears the settings, Wi-Fi and the keys. Erase '
     'everything also deletes the saved data. Both are confirmed on the '
@@ -307,17 +306,11 @@ class DevicePages:
     ----------
     status : Callable[[], DeviceStatus | None]
         The latest device status.
-    feeds : Callable[[], Mapping[str, float]]
-        When each feed last worked.
     panel : Callable[[], PanelTimes | None]
         The panel's refresh times, or None when there is no panel.
     keys : Sequence[DeviceKey]
         The API keys, in declaration order; the setup page asks for the
         first one missing. With none, no page asks for a key.
-    feed_label : Callable[[str], str]
-        Names a feed for people.
-    daily_limit : int
-        The API calls allowed each day.
     post : Callable[[DeviceRequest], None]
         Sends a request to the app; called at request time.
     zone : tzinfo
@@ -337,17 +330,17 @@ class DevicePages:
         text, escaped.
     sheets : Sequence[str]
         Extra stylesheets each page links straight after `/live.css`.
+    data : Callable[[], str] | None
+        The Device page's Data section as HTML, called at request time;
+        None leaves the section out.
     """
 
     def __init__(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         *,
         status: Callable[[], DeviceStatus | None],
-        feeds: Callable[[], Mapping[str, float]],
         panel: Callable[[], PanelTimes | None],
         keys: Sequence[DeviceKey] = (),
-        feed_label: Callable[[str], str],
-        daily_limit: int,
         post: Callable[[DeviceRequest], None],
         zone: tzinfo,
         error_log: Path | None,
@@ -357,13 +350,11 @@ class DevicePages:
         nav: Sequence[NavItem] = KIT_NAV,
         reset_hint: str = KIT_RESET_HINT,
         sheets: Sequence[str] = (),
+        data: Callable[[], str] | None = None,
     ) -> None:
         self._status = status
-        self._feeds = feeds
         self._panel = panel
         self._keys = tuple(keys)
-        self._feed_label = feed_label
-        self._daily_limit = daily_limit
         self._post = post
         self._zone = zone
         self._error_log = error_log
@@ -373,6 +364,7 @@ class DevicePages:
         self._nav = tuple(nav)
         self._reset_hint = reset_hint
         self._sheets = tuple(sheets)
+        self._data = data
 
     def _routes(self) -> list[web.RouteDef]:
         """
@@ -648,22 +640,10 @@ class DevicePages:
             The page; the key itself is never drawn.
         """
         device, now = self._status(), self._clock()
-        feeds = self._feeds()
         facts = None if device is None else device.facts
         marks = {
             NOTICE_MARK: news,
             '{{network}}': network_rows(facts=facts),
-            '{{data}}': data_rows(
-                status=device,
-                daily_limit=self._daily_limit,
-                zone=self._zone,
-            ),
-            '{{feeds}}': feed_rows(
-                feeds=feeds,
-                now=now,
-                label=self._feed_label,
-                zone=self._zone,
-            ),
             '{{system}}': system_rows(facts=facts),
             '{{panel}}': (
                 panel_rows(panel=self._panel())
@@ -688,6 +668,8 @@ class DevicePages:
         )
         for mark, value in marks.items():
             page = page.replace(mark, value)
+        data = '' if self._data is None else f'    {self._data()}\n'
+        page = page.replace(DATA_LINE, data)
         return web.Response(
             text=page, content_type='text/html', status=status,
         )

@@ -1,31 +1,23 @@
 """Draw the Device page's facts and news."""
 
 import html
-from collections.abc import Callable, Mapping
-from datetime import datetime, tzinfo
+from collections.abc import Mapping
 from typing import Final
 
 from paperroute_device.core.device_model import (
     POWER_ACTIONS,
     ConfirmAction,
     DeviceFacts,
-    DeviceStatus,
     PowerAction,
 )
 from paperroute_device.core.panel_views import (
     CANCEL_LINE,
-    CONFIRM_COPY,
+    CONFIRM_WORDS,
     LOCAL_NAME,
     UNKNOWN,
 )
 from paperroute_device.core.panel_views import strength as dbm_strength
-from paperroute_device.core.text import (
-    DOT,
-    HINT_DOT,
-    clock_text,
-    day_text,
-    local_time,
-)
+from paperroute_device.core.text import DOT, HINT_DOT
 from paperroute_hardware.ports import PanelTimes
 
 POWER_STATUS: Final[dict[PowerAction, str]] = {
@@ -36,7 +28,7 @@ POWER_STATUS: Final[dict[PowerAction, str]] = {
 ASKED: Final[dict[str, str]] = {
     action.value: (
         'Confirm on the device. Bottom: press to '
-        f'{CONFIRM_COPY[action][2]}{HINT_DOT}{CANCEL_LINE}'
+        f'{CONFIRM_WORDS[action][1]}{HINT_DOT}{CANCEL_LINE}'
     )
     for action in (
         ConfirmAction.JOIN_WIFI,
@@ -56,13 +48,6 @@ ROW: Final[str] = """        <div>
           <dt>{label}</dt>
           <dd>{value}</dd>
         </div>"""
-FEED_ROW: Final[str] = (
-    '            <tr><th scope="row">{label}</th>'
-    '<td>{last}</td><td>{age}</td></tr>'
-)
-NO_FEEDS: Final[str] = (
-    '            <tr><td colspan="3">none yet</td></tr>'
-)
 
 
 def notice(*, text: str, alert: bool = False) -> str:
@@ -168,59 +153,6 @@ def clock_value(*, facts: DeviceFacts | None) -> str:
     return 'Synced' if facts.clock_synced else 'Not synced'
 
 
-def timetable_text(*, status: DeviceStatus, zone: tzinfo) -> str:
-    """
-    Describe the timetable in use.
-
-    Parameters
-    ----------
-    status : DeviceStatus
-        The device status.
-    zone : tzinfo
-        Time zone whose wall clock to show.
-
-    Returns
-    -------
-    str
-        `rebuilding` while a rebuild runs; else its version and build
-        time, then `ok` or `last build failed`; with no timetable,
-        `none yet` or `last build failed`.
-    """
-    failed = 'last build failed'
-    if status.rebuilding:
-        return 'rebuilding'
-    built = local_time(stamp=status.timetable, zone=zone)
-    if built is None:
-        return failed if status.rebuild_failed else 'none yet'
-    parts = [] if status.schema is None else [f'version {status.schema}']
-    clock = clock_text(moment=built, zone=zone)
-    parts.append(f'built {day_text(moment=built)} {clock}')
-    parts.append(failed if status.rebuild_failed else 'ok')
-    return DOT.join(parts)
-
-
-def tiles_text(*, facts: DeviceFacts | None, zone: tzinfo) -> str:
-    """
-    Say when the map tiles were built.
-
-    Parameters
-    ----------
-    facts : DeviceFacts | None
-        The latest probe, or None.
-    zone : tzinfo
-        Time zone whose calendar day to show.
-
-    Returns
-    -------
-    str
-        `built 19 Oct`, `none`, or a dash before the first probe.
-    """
-    if facts is None:
-        return UNKNOWN
-    built = local_time(stamp=facts.tiles_built, zone=zone)
-    return 'none' if built is None else f'built {day_text(moment=built)}'
-
-
 def uptime_text(*, seconds: float | None) -> str:
     """
     Give how long the device has been up.
@@ -307,41 +239,6 @@ def network_rows(*, facts: DeviceFacts | None) -> str:
         row(label='Wi-Fi', value=wifi_text(facts=facts)),
         row(label='Address', value=address_text(facts=facts)),
         row(label='Clock', value=clock_value(facts=facts)),
-    ))
-
-
-def data_rows(
-    *, status: DeviceStatus | None, daily_limit: int, zone: tzinfo,
-) -> str:
-    """
-    Draw the Data section's facts.
-
-    Parameters
-    ----------
-    status : DeviceStatus | None
-        The device status, or None before the app reports it.
-    daily_limit : int
-        The API calls allowed each day.
-    zone : tzinfo
-        Time zone whose wall clock to show.
-
-    Returns
-    -------
-    str
-        Timetable, map tiles and the API calls made today.
-    """
-    if status is None:
-        timetable, calls = UNKNOWN, UNKNOWN
-    else:
-        timetable = timetable_text(status=status, zone=zone)
-        calls = f'{status.calls_today:,} of {daily_limit:,}'
-    facts = None if status is None else status.facts
-    return '\n'.join((
-        row(label='Timetable', value=timetable),
-        row(
-            label='Map tiles', value=tiles_text(facts=facts, zone=zone),
-        ),
-        row(label='API calls today', value=calls),
     ))
 
 
@@ -445,46 +342,6 @@ def knob_rows(*, knobs: bool | None) -> str:
     return row(label='Knobs', value='on' if knobs else 'not answering')
 
 
-def feed_rows(
-    *,
-    feeds: Mapping[str, float],
-    now: float,
-    label: Callable[[str], str],
-    zone: tzinfo,
-) -> str:
-    """
-    Draw the feed table's body.
-
-    Parameters
-    ----------
-    feeds : Mapping[str, float]
-        Wall-clock time each feed last worked.
-    now : float
-        The wall-clock time now.
-    label : Callable[[str], str]
-        Names a feed for people.
-    zone : tzinfo
-        Time zone whose wall clock to show.
-
-    Returns
-    -------
-    str
-        One row per feed, by name, with its time in ``zone`` and its
-        age; one `none yet` row with no feeds.
-    """
-    rows = sorted((label(feed), last) for feed, last in feeds.items())
-    if not rows:
-        return NO_FEEDS
-    return '\n'.join(
-        FEED_ROW.format(
-            label=html.escape(name),
-            last=f'{datetime.fromtimestamp(last, tz=zone):%H:%M:%S}',
-            age=ago_text(seconds=now - last),
-        )
-        for name, last in rows
-    )
-
-
 def key_text(*, present: bool, last_used: float | None, now: float) -> str:
     """
     Describe the API key without showing it.
@@ -494,7 +351,7 @@ def key_text(*, present: bool, last_used: float | None, now: float) -> str:
     present : bool
         Whether a key is set.
     last_used : float | None
-        Wall-clock time a feed last worked with it, or None.
+        Wall-clock time the key last worked, or None.
     now : float
         The wall-clock time now.
 

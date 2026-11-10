@@ -11,7 +11,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute_device.adapters.device_page import ASKED as DEVICE_ASKED
-from paperroute_device.adapters.device_page import ago_text, data_rows
+from paperroute_device.adapters.device_page import ago_text
 from paperroute_device.adapters.web_device import (
     KIT_RESET_HINT,
     RESET_MARK,
@@ -33,7 +33,7 @@ from paperroute_device.core.device_model import (
     PowerAction,
     WifiStatus,
 )
-from paperroute_device.core.panel_views import confirm_view
+from paperroute_device.core.panel_views import KIT_CONFIRM_COPY, confirm_view
 from paperroute_device_testkit.device_fakes import FakeKeys
 from paperroute_device_testkit.device_pages import (
     FACTS,
@@ -73,7 +73,7 @@ ASKED = {
 
 @pytest.fixture(name='device')
 def _device() -> DeviceSite:
-    """Device pages over a status, two feeds and a key."""
+    """Device pages over a status and a key."""
     return DeviceSite()
 
 
@@ -102,17 +102,10 @@ def _row(*, label: str, value: str) -> str:
 
 
 @pytest.mark.parametrize(('change', 'label', 'value'), [
-    ({'rebuilding': True}, 'Timetable', 'rebuilding'),
-    ({'rebuild_failed': True, 'timetable': None}, 'Timetable',
-     'last build failed'),
-    ({'timetable': None}, 'Timetable', 'none yet'),
-    ({'rebuild_failed': True}, 'Timetable',
-     'version 6 · built 21 Oct 21:45 · last build failed'),
     ({'facts': replace(FACTS, wifi=WifiStatus(managed=True))}, 'Wi-Fi',
      'not connected'),
     ({'facts': replace(FACTS, wifi=WifiStatus(managed=True))}, 'Address',
      'paperroute.local'),
-    ({'facts': replace(FACTS, tiles_built=None)}, 'Map tiles', 'none'),
     ({'facts': replace(FACTS, uptime_s=600)}, 'Up', '10 min'),
     ({'facts': replace(FACTS, clock_synced=False)}, 'Clock', 'Not synced'),
     ({'facts': replace(FACTS, clock_synced=None)}, 'Clock', 'Unknown'),
@@ -205,10 +198,9 @@ async def test_device_page_key_states(
 
 
 async def test_key_line_reads_the_keys_last_used() -> None:
-    """Each key's line says when that key was used, not when feeds were."""
+    """Each key's line says when that key was used."""
     site, second = two_keys()
     site.keys.key, second.key = KEY, KEY
-    site.feeds = {'trains': NOW - 5}
     site.last_used = NOW - 600
     client = await _start(device=site)
     try:
@@ -279,7 +271,7 @@ async def test_asked_ignores_unknown_value(client: Client) -> None:
 def test_device_asks_name_the_confirm_buttons(action: ConfirmAction) -> None:
     """The phone's ask names the buttons the panel draws."""
     confirm = Confirm(action=action, origin=Origin.PHONE, asked_at=ASKED_AT)
-    view = confirm_view(confirm=confirm)
+    view = confirm_view(confirm=confirm, copy=KIT_CONFIRM_COPY)
     assert view.confirm in DEVICE_ASKED[action.value]
     assert view.cancel in DEVICE_ASKED[action.value]
 
@@ -327,11 +319,32 @@ async def test_device_page_uses_credential_label(device: DeviceSite) -> None:
     assert 'Test key not saved.' in refused
 
 
-def test_device_page_shows_given_daily_limit() -> None:
-    """The API calls row counts against the limit it is given."""
-    assert 'of 1,234' in data_rows(
-        status=STATUS, daily_limit=1234, zone=ZONE,
+async def test_device_page_without_data_has_no_section(
+    device: DeviceSite, client: Client
+) -> None:
+    """With no data callable the page has no Data section and no gap."""
+    assert device.data is None
+    text = await (await client.get('/device')).text()
+    assert 'id="data"' not in text
+    assert '{{' not in text
+    assert '</section>\n    <section class="card setting" aria-labelledby="system">' in text
+
+
+async def test_data_section_is_app_markup(device: DeviceSite) -> None:
+    """The app's markup fills the page where the Data section was."""
+    device.data = lambda: (
+        '<section id="mine">\n      <p>{{system}} 1 < 2</p>\n    </section>'
     )
+    client = await _start(device=device)
+    try:
+        text = await (await client.get('/device')).text()
+    finally:
+        await client.close()
+    assert (
+        '    <section id="mine">\n      <p>{{system}} 1 < 2</p>\n'
+        '    </section>\n    <section class="card setting" '
+        'aria-labelledby="system">'
+    ) in text
 
 
 async def test_downloads_serve_files(
@@ -374,17 +387,6 @@ async def test_downloads_404_without_file(
         assert response.status == HTTPStatus.NOT_FOUND
     finally:
         await other.close()
-
-
-async def test_device_page_feed_times_in_given_zone(client: Client) -> None:
-    """Each feed's last good time is read in the pages' zone."""
-    text = await (await client.get('/device')).text()
-    assert (
-        '<th scope="row">Trains</th><td>21:44:48</td><td>12 s</td>'
-    ) in text
-    assert (
-        '<th scope="row">Buses</th><td>21:44:20</td><td>40 s</td>'
-    ) in text
 
 
 async def test_device_pages_serve_power_page(
@@ -552,10 +554,7 @@ async def test_device_pages_with_no_keys() -> None:
     site = DeviceSite(status=replace(HOTSPOT, missing_keys=('Test',)))
     pages = DevicePages(
         status=lambda: site.status,
-        feeds=dict,
         panel=lambda: None,
-        feed_label=str,
-        daily_limit=1,
         post=site.posted.append,
         zone=ZONE,
         error_log=None,

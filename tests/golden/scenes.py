@@ -63,6 +63,7 @@ from paperroute_transit.core.messages import (
     StripLoaded,
 )
 from paperroute_transit.core.model import Pin
+from paperroute_transit.core.panel_screens import TilesFacts
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.saved import LiveView
 from paperroute_transit.core.state import step
@@ -505,8 +506,9 @@ def panel(
         State at `START`, with the probe's facts.
     """
     state = stop()
+    facts = replace(FACTS, app=TilesFacts(built='2025-10-19T08:00:00+11:00'))
     shown = replace(
-        state.panel, facts=FACTS, menu=menu, wifi=wifi, confirm=confirm,
+        state.panel, facts=facts, menu=menu, wifi=wifi, confirm=confirm,
     )
     return replace(state, panel=shown)
 

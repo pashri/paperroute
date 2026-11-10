@@ -2,7 +2,7 @@
 
 import logging
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 
 from paperroute_device.core.device_model import DeviceStatus
@@ -98,6 +98,8 @@ class Timings:
         Wall-clock time of each feed's latest parse.
     device : DeviceStatus | None
         The device status, or None before the app reports it.
+    app : dict[str, object]
+        The app's status readings; empty before the app reports them.
     pins : PinsSeen | None
         The pins, or None before the app reports them.
     panel : PanelTimes | None
@@ -113,6 +115,7 @@ class Timings:
     settings: Settings | None = None
     last_ok: dict[str, float] = field(default_factory=dict)
     device: DeviceStatus | None = None
+    app: dict[str, object] = field(default_factory=dict)
     pins: PinsSeen | None = None
     panel: PanelTimes | None = None
 
@@ -153,6 +156,29 @@ class Timings:
             trips=trips,
         )
         self.last_ok[feed] = time.time()
+
+    def work_done(self, *, name: str, ms: float) -> None:
+        """
+        Ignore a piece of background work; feeds are kept by `feed_parsed`.
+
+        Parameters
+        ----------
+        name : str
+            What was done.
+        ms : float
+            Time taken, in milliseconds.
+        """
+
+    def app_seen(self, *, status: Mapping[str, object]) -> None:
+        """
+        Record the app's status.
+
+        Parameters
+        ----------
+        status : Mapping[str, object]
+            The status.
+        """
+        self.app = dict(status)
 
     def ticked(self) -> None:
         """Record an app loop tick."""
@@ -261,11 +287,15 @@ class Timings:
         if self.settings is not None:
             snapshot['settings'] = form_values(settings=self.settings)
         if self.device is not None:
-            snapshot['device'] = device_snapshot(status=self.device)
+            snapshot['device'] = device_snapshot(
+                status=self.device, app=self.app,
+            )
         return snapshot
 
 
-def device_snapshot(*, status: DeviceStatus) -> dict[str, object]:
+def device_snapshot(
+    *, status: DeviceStatus, app: Mapping[str, object],
+) -> dict[str, object]:
     """
     Give the device status in a JSON-ready form, without its facts.
 
@@ -273,22 +303,20 @@ def device_snapshot(*, status: DeviceStatus) -> dict[str, object]:
     ----------
     status : DeviceStatus
         The status.
+    app : Mapping[str, object]
+        The app's status readings.
 
     Returns
     -------
     dict[str, object]
-        Timetable, schema, rebuild state, calls today, whether every
-        key is set (None until known), what a phone asked for that
-        waits on the panel, and Wi-Fi setup's phase; never its
-        password and never a key's name or value.
+        The app's readings (timetable, schema, rebuild state and calls
+        today), then whether every key is set (None until known), what
+        a phone asked for that waits on the panel, and Wi-Fi setup's
+        phase; never its password and never a key's name or value.
     """
     setup = status.setup
     return {
-        'timetable': status.timetable,
-        'schema': status.schema,
-        'rebuilding': status.rebuilding,
-        'rebuild_failed': status.rebuild_failed,
-        'calls_today': status.calls_today,
+        **app,
         'key_set': (
             None
             if status.missing_keys is None
@@ -328,6 +356,28 @@ class NullObserver:
             Parse time in milliseconds.
         trips : int
             Number of trip updates found.
+        """
+
+    def work_done(self, *, name: str, ms: float) -> None:
+        """
+        Ignore a piece of background work.
+
+        Parameters
+        ----------
+        name : str
+            What was done.
+        ms : float
+            Time taken, in milliseconds.
+        """
+
+    def app_seen(self, *, status: Mapping[str, object]) -> None:
+        """
+        Ignore the app's status.
+
+        Parameters
+        ----------
+        status : Mapping[str, object]
+            The status.
         """
 
     def ticked(self) -> None:
@@ -381,7 +431,7 @@ class ObserverGroup:
     Pass each event on to every observer, even if one fails.
 
     The device events go to the observers first, then the devices. The
-    settings and pins go to the observers only.
+    parsed feeds, settings and pins go to the observers only.
 
     Parameters
     ----------
@@ -454,13 +504,43 @@ class ObserverGroup:
             Number of trip updates found.
         """
         self._each(
-            observers=self._everyone,
+            observers=self._observers,
             call=lambda o: o.feed_parsed(
                 feed=feed,
                 fetch_ms=fetch_ms,
                 parse_ms=parse_ms,
                 trips=trips,
             ),
+        )
+
+    def work_done(self, *, name: str, ms: float) -> None:
+        """
+        Pass on a piece of background work.
+
+        Parameters
+        ----------
+        name : str
+            What was done.
+        ms : float
+            Time taken, in milliseconds.
+        """
+        self._each(
+            observers=self._everyone,
+            call=lambda o: o.work_done(name=name, ms=ms),
+        )
+
+    def app_seen(self, *, status: Mapping[str, object]) -> None:
+        """
+        Pass on the app's status.
+
+        Parameters
+        ----------
+        status : Mapping[str, object]
+            The status.
+        """
+        self._each(
+            observers=self._everyone,
+            call=lambda o: o.app_seen(status=status),
         )
 
     def ticked(self) -> None:

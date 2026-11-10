@@ -40,3 +40,17 @@ def test_led_unwritable_trigger_warns_once(
         led.frame_drawn(render_ms=1.0)
         led.frame_drawn(render_ms=1.0)
     assert len(caplog.records) == 1
+
+
+def test_led_ignores_work_and_app_status(tmp_path: Path) -> None:
+    """Neither call touches the trigger, and both return None."""
+    (tmp_path / 'trigger').write_text('mmc0\n')
+    led = ActLed(root=tmp_path)
+    results = (
+        led.work_done(name='f', ms=1.0),  # type: ignore[func-returns-value]
+        led.app_seen(  # type: ignore[func-returns-value]
+            status={'n': 1},
+        ),
+    )
+    assert results == (None, None)
+    assert (tmp_path / 'trigger').read_text() == 'mmc0\n'

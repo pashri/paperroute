@@ -39,18 +39,9 @@ FACTS: Final[DeviceFacts] = DeviceFacts(
     mem_free=134_000_000,
     version='abc1234',
     last_error=None,
-    tiles_built='2025-10-19T08:00:00+11:00',
     missing_keys=(),
 )
-STATUS: Final[DeviceStatus] = DeviceStatus(
-    timetable='2025-10-21T21:45:00+11:00',
-    schema='6',
-    rebuilding=False,
-    rebuild_failed=False,
-    calls_today=8412,
-    missing_keys=(),
-    facts=FACTS,
-)
+STATUS: Final[DeviceStatus] = DeviceStatus(missing_keys=(), facts=FACTS)
 NETWORKS: Final[tuple[WifiNetwork, ...]] = (
     WifiNetwork(ssid='Home', signal=80, secured=True, enterprise=False),
     WifiNetwork(
@@ -59,11 +50,6 @@ NETWORKS: Final[tuple[WifiNetwork, ...]] = (
     WifiNetwork(ssid='Corp', signal=20, secured=True, enterprise=True),
 )
 HOTSPOT: Final[DeviceStatus] = DeviceStatus(
-    timetable=None,
-    schema=None,
-    rebuilding=False,
-    rebuild_failed=False,
-    calls_today=0,
     missing_keys=(),
     facts=None,
     setup=WifiSetup(
@@ -83,8 +69,6 @@ class DeviceSite:
     ----------
     status : DeviceStatus | None
         The device status the pages read.
-    feeds : dict[str, float]
-        When each feed last worked.
     panel : PanelTimes | None
         The panel's refresh times, or None.
     knobs : bool | None
@@ -101,10 +85,6 @@ class DeviceSite:
         When the first key last worked, or None.
     more_keys : tuple[DeviceKey, ...]
         The keys after the first.
-    feed_label : Callable[[str], str]
-        Names a feed.
-    daily_limit : int
-        The API calls allowed each day.
     zone : tzinfo
         The wall clock the pages show.
     posted : list[DeviceRequest]
@@ -119,12 +99,11 @@ class DeviceSite:
         The Device page's reset wording.
     sheets : tuple[str, ...]
         Extra stylesheets each page links.
+    data : Callable[[], str] | None
+        The Device page's Data section, or None for none.
     """
 
     status: DeviceStatus | None = STATUS
-    feeds: dict[str, float] = field(
-        default_factory=lambda: {'trains': NOW - 12, 'buses': NOW - 40},
-    )
     panel: PanelTimes | None = None
     knobs: bool | None = None
     keys: FakeKeys = field(default_factory=lambda: FakeKeys(key=KEY))
@@ -133,8 +112,6 @@ class DeviceSite:
     display_name: str = 'Test'
     last_used: float | None = None
     more_keys: tuple[DeviceKey, ...] = ()
-    feed_label: Callable[[str], str] = str.title
-    daily_limit: int = 60_000
     zone: tzinfo = ZONE
     posted: list[DeviceRequest] = field(default_factory=list)
     error_log: Path | None = None
@@ -142,6 +119,7 @@ class DeviceSite:
     nav: tuple[NavItem, ...] = KIT_NAV
     reset_hint: str = KIT_RESET_HINT
     sheets: tuple[str, ...] = ()
+    data: Callable[[], str] | None = None
 
     def pages(self) -> DevicePages:
         """
@@ -154,7 +132,6 @@ class DeviceSite:
         """
         return DevicePages(
             status=lambda: self.status,
-            feeds=lambda: self.feeds,
             panel=lambda: self.panel,
             knobs=lambda: self.knobs,
             keys=(
@@ -167,8 +144,6 @@ class DeviceSite:
                 ),
                 *self.more_keys,
             ),
-            feed_label=self.feed_label,
-            daily_limit=self.daily_limit,
             post=self.posted.append,
             zone=self.zone,
             error_log=self.error_log,
@@ -177,4 +152,5 @@ class DeviceSite:
             nav=self.nav,
             reset_hint=self.reset_hint,
             sheets=self.sheets,
+            data=self.data,
         )

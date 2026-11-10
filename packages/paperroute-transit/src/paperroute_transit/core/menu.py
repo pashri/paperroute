@@ -6,7 +6,7 @@ from typing import Final
 
 from paperroute_device.core.device_events import ConfirmAsked, PowerRequested
 from paperroute_device.core.device_model import (
-    MENU_ROWS,
+    AppRow,
     Confirm,
     ConfirmAction,
     Menu,
@@ -25,7 +25,7 @@ from paperroute_hardware.core.knob_events import (
 )
 from paperroute_transit.core.device import on_power, on_reset, probe_effects
 from paperroute_transit.core.messages import Effect
-from paperroute_transit.core.rebuild import forced
+from paperroute_transit.core.rebuild import REBUILD_ROW, TRANSIT_ROWS, forced
 from paperroute_transit.core.sleep import slept
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import settled
@@ -146,7 +146,7 @@ def menu_knob(
         case KnobTurned(knob=Knob.BOTTOM, steps=steps):
             return moved(state=state, menu=menu, steps=steps)
         case KnobPressed(knob=Knob.BOTTOM):
-            return row_chosen(state=state, row=MENU_ROWS[menu.cursor])
+            return row_chosen(state=state, row=TRANSIT_ROWS[menu.cursor])
         case KnobPressed(knob=Knob.TOP):
             return settled(state=with_menu(state=state, menu=None))
     return state, ()
@@ -172,7 +172,7 @@ def moved(
     tuple[State, tuple[Effect, ...]]
         New state and its redraw; unchanged at either end.
     """
-    cursor = min(max(menu.cursor + steps, 0), len(MENU_ROWS) - 1)
+    cursor = min(max(menu.cursor + steps, 0), len(TRANSIT_ROWS) - 1)
     if cursor == menu.cursor:
         return state, ()
     menu = replace(menu, cursor=cursor)
@@ -180,7 +180,7 @@ def moved(
 
 
 def row_chosen(
-    *, state: State, row: MenuRow
+    *, state: State, row: MenuRow | AppRow
 ) -> tuple[State, tuple[Effect, ...]]:
     """
     Open a menu row.
@@ -189,7 +189,7 @@ def row_chosen(
     ----------
     state : State
         State, with the menu open.
-    row : MenuRow
+    row : MenuRow | AppRow
         The row pressed.
 
     Returns
@@ -200,13 +200,13 @@ def row_chosen(
         screen, or Wi-Fi setup scanning.
     """
     menu = state.panel.menu or Menu()
+    if isinstance(row, AppRow) or row is MenuRow.DEVICE:
+        return device_shown(state=state, menu=menu, row=row)
     if row in CONFIRM_FOR:
         confirm = Confirm(
             action=CONFIRM_FOR[row], origin=Origin.PANEL, asked_at=state.now,
         )
         return settled(state=with_confirm(state=state, confirm=confirm))
-    if row in (MenuRow.DEVICE, MenuRow.REBUILD):
-        return device_shown(state=state, menu=menu, row=row)
     if row is MenuRow.PHONE:
         menu = replace(menu, screen=PanelScreen.PHONE)
         return settled(state=with_menu(state=state, menu=menu))
@@ -217,7 +217,7 @@ def row_chosen(
 
 
 def device_shown(
-    *, state: State, menu: Menu, row: MenuRow
+    *, state: State, menu: Menu, row: MenuRow | AppRow
 ) -> tuple[State, tuple[Effect, ...]]:
     """
     Show the Device screen, rebuilding the timetable first if asked.
@@ -228,7 +228,7 @@ def device_shown(
         State, with the menu open.
     menu : Menu
         The open menu.
-    row : MenuRow
+    row : MenuRow | AppRow
         Device, or Rebuild timetable now.
 
     Returns
@@ -238,7 +238,7 @@ def device_shown(
         one runs, a probe when one is due, and the redraw.
     """
     rebuilds: tuple[Effect, ...] = ()
-    if row is MenuRow.REBUILD:
+    if row == REBUILD_ROW:
         state, rebuilds = forced(state=state)
     menu = replace(menu, screen=PanelScreen.DEVICE)
     state, probes = probe_effects(state=with_menu(state=state, menu=menu))

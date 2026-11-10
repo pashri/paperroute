@@ -679,7 +679,25 @@ class FeedsClient(Protocol):
 
 
 class Observer(DeviceObserver, Protocol):
-    """Receives the device events plus the settings and pins."""
+    """Receives the device events plus the feeds, settings and pins."""
+
+    def feed_parsed(
+        self, *, feed: str, fetch_ms: float, parse_ms: float, trips: int
+    ) -> None:
+        """
+        Record that a realtime feed was fetched and parsed.
+
+        Parameters
+        ----------
+        feed : str
+            Feed path.
+        fetch_ms : float
+            Download time in milliseconds.
+        parse_ms : float
+            Parse time in milliseconds.
+        trips : int
+            Number of trip updates found.
+        """
 
     def settings_seen(self, *, settings: Settings) -> None:
         """

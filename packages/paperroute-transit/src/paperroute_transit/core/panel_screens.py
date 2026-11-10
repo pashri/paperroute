@@ -1,10 +1,13 @@
 """Build the panel's settings screens from the state."""
 
+from dataclasses import dataclass
 from datetime import tzinfo
+from typing import Final
 
 from paperroute_device.core.device_model import (
-    MENU_ROWS,
+    ConfirmAction,
     DeviceFacts,
+    MenuRow,
     PanelScreen,
     WifiStatus,
 )
@@ -12,6 +15,7 @@ from paperroute_device.core.panel_views import (
     LOCAL_NAME,
     MENU_VISIBLE,
     UNKNOWN,
+    ConfirmCopy,
     DeviceView,
     InfoRow,
     MenuView,
@@ -22,8 +26,44 @@ from paperroute_device.core.panel_views import (
 )
 from paperroute_device.core.text import DOT, clock_text, day_text, local_time
 from paperroute_transit.core.quota import calls_today
+from paperroute_transit.core.rebuild import TRANSIT_ROWS
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.wifi import wifi_setup_view
+
+TRANSIT_CONFIRM_COPY: Final[ConfirmCopy] = {
+    ConfirmAction.RESTART: (
+        'paperroute starts again. Your pins and settings stay.'
+    ),
+    ConfirmAction.SHUT_DOWN: (
+        "paperroute switches off. The screen says when it's safe"
+        ' to unplug.'
+    ),
+    ConfirmAction.RESET_SETTINGS: (
+        'Clears pins, settings, Wi-Fi and the key.'
+        ' The timetable and map stay.'
+    ),
+    ConfirmAction.ERASE: (
+        'Clears pins, settings, Wi-Fi, the key and the timetable.'
+        ' The map stays.'
+    ),
+    ConfirmAction.JOIN_WIFI: (
+        'paperroute leaves its Wi-Fi while you set up the new one.'
+    ),
+}
+
+
+@dataclass(frozen=True)
+class TilesFacts:
+    """
+    What the app's probe found about the map tiles.
+
+    Attributes
+    ----------
+    built : str | None
+        When the tiles were built, or None with no tiles.
+    """
+
+    built: str | None
 
 
 def menu_view(*, state: State) -> MenuView:
@@ -44,7 +84,10 @@ def menu_view(*, state: State) -> MenuView:
     cursor = state.panel.menu.cursor if state.panel.menu else 0
     return MenuView(
         clock=clock_text(moment=state.now, zone=state.city.zone),
-        rows=tuple(row.value for row in MENU_ROWS),
+        rows=tuple(
+            row.value if isinstance(row, MenuRow) else row.label
+            for row in TRANSIT_ROWS
+        ),
         cursor=cursor,
         first=max(0, cursor - MENU_VISIBLE + 1),
     )
@@ -191,7 +234,9 @@ def facts_values(
     if facts is None:
         return UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN
     synced = {True: 'synced', False: 'not synced', None: UNKNOWN}
-    tiles = local_time(stamp=facts.tiles_built, zone=zone)
+    app = facts.app
+    stamp = app.built if isinstance(app, TilesFacts) else None
+    tiles = local_time(stamp=stamp, zone=zone)
     return (
         wifi_value(wifi=facts.wifi),
         synced[facts.clock_synced],
@@ -267,7 +312,9 @@ def panel_view(*, state: State) -> PanelView | None:
         None with none of them.
     """
     if state.panel.confirm is not None:
-        return confirm_view(confirm=state.panel.confirm)
+        return confirm_view(
+            confirm=state.panel.confirm, copy=TRANSIT_CONFIRM_COPY,
+        )
     if state.panel.wifi is not None:
         return wifi_setup_view(state=state)
     menu = state.panel.menu

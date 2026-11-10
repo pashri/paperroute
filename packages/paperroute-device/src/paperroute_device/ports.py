@@ -1,5 +1,6 @@
 """Interfaces the device kit depends on; adapters implement them."""
 
+from collections.abc import Mapping
 from datetime import datetime
 from typing import Protocol
 
@@ -29,22 +30,16 @@ class DeviceObserver(Protocol):
             Time taken to render, in milliseconds.
         """
 
-    def feed_parsed(
-        self, *, feed: str, fetch_ms: float, parse_ms: float, trips: int
-    ) -> None:
+    def work_done(self, *, name: str, ms: float) -> None:
         """
-        Record that a realtime feed was fetched and parsed.
+        Record that the app finished a piece of background work.
 
         Parameters
         ----------
-        feed : str
-            Feed path.
-        fetch_ms : float
-            Download time in milliseconds.
-        parse_ms : float
-            Parse time in milliseconds.
-        trips : int
-            Number of trip updates found.
+        name : str
+            What was done, as the app names it.
+        ms : float
+            Time taken, in milliseconds.
         """
 
     def ticked(self) -> None:
@@ -58,6 +53,16 @@ class DeviceObserver(Protocol):
         ----------
         status : DeviceStatus
             The status, at start and after each change.
+        """
+
+    def app_seen(self, *, status: Mapping[str, object]) -> None:
+        """
+        Record the app's own status.
+
+        Parameters
+        ----------
+        status : Mapping[str, object]
+            The app's readings, at start and after each change.
         """
 
     def panel_refreshed(self, *, refresh: PanelRefresh) -> None:

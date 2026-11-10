@@ -1,7 +1,9 @@
 """Tests for the observers."""
 
+import json
 import logging
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 
 import pytest
@@ -25,15 +27,14 @@ from paperroute_transit.core.model import Pin
 from paperroute_transit.core.saved import Settings, default_settings
 from paperroute_transit.observers import NullObserver, ObserverGroup, Timings
 
-STATUS: DeviceStatus = DeviceStatus(
-    timetable='2026-10-21',
-    schema='6',
-    rebuilding=False,
-    rebuild_failed=True,
-    calls_today=12,
-    missing_keys=(),
-    facts=device_facts(),
-)
+STATUS: DeviceStatus = DeviceStatus(missing_keys=(), facts=device_facts())
+APP_STATUS: dict[str, object] = {
+    'timetable': '2026-10-21T21:45:00+11:00',
+    'schema': '6',
+    'rebuilding': False,
+    'rebuild_failed': False,
+    'calls_today': 8412,
+}
 
 PINS: tuple[Pin, ...] = (pin_of('215020', '200060'),)
 MANUAL: Settings = Settings(device=DeviceSettings(auto_rebuild=False))
@@ -50,11 +51,13 @@ class _DeviceRecorder:
         """Record a frame."""
         self.events.append(f'{self.prefix}frame_drawn')
 
-    def feed_parsed(
-        self, *, feed: str, fetch_ms: float, parse_ms: float, trips: int
-    ) -> None:
-        """Record a feed."""
-        self.events.append(f'{self.prefix}feed_parsed')
+    def work_done(self, *, name: str, ms: float) -> None:
+        """Record some work."""
+        self.events.append(f'{self.prefix}work_done')
+
+    def app_seen(self, *, status: Mapping[str, object]) -> None:
+        """Record an app status."""
+        self.events.append(f'{self.prefix}app_seen')
 
     def ticked(self) -> None:
         """Record a tick."""
@@ -72,6 +75,12 @@ class _DeviceRecorder:
 @dataclass
 class _Recorder(_DeviceRecorder):
     """An app observer that records the name of each event."""
+
+    def feed_parsed(
+        self, *, feed: str, fetch_ms: float, parse_ms: float, trips: int
+    ) -> None:
+        """Record a feed."""
+        self.events.append(f'{self.prefix}feed_parsed')
 
     def settings_seen(self, *, settings: Settings) -> None:
         """Record the settings."""
@@ -94,6 +103,14 @@ class _Failing:
     ) -> None:
         """Raise."""
         raise RuntimeError(feed)
+
+    def work_done(self, *, name: str, ms: float) -> None:
+        """Raise."""
+        raise RuntimeError(name, ms)
+
+    def app_seen(self, *, status: Mapping[str, object]) -> None:
+        """Raise."""
+        raise RuntimeError(status)
 
     def ticked(self) -> None:
         """Raise."""
@@ -212,18 +229,37 @@ def test_timings_feed_last_ok() -> None:
     assert 0 <= entry['age_s'] < 5
 
 
+def test_status_keeps_todays_key_order() -> None:
+    """The app's readings come first, then the kit's, as they always did."""
+    timings = Timings()
+    timings.app_seen(status=APP_STATUS)
+    timings.status_seen(status=STATUS)
+    device = timings.snapshot()['device']
+    assert isinstance(device, dict)
+    assert list(device) == [
+        'timetable',
+        'schema',
+        'rebuilding',
+        'rebuild_failed',
+        'calls_today',
+        'key_set',
+        'asked',
+        'setup_phase',
+    ]
+    assert json.dumps(device) == json.dumps(
+        {**APP_STATUS, 'key_set': True, 'asked': None, 'setup_phase': None},
+    )
+
+
 def test_status_json_has_no_facts() -> None:
     """The device status is reported without the device facts."""
     timings = Timings()
     assert 'device' not in timings.snapshot()
+    timings.app_seen(status=APP_STATUS)
     timings.status_seen(status=STATUS)
     snap = timings.snapshot()
     assert snap['device'] == {
-        'timetable': '2026-10-21',
-        'schema': '6',
-        'rebuilding': False,
-        'rebuild_failed': True,
-        'calls_today': 12,
+        **APP_STATUS,
         'key_set': True,
         'asked': None,
         'setup_phase': None,
@@ -351,33 +387,38 @@ def test_swap_setting_swaps_decoded_knobs() -> None:
 
 
 def test_group_sends_device_events_to_devices() -> None:
-    """Devices get the five device events; observers get all seven."""
+    """Devices get the six device events; observers get all eight."""
     full = _Recorder()
     device = _DeviceRecorder()
     group = ObserverGroup(observers=[full], devices=[device])
     group.frame_drawn(render_ms=1.0)
     group.feed_parsed(feed='f', fetch_ms=1.0, parse_ms=1.0, trips=1)
+    group.work_done(name='f', ms=1.0)
     group.ticked()
     group.settings_seen(settings=default_settings(city=SYDNEY))
     group.status_seen(status=STATUS)
+    group.app_seen(status=APP_STATUS)
     group.pins_seen(pins=PINS, shown=0)
     group.panel_refreshed(
         refresh=PanelRefresh(full=False, seconds=0.5, ok=True),
     )
     device_events = [
         'frame_drawn',
-        'feed_parsed',
+        'work_done',
         'ticked',
         'status_seen',
+        'app_seen',
         'panel_refreshed',
     ]
     assert device.events == device_events
     assert full.events == [
         'frame_drawn',
         'feed_parsed',
+        'work_done',
         'ticked',
         'settings_seen',
         'status_seen',
+        'app_seen',
         'pins_seen',
         'panel_refreshed',
     ]

@@ -24,11 +24,12 @@ from paperroute_sydney.sydney_feeds import (
 from paperroute_testkit.page_markup import parse_page
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_web import BOARD_WEB
+from paperroute_transit.adapters.device_data import data_section
 from paperroute_transit.adapters.web_display import RESET_HINT, WebDisplay
+from tests.adapters.test_device_data import BUSES, SYDNEY_STATUS, TRAINS
+from tests.test_observers import APP_STATUS
 
 Client = TestClient[web.Request, web.Application]
-TRAINS = POSITION_FEEDS[SydneyFeed.TRAIN][0]
-BUSES = FEEDS[SydneyFeed.BUS]
 SHELL_PAGES: Final[frozenset[str]] = frozenset(
     {'device.html', 'power.html', 'setup.html', 'live.html'},
 )
@@ -41,20 +42,28 @@ def sydney_site() -> DeviceSite:
     Returns
     -------
     DeviceSite
-        Sydney's key, used with the latest feed, its feeds, limit and
-        zone over the fixed status.
+        Sydney's key, used with the latest feed, its Data section, nav
+        and zone over the fixed status.
     """
-    return DeviceSite(
-        feeds={TRAINS: NOW - 12, BUSES: NOW - 40},
+    site = DeviceSite(
+        status=SYDNEY_STATUS,
         credential=TFNSW_KEY,
         display_name='TfNSW',
         last_used=NOW - 12,
-        feed_label=feed_label,
-        daily_limit=DAILY_LIMIT,
         zone=SYDNEY_ZONE,
         nav=SYDNEY_NAV,
         reset_hint=RESET_HINT,
     )
+    site.data = lambda: data_section(
+        status=APP_STATUS,
+        facts=None if site.status is None else site.status.facts,
+        feeds={TRAINS: NOW - 12, BUSES: NOW - 40},
+        now=NOW,
+        label=feed_label,
+        daily_limit=DAILY_LIMIT,
+        zone=SYDNEY_ZONE,
+    )
+    return site
 
 
 @pytest.fixture(name='device')

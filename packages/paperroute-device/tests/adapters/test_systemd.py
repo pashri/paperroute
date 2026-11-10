@@ -29,9 +29,8 @@ def test_notifier_sends_ready_once_and_watchdog(sock_dir: Path) -> None:
         notifier = SystemdNotifier(socket_path=str(path))
         notifier.frame_drawn(render_ms=1.0)
         notifier.frame_drawn(render_ms=1.0)
-        notifier.feed_parsed(
-            feed='f', fetch_ms=1.0, parse_ms=1.0, trips=1
-        )
+        notifier.work_done(name='f', ms=1.0)
+        notifier.app_seen(status={'n': 1})
         notifier.ticked()
         got = [server.recv(64), server.recv(64)]
         server.settimeout(0.1)
@@ -144,3 +143,25 @@ def test_notifier_does_not_block_when_the_queue_is_full(
                     break
     assert len(caplog.records) == 1
     assert 'systemd notify failed' in caplog.text
+
+
+def test_work_done_and_app_status_are_accepted_and_ignored(
+    sock_dir: Path,
+) -> None:
+    """Neither call sends anything, and both return None."""
+    path = sock_dir / 'n.sock'
+    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as server:
+        server.bind(str(path))
+        server.settimeout(0.1)
+        notifier = SystemdNotifier(socket_path=str(path))
+        results = (
+            notifier.work_done(  # type: ignore[func-returns-value]
+                name='f', ms=1.0,
+            ),
+            notifier.app_seen(  # type: ignore[func-returns-value]
+                status={'n': 1},
+            ),
+        )
+        with pytest.raises(TimeoutError):
+            server.recv(64)
+    assert results == (None, None)

@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
+from paperroute_device.core.device_model import AppRow, menu_rows
 from paperroute_device.core.panel_views import NoticeView
 from paperroute_device.core.text import DOT, clock_text
 from paperroute_transit.core.banners import offline
@@ -27,6 +28,8 @@ REBUILD_OFF: Final[str] = (
 WAITING_KEY: Final[str] = (
     f'Waiting for the API key{DOT}set it on your phone'
 )
+REBUILD_ROW: Final[AppRow] = AppRow(label='Rebuild timetable now')
+TRANSIT_ROWS: Final = menu_rows(app_rows=(REBUILD_ROW,))
 BACKOFF_FIRST: Final[timedelta] = timedelta(hours=1)
 BACKOFF_MAX: Final[timedelta] = timedelta(hours=24)
 

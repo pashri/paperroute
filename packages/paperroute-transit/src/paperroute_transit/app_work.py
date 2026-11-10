@@ -160,6 +160,7 @@ async def fetch(
     ports.observer.feed_parsed(
         feed=effect.feed, fetch_ms=fetch_ms, parse_ms=parse_ms, trips=count
     )
+    ports.observer.work_done(name=effect.feed, ms=parse_ms)
     await queue.put(event)
     if isinstance(data, JoinedBody):
         await queue.put(FeedJoined(feed=effect.feed))

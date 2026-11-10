@@ -3,6 +3,7 @@
 import logging
 import os
 import socket
+from collections.abc import Mapping
 
 from paperroute_device.core.device_model import DeviceStatus
 from paperroute_hardware.ports import PanelRefresh
@@ -125,22 +126,26 @@ class SystemdNotifier:
         if not self._ready_sent:
             self._ready_sent = self._send(message=b'READY=1')
 
-    def feed_parsed(
-        self, *, feed: str, fetch_ms: float, parse_ms: float, trips: int
-    ) -> None:
+    def work_done(self, *, name: str, ms: float) -> None:
         """
-        Ignore a parsed feed.
+        Ignore a piece of background work.
 
         Parameters
         ----------
-        feed : str
-            Feed path.
-        fetch_ms : float
-            Download time in milliseconds.
-        parse_ms : float
-            Parse time in milliseconds.
-        trips : int
-            Number of trip updates found.
+        name : str
+            What was done.
+        ms : float
+            Time taken, in milliseconds.
+        """
+
+    def app_seen(self, *, status: Mapping[str, object]) -> None:
+        """
+        Ignore the app's status.
+
+        Parameters
+        ----------
+        status : Mapping[str, object]
+            The app's readings.
         """
 
     def ticked(self) -> None:

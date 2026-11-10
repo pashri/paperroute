@@ -17,7 +17,7 @@ from paperroute_device.core.device_model import (
     missing_keys,
 )
 from paperroute_device.ports import DeviceProbe, Resets, WifiControl
-from paperroute_transit.core.device import device_status
+from paperroute_transit.core.device import app_status, device_status
 from paperroute_transit.core.messages import (
     DeviceProbed,
     DeviceProbeFailed,
@@ -362,9 +362,12 @@ class Reported:
     status : DeviceStatus | None
         The status, without its changing readings, or None before the
         first report.
+    app : dict[str, object] | None
+        The app's status, or None before the first report.
     """
 
     status: DeviceStatus | None = None
+    app: dict[str, object] | None = None
 
 
 def steady(*, status: DeviceStatus) -> DeviceStatus:
@@ -398,7 +401,7 @@ def report_status(
     *, observer: Observer, state: State, reported: Reported
 ) -> None:
     """
-    Report the device status when it differs from the last one reported.
+    Report the device and app statuses when they differ from the last ones.
 
     Uptime, CPU temperature, free memory and free disk are reported but
     a change in them alone is not.
@@ -417,6 +420,10 @@ def report_status(
     if kept != reported.status:
         observer.status_seen(status=status)
         reported.status = kept
+    app = app_status(state=state)
+    if app != reported.app:
+        observer.app_seen(status=app)
+        reported.app = app
 
 
 def report_pins(

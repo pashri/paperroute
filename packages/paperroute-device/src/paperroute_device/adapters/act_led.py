@@ -1,6 +1,7 @@
 """Hold the Pi's green LED steady once the first frame is drawn."""
 
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 
 from paperroute_device.core.device_model import DeviceStatus
@@ -47,22 +48,26 @@ class ActLed:
         except OSError as error:
             logger.warning('cannot set LED trigger: %s', error)
 
-    def feed_parsed(
-        self, *, feed: str, fetch_ms: float, parse_ms: float, trips: int
-    ) -> None:
+    def work_done(self, *, name: str, ms: float) -> None:
         """
-        Ignore a parsed feed.
+        Ignore a piece of background work.
 
         Parameters
         ----------
-        feed : str
-            Feed path.
-        fetch_ms : float
-            Download time in milliseconds.
-        parse_ms : float
-            Parse time in milliseconds.
-        trips : int
-            Number of trip updates found.
+        name : str
+            What was done.
+        ms : float
+            Time taken, in milliseconds.
+        """
+
+    def app_seen(self, *, status: Mapping[str, object]) -> None:
+        """
+        Ignore the app's status.
+
+        Parameters
+        ----------
+        status : Mapping[str, object]
+            The app's readings.
         """
 
     def ticked(self) -> None:

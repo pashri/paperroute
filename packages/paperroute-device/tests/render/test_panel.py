@@ -13,6 +13,7 @@ from paperroute_device.core.device_model import (
     WifiPhase,
 )
 from paperroute_device.core.panel_views import (
+    KIT_CONFIRM_COPY,
     MENU_VISIBLE,
     DeviceView,
     InfoRow,
@@ -142,7 +143,9 @@ def shut_down_frame() -> NDArray[np.uint8]:
     confirm = Confirm(
         action=ConfirmAction.SHUT_DOWN, origin=Origin.PHONE, asked_at=START,
     )
-    return draw_panel_view(view=confirm_view(confirm=confirm))
+    return draw_panel_view(
+        view=confirm_view(confirm=confirm, copy=KIT_CONFIRM_COPY),
+    )
 
 
 def test_confirm_stacks_cancel_over_confirm() -> None:
@@ -167,6 +170,7 @@ def test_every_confirm_fits(action: ConfirmAction) -> None:
     """Every line and label fits its room without a cut."""
     view = confirm_view(
         confirm=Confirm(action=action, origin=Origin.PHONE, asked_at=START),
+        copy=KIT_CONFIRM_COPY,
     )
     for line in view.lines:
         assert text_width(text=line, face=BODY_FACE) <= WIDTH - 2 * MARGIN

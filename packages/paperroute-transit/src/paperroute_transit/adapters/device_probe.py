@@ -2,7 +2,7 @@
 
 import asyncio
 import shutil
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import Final
 
@@ -13,6 +13,7 @@ from paperroute_device.core.device_model import (
     missing_keys,
 )
 from paperroute_device.ports import WifiControl
+from paperroute_transit.core.panel_screens import TilesFacts
 from paperroute_transit.logs import LastError
 from paperroute_transit.ports import TileRepository
 
@@ -129,6 +130,23 @@ def disk_free(*, path: Path) -> int | None:
         return None
 
 
+async def tiles_facts(*, tiles: TileRepository) -> TilesFacts:
+    """
+    Find out when the map tiles were built, off the event loop.
+
+    Parameters
+    ----------
+    tiles : TileRepository
+        The map tiles.
+
+    Returns
+    -------
+    TilesFacts
+        The build time, or None with no tiles.
+    """
+    return TilesFacts(built=await asyncio.to_thread(tiles.version))
+
+
 class SystemProbe:
     """
     Gathers the device's facts from /proc, /sys and the adapters.
@@ -139,8 +157,9 @@ class SystemProbe:
         Reports the Wi-Fi link.
     keys : Sequence[DeviceKey]
         Each says whether it is set.
-    tiles : TileRepository
-        Says when the map tiles were built.
+    app_probe : Callable[[], Awaitable[object]]
+        Finds out what the app wants reported; its answer is the facts'
+        `app` part.
     last_error : LastError
         Holds the latest error logged.
     data_dir : Path
@@ -156,7 +175,7 @@ class SystemProbe:
         *,
         wifi: WifiControl,
         keys: Sequence[DeviceKey],
-        tiles: TileRepository,
+        app_probe: Callable[[], Awaitable[object]],
         last_error: LastError,
         data_dir: Path,
         version_file: Path | None,
@@ -164,7 +183,7 @@ class SystemProbe:
     ) -> None:
         self._wifi = wifi
         self._keys = tuple(keys)
-        self._tiles = tiles
+        self._app_probe = app_probe
         self._last_error = last_error
         self._data_dir = data_dir
         self._version_file = version_file
@@ -199,7 +218,7 @@ class SystemProbe:
             return None
         return (directory / 'synchronized').exists()
 
-    def read(self, *, wifi: WifiStatus) -> DeviceFacts:
+    def read(self, *, wifi: WifiStatus, app: object) -> DeviceFacts:
         """
         Read the device's facts from files, blocking.
 
@@ -207,6 +226,8 @@ class SystemProbe:
         ----------
         wifi : WifiStatus
             The Wi-Fi link, found already.
+        app : object
+            What the app's probe found, already.
 
         Returns
         -------
@@ -223,8 +244,8 @@ class SystemProbe:
             mem_free=mem_available(meminfo=meminfo),
             version=self.version(),
             last_error=self._last_error.text(),
-            tiles_built=self._tiles.version(),
             missing_keys=missing_keys(keys=self._keys),
+            app=app,
         )
 
     async def probe(self) -> DeviceFacts:
@@ -237,4 +258,5 @@ class SystemProbe:
             What was found; a file that can't be read gives None.
         """
         wifi = await self._wifi.status()
-        return await asyncio.to_thread(self.read, wifi=wifi)
+        app = await self._app_probe()
+        return await asyncio.to_thread(self.read, wifi=wifi, app=app)

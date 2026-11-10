@@ -7,13 +7,7 @@ from datetime import timedelta
 import pytest
 
 from paperroute_device.core.device_events import ApiKeyChanged
-from paperroute_device.core.device_model import (
-    MENU_ROWS,
-    Menu,
-    MenuRow,
-    PanelScreen,
-    WifiStatus,
-)
+from paperroute_device.core.device_model import Menu, PanelScreen, WifiStatus
 from paperroute_device.core.panel_views import MenuView, NoticeView
 from paperroute_device.render.canvas import WIDTH, text_width
 from paperroute_device.render.notice import DETAIL_FACE
@@ -45,7 +39,9 @@ from paperroute_transit.core.messages import (
 from paperroute_transit.core.panel_screens import device_rows
 from paperroute_transit.core.rebuild import (
     BACKOFF_MAX,
+    REBUILD_ROW,
     SETTINGS_HINT,
+    TRANSIT_ROWS,
     building_view,
     forced,
     is_outdated,
@@ -444,7 +440,7 @@ def test_menu_works_on_building_screen() -> None:
 def test_rebuild_row_starts_and_shows_device_screen() -> None:
     """The row forces a rebuild and the Device screen says it runs."""
     state = building()
-    cursor = MENU_ROWS.index(MenuRow.REBUILD)
+    cursor = TRANSIT_ROWS.index(REBUILD_ROW)
     state = replace(
         state, panel=replace(state.panel, menu=Menu(cursor=cursor)),
     )

@@ -4,7 +4,7 @@ import asyncio
 import logging
 import shutil
 import sqlite3
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Mapping
 from contextlib import closing
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
@@ -427,6 +427,40 @@ class RaisingObserver:
         """
         raise RuntimeError(f'frame {render_ms}')
 
+    def work_done(self, *, name: str, ms: float) -> None:
+        """
+        Fail.
+
+        Parameters
+        ----------
+        name : str
+            Ignored.
+        ms : float
+            Ignored.
+
+        Raises
+        ------
+        RuntimeError
+            Always.
+        """
+        raise RuntimeError(f'work {name} {ms}')
+
+    def app_seen(self, *, status: Mapping[str, object]) -> None:
+        """
+        Fail.
+
+        Parameters
+        ----------
+        status : Mapping[str, object]
+            Ignored.
+
+        Raises
+        ------
+        RuntimeError
+            Always.
+        """
+        raise RuntimeError(f'app {status}')
+
     def feed_parsed(
         self, *, feed: str, fetch_ms: float, parse_ms: float, trips: int
     ) -> None:
@@ -535,6 +569,8 @@ class CallRecorder:
 
     feeds: int = 0
     ticks: int = 0
+    work: list[tuple[str, float]] = field(default_factory=list)
+    apps: list[Mapping[str, object]] = field(default_factory=list)
     settings: list[Settings] = field(default_factory=list)
     statuses: list[DeviceStatus] = field(default_factory=list)
     pins: list[tuple[tuple[Pin, ...], int | None]] = field(
@@ -569,6 +605,30 @@ class CallRecorder:
             Ignored.
         """
         self.feeds += 1
+
+    def work_done(self, *, name: str, ms: float) -> None:
+        """
+        Keep a piece of work.
+
+        Parameters
+        ----------
+        name : str
+            What was done.
+        ms : float
+            How long it took in milliseconds.
+        """
+        self.work.append((name, ms))
+
+    def app_seen(self, *, status: Mapping[str, object]) -> None:
+        """
+        Keep the app status.
+
+        Parameters
+        ----------
+        status : Mapping[str, object]
+            The status.
+        """
+        self.apps.append(status)
 
     def ticked(self) -> None:
         """Count a tick."""
@@ -873,6 +933,38 @@ async def test_fetch_failure_does_not_report_a_parsed_feed(
     assert isinstance(posted, FeedFailed)
     assert posted.sent
     assert observer.feeds == 0
+
+
+async def test_feed_parse_is_reported_as_work_done(
+    tmp_path: Path,
+) -> None:
+    """Each parsed feed is also reported as a piece of work by its name."""
+    recorder = CallRecorder()
+    timetable = SqliteTimetableRepository(
+        path=_build_db(tmp_path), city=SYDNEY,
+    )
+    ports = Ports(
+        timetable=timetable,
+        feeds=FileFeedsClient(directory=REAL),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
+        observer=recorder,
+    )
+    try:
+        await run(
+            ports=ports, seed=PIN, tick_every=0.01, max_events=60,
+            city=SYDNEY,
+        )
+    finally:
+        timetable.close()
+    assert recorder.feeds > 0
+    assert len(recorder.work) == recorder.feeds
+    assert 'v2/gtfs/realtime/sydneytrains' in {
+        name for name, _ in recorder.work
+    }
+    assert all(ms >= 0 for _, ms in recorder.work)
 
 
 class RefusingFeeds:

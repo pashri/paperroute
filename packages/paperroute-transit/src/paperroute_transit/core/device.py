@@ -557,20 +557,39 @@ def device_status(*, state: State) -> DeviceStatus:
     Returns
     -------
     DeviceStatus
-        The timetable, rebuild, calls today, key, latest facts, what
-        a phone asked for that waits on the panel and Wi-Fi setup.
+        The keys not set, latest facts, what a phone asked for that
+        waits on the panel and Wi-Fi setup.
     """
     return DeviceStatus(
-        timetable=state.saving.timetable,
-        schema=state.rebuild.schema,
-        rebuilding=state.rebuild.running,
-        rebuild_failed=state.rebuild.failed,
-        calls_today=calls_today(quota=state.quota, day=state.now.date()),
         missing_keys=state.panel.missing_keys,
         facts=state.panel.facts,
         asked=phone_asked(state=state),
         setup=state.panel.wifi,
     )
+
+
+def app_status(*, state: State) -> dict[str, object]:
+    """
+    Gather what the app reports about itself.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    dict[str, object]
+        The timetable, its schema, whether a rebuild runs or the last
+        one failed, and the calls made today, in that order.
+    """
+    return {
+        'timetable': state.saving.timetable,
+        'schema': state.rebuild.schema,
+        'rebuilding': state.rebuild.running,
+        'rebuild_failed': state.rebuild.failed,
+        'calls_today': calls_today(quota=state.quota, day=state.now.date()),
+    }
 
 
 def phone_asked(*, state: State) -> ConfirmAction | None:

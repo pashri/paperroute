@@ -145,5 +145,5 @@ def test_settings_round_trip_swap_knobs() -> None:
 
 
 def test_v11_device_fields_snapshot() -> None:
-    """The frozen v11 field names equal today's device fields."""
-    assert V11_DEVICE_FIELDS == DEVICE_FIELDS
+    """The frozen v11 field names are today's device fields and the switch."""
+    assert V11_DEVICE_FIELDS == DEVICE_FIELDS | {'auto_rebuild'}

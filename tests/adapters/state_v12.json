@@ -1,0 +1,245 @@
+{
+  "schema_version": 12,
+  "device": {
+    "schema_version": 1,
+    "settings": {
+      "auto_rebuild": false,
+      "quiet_mode": "timetable",
+      "my_hours": {
+        "start": "22:15",
+        "end": "06:00"
+      },
+      "rotate": true,
+      "larger_text": true,
+      "inverted_lists": true,
+      "clean_after": 60,
+      "swap_knobs": true
+    }
+  },
+  "board": {
+    "schema_version": 1,
+    "pins": [
+      {
+        "origin": {
+          "stop_id": "G2145615",
+          "name": "Hollis St Opp Constitution Hill Library",
+          "x": 0.0,
+          "y": 900.0
+        },
+        "destination": {
+          "stop_id": "214510",
+          "name": "Westmead Station",
+          "x": 800.0,
+          "y": -1900.0
+        },
+        "kind": "bus",
+        "routes": [],
+        "nickname": "Work",
+        "only": [],
+        "windows": [],
+        "ways": [
+          {
+            "changes": [
+              {
+                "alight": {
+                  "stop_id": "G215254",
+                  "name": "Hammers Rd Opp Sherwood St",
+                  "x": 0.0,
+                  "y": 0.0
+                },
+                "board": {
+                  "stop_id": "2145648",
+                  "name": "Constitution Hill, North West Twy",
+                  "x": 144.0,
+                  "y": 0.0
+                },
+                "allow": 7
+              }
+            ],
+            "ticked": true
+          },
+          {
+            "changes": [
+              {
+                "alight": {
+                  "stop_id": "G215254",
+                  "name": "Hammers Rd Opp Sherwood St",
+                  "x": 0.0,
+                  "y": 0.0
+                },
+                "board": {
+                  "stop_id": "2145648",
+                  "name": "Constitution Hill, North West Twy",
+                  "x": 144.0,
+                  "y": 0.0
+                },
+                "allow": 7
+              },
+              {
+                "alight": {
+                  "stop_id": "214510",
+                  "name": "Westmead Station",
+                  "x": 800.0,
+                  "y": -1900.0
+                },
+                "board": {
+                  "stop_id": "214510",
+                  "name": "Westmead Station",
+                  "x": 800.0,
+                  "y": -1900.0
+                },
+                "allow": 4
+              }
+            ],
+            "ticked": true
+          }
+        ],
+        "never": []
+      },
+      {
+        "origin": {
+          "stop_id": "home",
+          "name": "home",
+          "x": 100.0,
+          "y": 0.0
+        },
+        "destination": null,
+        "kind": "bus",
+        "routes": [
+          "606",
+          "609"
+        ],
+        "nickname": null,
+        "only": [
+          "606"
+        ],
+        "windows": [
+          {
+            "days": [
+              "mon",
+              "tue",
+              "wed",
+              "thu",
+              "fri"
+            ],
+            "start": "17:00",
+            "end": "18:00"
+          }
+        ],
+        "ways": [],
+        "never": [
+          "660"
+        ]
+      }
+    ],
+    "current": 1,
+    "unpinned": null,
+    "view": "strip",
+    "settings": {
+      "peak_rate": "2min",
+      "offpeak_rate": "60s",
+      "peak_windows": [
+        {
+          "start": "07:00",
+          "end": "09:00"
+        }
+      ],
+      "alert_lookahead": "3d",
+      "connection_map": "whole",
+      "skip_school_buses": false,
+      "skip_school_on_route_pins": true
+    },
+    "quota": {
+      "day": "2026-10-16",
+      "calls": 1234
+    },
+    "auto": {
+      "occurrence": {
+        "ref": "bec2a992c964",
+        "start": "2026-10-16T06:00:00Z",
+        "end": "2026-10-16T07:00:00Z"
+      },
+      "before": {
+        "place": {
+          "origin": {
+            "stop_id": "G2145615",
+            "name": "Hollis St Opp Constitution Hill Library",
+            "x": 0.0,
+            "y": 900.0
+          },
+          "destination": {
+            "stop_id": "214510",
+            "name": "Westmead Station",
+            "x": 800.0,
+            "y": -1900.0
+          },
+          "kind": "bus",
+          "routes": [],
+          "nickname": "Work",
+          "only": [],
+          "windows": [],
+          "ways": [
+            {
+              "changes": [
+                {
+                  "alight": {
+                    "stop_id": "G215254",
+                    "name": "Hammers Rd Opp Sherwood St",
+                    "x": 0.0,
+                    "y": 0.0
+                  },
+                  "board": {
+                    "stop_id": "2145648",
+                    "name": "Constitution Hill, North West Twy",
+                    "x": 144.0,
+                    "y": 0.0
+                  },
+                  "allow": 7
+                }
+              ],
+              "ticked": true
+            },
+            {
+              "changes": [
+                {
+                  "alight": {
+                    "stop_id": "G215254",
+                    "name": "Hammers Rd Opp Sherwood St",
+                    "x": 0.0,
+                    "y": 0.0
+                  },
+                  "board": {
+                    "stop_id": "2145648",
+                    "name": "Constitution Hill, North West Twy",
+                    "x": 144.0,
+                    "y": 0.0
+                  },
+                  "allow": 7
+                },
+                {
+                  "alight": {
+                    "stop_id": "214510",
+                    "name": "Westmead Station",
+                    "x": 800.0,
+                    "y": -1900.0
+                  },
+                  "board": {
+                    "stop_id": "214510",
+                    "name": "Westmead Station",
+                    "x": 800.0,
+                    "y": -1900.0
+                  },
+                  "allow": 4
+                }
+              ],
+              "ticked": true
+            }
+          ],
+          "never": []
+        },
+        "pinned": true
+      },
+      "overridden_at": "2026-10-16T17:20:00+11:00"
+    }
+  }
+}

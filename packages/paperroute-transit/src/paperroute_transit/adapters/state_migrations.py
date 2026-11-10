@@ -19,7 +19,7 @@ from paperroute_transit.adapters.state_change import (
 from paperroute_transit.adapters.state_settings import default_settings
 from paperroute_transit.core.city import City
 
-SCHEMA_VERSION: Final[int] = 12
+SCHEMA_VERSION: Final[int] = 13
 BOARD_SCHEMA: Final[int] = 1
 BOARD_MIGRATIONS: Final[Mapping[int, SectionStep]] = {}
 BOARD_KEYS: Final[tuple[str, ...]] = (
@@ -30,6 +30,7 @@ V11_DEVICE_FIELDS: Final[frozenset[str]] = frozenset({
     'my_hours', 'quiet_mode', 'rotate', 'swap_knobs',
 })
 V1_TRAINLINK_LINES: Final[tuple[str, ...]] = ('NRC', 'NRW', 'STH', 'WST')
+V12_QUIET_MODES: Final[dict[str, str]] = {'timetable': 'app'}
 
 
 def coach_pin(*, pin: object) -> object:
@@ -674,6 +675,79 @@ def split_sections(
     }
 
 
+def move_auto_rebuild(
+    data: dict[str, object], *, city: City,
+) -> dict[str, object]:
+    """
+    Move the rebuild switch to the board and rename the timetable mode.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        Version 12 data.
+    city : City
+        The city; this step needs nothing from it.
+
+    Returns
+    -------
+    dict[str, object]
+        The data with ``auto_rebuild`` taken out of the device settings
+        and put first in the board settings, and a ``timetable`` quiet
+        mode saved as ``app``. The switch leaves the device settings
+        even when the board settings are not an object, so the device
+        section still validates; a device section without settings is
+        left for repair.
+    """
+    del city
+    device = data.get('device')
+    if not isinstance(device, dict):
+        return data
+    settings = device.get('settings')
+    if not isinstance(settings, dict):
+        return data
+    kept = {
+        name: value
+        for name, value in settings.items()
+        if name != 'auto_rebuild'
+    }
+    mode = kept.get('quiet_mode')
+    if isinstance(mode, str) and mode in V12_QUIET_MODES:
+        kept['quiet_mode'] = V12_QUIET_MODES[mode]
+    moved = {**data, 'device': {**device, 'settings': kept}}
+    return with_board_switch(data=moved, settings=settings)
+
+
+def with_board_switch(
+    *, data: dict[str, object], settings: dict[str, object],
+) -> dict[str, object]:
+    """
+    Put a version 12 device rebuild switch first in the board settings.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        The data being migrated.
+    settings : dict[str, object]
+        The version 12 device settings.
+
+    Returns
+    -------
+    dict[str, object]
+        The data with the switch in the board settings; unchanged when
+        there was no switch or the board settings are not an object.
+    """
+    board = data.get('board')
+    if 'auto_rebuild' not in settings or not isinstance(board, dict):
+        return data
+    board_settings = board.get('settings')
+    if not isinstance(board_settings, dict):
+        return data
+    return {**data, 'board': {**board, 'settings': {
+        'auto_rebuild': settings['auto_rebuild'],
+        **board_settings,
+    }}}
+
+
 class MigrationStep(Protocol):
     """Brings stored data up one schema version."""
 
@@ -709,6 +783,7 @@ MIGRATIONS: Final[dict[int, MigrationStep]] = {
     9: add_ways,
     10: drop_zoom,
     11: split_sections,
+    12: move_auto_rebuild,
 }
 
 

@@ -24,7 +24,11 @@ from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.factories import pin_of
 from paperroute_transit.adapters.settings_form import form_values
 from paperroute_transit.core.model import Pin
-from paperroute_transit.core.saved import Settings, default_settings
+from paperroute_transit.core.saved import (
+    BoardSettings,
+    Settings,
+    default_settings,
+)
 from paperroute_transit.observers import NullObserver, ObserverGroup, Timings
 
 STATUS: DeviceStatus = DeviceStatus(missing_keys=(), facts=device_facts())
@@ -37,7 +41,7 @@ APP_STATUS: dict[str, object] = {
 }
 
 PINS: tuple[Pin, ...] = (pin_of('215020', '200060'),)
-MANUAL: Settings = Settings(device=DeviceSettings(auto_rebuild=False))
+MANUAL: Settings = Settings(board=BoardSettings(auto_rebuild=False))
 
 
 @dataclass

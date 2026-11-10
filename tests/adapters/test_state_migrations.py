@@ -1,4 +1,4 @@
-"""Tests for the steps from state.json schema 9 to 12."""
+"""Tests for the steps from state.json schema 9 to 13."""
 
 import json
 from dataclasses import replace
@@ -33,6 +33,7 @@ from paperroute_transit.adapters.state_migrations import (
     coach_pin,
     drop_zoom,
     migrate,
+    move_auto_rebuild,
     split_sections,
     v9_ref,
 )
@@ -45,7 +46,12 @@ from paperroute_transit.core.model import (
     pin_ref,
 )
 from paperroute_transit.core.saved import ConnectionMap, Saved, default_saved
-from tests.adapters.state_layout import STATE_V11, STATE_V11_KINDS, flat_v11
+from tests.adapters.state_layout import (
+    STATE_V11,
+    STATE_V11_KINDS,
+    STATE_V12,
+    flat_v11,
+)
 from tests.golden.scenes import GOLDEN
 
 GOLDEN_STATE: Final[Path] = GOLDEN / 'state.json'
@@ -529,11 +535,11 @@ def v10_data() -> dict[str, object]:
 
 
 def test_v10_zoom_is_dropped() -> None:
-    """A schema 10 file with a zoom loads at 12 without it."""
+    """A schema 10 file with a zoom loads at 13 without it."""
     model = state_model_of(
         text=json.dumps(v10_data()), city=SYDNEY,
     )
-    assert model.schema_version == SCHEMA_VERSION == 12
+    assert model.schema_version == SCHEMA_VERSION == 13
     assert 'zoom' not in model.board.model_dump()
     saved = from_model(model=model, city=SYDNEY)
     assert len(saved.pins) == 6
@@ -609,7 +615,7 @@ def v11_refs(*, data: dict[str, Any]) -> list[str]:
 
 def test_v11_kinds_split_keeping_refs() -> None:
     """
-    A v11 file with every kind keeps every pin, kind and ref at v12.
+    A v11 file with every kind keeps every pin, kind and ref.
 
     The running occurrence still names the bus pin's ref.
     """
@@ -644,8 +650,8 @@ def test_v11_kinds_split_keeping_refs() -> None:
     assert saved.pins[0].kind == SydneyMode.BUS
 
 
-def test_v11_golden_splits_into_v12() -> None:
-    """Today's v11 golden migrates to exactly the v12 golden."""
+def test_v11_golden_migrates_to_the_golden() -> None:
+    """The v11 fixture migrates to exactly today's golden."""
     v11 = json.loads(STATE_V11.read_text())
     migrated = migrate(
         data=json.loads(STATE_V11.read_text()), city=SYDNEY,
@@ -700,14 +706,77 @@ def test_migrate_leaves_missing_section_for_repair() -> None:
     """A v12 file without a device section migrates without one."""
     data: dict[str, object] = {'schema_version': 12, 'board': 3}
     assert migrate(data=data, city=SYDNEY) == {
-        'schema_version': 12, 'board': 3,
+        'schema_version': 13, 'board': 3,
     }
 
 
 def test_migrate_refuses_newer_board() -> None:
     """A board section newer than the code is refused by name."""
     data: dict[str, object] = {
-        'schema_version': 12, 'board': {'schema_version': BOARD_SCHEMA + 1},
+        'schema_version': 13, 'board': {'schema_version': BOARD_SCHEMA + 1},
     }
     with pytest.raises(ValueError, match='board'):
         migrate(data=data, city=SYDNEY)
+
+
+def test_v12_golden_becomes_v13_keeping_every_value() -> None:
+    """The v12 golden moves its rebuild switch and renames its mode."""
+    v12 = json.loads(STATE_V12.read_text())
+    expected = json.loads(STATE_V12.read_text())
+    expected['schema_version'] = 13
+    device = expected['device']['settings']
+    expected['board']['settings'] = {
+        'auto_rebuild': device.pop('auto_rebuild'),
+        **expected['board']['settings'],
+    }
+    device['quiet_mode'] = 'app'
+    migrated = migrate(data=v12, city=SYDNEY)
+    assert migrated == expected
+    assert migrated == json.loads(GOLDEN_STATE.read_text())
+    board: Any = migrated['board']
+    assert board['settings']['auto_rebuild'] is False
+
+
+def test_move_auto_rebuild_keeps_my_hours_mode() -> None:
+    """A My hours mode stays, and the rebuild switch moves as it is."""
+    data = move_auto_rebuild(
+        {
+            'device': {
+                'schema_version': 1,
+                'settings': {'auto_rebuild': True, 'quiet_mode': 'my_hours'},
+            },
+            'board': {'schema_version': 1, 'settings': {'peak_rate': '30s'}},
+        },
+        city=SYDNEY,
+    )
+    assert data == {
+        'device': {'schema_version': 1, 'settings': {'quiet_mode': 'my_hours'}},
+        'board': {
+            'schema_version': 1,
+            'settings': {'auto_rebuild': True, 'peak_rate': '30s'},
+        },
+    }
+
+
+@pytest.mark.parametrize('board', [3, {'settings': 3}, None])
+def test_move_auto_rebuild_with_unusable_board_settings_drops_the_key(
+    board: object,
+) -> None:
+    """The switch leaves the device section even with nowhere to go."""
+    data: dict[str, object] = {
+        'device': {'settings': {'auto_rebuild': False, 'rotate': True}},
+    }
+    if board is not None:
+        data['board'] = board
+    moved = move_auto_rebuild(data, city=SYDNEY)
+    assert moved['device'] == {'settings': {'rotate': True}}
+    assert moved.get('board') == board
+
+
+@pytest.mark.parametrize('device', [3, {'settings': 3}, {}])
+def test_move_auto_rebuild_leaves_an_unusable_device_section(
+    device: object,
+) -> None:
+    """A device section without settings is left for repair."""
+    data: dict[str, object] = {'device': device, 'board': {'settings': {}}}
+    assert move_auto_rebuild(data, city=SYDNEY) == data

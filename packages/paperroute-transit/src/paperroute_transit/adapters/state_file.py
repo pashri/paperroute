@@ -53,6 +53,7 @@ from paperroute_transit.adapters.state_settings import (
     board_settings_to_model,
     device_settings_from_model,
     device_settings_to_model,
+    repaired_device_settings,
     repaired_settings,
 )
 from paperroute_transit.core.auto_model import AutoState, Before
@@ -856,8 +857,8 @@ def repaired_device(*, section: object, city: City) -> dict[str, object]:
     Returns
     -------
     dict[str, object]
-        The section with bad settings reset; all defaults when it is
-        missing or not an object.
+        The section with unknown settings dropped quietly and bad ones
+        reset; all defaults when it is missing or not an object.
     """
     defaults = device_section(
         settings=default_saved(city=city).settings.device,
@@ -865,10 +866,8 @@ def repaired_device(*, section: object, city: City) -> dict[str, object]:
     if not isinstance(section, dict):
         logger.warning('state.json device section unusable, resetting it')
         return defaults
-    return repaired_settings(
-        data=section,
-        model=DeviceSettingsModel,
-        defaults=defaults['settings'],
+    return repaired_device_settings(
+        data=section, defaults=defaults['settings'],
     )
 
 

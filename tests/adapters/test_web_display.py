@@ -8,6 +8,7 @@ from dataclasses import replace
 from datetime import time as clock
 from html.parser import HTMLParser
 from http import HTTPStatus
+from typing import Final
 
 import numpy as np
 import pytest
@@ -19,7 +20,7 @@ from paperroute_device.adapters.web_frame import LIVE_NAV, SHELL_WEB
 from paperroute_device.adapters.web_live import knob_event, live_page
 from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction
-from paperroute_device.core.device_settings import Window
+from paperroute_device.core.device_settings import QuietMode, Window
 from paperroute_device.render.canvas import encode_png
 from paperroute_device_testkit.device_pages import DeviceSite
 from paperroute_hardware.core.knob_events import (
@@ -604,10 +605,17 @@ DISPLAY_FORM = [
     ('peak_1_end', '09:00'),
     ('peak_2_start', ''),
     ('peak_2_end', ''),
+    ('skip_school_buses', 'off'),
+    ('skip_school_buses', 'on'),
+]
+DEVICE_FORM = [
     ('rotate', 'off'),
     ('rotate', 'on'),
     ('larger_text', 'off'),
     ('inverted_lists', 'off'),
+    ('quiet_mode', 'app'),
+    ('quiet_start', '23:00'),
+    ('quiet_end', '05:30'),
 ]
 
 
@@ -626,9 +634,27 @@ async def test_display_form_posts_event(
         peak_rate=Rate.STEADY,
         offpeak_rate=Rate.SLOW,
         peak_windows=(Window(start=clock(7), end=clock(9)),),
+        skip_school_buses=True,
+    )]
+
+
+async def test_device_form_posts_event(
+    display: WebDisplay, client: Client
+) -> None:
+    """A form post of the Device section posts one event and redirects."""
+    posted: list[Event] = []
+    display.bind(post=posted.append)
+    response = await client.post(
+        '/settings', data=DEVICE_FORM, allow_redirects=False,
+    )
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert response.headers['Location'] == '/settings'
+    assert posted == [SettingsChanged(
         rotate=True,
         larger_text=False,
         inverted_lists=False,
+        quiet_mode=QuietMode.APP,
+        my_hours=Window(start=clock(23), end=clock(5, 30)),
     )]
 
 
@@ -731,6 +757,48 @@ async def test_unknown_value_is_400(
     response = await client.post('/settings', data={'peak_rate': '1s'})
     assert response.status == HTTPStatus.BAD_REQUEST
     assert not posted
+
+
+async def test_stale_timetable_quiet_mode_is_400(
+    display: WebDisplay, client: Client
+) -> None:
+    """A stale page's `timetable` quiet mode is refused."""
+    posted: list[Event] = []
+    display.bind(post=posted.append)
+    response = await client.post(
+        '/settings', data={'quiet_mode': 'timetable'},
+    )
+    assert response.status == HTTPStatus.BAD_REQUEST
+    assert not posted
+
+
+DEVICE_CONTROLS: Final[tuple[str, ...]] = (
+    'rotate', 'swap_knobs', 'larger_text', 'inverted_lists', 'clean_after',
+    'quiet_mode', 'quiet_start', 'quiet_end',
+)
+
+
+async def test_device_section_comes_first_and_quiet_hours_is_gone(
+    client: Client,
+) -> None:
+    """Device comes first, holding every device control and quiet mode."""
+    text = await (await client.get('/settings')).text()
+    assert re.findall(r'<h2 id="([a-z]+)">', text) == [
+        'device', 'display', 'alerts', 'timetable',
+    ]
+    assert re.findall(r'<form id="([a-z]+)-form"', text) == [
+        'device', 'display', 'alerts', 'timetable',
+    ]
+    assert 'Quiet hours</h2>' not in text
+    device, rest = text.split('<form id="device-form"')[1].split('</form>', 1)
+    names = set(re.findall(r'name="([a-z_]+)"', device))
+    assert names == set(DEVICE_CONTROLS)
+    assert not names & set(re.findall(r'name="([a-z_]+)"', rest))
+    assert '<legend>When the screen sleeps</legend>' in device
+    assert re.findall(r'name="quiet_mode" value="([a-z_]+)"', device) == [
+        'my_hours', 'app',
+    ]
+    assert 'Follow the timetable' in device
 
 
 async def test_unknown_lookahead_is_400(

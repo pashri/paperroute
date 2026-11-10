@@ -617,9 +617,6 @@ def test_device_kit_names_no_sydney() -> None:
     assert not offenders
 
 
-@pytest.mark.xfail(
-    strict=True, reason='until the kit names no transit concept',
-)
 def test_device_kit_names_no_transit() -> None:
     """No kit file names a timetable, rebuild, tiles, feeds or a city."""
     hardware = [

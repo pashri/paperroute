@@ -29,7 +29,7 @@ class QuietMode(StrEnum):
     """How quiet hours are chosen."""
 
     MY_HOURS = 'my_hours'
-    TIMETABLE = 'timetable'
+    APP = 'app'
 
 
 MY_HOURS: Final[Window] = Window(start=time(23), end=time(5, 30))
@@ -43,8 +43,6 @@ class DeviceSettings:  # pylint: disable=too-many-instance-attributes
 
     Attributes
     ----------
-    auto_rebuild : bool
-        Whether an outdated timetable is rebuilt on the device.
     quiet_mode : QuietMode
         How quiet hours are chosen.
     my_hours : Window
@@ -62,7 +60,6 @@ class DeviceSettings:  # pylint: disable=too-many-instance-attributes
         Whether knob A plays the bottom knob and knob B the top.
     """
 
-    auto_rebuild: bool = True
     quiet_mode: QuietMode = QuietMode.MY_HOURS
     my_hours: Window = MY_HOURS
     rotate: bool = False

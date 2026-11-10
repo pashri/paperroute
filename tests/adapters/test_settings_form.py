@@ -34,8 +34,7 @@ from paperroute_transit.core.saved import (
 
 ODD = Settings(
     device=DeviceSettings(
-        auto_rebuild=False,
-        quiet_mode=QuietMode.TIMETABLE,
+        quiet_mode=QuietMode.APP,
         my_hours=Window(start=time(22, 45), end=time(4)),
         rotate=True,
         larger_text=True,
@@ -43,6 +42,7 @@ ODD = Settings(
         clean_after=60,
     ),
     board=BoardSettings(
+        auto_rebuild=False,
         peak_rate=Rate.STEADY,
         offpeak_rate=Rate.FAST,
         peak_windows=(Window(start=time(7), end=time(8, 15)),),
@@ -79,7 +79,7 @@ def test_form_values_spell_out_each_field() -> None:
     assert values['peak_rate'] == '60s'
     assert values['peak_1_start'] == '07:00'
     assert values['peak_2_start'] == ''
-    assert values['quiet_mode'] == 'timetable'
+    assert values['quiet_mode'] == 'app'
     assert values['quiet_start'] == '22:45'
 
 
@@ -152,6 +152,19 @@ def test_quiet_wrap_is_fine() -> None:
         fields={'quiet_start': '23:00', 'quiet_end': '05:30'},
     )
     assert event.my_hours == Window(start=time(23), end=time(5, 30))
+
+
+def test_quiet_mode_app_round_trips() -> None:
+    """The quiet radio's `app` value is read and written back as `app`."""
+    event = changed_from(fields={'quiet_mode': 'app'})
+    assert event == SettingsChanged(quiet_mode=QuietMode.APP)
+    assert form_values(settings=_applied(event=event))['quiet_mode'] == 'app'
+
+
+def test_quiet_mode_timetable_is_unknown() -> None:
+    """A stale page's `timetable` quiet mode is refused."""
+    with pytest.raises(UnknownValue):
+        changed_from(fields={'quiet_mode': 'timetable'})
 
 
 @pytest.mark.parametrize('field', ['peak_rate', 'quiet_mode', 'rotate'])

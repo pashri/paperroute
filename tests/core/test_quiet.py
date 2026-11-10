@@ -352,7 +352,7 @@ def followed(*, spans: dict[int, ServiceSpan | None]) -> State:
     State
         State with the spans answered.
     """
-    state = evening(mode=QuietMode.TIMETABLE)
+    state = evening(mode=QuietMode.APP)
     for days, span in spans.items():
         event = ServiceSpanLoaded(
             pin=shown(state=state),
@@ -366,7 +366,7 @@ def followed(*, spans: dict[int, ServiceSpan | None]) -> State:
 def test_follow_asks_for_three_days() -> None:
     """Following the timetable asks for yesterday, today and tomorrow."""
     state = fresh(now=at(22, 59))
-    device = replace(state.settings.device, quiet_mode=QuietMode.TIMETABLE)
+    device = replace(state.settings.device, quiet_mode=QuietMode.APP)
     settings = replace(state.settings, device=device)
     state, effects = step(
         replace(state, settings=settings), Tick(now=at(22, 59)),
@@ -411,7 +411,7 @@ def test_follow_no_trips_next_day_stays_awake() -> None:
 
 def test_follow_reloads_on_pin_change() -> None:
     """A top turn to another pin forgets the spans and asks again."""
-    state = evening(mode=QuietMode.TIMETABLE)
+    state = evening(mode=QuietMode.APP)
     state = replace(state, places=Places(pins=PINS))
     state, _ = step(state, Tick(now=at(23)))
     for days in (-1, 0, 1):
@@ -429,7 +429,7 @@ def test_follow_reloads_on_pin_change() -> None:
 
 def test_stale_span_is_ignored() -> None:
     """A span for a pin no longer shown is dropped."""
-    state = evening(mode=QuietMode.TIMETABLE)
+    state = evening(mode=QuietMode.APP)
     event: Event = ServiceSpanLoaded(pin=PINS[2], day=DAY, span=None)
     after, _ = step(state, event)
     assert after.calendar.spans == state.calendar.spans
@@ -649,7 +649,7 @@ def night_spans(*, state: State) -> State:
 
 def test_follow_timetable_overridden_too() -> None:
     """A window's start wakes a sleep by the timetable too."""
-    state = windowed(now=at(4, 30), mode=QuietMode.TIMETABLE)
+    state = windowed(now=at(4, 30), mode=QuietMode.APP)
     state = ticked(state=night_spans(state=state), times=(at(4, 59),))
     assert state.panel.asleep
     state = ticked(state=state, times=(at(5),))

@@ -706,12 +706,10 @@ async def test_app_reports_settings() -> None:
     )
     assert recorder.settings == [
         Settings(
-            board=BoardSettings(peak_windows=PEAK_WINDOWS),
-            device=DeviceSettings(auto_rebuild=True),
+            board=BoardSettings(auto_rebuild=True, peak_windows=PEAK_WINDOWS),
         ),
         Settings(
-            board=BoardSettings(peak_windows=PEAK_WINDOWS),
-            device=DeviceSettings(auto_rebuild=False),
+            board=BoardSettings(auto_rebuild=False, peak_windows=PEAK_WINDOWS),
         ),
     ]
 

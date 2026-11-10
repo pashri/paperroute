@@ -53,7 +53,6 @@ class DeviceSettingsModel(BaseModel):
 
     model_config = ConfigDict(extra='forbid', frozen=True)
 
-    auto_rebuild: bool
     quiet_mode: QuietMode
     my_hours: WindowModel
     rotate: bool
@@ -88,6 +87,10 @@ class DeviceSettingsModel(BaseModel):
         return count
 
 
+DEVICE_SETTING_NAMES: Final[frozenset[str]] = frozenset(
+    DeviceSettingsModel.model_fields,
+)
+
 class BoardSettingsModel(BaseModel):
     """
     The transit board's Settings page choices as stored.
@@ -97,6 +100,7 @@ class BoardSettingsModel(BaseModel):
 
     model_config = ConfigDict(extra='forbid', frozen=True)
 
+    auto_rebuild: bool
     peak_rate: Rate
     offpeak_rate: Rate
     peak_windows: tuple[WindowModel, ...] = Field(
@@ -198,7 +202,6 @@ def device_settings_to_model(
         The stored settings.
     """
     return DeviceSettingsModel(
-        auto_rebuild=settings.auto_rebuild,
         quiet_mode=settings.quiet_mode,
         my_hours=window_to_model(window=settings.my_hours),
         rotate=settings.rotate,
@@ -226,7 +229,6 @@ def device_settings_from_model(
         The device's settings.
     """
     return DeviceSettings(
-        auto_rebuild=model.auto_rebuild,
         quiet_mode=model.quiet_mode,
         my_hours=window_from_model(model=model.my_hours),
         rotate=model.rotate,
@@ -252,6 +254,7 @@ def board_settings_to_model(*, settings: BoardSettings) -> BoardSettingsModel:
         The stored settings.
     """
     return BoardSettingsModel(
+        auto_rebuild=settings.auto_rebuild,
         peak_rate=settings.peak_rate,
         offpeak_rate=settings.offpeak_rate,
         peak_windows=tuple(
@@ -280,6 +283,7 @@ def board_settings_from_model(*, model: BoardSettingsModel) -> BoardSettings:
         The board's settings.
     """
     return BoardSettings(
+        auto_rebuild=model.auto_rebuild,
         peak_rate=model.peak_rate,
         offpeak_rate=model.offpeak_rate,
         peak_windows=tuple(
@@ -392,3 +396,34 @@ def repaired_settings(
         }
         return {**data, 'settings': {**defaults, **kept}}
     return data
+
+
+def repaired_device_settings(
+    *, data: dict[str, object], defaults: dict[str, object],
+) -> dict[str, object]:
+    """
+    Repair a migrated device section's settings.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        The migrated device section.
+    defaults : dict[str, object]
+        The default device settings as stored.
+
+    Returns
+    -------
+    dict[str, object]
+        The section with unknown settings dropped quietly, before
+        validation, and each bad one reset as `repaired_settings` does.
+    """
+    settings = data.get('settings')
+    if isinstance(settings, dict):
+        data = {**data, 'settings': {
+            name: value
+            for name, value in settings.items()
+            if name in DEVICE_SETTING_NAMES
+        }}
+    return repaired_settings(
+        data=data, model=DeviceSettingsModel, defaults=defaults,
+    )

@@ -46,8 +46,7 @@ RICH_SAVED: Final[Saved] = Saved(
     view=LiveView.STRIP,
     settings=Settings(
         device=DeviceSettings(
-            auto_rebuild=False,
-            quiet_mode=QuietMode.TIMETABLE,
+            quiet_mode=QuietMode.APP,
             my_hours=Window(start=time(22, 15), end=time(6)),
             rotate=True,
             larger_text=True,
@@ -56,6 +55,7 @@ RICH_SAVED: Final[Saved] = Saved(
             swap_knobs=True,
         ),
         board=BoardSettings(
+            auto_rebuild=False,
             peak_rate=Rate.SLOW,
             offpeak_rate=Rate.STEADY,
             peak_windows=(Window(start=time(7), end=time(9)),),

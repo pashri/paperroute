@@ -74,6 +74,8 @@ class BoardSettings:
 
     Attributes
     ----------
+    auto_rebuild : bool
+        Whether an outdated timetable is rebuilt on the device.
     peak_rate : Rate
         The rate inside peak hours.
     offpeak_rate : Rate
@@ -94,6 +96,7 @@ class BoardSettings:
         it has no effect while `skip_school_buses` is off.
     """
 
+    auto_rebuild: bool = True
     peak_rate: Rate = Rate.FAST
     offpeak_rate: Rate = Rate.SLOW
     peak_windows: tuple[Window, ...] = ()

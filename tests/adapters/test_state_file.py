@@ -51,7 +51,12 @@ from paperroute_transit.core.saved import (
 )
 from paperroute_transit.core.state import initial_state
 from paperroute_transit.core.state_views import saved_of
-from tests.adapters.state_layout import STATE_V11, STATE_V11_KINDS, flat_v11
+from tests.adapters.state_layout import (
+    STATE_V11,
+    STATE_V11_KINDS,
+    STATE_V12,
+    flat_v11,
+)
 from tests.core.test_auto_pins import is_shown, started, ticked, trusted
 from tests.golden.scenes import GOLDEN
 
@@ -136,7 +141,6 @@ def settings_values(draw: st.DrawFn) -> Settings:
     )
     return Settings(
         device=DeviceSettings(
-            auto_rebuild=draw(st.booleans()),
             quiet_mode=draw(st.sampled_from(QuietMode)),
             my_hours=Window(
             start=clock(minute=draw(MINUTES)),
@@ -147,6 +151,7 @@ def settings_values(draw: st.DrawFn) -> Settings:
             inverted_lists=draw(st.booleans()),
         ),
         board=BoardSettings(
+            auto_rebuild=draw(st.booleans()),
             peak_rate=draw(st.sampled_from(Rate)),
             offpeak_rate=draw(st.sampled_from(Rate)),
             peak_windows=peak,
@@ -426,7 +431,8 @@ def test_written_json_shape(path: Path) -> None:
     JsonStateRepository(path=path, city=SYDNEY).save(saved=sample())
     data = json.loads(path.read_text())
     assert data['schema_version'] == SCHEMA_VERSION
-    assert data['device']['settings']['auto_rebuild'] is True
+    assert data['board']['settings']['auto_rebuild'] is True
+    assert 'auto_rebuild' not in data['device']['settings']
     assert data['board']['pins'][0]['origin'] == {
         'stop_id': 'a',
         'name': 'A',
@@ -561,7 +567,7 @@ def test_migrates_v2_with_auto_rebuild_on(path: Path) -> None:
     loaded = repository.load()
     assert loaded.stored
     assert loaded.saved == sample()
-    assert loaded.saved.settings.device.auto_rebuild is True
+    assert loaded.saved.settings.board.auto_rebuild is True
     repository.save(saved=loaded.saved)
     assert json.loads(path.read_text())['schema_version'] == SCHEMA_VERSION
 
@@ -570,12 +576,11 @@ def test_round_trips_settings(path: Path) -> None:
     """A switched-off rebuild survives a save and a load."""
     repository = JsonStateRepository(path=path, city=SYDNEY)
     manual = Settings(
-        board=BoardSettings(peak_windows=PEAK_WINDOWS),
-        device=DeviceSettings(auto_rebuild=False),
+        board=BoardSettings(auto_rebuild=False, peak_windows=PEAK_WINDOWS),
     )
     saved = replace(sample(), settings=manual)
     repository.save(saved=saved)
-    assert repository.load().saved.settings.device.auto_rebuild is False
+    assert repository.load().saved.settings.board.auto_rebuild is False
 
 
 def test_migrates_v3_to_v4_with_empty_quota(path: Path) -> None:
@@ -659,8 +664,7 @@ def test_migrates_v4_to_v5_with_defaults(path: Path) -> None:
     loaded = repository.load()
     assert loaded.stored
     assert loaded.saved.settings == Settings(
-        board=BoardSettings(peak_windows=PEAK_WINDOWS),
-        device=DeviceSettings(auto_rebuild=False),
+        board=BoardSettings(auto_rebuild=False, peak_windows=PEAK_WINDOWS),
     )
     assert loaded.saved.pins == sample().pins
     repository.save(saved=loaded.saved)
@@ -676,14 +680,14 @@ def test_round_trips_all_settings(path: Path) -> None:
     """Every setting off its default survives a save and a load."""
     changed = Settings(
         device=DeviceSettings(
-            auto_rebuild=False,
-            quiet_mode=QuietMode.TIMETABLE,
+            quiet_mode=QuietMode.APP,
             my_hours=Window(start=time(22, 15), end=time(6)),
             rotate=True,
             larger_text=True,
             inverted_lists=True,
         ),
         board=BoardSettings(
+            auto_rebuild=False,
             peak_rate=Rate.SLOW,
             offpeak_rate=Rate.STEADY,
             peak_windows=(Window(start=time(7), end=time(9)),),
@@ -1180,6 +1184,8 @@ def test_migrates_v8_to_current(path: Path) -> None:
     assert loaded.saved == saved
     assert all(not pin.ways for pin in loaded.saved.pins)
     assert loaded.saved.settings.board.connection_map is ConnectionMap.CHANGES
+    repository.save(saved=loaded.saved)
+    assert json.loads(path.read_text())['schema_version'] == 13
 
 
 def stored_change(*, path: Path, change: dict[str, object]) -> None:
@@ -1272,14 +1278,47 @@ def test_round_trips_swap_knobs(path: Path) -> None:
 GOLDEN_STATE: Final[Path] = GOLDEN / 'state.json'
 
 
-def test_v11_file_saves_as_v12_golden(path: Path) -> None:
-    """Today's v11 golden loads and saves as the v12 golden's bytes."""
+def test_v11_file_saves_as_v13_golden(path: Path) -> None:
+    """The v11 fixture loads and saves as the v13 golden's bytes."""
     path.write_bytes(STATE_V11.read_bytes())
     repository = JsonStateRepository(path=path, city=SYDNEY)
     loaded = repository.load()
     assert loaded.stored
     repository.save(saved=loaded.saved)
     assert path.read_bytes() == GOLDEN_STATE.read_bytes()
+
+
+def test_v12_file_saves_as_v13_golden(path: Path) -> None:
+    """The v12 fixture loads and saves as the v13 golden's bytes."""
+    path.write_bytes(STATE_V12.read_bytes())
+    repository = JsonStateRepository(path=path, city=SYDNEY)
+    loaded = repository.load()
+    assert loaded.stored
+    repository.save(saved=loaded.saved)
+    assert path.read_bytes() == GOLDEN_STATE.read_bytes()
+
+
+def test_unknown_device_key_resets_nothing(
+    path: Path, caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A stray device setting is dropped quietly; the rest are kept."""
+    settings = Settings(
+        device=DeviceSettings(
+            quiet_mode=QuietMode.APP,
+            rotate=True,
+            clean_after=60,
+            swap_knobs=True,
+        ),
+        board=BoardSettings(auto_rebuild=False, peak_windows=PEAK_WINDOWS),
+    )
+    repository = JsonStateRepository(path=path, city=SYDNEY)
+    repository.save(saved=replace(sample(), settings=settings))
+    data = json.loads(path.read_text())
+    data['device']['settings']['auto_rebuild'] = True
+    path.write_text(json.dumps(data))
+    loaded = repository.load()
+    assert (loaded.saved.settings, loaded.stored) == (settings, True)
+    assert not caplog.records
 
 
 def test_unknown_kind_drops_pin(

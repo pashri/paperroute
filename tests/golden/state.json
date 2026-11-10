@@ -1,10 +1,9 @@
 {
-  "schema_version": 12,
+  "schema_version": 13,
   "device": {
     "schema_version": 1,
     "settings": {
-      "auto_rebuild": false,
-      "quiet_mode": "timetable",
+      "quiet_mode": "app",
       "my_hours": {
         "start": "22:15",
         "end": "06:00"
@@ -136,6 +135,7 @@
     "unpinned": null,
     "view": "strip",
     "settings": {
+      "auto_rebuild": false,
       "peak_rate": "2min",
       "offpeak_rate": "60s",
       "peak_windows": [

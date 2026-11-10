@@ -79,7 +79,7 @@ def test_settings_change_is_saved() -> None:
     _, effects = step(state, Tick(now=START + SAVE_AFTER * 2))
     saves = [effect for effect in effects if isinstance(effect, SaveState)]
     assert len(saves) == 1
-    assert saves[0].saved.settings.device.auto_rebuild is False
+    assert saves[0].saved.settings.board.auto_rebuild is False
     assert saves[0].saved.settings.device.rotate is True
 
 
@@ -104,7 +104,7 @@ def test_on_settings_routes_every_field() -> None:
         peak_rate=Rate.STEADY,
         offpeak_rate=Rate.FAST,
         peak_windows=peaks,
-        quiet_mode=QuietMode.TIMETABLE,
+        quiet_mode=QuietMode.APP,
         my_hours=quiet,
         rotate=True,
         larger_text=True,
@@ -119,8 +119,7 @@ def test_on_settings_routes_every_field() -> None:
     state, _ = on_settings(state=fresh(), event=event)
     assert state.settings == Settings(
         device=DeviceSettings(
-            auto_rebuild=False,
-            quiet_mode=QuietMode.TIMETABLE,
+            quiet_mode=QuietMode.APP,
             my_hours=quiet,
             rotate=True,
             larger_text=True,
@@ -129,6 +128,7 @@ def test_on_settings_routes_every_field() -> None:
             swap_knobs=True,
         ),
         board=BoardSettings(
+            auto_rebuild=False,
             peak_rate=Rate.STEADY,
             offpeak_rate=Rate.FAST,
             peak_windows=peaks,

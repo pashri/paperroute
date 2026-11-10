@@ -253,7 +253,7 @@ def span_requests(*, state: State) -> tuple[State, tuple[Effect, ...]]:
         LoadServiceSpan for each of yesterday, today and tomorrow neither
         loaded nor pending; unchanged by My hours.
     """
-    if state.settings.device.quiet_mode is not QuietMode.TIMETABLE:
+    if state.settings.device.quiet_mode is not QuietMode.APP:
         return state, ()
     calendar = spans_kept(state=state)
     wanted = tuple(

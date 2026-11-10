@@ -37,7 +37,11 @@ from paperroute_device.core.kit_events import (
 )
 from paperroute_device.core.kit_state import KitState
 from paperroute_device.core.panel_views import WifiSetupView
-from paperroute_device.core.wifi import SETUP_FOR, wifi_setup_view
+from paperroute_device.core.wifi import (
+    SETUP_FOR,
+    setup_started,
+    wifi_setup_view,
+)
 from paperroute_device_testkit.device_fakes import device_facts
 from tests.core.fake_app import (
     BOTH,
@@ -274,3 +278,12 @@ def test_no_probe_while_setup_open() -> None:
         tick = Tick(now=START + timedelta(minutes=minutes))
         kit, effects = kit_step(kit=kit, event=tick)
         assert ProbeDevice() not in effects
+
+
+def test_setup_start_and_hotspot_need_their_phase() -> None:
+    """Setup does not start twice; a hotspot only answers a scan."""
+    kit = hotspot()
+    device, effects = setup_started(device=kit.device)
+    assert device is kit.device
+    assert not effects
+    assert unmoved(kit=kit, event=STARTED)

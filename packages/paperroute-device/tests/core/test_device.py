@@ -1,5 +1,6 @@
 """Tests for the device's own settings, power, keys, probe and resets."""
 
+from dataclasses import replace
 from datetime import time, timedelta
 
 import pytest
@@ -22,7 +23,11 @@ from paperroute_device.core.device_settings import (
     QuietMode,
     Window,
 )
-from paperroute_device.core.device_state import DeviceState
+from paperroute_device.core.device_state import (
+    ClockWait,
+    DeviceState,
+    clock_waiting,
+)
 from paperroute_device.core.kit_effects import (
     ControlPower,
     ProbeDevice,
@@ -424,3 +429,14 @@ def test_clock_wait_starts_gives_up_and_sets() -> None:
     assert kit.device.clock.wait_until is None
     assert kit.device.clock.set_at == later
     assert not kit.device.clock.gave_up
+
+
+def test_clock_wait_only_before_the_first_frame() -> None:
+    """An unsynced tick after a frame is drawn starts no wait."""
+    kit, _ = kit_step(kit=drawn(), event=Tick(now=START, synced=False))
+    assert kit.device.clock.wait_until is None
+    assert not clock_waiting(device=kit.device)
+    unknown = replace(kit.device, clock=ClockWait(known=False))
+    assert clock_waiting(device=unknown)
+    over = ClockWait(wait_until=START + timedelta(minutes=2), gave_up=True)
+    assert not clock_waiting(device=replace(kit.device, clock=over))

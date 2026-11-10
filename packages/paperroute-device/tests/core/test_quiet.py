@@ -186,3 +186,32 @@ def test_quiet_waits_for_power() -> None:
     )
     assert not kit.device.panel.asleep
     assert not renders(effects=effects)
+
+
+def test_wake_in_quiet_hours_lasts_its_time() -> None:
+    """A touch in quiet hours keeps the screen up for its wake, then sleeps."""
+    kit, _ = kit_step(
+        kit=with_settings(kit=drawn(), settings=QUIET_NOW), event=LATER,
+    )
+    kit, _ = kit_step(kit=kit, event=DOWN)
+    assert not kit.device.panel.asleep
+    until = kit.device.panel.awake_until
+    assert until is not None
+    kit, _ = kit_step(kit=kit, event=Tick(now=until - timedelta(seconds=1)))
+    assert not kit.device.panel.asleep
+    kit, _ = kit_step(kit=kit, event=Tick(now=until))
+    assert kit.device.panel.asleep
+
+
+def test_wake_run_out_outside_quiet_hours_is_forgotten() -> None:
+    """Once a wake has run out outside quiet hours it is cleared."""
+    kit, _ = kit_step(
+        kit=with_settings(kit=drawn(), settings=QUIET_NOW), event=LATER,
+    )
+    kit, _ = kit_step(kit=kit, event=DOWN)
+    until = kit.device.panel.awake_until
+    assert until is not None
+    kit = with_settings(kit=kit, settings=DeviceSettings())
+    kit, _ = kit_step(kit=kit, event=Tick(now=until))
+    assert kit.device.panel.awake_until is None
+    assert not kit.device.panel.asleep

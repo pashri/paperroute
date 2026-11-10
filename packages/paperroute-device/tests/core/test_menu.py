@@ -16,11 +16,13 @@ from paperroute_device.core.device_model import (
     Menu,
     MenuRow,
     Origin,
+    Panel,
     PanelScreen,
     PowerAction,
     ResetKind,
     menu_rows,
 )
+from paperroute_device.core.device_state import DeviceState
 from paperroute_device.core.kit_effects import (
     ControlPower,
     ProbeDevice,
@@ -31,9 +33,11 @@ from paperroute_device.core.kit_effects import (
 from paperroute_device.core.kit_events import DeviceProbed, Tick
 from paperroute_device.core.kit_state import KitState
 from paperroute_device.core.menu import CONFIRM_WAIT, MENU_IDLE
+from paperroute_device.core.panel_screens import device_view
 from paperroute_device.core.panel_views import (
     ConfirmCopy,
     ConfirmView,
+    InfoRow,
     MenuView,
     NoticeView,
     PhoneView,
@@ -455,3 +459,31 @@ def test_menu_rows_read_as_before() -> None:
         'Shut down',
         'Reset settings',
     )
+
+
+def test_device_screen_takes_only_a_top_press() -> None:
+    """On the Device screen only a top press does anything."""
+    kit, _ = kit_step(kit=opened_at(row=MenuRow.DEVICE), event=DOWN)
+    assert unmoved(kit=kit, event=DOWN)
+    assert unmoved(kit=kit, event=turn(steps=1))
+
+
+def test_device_screen_lists_kit_and_app_rows() -> None:
+    """The Device screen puts the app's lines between the kit's."""
+    facts = device_facts()
+    wifi = replace(
+        facts.wifi, managed=True, ssid='Home', dbm=-65, ip='10.0.0.2',
+    )
+    facts = replace(facts, wifi=wifi, uptime_s=None, last_error='boom')
+    device = DeviceState(now=START, panel=Panel(facts=facts))
+    app_row = InfoRow(label='Data', value='fresh')
+    view = device_view(device=device, app_rows=(app_row,), zone=ZONE)
+    assert view.rows == (
+        InfoRow(label='Wi-Fi', value='Home · good · 10.0.0.2'),
+        InfoRow(label='Clock', value='synced'),
+        app_row,
+        InfoRow(label='Software', value='dev'),
+        InfoRow(label='Last error', value='boom'),
+    )
+    empty = device_view(device=DeviceState(now=START), app_rows=(), zone=ZONE)
+    assert [row.value for row in empty.rows] == ['-', '-', '-', '-']

@@ -1,7 +1,7 @@
 """Tests for the device's own settings, power, keys, probe and resets."""
 
 from dataclasses import replace
-from datetime import time, timedelta
+from datetime import datetime, time, timedelta
 
 import pytest
 
@@ -26,7 +26,9 @@ from paperroute_device.core.device_settings import (
 from paperroute_device.core.device_state import (
     ClockWait,
     DeviceState,
+    KitSaved,
     clock_waiting,
+    elapsed,
 )
 from paperroute_device.core.kit_effects import (
     ControlPower,
@@ -48,6 +50,7 @@ from paperroute_device.core.kit_events import (
 )
 from paperroute_device.core.kit_state import SAVE_WAIT, KitState, with_device
 from paperroute_device.core.panel_views import NoticeView
+from paperroute_device.core.reducer import step
 from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_hardware.core.knob_events import (
     Knob,
@@ -57,6 +60,8 @@ from paperroute_hardware.core.knob_events import (
 )
 from tests.core.fake_app import (
     START,
+    ZONE,
+    FakeApp,
     FakeState,
     drawn,
     fresh,
@@ -440,3 +445,120 @@ def test_clock_wait_only_before_the_first_frame() -> None:
     assert clock_waiting(device=unknown)
     over = ClockWait(wait_until=START + timedelta(minutes=2), gave_up=True)
     assert not clock_waiting(device=replace(kit.device, clock=over))
+
+
+QUOTA_WAIT = timedelta(minutes=10)
+
+
+class WaitingApp(FakeApp):
+    """The fake app holding a change of its own part for ten minutes."""
+
+    def save_waits(
+        self,
+        *,
+        written: object | None,
+        current: object | None,
+        written_at: datetime | None,
+        now: datetime,
+    ) -> bool:
+        """
+        Hold a change to the app's part until ten minutes after a write.
+
+        Parameters
+        ----------
+        written : object | None
+            Ignored.
+        current : object | None
+            Ignored.
+        written_at : datetime | None
+            When the kit last wrote.
+        now : datetime
+            The time.
+
+        Returns
+        -------
+        bool
+            True until `QUOTA_WAIT` after the last write.
+        """
+        del written, current
+        return not elapsed(since=written_at, now=now, span=QUOTA_WAIT)
+
+
+WAITING = WaitingApp()
+
+
+def waiting_step(
+    *, kit: KitState[FakeState], event: object,
+) -> tuple[KitState[FakeState], tuple[object, ...]]:
+    """
+    Step the kit with the waiting app.
+
+    Parameters
+    ----------
+    kit : KitState[FakeState]
+        Kit state.
+    event : object
+        What happened.
+
+    Returns
+    -------
+    tuple[KitState[FakeState], tuple[object, ...]]
+        The next state and effects.
+    """
+    return step(kit=kit, app=WAITING, zone=ZONE, event=event)
+
+
+def saves(*, effects: tuple[object, ...]) -> list[SaveState]:
+    """
+    List the saves asked for.
+
+    Parameters
+    ----------
+    effects : tuple[object, ...]
+        Effects.
+
+    Returns
+    -------
+    list[SaveState]
+        Each SaveState.
+    """
+    return [effect for effect in effects if isinstance(effect, SaveState)]
+
+
+def test_waiting_app_holds_its_save_until_its_rule_allows() -> None:
+    """An app's own change waits as `save_waits` says, then is written."""
+    kit, _ = waiting_step(kit=drawn(), event='other')
+    for minutes in (1, 5, 9):
+        tick = Tick(now=START + timedelta(minutes=minutes))
+        kit, effects = waiting_step(kit=kit, event=tick)
+        assert not saves(effects=effects), minutes
+    now = START + QUOTA_WAIT
+    kit, effects = waiting_step(kit=kit, event=Tick(now=now))
+    assert saves(effects=effects) == [
+        SaveState(saved=KitSaved(device=DeviceSettings(), app='other')),
+    ]
+    assert kit.written_at == now
+    kit, _ = waiting_step(kit=kit, event='again')
+    later = Tick(now=now + timedelta(minutes=1))
+    _, effects = waiting_step(kit=kit, event=later)
+    assert not saves(effects=effects)
+
+
+def test_device_change_saves_even_when_the_app_would_wait() -> None:
+    """A device-setting change is written `SAVE_WAIT` later regardless."""
+    kit, _ = waiting_step(kit=drawn(), event='other')
+    kit, _ = waiting_step(kit=kit, event=posted(rotate=True))
+    _, effects = waiting_step(kit=kit, event=Tick(now=START + SAVE_WAIT))
+    saved = KitSaved(device=DeviceSettings(rotate=True), app='other')
+    assert saves(effects=effects) == [SaveState(saved=saved)]
+
+
+def test_quit_and_power_write_at_once_for_a_waiting_app() -> None:
+    """A quit or a power request writes a held change without waiting."""
+    kit, _ = waiting_step(kit=drawn(), event='other')
+    _, effects = waiting_step(kit=kit, event=QuitRequested())
+    assert saves(effects=effects)
+    off = PowerRequested(action=PowerAction.OFF)
+    after, effects = waiting_step(kit=kit, event=off)
+    assert saves(effects=effects)
+    assert after.written_at == START

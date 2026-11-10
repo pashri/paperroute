@@ -82,6 +82,41 @@ def kit_saved[S](*, kit: KitState[S], app: App[S]) -> KitSaved:
     )
 
 
+def save_waits[S](
+    *, kit: KitState[S], app: App[S], current: KitSaved,
+) -> bool:
+    """
+    Say whether a change to what is kept is too new to write.
+
+    Parameters
+    ----------
+    kit : KitState[S]
+        Kit state, with something written before.
+    app : App[S]
+        The app.
+    current : KitSaved
+        What is kept now, which differs from what was last written.
+
+    Returns
+    -------
+    bool
+        True when the change is younger than `SAVE_WAIT`, or when only
+        the app's part changed and `App.save_waits` holds it.
+    """
+    written = kit.saved
+    if written is None:
+        return False
+    now = kit.device.now
+    if current.device == written.device and app.save_waits(
+        written=written.app,
+        current=current.app,
+        written_at=kit.written_at,
+        now=now,
+    ):
+        return True
+    return not elapsed(since=kit.changed_at, now=now, span=SAVE_WAIT)
+
+
 def saved_effects[S](
     *, kit: KitState[S], app: App[S], wait: bool = True,
 ) -> KitStep[S]:
@@ -95,23 +130,22 @@ def saved_effects[S](
     app : App[S]
         The app.
     wait : bool
-        Hold the save until `SAVE_WAIT` after the last change, unless
-        nothing was ever written.
+        Hold the save as `save_waits` says, unless nothing was ever
+        written.
 
     Returns
     -------
     KitStep[S]
-        Kit state with the save recorded, and a SaveState; unchanged when
-        nothing is due.
+        Kit state with the save and its time recorded, and a SaveState;
+        unchanged when nothing is due.
     """
     current = kit_saved(kit=kit, app=app)
     if current == kit.saved:
         return kit, ()
-    if wait and kit.saved is not None and not elapsed(
-        since=kit.changed_at, now=kit.device.now, span=SAVE_WAIT,
-    ):
+    if wait and save_waits(kit=kit, app=app, current=current):
         return kit, ()
-    return replace(kit, saved=current), (SaveState(saved=current),)
+    written = replace(kit, saved=current, written_at=kit.device.now)
+    return written, (SaveState(saved=current),)
 
 
 def on_device_settings(
@@ -177,7 +211,10 @@ def on_power[S](
     saved = kit_saved(kit=kit, app=app)
     view = NoticeView(title=NOTICE[event.action])
     device = replace(device, power=event.action, last_view=view)
-    return replace(kit, device=device, saved=saved), (
+    written = replace(
+        kit, device=device, saved=saved, written_at=device.now,
+    )
+    return written, (
         *stops,
         SaveState(saved=saved),
         Render(view=view, full=True),

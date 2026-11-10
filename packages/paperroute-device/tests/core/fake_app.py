@@ -165,6 +165,8 @@ class FakeApp(App[FakeState]):
         """
         Record a knob event; a bottom turn or a hold names a new view.
 
+        A top press closes the app's own menu.
+
         Parameters
         ----------
         state : FakeState
@@ -186,8 +188,9 @@ class FakeApp(App[FakeState]):
             view = f'{view}+{event.steps}'
         if isinstance(event, KnobHeld):
             view = 'held' if state.marked else 'unmarked'
+        menu = state.menu and event != UP
         knobs = [*state.knobs, event]
-        return replace(state, knobs=knobs, view=view), ()
+        return replace(state, knobs=knobs, view=view, menu=menu), ()
 
     def on_row(
         self, *, state: FakeState, device: DeviceState, row: AppRow,
@@ -418,7 +421,7 @@ APP: Final[FakeApp] = FakeApp()
 
 def fresh(*, app: FakeState | None = None) -> KitState[FakeState]:
     """
-    Make a kit state at START, saved as it stands and nothing drawn.
+    Make a kit state at START, written then as it stands, nothing drawn.
 
     Parameters
     ----------
@@ -433,7 +436,9 @@ def fresh(*, app: FakeState | None = None) -> KitState[FakeState]:
     state = app or FakeState()
     device = DeviceState(now=START)
     saved = KitSaved(device=device.settings, app=APP.saved(state=state))
-    return KitState(device=device, app=state, saved=saved, stored=True)
+    return KitState(
+        device=device, app=state, saved=saved, stored=True, written_at=START,
+    )
 
 
 def drawn(*, app: FakeState | None = None) -> KitState[FakeState]:

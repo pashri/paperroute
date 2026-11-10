@@ -60,7 +60,9 @@ def quiet_due[S](*, device: DeviceState, app: App[S], state: S) -> bool:
     return quiet and app.may_sleep(state=state, now=device.now)
 
 
-def panel_may_sleep(*, device: DeviceState) -> bool:
+def panel_may_sleep[S](
+    *, device: DeviceState, app: App[S], state: S,
+) -> bool:
     """
     Say whether quiet hours may put the screen to sleep now.
 
@@ -68,15 +70,23 @@ def panel_may_sleep(*, device: DeviceState) -> bool:
     ----------
     device : DeviceState
         Device state.
+    app : App[S]
+        The app.
+    state : S
+        The app's state.
 
     Returns
     -------
     bool
-        True when awake with no wake running, no confirm, menu or Wi-Fi
-        setup open, and no power action or reset under way.
+        True when awake with no wake running, no confirm, menu, Wi-Fi
+        setup or app menu open, and no power action or reset under way.
+        An open app menu does not stop quiet hours being due, so a wake
+        that runs out under it is kept and the next touch moves it on.
     """
     panel = device.panel
     if panel.asleep or device.power is not None:
+        return False
+    if app.in_menu(state=state):
         return False
     if panel.awake_until is not None and panel.awake_until > device.now:
         return False
@@ -111,7 +121,7 @@ def quiet_effects[S](*, kit: KitState[S], app: App[S]) -> KitStep[S]:
         if panel.by_quiet and not due:
             return with_device(kit=kit, device=awake(device=device)), ()
         return kit, ()
-    if due and panel_may_sleep(device=device):
+    if due and panel_may_sleep(device=device, app=app, state=kit.app):
         asleep = slept(device=device, by_quiet=True)
         return with_device(kit=kit, device=asleep), ()
     if panel.awake_until is not None and not due and elapsed(

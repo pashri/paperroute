@@ -15,11 +15,12 @@ from paperroute_device.core.kit_events import Tick
 from paperroute_device.core.kit_state import KitState
 from paperroute_device.core.panel_views import PlainSleepView
 from paperroute_device.core.quiet import in_window
-from paperroute_device.core.sleep import SLEEP_BAND
+from paperroute_device.core.sleep import SLEEP_BAND, WAKE_FOR
 from tests.core.fake_app import (
     BOTH,
     DOWN,
     START,
+    UP,
     FakeState,
     drawn,
     kit_step,
@@ -215,3 +216,26 @@ def test_wake_run_out_outside_quiet_hours_is_forgotten() -> None:
     kit, _ = kit_step(kit=kit, event=Tick(now=until))
     assert kit.device.panel.awake_until is None
     assert not kit.device.panel.asleep
+
+
+def test_app_menu_left_open_keeps_the_wake() -> None:
+    """An app menu open past a quiet-hours wake keeps it for the next touch."""
+    kit, _ = kit_step(
+        kit=with_settings(kit=drawn(), settings=QUIET_NOW), event=LATER,
+    )
+    kit, _ = kit_step(kit=kit, event=DOWN)
+    until = kit.device.panel.awake_until
+    assert until is not None
+    kit = replace(kit, app=replace(kit.app, menu=True))
+    idle = until + timedelta(minutes=1)
+    kit, _ = kit_step(kit=kit, event=Tick(now=idle))
+    assert not kit.device.panel.asleep
+    assert kit.device.panel.awake_until == until
+    kit, _ = kit_step(kit=kit, event=UP)
+    assert not kit.app.menu
+    assert kit.device.panel.awake_until == idle + WAKE_FOR
+    tick = Tick(now=idle + timedelta(seconds=30))
+    kit, _ = kit_step(kit=kit, event=tick)
+    assert not kit.device.panel.asleep
+    kit, _ = kit_step(kit=kit, event=Tick(now=idle + WAKE_FOR))
+    assert kit.device.panel.asleep

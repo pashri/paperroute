@@ -28,6 +28,9 @@ class KitState[S]:
         What was last written, or None before anything was.
     stored : bool
         Whether the state at start-up came from the file.
+    written_at : datetime | None
+        When what is kept was last written, or None before anything
+        was.
     """
 
     device: DeviceState
@@ -36,6 +39,7 @@ class KitState[S]:
     changed_at: datetime | None = None
     saved: KitSaved | None = None
     stored: bool = False
+    written_at: datetime | None = None
 
 
 def with_device[S](*, kit: KitState[S], device: DeviceState) -> KitState[S]:

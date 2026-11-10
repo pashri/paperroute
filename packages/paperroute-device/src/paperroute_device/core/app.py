@@ -520,6 +520,37 @@ class App[S](ABC):
         """
         return self.saved(state=before) != self.saved(state=after)
 
+    def save_waits(
+        self,
+        *,
+        written: object | None,
+        current: object | None,
+        written_at: datetime | None,
+        now: datetime,
+    ) -> bool:
+        """
+        Say whether a change to the app's part alone may wait to be saved.
+
+        Parameters
+        ----------
+        written : object | None
+            The app's part as last written.
+        current : object | None
+            The app's part now, which differs from `written`.
+        written_at : datetime | None
+            When the kit last wrote, or None before it did.
+        now : datetime
+            The time.
+
+        Returns
+        -------
+        bool
+            By default False, so the change is saved `SAVE_WAIT` after
+            it was made. A change to the device settings never asks.
+        """
+        del written, current, written_at, now
+        return False
+
     def observe(self, *, before: S, after: S, event: object) -> None:
         """
         Report a step to the app's own observers.

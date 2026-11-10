@@ -56,6 +56,9 @@ KIT_PAGES: Final[tuple[Path, ...]] = tuple(
     )
 )
 SHEETS: Final[tuple[str, ...]] = ('/live.css', '/palette.css', '/board.css')
+SETTINGS_BORROWS: Final[frozenset[str]] = frozenset({
+    '.switch', '.times', '.error',
+})
 DARK: Final[str] = '@media (prefers-color-scheme: dark)'
 SYDNEY_LIGHT: Final[dict[str, str]] = {
     '--masthead': '#002664',
@@ -301,14 +304,19 @@ def test_palette_rules_never_match_kit_markup() -> None:
 
 
 def test_kit_markup_needs_no_board_rule() -> None:
-    """Every board selector but `:root` names a class or id kit lacks."""
+    """
+    Every board selector but `:root` names a class or id kit lacks.
+
+    The one exception is the kit Settings page's Device section, whose
+    switches, times and error line are styled by the board's rules.
+    """
     app = display(status=STATUS, keys=FakeKeys(key=KEY)).app()
     tokens = markup_tokens(root=SHELL_WEB, python=KIT_PAGES)
-    matching = [
+    matching = {
         selector
         for rule in served_rules(app=app)['/board.css']
         for selector in top_level_split(text=rule.selector)
         if selector != ':root'
         and selector_tokens(selector=selector) <= tokens
-    ]
-    assert not matching
+    }
+    assert matching <= SETTINGS_BORROWS

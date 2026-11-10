@@ -1,11 +1,14 @@
 """The contract an app implements to run on the device kit."""
 
+import argparse
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from datetime import datetime, tzinfo
-from typing import Final, Protocol
+from pathlib import Path
+from typing import TYPE_CHECKING, Final, Protocol
 
-from paperroute_device.core.device_model import AppRow
+from paperroute_device.core.device_model import AppRow, DeviceKey
 from paperroute_device.core.device_state import Banner, DeviceState
 from paperroute_device.core.kit_events import Tick
 from paperroute_device.core.kit_state import Step
@@ -17,8 +20,12 @@ from paperroute_device.core.panel_views import (
 )
 from paperroute_device.core.sleep import SLEEP_BAND
 from paperroute_device.ports import DeviceObserver, Frame
-from paperroute_device.runtime.timings import KitTimings
 from paperroute_hardware.core.knob_events import KnobEvent
+
+if TYPE_CHECKING:
+    from paperroute_device.logs import LastError
+    from paperroute_device.runtime.app_web import AppWeb
+    from paperroute_device.runtime.timings import KitTimings
 
 KIT_RESET_HINT: Final[str] = (
     'Reset settings clears the settings, Wi-Fi and the keys. Erase '
@@ -188,7 +195,95 @@ class App[S](ABC):
         KitTimings
             By default the kit's own.
         """
+        # pylint: disable-next=import-outside-toplevel
+        from paperroute_device.runtime.timings import KitTimings
+
         return KitTimings()
+
+    def add_arguments(self, *, parser: argparse.ArgumentParser) -> None:
+        """
+        Add the app's own flags to the run command.
+
+        Parameters
+        ----------
+        parser : argparse.ArgumentParser
+            The run command's parser, holding the kit's flags already.
+        """
+        del parser
+
+    @contextmanager
+    def opened(
+        self, *, args: argparse.Namespace, last_error: LastError,
+    ) -> Iterator[None]:
+        """
+        Open the app's adapters for the run, and close them after it.
+
+        Parameters
+        ----------
+        args : argparse.Namespace
+            The run command's arguments.
+        last_error : LastError
+            Holds the latest error logged.
+
+        Yields
+        ------
+        None
+            While the app's adapters are open; by default none are.
+        """
+        del args, last_error
+        yield
+
+    def keys(self) -> tuple[DeviceKey, ...]:
+        """
+        Give the API keys the device keeps for the app.
+
+        Returns
+        -------
+        tuple[DeviceKey, ...]
+            The keys, in declaration order; by default none.
+        """
+        return ()
+
+    def erased(self, *, args: argparse.Namespace) -> tuple[Path, ...]:
+        """
+        Name the app's files that Erase everything deletes.
+
+        Parameters
+        ----------
+        args : argparse.Namespace
+            The run command's arguments.
+
+        Returns
+        -------
+        tuple[Path, ...]
+            The files, each inside the data directory; by default none.
+        """
+        del args
+        return ()
+
+    def web(self, *, args: argparse.Namespace, timings: KitTimings) -> AppWeb:
+        """
+        Give the app's part of the web pages.
+
+        Called once the app's adapters are open.
+
+        Parameters
+        ----------
+        args : argparse.Namespace
+            The run command's arguments.
+        timings : KitTimings
+            The timings object from `timings`, which the pages read.
+
+        Returns
+        -------
+        AppWeb
+            By default the kit's nav and hint and nothing else.
+        """
+        # pylint: disable-next=import-outside-toplevel
+        from paperroute_device.runtime.app_web import AppWeb
+
+        del args, timings
+        return AppWeb()
 
     def observers(self) -> tuple[DeviceObserver, ...]:
         """

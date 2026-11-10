@@ -31,6 +31,9 @@ ENTRY_POINTS: Final[tuple[Path, ...]] = (
 APP_FILES: Final[re.Pattern[str]] = re.compile(
     r'''files\(\s*(['"])paperroute_sydney(\.[\w.]*)?\1''',
 )
+MOVING_TO_KIT: Final[frozenset[str]] = frozenset({
+    'settings.html', 'settings.js',
+})
 READERS: Final[dict[str, Traversable]] = {
     'asset': APP_ASSETS.web,
     'asset_bytes': APP_ASSETS.web,
@@ -239,6 +242,7 @@ def test_no_web_file_in_both_places() -> None:
 
     This records Sydney's choice under Ruling 3: its web directory
     overrides no transit board file. Another city may override one.
+    The Settings page's files are in both until transit uses the kit's.
     """
     shell = relative_files(root=SHELL_WEB)
     board = relative_files(root=BOARD_WEB)
@@ -247,4 +251,4 @@ def test_no_web_file_in_both_places() -> None:
     assert board
     assert not shell & app
     assert not board & app
-    assert not board & shell
+    assert board & shell <= MOVING_TO_KIT

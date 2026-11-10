@@ -1,5 +1,10 @@
 """Tests for the App contract's defaults."""
 
+import argparse
+import subprocess
+import sys
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -10,10 +15,12 @@ from paperroute_device.core.kit_events import Tick
 from paperroute_device.core.kit_state import Step
 from paperroute_device.core.panel_views import KIT_CONFIRM_COPY, PlainSleepView
 from paperroute_device.core.sleep import SLEEP_BAND
+from paperroute_device.logs import LastError
 from paperroute_device.ports import Frame
+from paperroute_device.runtime.app_web import AppWeb
 from paperroute_device.runtime.timings import KitTimings
 from paperroute_hardware.core.knob_events import Knob, KnobEvent, KnobPressed
-from tests.core.fake_app import START
+from tests.core.fake_app import START, ZONE
 
 
 class Bare(App[int]):
@@ -160,3 +167,35 @@ async def test_runtime_defaults_are_the_kit_ones() -> None:
     with pytest.raises(ValueError, match="unknown effect 'go'"):
         await app.perform(effect='go', post=posted.append)
     assert not posted
+
+
+def test_command_line_defaults_are_the_kit_ones() -> None:
+    """The command-line hooks add, open, keep and erase nothing."""
+    app = Bare()
+    parser = argparse.ArgumentParser()
+    app.add_arguments(parser=parser)
+    args = parser.parse_args([])
+    with app.opened(args=args, last_error=LastError(zone=ZONE)) as opened:
+        assert opened is None
+    assert not vars(args)
+    assert app.keys() == ()
+    assert app.erased(args=args) == ()
+    assert app.web(args=args, timings=KitTimings()) == AppWeb()
+
+
+def test_importing_the_contract_loads_no_adapter() -> None:
+    """Importing `core.app` alone loads no `paperroute_device.adapters`."""
+    done = subprocess.run(
+        [
+            sys.executable,
+            '-c',
+            'import sys, paperroute_device.core.app; '
+            'print(sorted(name for name in sys.modules '
+            "if name.startswith('paperroute_device.adapters')))",
+        ],
+        capture_output=True,
+        check=True,
+        text=True,
+        cwd=Path(__file__).parent,
+    )
+    assert done.stdout == '[]\n'

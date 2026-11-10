@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Settings - paperroute</title>
+  <link rel="stylesheet" href="/live.css">
+  {{sheets}}
+  <script type="module" src="/settings.js"></script>
+</head>
+<body>
+  <header>
+    <h1>paperroute</h1>
+  </header>
+  {{nav}}
+  <main>
+    <section class="card setting" aria-labelledby="device">
+      <h2 id="device">Device</h2>
+      <form id="device-form" method="post" action="/settings">
+        <input type="hidden" name="rotate" value="off">
+        <label class="switch">
+          <input type="checkbox" role="switch" name="rotate"
+                 value="on"{{rotate}}>
+          Rotate 180&deg;
+        </label>
+        <input type="hidden" name="swap_knobs" value="off">
+        <label class="switch">
+          <input type="checkbox" role="switch" name="swap_knobs"
+                 value="on"{{swap_knobs}}>
+          Swap knobs
+        </label>
+        <input type="hidden" name="larger_text" value="off">
+        <label class="switch">
+          <input type="checkbox" role="switch" name="larger_text"
+                 value="on"{{larger_text}}>
+          Larger text
+        </label>
+        <input type="hidden" name="inverted_lists" value="off">
+        <label class="switch">
+          <input type="checkbox" role="switch" name="inverted_lists"
+                 value="on"{{inverted_lists}}>
+          White on black lists
+        </label>
+        <label>Clean screen after
+          <select name="clean_after" aria-describedby="clean-hint">
+            <option value="15"{{clean_after:15}}>15 changes</option>
+            <option value="30"{{clean_after:30}}>30 changes</option>
+            <option value="60"{{clean_after:60}}>60 changes</option>
+            <option value="120"{{clean_after:120}}>120 changes</option>
+          </select>
+        </label>
+        <p id="clean-hint" class="hint">
+          A full refresh clears the faint marks quick updates leave behind.
+          It waits until the knobs have rested for 30 s.
+        </p>
+        <fieldset>
+          <legend>When the screen sleeps</legend>
+          <label class="switch">
+            <input type="radio" name="quiet_mode" value="my_hours"{{quiet_mode:my_hours}}>
+            My hours
+          </label>
+          <div class="times">
+            <label>from
+              <input type="time" name="quiet_start" value="{{quiet_start}}">
+            </label>
+            <label>to
+              <input type="time" name="quiet_end" value="{{quiet_end}}">
+            </label>
+          </div>
+          {{quiet_app}}
+        </fieldset>
+        <p class="hint">
+          The screen sleeps and stops polling. The first touch only wakes it
+          (it isn't acted on); each touch keeps it awake 5 more minutes.
+        </p>
+        {{error_quiet}}
+        <button type="submit">Save</button>
+        <p class="hint saved" aria-live="polite"></p>
+      </form>
+    </section>
+    {{app_sections}}
+  </main>
+</body>
+</html>

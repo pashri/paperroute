@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from typing import Final
 
+from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
@@ -14,7 +15,6 @@ from paperroute_hardware.core.knob_events import (
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_testkit.core.factories import START, departure, pin_at
 from paperroute_testkit.core.steps import wakeful
-from paperroute_testkit.fakes import device_facts
 from paperroute_transit.core.alert_model import AlertTie, Matched, Period
 from paperroute_transit.core.auto_model import AutoState, Before, Occurrence
 from paperroute_transit.core.auto_pins import rule_holds

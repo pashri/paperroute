@@ -5,6 +5,7 @@ dev = [
     "isort>=5.13",
     "mypy>=1.15",
     "numpydoc>=1.8",
+    "paperroute-device-testkit",
     "paperroute-sydney",
     "paperroute-testkit",
     "pylint>=3.3",
@@ -25,6 +26,7 @@ members = ["packages/*", "apps/*"]
 paperroute-hardware = { workspace = true }
 paperroute-device = { workspace = true }
 paperroute-transit = { workspace = true }
+paperroute-device-testkit = { workspace = true }
 paperroute-testkit = { workspace = true }
 paperroute-sydney = { workspace = true }
 
@@ -44,6 +46,7 @@ files = [
     "apps/paperroute-sydney/src",
     "packages/paperroute-hardware/src",
     "packages/paperroute-device/src",
+    "packages/paperroute-device-testkit/src",
     "packages/paperroute-transit/src",
     "packages/paperroute-testkit/src",
 ]
@@ -68,6 +71,7 @@ known_first_party = [
     "paperroute_sydney",
     "paperroute_hardware",
     "paperroute_device",
+    "paperroute_device_testkit",
     "paperroute_transit",
     "paperroute_testkit",
     "tests",
@@ -77,6 +81,7 @@ src_paths = [
     "tests",
     "packages/paperroute-hardware/src",
     "packages/paperroute-device/src",
+    "packages/paperroute-device-testkit/src",
     "packages/paperroute-transit/src",
     "packages/paperroute-testkit/src",
 ]
@@ -91,6 +96,7 @@ known-first-party = [
     "paperroute_sydney",
     "paperroute_hardware",
     "paperroute_device",
+    "paperroute_device_testkit",
     "paperroute_transit",
     "paperroute_testkit",
 ]

@@ -11,14 +11,7 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute_device.core.device_model import (
-    DeviceFacts,
-    PowerAction,
-    ResetKind,
-    WifiStatus,
-)
 from paperroute_testkit.city_setting import city_under_test
-from paperroute_testkit.hardware_fakes import FrameRecorder
 from paperroute_transit.core.alert_model import AlertPlaces
 from paperroute_transit.core.chooser import ChooserPath, Column
 from paperroute_transit.core.city import City
@@ -184,75 +177,6 @@ class MemoryStates:
             raise self.error
         self.stored = saved
         self.saves.append(saved)
-
-
-@dataclass(frozen=True)
-class FixedClock:
-    """A clock stuck at one moment."""
-
-    at: datetime
-
-    def now(self) -> datetime:
-        """
-        The fixed time.
-
-        Returns
-        -------
-        datetime
-            Time.
-        """
-        return self.at
-
-    def synced(self) -> bool:
-        """
-        Say the clock is synchronised.
-
-        Returns
-        -------
-        bool
-            Always True.
-        """
-        return True
-
-
-@dataclass
-class SyncingClock:
-    """
-    A clock stuck at one moment that syncs after a few asks.
-
-    Attributes
-    ----------
-    at : datetime
-        The fixed time.
-    unsynced : int
-        How many asks are answered unsynchronised first.
-    """
-
-    at: datetime
-    unsynced: int
-
-    def now(self) -> datetime:
-        """
-        The fixed time.
-
-        Returns
-        -------
-        datetime
-            Time.
-        """
-        return self.at
-
-    def synced(self) -> bool:
-        """
-        Say whether the clock is synchronised, counting down the asks.
-
-        Returns
-        -------
-        bool
-            False for the first `unsynced` asks, then True.
-        """
-        self.unsynced -= 1
-        return self.unsynced < 0
 
 
 @dataclass
@@ -656,124 +580,6 @@ class FakeBuilder:
 
 
 @dataclass
-class FakePower:
-    """
-    A power control that answers at once and notes the screen when called.
-
-    Attributes
-    ----------
-    result : bool
-        What each action returns.
-    display : FrameRecorder | None
-        The display whose frame count is noted at each call.
-    calls : list[tuple[PowerAction, int]]
-        Each action asked for, with how many frames were shown by then.
-    """
-
-    result: bool = True
-    display: FrameRecorder | None = None
-    calls: list[tuple[PowerAction, int]] = field(default_factory=list)
-
-    async def control(self, *, action: PowerAction) -> bool:
-        """
-        Note the call and give the set result.
-
-        Parameters
-        ----------
-        action : PowerAction
-            The action asked for.
-
-        Returns
-        -------
-        bool
-            `result`.
-        """
-        shown = 0 if self.display is None else len(self.display.frames)
-        self.calls.append((action, shown))
-        return self.result
-
-
-def device_facts(*, key_set: bool = True) -> DeviceFacts:
-    """
-    Make facts for a device on no network.
-
-    Parameters
-    ----------
-    key_set : bool
-        Whether a key is set.
-
-    Returns
-    -------
-    DeviceFacts
-        The facts.
-    """
-    return DeviceFacts(
-        wifi=WifiStatus(),
-        clock_synced=True,
-        uptime_s=60.0,
-        cpu_c=45.0,
-        disk_free=1_000_000,
-        mem_free=2_000_000,
-        version='dev',
-        last_error=None,
-        tiles_built=None,
-        key_set=key_set,
-    )
-
-
-@dataclass
-class FakeProbe:
-    """
-    A device probe that gives fixed facts, or raises.
-
-    Attributes
-    ----------
-    facts : DeviceFacts
-        What `probe` gives.
-    error : Exception | None
-        Raised by `probe` when set.
-    """
-
-    facts: DeviceFacts = field(default_factory=device_facts)
-    error: Exception | None = None
-
-    async def probe(self) -> DeviceFacts:
-        """
-        Give the fixed facts.
-
-        Returns
-        -------
-        DeviceFacts
-            `facts`.
-
-        Raises
-        ------
-        Exception
-            `error`, when set.
-        """
-        if self.error is not None:
-            raise self.error
-        return self.facts
-
-
-@dataclass
-class HangingProbe:
-    """A device probe that never answers."""
-
-    async def probe(self) -> DeviceFacts:
-        """
-        Wait for ever.
-
-        Returns
-        -------
-        DeviceFacts
-            Never.
-        """
-        await asyncio.Event().wait()
-        return device_facts()
-
-
-@dataclass
 class WatchingBuilder(FakeBuilder):
     """
     A builder that notes, when stopped, whether a file still exists.
@@ -793,31 +599,6 @@ class WatchingBuilder(FakeBuilder):
         """Note whether the file exists, and count the stop."""
         self.existed.append(self.watched is not None and self.watched.exists())
         await super().stop()
-
-
-@dataclass
-class RecordingResets:
-    """
-    Resets that note each kind asked for and touch nothing.
-
-    Attributes
-    ----------
-    kinds : list[ResetKind]
-        Each reset asked for.
-    """
-
-    kinds: list[ResetKind] = field(default_factory=list)
-
-    async def reset(self, *, kind: ResetKind) -> None:
-        """
-        Note the reset.
-
-        Parameters
-        ----------
-        kind : ResetKind
-            The reset asked for.
-        """
-        self.kinds.append(kind)
 
 
 @dataclass

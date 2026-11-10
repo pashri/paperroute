@@ -19,7 +19,8 @@ SRC: Final[tuple[Path, ...]] = tuple(
             *ROOT.glob('apps/*/src/*/__init__.py'),
             *ROOT.glob('packages/*/src/*/__init__.py'),
         ]
-        if path.parent.name != 'paperroute_testkit'
+        if path.parent.name
+        not in {'paperroute_testkit', 'paperroute_device_testkit'}
     ),
 )
 APPS: Final[frozenset[str]] = frozenset(
@@ -61,6 +62,13 @@ TRANSIT: Final[Path] = (
 )
 TESTKIT: Final[Path] = (
     ROOT / 'packages' / 'paperroute-testkit' / 'src' / 'paperroute_testkit'
+)
+DEVICE_TESTKIT: Final[Path] = (
+    ROOT
+    / 'packages'
+    / 'paperroute-device-testkit'
+    / 'src'
+    / 'paperroute_device_testkit'
 )
 CITY_DEFAULTS: Final[dict[str, str | None]] = {
     'Settings': None,
@@ -810,3 +818,22 @@ def test_app_main_is_thin() -> None:
     assert defined_names(path=APP / '__main__.py') == [
         'tfnsw_feeds', 'tfnsw_keys', 'SYDNEY_PARTS', 'main',
     ]
+
+
+def test_device_testkit_imports_no_transit() -> None:
+    """No device test kit module imports transit or the testkit."""
+    paths = sorted(DEVICE_TESTKIT.rglob('*.py'))
+    offenders = {
+        path.relative_to(ROOT).as_posix(): sorted(higher)
+        for path in paths
+        if (
+            higher := {
+                name
+                for name in imported_names(path=path)
+                if name.split('.')[0]
+                in {'paperroute_transit', 'paperroute_testkit', *APPS}
+            }
+        )
+    }
+    assert paths
+    assert not offenders

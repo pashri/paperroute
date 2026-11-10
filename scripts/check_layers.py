@@ -15,9 +15,11 @@ KIT_RANKS: Final[dict[str, int]] = {
     'paperroute_transit': 2,
 }
 APP_RANK: Final[int] = 3
-TESTKIT: Final[str] = 'paperroute_testkit'
-TESTKIT_RANK: Final[int] = 3
-TEST_ONLY: Final[frozenset[str]] = frozenset({TESTKIT, 'tests'})
+TESTKITS: Final[dict[str, int]] = {
+    'paperroute_device_testkit': 2,
+    'paperroute_testkit': 3,
+}
+TEST_ONLY: Final[frozenset[str]] = frozenset({*TESTKITS, 'tests'})
 LOOKUPS: Final[frozenset[str]] = frozenset({'files', 'import_module'})
 DISTRIBUTION: Final[re.Pattern[str]] = re.compile(r'[A-Za-z0-9._-]+')
 
@@ -82,12 +84,12 @@ def ranks(*, root: Path) -> dict[str, int]:
     Returns
     -------
     dict[str, int]
-        The kits at their ranks, the testkit at ``TESTKIT_RANK`` and
+        The kits at their ranks, each test kit at its ``TESTKITS`` rank and
         each ``apps/*/src/<name>`` at ``APP_RANK``.
     """
     return {
         **KIT_RANKS,
-        TESTKIT: TESTKIT_RANK,
+        **TESTKITS,
         **{
             path.parent.name: APP_RANK
             for path in root.glob('apps/*/src/*/__init__.py')
@@ -303,8 +305,15 @@ def allowed(
     bool
         True when the import keeps the layers: its own package or a
         lower rank, so two apps at the same rank never import each
-        other. The repository's own tests may import anything.
+        other. A test kit may import a test kit of lower rank. The
+        repository's own tests may import anything.
     """
+    if (
+        tree.name in TESTKITS
+        and name in TESTKITS
+        and TESTKITS[name] < TESTKITS[tree.name]
+    ):
+        return True
     if tree.src is None or name == tree.name or (test and name in TEST_ONLY):
         return True
     if name in TEST_ONLY:

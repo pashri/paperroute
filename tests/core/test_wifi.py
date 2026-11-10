@@ -21,8 +21,8 @@ from paperroute_device.core.device_model import (
     WifiStatus,
 )
 from paperroute_device.core.panel_views import WifiSetupView
+from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_testkit.core.factories import START
-from paperroute_testkit.fakes import device_facts
 from paperroute_transit.core.banners import NO_WIFI
 from paperroute_transit.core.messages import (
     DeviceProbed,

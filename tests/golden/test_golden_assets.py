@@ -12,9 +12,9 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute_device.adapters.web_frame import SHELL_WEB
-from paperroute_testkit.device_fakes import FakeKeys
-from paperroute_testkit.device_pages import KEY, STATUS
-from paperroute_testkit.paths import ROOT
+from paperroute_device_testkit.device_fakes import FakeKeys
+from paperroute_device_testkit.device_pages import KEY, STATUS
+from paperroute_device_testkit.paths import ROOT
 from tests.css_rules import (
     CssRule,
     css_rules,

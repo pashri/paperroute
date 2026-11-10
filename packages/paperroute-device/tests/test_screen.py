@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 
 from paperroute_device.screen import read_rotate, screen_main
+from paperroute_device_testkit.hardware_fakes import FakePanelBus
+from paperroute_device_testkit.panel_frames import drawn_planes, stepped_frame
 from paperroute_hardware.adapters.panel_bus import LinuxPanelBus
 from paperroute_hardware.render.panel_bits import grey_planes, oriented
-from paperroute_testkit.hardware_fakes import FakePanelBus
-from paperroute_testkit.panel_frames import drawn_planes, stepped_frame
 
 
 def test_screen_main_returns_1_on_bad_file(

@@ -5,8 +5,8 @@ from typing import cast
 import numpy as np
 from numpy.typing import NDArray
 
+from paperroute_device_testkit.hardware_fakes import FakePanelBus
 from paperroute_hardware.render.panel_bits import HEIGHT, WIDTH
-from paperroute_testkit.hardware_fakes import FakePanelBus
 
 
 def stepped_frame() -> NDArray[np.uint8]:

@@ -7,7 +7,7 @@ import pytest
 
 from paperroute_device import assets as asset_module
 from paperroute_device.assets import AssetRoot
-from paperroute_testkit.paths import ROOT
+from paperroute_device_testkit.paths import ROOT
 from paperroute_transit.adapters.board_web import (
     BOARD_WEB,
     board_bytes,

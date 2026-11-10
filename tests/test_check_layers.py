@@ -13,6 +13,7 @@ SCRIPT: Final[Path] = ROOT / 'scripts' / 'check_layers.py'
 HARDWARE: Final[str] = 'packages/paperroute-hardware'
 DEVICE: Final[str] = 'packages/paperroute-device'
 TESTKIT: Final[str] = 'packages/paperroute-testkit'
+DEVICE_TESTKIT: Final[str] = 'packages/paperroute-device-testkit'
 TRANSIT: Final[str] = 'packages/paperroute-transit'
 APP_A: Final[str] = 'apps/paperroute-a'
 APP_B: Final[str] = 'apps/paperroute-b'
@@ -311,6 +312,58 @@ def test_problems_flags_testkit_depending_on_app(
     root = build(root=tmp_path, extra={name: text})
     assert check_layers.problems(root=root) == [
         f'{name}: paperroute_testkit may not import paperroute_a',
+    ]
+
+
+def test_problems_flags_device_testkit_importing_transit(
+    check_layers: ModuleType, tmp_path: Path,
+) -> None:
+    """The device test kit may not import transit."""
+    name = f'{DEVICE_TESTKIT}/src/paperroute_device_testkit/x.py'
+    root = build(
+        root=tmp_path,
+        extra={
+            f'{DEVICE_TESTKIT}/src/paperroute_device_testkit/__init__.py': '',
+            name: 'import paperroute_transit\n',
+            f'{TRANSIT}/src/paperroute_transit/__init__.py': '',
+        },
+    )
+    assert check_layers.problems(root=root) == [
+        f'{name}: paperroute_device_testkit may not import '
+        'paperroute_transit',
+    ]
+
+
+def test_problems_allows_testkit_importing_device_testkit(
+    check_layers: ModuleType, tmp_path: Path,
+) -> None:
+    """The testkit may import the device test kit, which ranks below it."""
+    name = f'{TESTKIT}/src/paperroute_testkit/__init__.py'
+    root = build(
+        root=tmp_path,
+        extra={
+            f'{DEVICE_TESTKIT}/src/paperroute_device_testkit/__init__.py': '',
+            name: 'import paperroute_device_testkit\n',
+        },
+    )
+    assert check_layers.problems(root=root) == []
+
+
+def test_problems_flags_device_testkit_importing_testkit(
+    check_layers: ModuleType, tmp_path: Path,
+) -> None:
+    """The device test kit may not import the testkit above it."""
+    name = f'{DEVICE_TESTKIT}/src/paperroute_device_testkit/x.py'
+    root = build(
+        root=tmp_path,
+        extra={
+            f'{DEVICE_TESTKIT}/src/paperroute_device_testkit/__init__.py': '',
+            name: 'import paperroute_testkit\n',
+        },
+    )
+    assert check_layers.problems(root=root) == [
+        f'{name}: paperroute_device_testkit may not import '
+        'paperroute_testkit',
     ]
 
 

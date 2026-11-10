@@ -17,6 +17,7 @@ from paperroute_device.core.device_model import (
 from paperroute_device.core.panel_views import MenuView, NoticeView
 from paperroute_device.render.canvas import WIDTH, text_width
 from paperroute_device.render.notice import DETAIL_FACE
+from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobPressed,
@@ -26,7 +27,6 @@ from paperroute_hardware.core.knob_events import (
 from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.factories import START, begun, pin_at
 from paperroute_testkit.core.steps import answer_fetches, step_untouched
-from paperroute_testkit.fakes import device_facts
 from paperroute_transit.core.map_view import DEFAULT_ZOOM
 from paperroute_transit.core.messages import (
     ColumnLoaded,

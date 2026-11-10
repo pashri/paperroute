@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 from google.transit import gtfs_realtime_pb2
 
+from paperroute_device_testkit.hardware_fakes import FrameRecorder
 from paperroute_sydney.city import (
     SYDNEY,
     SYDNEY_PROJECTION,
@@ -27,7 +28,6 @@ from paperroute_testkit.fakes import (
     FakeNetwork,
     MemoryStates,
 )
-from paperroute_testkit.hardware_fakes import FrameRecorder
 from paperroute_testkit.render.factories import (
     STOP_VIEW,
     STRIP_VIEW,

@@ -15,6 +15,7 @@ from paperroute_device.core.device_model import (
     WifiSetup,
 )
 from paperroute_device.core.device_settings import QuietMode, Window
+from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobPressed,
@@ -24,7 +25,6 @@ from paperroute_hardware.core.knob_events import (
 from paperroute_sydney.city import SYDNEY_ZONE
 from paperroute_testkit.core.factories import START, departure
 from paperroute_testkit.core.steps import step_answered
-from paperroute_testkit.fakes import device_facts
 from paperroute_transit.core.auto_model import AutoState
 from paperroute_transit.core.messages import (
     DeparturesLoaded,

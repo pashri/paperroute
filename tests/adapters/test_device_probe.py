@@ -3,8 +3,8 @@
 from pathlib import Path
 
 from paperroute_device.core.device_model import WifiStatus
+from paperroute_device_testkit.device_fakes import FakeKeys, FakeWifi
 from paperroute_sydney.city import SYDNEY_ZONE
-from paperroute_testkit.device_fakes import FakeKeys, FakeWifi
 from paperroute_transit.adapters.device_probe import SystemProbe, mem_available
 from paperroute_transit.adapters.tiles_db import NullTiles
 from paperroute_transit.logs import LastError

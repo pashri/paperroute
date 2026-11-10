@@ -9,9 +9,9 @@ import pytest
 from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction, WifiStatus
 from paperroute_device.core.panel_views import NoticeView
+from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_testkit.core.factories import START, departure, snapshot
-from paperroute_testkit.fakes import device_facts
 from paperroute_transit.core.alert_model import AlertsFetched, AlertsSnapshot
 from paperroute_transit.core.alert_state import ALERT_EVERY
 from paperroute_transit.core.cycle import (

@@ -27,6 +27,15 @@ from paperroute_device.render.frame import HEADER
 from paperroute_device.render.notice import draw_notice_view
 from paperroute_device.render.panel import draw_panel_view
 from paperroute_device.render.sleep import with_sleep_band
+from paperroute_device_testkit.device_fakes import (
+    FakeKeys,
+    FakePower,
+    FakeWifi,
+    FixedClock,
+    RecordingResets,
+    SyncingClock,
+)
+from paperroute_device_testkit.hardware_fakes import FrameRecorder
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
@@ -45,7 +54,6 @@ from paperroute_sydney.city import (
     SydneyFeed,
 )
 from paperroute_testkit.core.factories import pin_of, place
-from paperroute_testkit.device_fakes import FakeKeys, FakeWifi
 from paperroute_testkit.fakes import (
     STOP_POINT,
     BrokenTimetable,
@@ -53,15 +61,10 @@ from paperroute_testkit.fakes import (
     EmptyPlacedTimetable,
     FakeBuilder,
     FakeNetwork,
-    FakePower,
-    FixedClock,
     LabelCountingTiles,
     MemoryStates,
     PlacedTimetable,
-    RecordingResets,
-    SyncingClock,
 )
-from paperroute_testkit.hardware_fakes import FrameRecorder
 from paperroute_transit.adapters.feed_errors import FeedThrottled
 from paperroute_transit.adapters.feed_files import FileFeedsClient
 from paperroute_transit.adapters.feed_guard import FeedBackingOff, JoinedBody

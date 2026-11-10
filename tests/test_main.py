@@ -29,6 +29,11 @@ from paperroute_device.adapters.web_shell import web_app
 from paperroute_device.adapters.wifi import NmcliWifi, NullWifi
 from paperroute_device.core.device_model import DeviceKey
 from paperroute_device.render.canvas import INK
+from paperroute_device_testkit.device_fakes import FakeKeys, FakeWifi
+from paperroute_device_testkit.hardware_fakes import (
+    FakeKnobLines,
+    FakePanelBus,
+)
 from paperroute_hardware.adapters.knob_reader import KnobReader
 from paperroute_hardware.adapters.panel_display import Displays
 from paperroute_hardware.core.knob_decoder import KnobDecoder
@@ -56,9 +61,7 @@ from paperroute_sydney.city import (
     SYDNEY_ZONE,
 )
 from paperroute_testkit.core.factories import pin_of
-from paperroute_testkit.device_fakes import FakeKeys, FakeWifi
 from paperroute_testkit.fakes import FakeNetwork, MemoryStates
-from paperroute_testkit.hardware_fakes import FakeKnobLines, FakePanelBus
 from paperroute_testkit.page_markup import parse_page
 from paperroute_transit.adapters.checked_tiles import CheckedTiles
 from paperroute_transit.adapters.clocks import ReplayClock

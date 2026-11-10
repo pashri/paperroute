@@ -16,6 +16,7 @@ from paperroute_device.core.device_settings import (
     Window,
 )
 from paperroute_device.core.panel_views import NoticeView
+from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobPressed,
@@ -25,7 +26,6 @@ from paperroute_hardware.core.knob_events import (
 from paperroute_sydney.city import PEAK_WINDOWS, SYDNEY
 from paperroute_testkit.core.factories import START
 from paperroute_testkit.core.steps import step_untouched
-from paperroute_testkit.fakes import device_facts
 from paperroute_transit.core.banners import NO_KEY
 from paperroute_transit.core.device import (
     NOTICE,

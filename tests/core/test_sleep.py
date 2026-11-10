@@ -7,6 +7,7 @@ from paperroute_device.core.device_events import ApiKeyChanged, ConfirmAsked
 from paperroute_device.core.device_model import ConfirmAction, MenuRow
 from paperroute_device.core.panel_views import ConfirmView
 from paperroute_device.render.sleep import BAND_H
+from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
@@ -16,7 +17,6 @@ from paperroute_hardware.core.knob_events import (
 )
 from paperroute_sydney.city import SYDNEY, SYDNEY_PROJECTION
 from paperroute_testkit.core.factories import START, departure, pattern, place
-from paperroute_testkit.fakes import device_facts
 from paperroute_transit.core.geo import make_shape
 from paperroute_transit.core.map_view import MAP_HEIGHT, MapView, screen_point
 from paperroute_transit.core.messages import (

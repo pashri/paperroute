@@ -10,7 +10,7 @@ from typing import Final
 
 import pytest
 
-from paperroute_testkit.paths import ROOT
+from paperroute_device_testkit.paths import ROOT
 from paperroute_transit.build.catalogue import route_sources
 from paperroute_transit.build.line_order import (
     hop_graph,

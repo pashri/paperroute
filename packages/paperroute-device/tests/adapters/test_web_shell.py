@@ -8,10 +8,14 @@ from aiohttp import web
 
 from paperroute_device.adapters.web_live import LiveView
 from paperroute_device.adapters.web_shell import web_app
-from paperroute_testkit.device_pages import DeviceSite
+from paperroute_device_testkit.device_pages import DeviceSite
 
 KIT_ONLY: Final[frozenset[str]] = frozenset(
-    {'paperroute_device', 'paperroute_hardware', 'paperroute_testkit'},
+    {
+        'paperroute_device',
+        'paperroute_device_testkit',
+        'paperroute_hardware',
+    },
 )
 BARE_APP: Final[str] = """
 import asyncio
@@ -25,7 +29,7 @@ from paperroute_device.adapters.web_frame import shell_bytes
 from paperroute_device.adapters.web_live import LiveView
 from paperroute_device.adapters.web_shell import web_app
 from paperroute_hardware.core.knob_events import Knob, KnobPressed
-from paperroute_testkit.device_pages import HOTSPOT, DeviceSite
+from paperroute_device_testkit.device_pages import HOTSPOT, DeviceSite
 
 EVIL = {'Origin': 'http://evil.example'}
 PRESS = {'knob': 'top', 'action': 'press'}

@@ -10,6 +10,7 @@ from typing import Final
 
 import pytest
 
+from paperroute_device_testkit.device_fakes import FixedClock
 from paperroute_sydney.city import (
     SYDNEY,
     SYDNEY_PROJECTION,
@@ -18,7 +19,6 @@ from paperroute_sydney.city import (
     SydneyMode,
 )
 from paperroute_testkit.core.factories import live
-from paperroute_testkit.fakes import FixedClock
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.app_connections import departures_read

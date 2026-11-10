@@ -2,8 +2,8 @@
 
 import pytest
 
+from paperroute_device_testkit.fake_assets import TEST_ASSETS
 from paperroute_testkit.city_setting import use_city_under_test
-from paperroute_testkit.fake_assets import TEST_ASSETS
 from paperroute_testkit.fake_city import TEST_CITY
 
 

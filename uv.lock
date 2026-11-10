@@ -9,6 +9,7 @@ resolution-markers = [
 [manifest]
 members = [
     "paperroute-device",
+    "paperroute-device-testkit",
     "paperroute-hardware",
     "paperroute-sydney",
     "paperroute-testkit",
@@ -22,6 +23,7 @@ dev = [
     { name = "isort", specifier = ">=5.13" },
     { name = "mypy", specifier = ">=1.15" },
     { name = "numpydoc", specifier = ">=1.8" },
+    { name = "paperroute-device-testkit", editable = "packages/paperroute-device-testkit" },
     { name = "paperroute-sydney", editable = "apps/paperroute-sydney" },
     { name = "paperroute-testkit", editable = "packages/paperroute-testkit" },
     { name = "pylint", specifier = ">=3.3" },
@@ -1121,6 +1123,25 @@ requires-dist = [
 ]
 
 [[package]]
+name = "paperroute-device-testkit"
+version = "0.1.0"
+source = { editable = "packages/paperroute-device-testkit" }
+dependencies = [
+    { name = "numpy" },
+    { name = "paperroute-device" },
+    { name = "paperroute-hardware" },
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = ">=2.3" },
+    { name = "paperroute-device", editable = "packages/paperroute-device" },
+    { name = "paperroute-hardware", editable = "packages/paperroute-hardware" },
+    { name = "pytest", specifier = ">=8.3" },
+]
+
+[[package]]
 name = "paperroute-hardware"
 version = "0.1.0"
 source = { editable = "packages/paperroute-hardware" }
@@ -1161,6 +1182,7 @@ source = { editable = "packages/paperroute-testkit" }
 dependencies = [
     { name = "numpy" },
     { name = "paperroute-device" },
+    { name = "paperroute-device-testkit" },
     { name = "paperroute-hardware" },
     { name = "paperroute-transit" },
     { name = "pytest" },
@@ -1170,6 +1192,7 @@ dependencies = [
 requires-dist = [
     { name = "numpy", specifier = ">=2.3" },
     { name = "paperroute-device", editable = "packages/paperroute-device" },
+    { name = "paperroute-device-testkit", editable = "packages/paperroute-device-testkit" },
     { name = "paperroute-hardware", editable = "packages/paperroute-hardware" },
     { name = "paperroute-transit", editable = "packages/paperroute-transit" },
     { name = "pytest", specifier = ">=8.3" },

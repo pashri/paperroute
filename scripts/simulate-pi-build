@@ -63,7 +63,13 @@ assert names == [
     'paperroute-sydney',
     'paperroute-transit',
 ], names
-absent = ('pytest', 'paperroute_testkit', 'osmium', 'shapely')
+absent = (
+    'pytest',
+    'paperroute_testkit',
+    'paperroute_device_testkit',
+    'osmium',
+    'shapely',
+)
 assert not [name for name in absent if find_spec(name)], absent
 EOF
 )

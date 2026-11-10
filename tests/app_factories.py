@@ -5,17 +5,17 @@ from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime
 
+from paperroute_device_testkit.device_fakes import FixedClock
+from paperroute_device_testkit.hardware_fakes import FrameRecorder
+from paperroute_device_testkit.paths import FIXTURES
 from paperroute_testkit.city_setting import city_under_test
 from paperroute_testkit.core.factories import pin_of
 from paperroute_testkit.fakes import (
     STOP_POINT,
     EmptyPlacedTimetable,
     FakeNetwork,
-    FixedClock,
     MemoryStates,
 )
-from paperroute_testkit.hardware_fakes import FrameRecorder
-from paperroute_testkit.paths import FIXTURES
 from paperroute_transit.adapters.feed_files import FileFeedsClient
 from paperroute_transit.app import MapRenderer, Ports, perform
 from paperroute_transit.app_effects import StateSaver

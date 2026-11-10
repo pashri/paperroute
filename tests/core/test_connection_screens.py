@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import time
 from typing import Final
 
+from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_hardware.core.knob_events import Knob, KnobPressed, KnobTurned
 from paperroute_sydney.city import SYDNEY, SydneyMode
 from paperroute_testkit.core.connection_factories import (
@@ -16,7 +17,6 @@ from paperroute_testkit.core.connection_factories import (
 )
 from paperroute_testkit.core.factories import place
 from paperroute_testkit.core.steps import wakeful
-from paperroute_testkit.fakes import device_facts
 from paperroute_transit.core.alert_model import AlertsFetched, AlertsSnapshot
 from paperroute_transit.core.chooser import ChooserState
 from paperroute_transit.core.connection_strip import (

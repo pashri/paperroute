@@ -20,7 +20,7 @@ from paperroute_device.render.canvas import (
     font,
     text_width,
 )
-from paperroute_testkit.paths import ROOT
+from paperroute_device_testkit.paths import ROOT
 
 LIGHT: Final[int] = 170
 

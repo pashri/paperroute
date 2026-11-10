@@ -12,14 +12,14 @@ from paperroute_device.core.device_model import (
     WifiSetup,
 )
 from paperroute_device.core.device_settings import DeviceSettings
+from paperroute_device_testkit.device_fakes import device_facts
+from paperroute_device_testkit.hardware_fakes import FakeKnobLines
 from paperroute_hardware.core.knob_decoder import Encoder
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_hardware.knobs_open import knobs_for
 from paperroute_hardware.ports import PanelRefresh, PanelTimes
 from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.factories import pin_of
-from paperroute_testkit.fakes import device_facts
-from paperroute_testkit.hardware_fakes import FakeKnobLines
 from paperroute_transit.adapters.settings_form import form_values
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.saved import Settings, default_settings

@@ -12,6 +12,8 @@ from paperroute_device.adapters.secrets_file import SecretsFile
 from paperroute_device.adapters.web_device import DevicePages
 from paperroute_device.core.device_model import DeviceKey, DeviceStatus
 from paperroute_device.ports import KeyStore
+from paperroute_device_testkit.device_fakes import FakeKeys
+from paperroute_device_testkit.device_pages import HOTSPOT, KEY, NOW, STATUS
 from paperroute_sydney.adapters.tfnsw import TFNSW_KEY
 from paperroute_sydney.adapters.web_board import (
     SYDNEY_HINT,
@@ -20,8 +22,6 @@ from paperroute_sydney.adapters.web_board import (
 )
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_sydney.sydney_feeds import DAILY_LIMIT, feed_label
-from paperroute_testkit.device_fakes import FakeKeys
-from paperroute_testkit.device_pages import HOTSPOT, KEY, NOW, STATUS
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages
 from paperroute_transit.adapters.settings_form import form_values

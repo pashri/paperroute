@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
+from paperroute_device_testkit.hardware_fakes import FrameRecorder
 from paperroute_hardware.adapters import panel_display
 from paperroute_hardware.adapters.epaper import PanelTimeout
 from paperroute_hardware.adapters.panel_display import (
@@ -27,7 +28,6 @@ from paperroute_hardware.render.panel_bits import (
     mono_patch,
     quick_planes,
 )
-from paperroute_testkit.hardware_fakes import FrameRecorder
 
 WAIT: Final[float] = 5  # seconds
 BOX_A: Final[Box] = Box(left=16, top=10, right=32, bottom=20)

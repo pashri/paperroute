@@ -5,8 +5,8 @@ from contextlib import closing
 from pathlib import Path
 from typing import Final
 
+from paperroute_device_testkit.paths import ROOT
 from paperroute_sydney.city import SYDNEY, SydneyMode
-from paperroute_testkit.paths import ROOT
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.reach import Reach, StripKey, build_reach

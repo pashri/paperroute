@@ -19,8 +19,8 @@ from paperroute_device.core.panel_views import (
     PhoneView,
     confirm_view,
 )
+from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_testkit.core.factories import START
-from paperroute_testkit.fakes import device_facts
 from paperroute_transit.core.map_view import MapView, Marker
 from paperroute_transit.core.panel_screens import (
     device_rows,

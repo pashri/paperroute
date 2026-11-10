@@ -6,6 +6,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from paperroute_device_testkit.hardware_fakes import FakePanelBus
+from paperroute_device_testkit.panel_frames import drawn_planes, stepped_frame
 from paperroute_hardware.adapters.epaper import PanelTimeout, Uc8179
 from paperroute_hardware.adapters.panel_bus import LinuxPanelBus
 from paperroute_hardware.render.panel_bits import (
@@ -15,8 +17,6 @@ from paperroute_hardware.render.panel_bits import (
     oriented,
 )
 from paperroute_hardware.screen import load_frame, show_frame, show_image
-from paperroute_testkit.hardware_fakes import FakePanelBus
-from paperroute_testkit.panel_frames import drawn_planes, stepped_frame
 
 
 def test_load_frame_reads_raw_grey(tmp_path: Path) -> None:

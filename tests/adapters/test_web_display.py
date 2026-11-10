@@ -21,6 +21,7 @@ from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction
 from paperroute_device.core.device_settings import Window
 from paperroute_device.render.canvas import encode_png
+from paperroute_device_testkit.device_pages import DeviceSite
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
@@ -35,7 +36,6 @@ from paperroute_sydney.adapters.web_board import (
     SYDNEY_NAV,
 )
 from paperroute_sydney.city import SYDNEY
-from paperroute_testkit.device_pages import DeviceSite
 from paperroute_testkit.page_markup import parse_page
 from paperroute_transit.adapters.settings_form import ERRORS
 from paperroute_transit.adapters.web_display import WebDisplay

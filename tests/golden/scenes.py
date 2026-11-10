@@ -22,6 +22,7 @@ from paperroute_device.core.device_model import (
     WifiPhase,
     WifiSetup,
 )
+from paperroute_device_testkit.device_pages import FACTS
 from paperroute_sydney.city import SydneyFeed, SydneyMode
 from paperroute_testkit.core.connection_factories import (
     LEG1,
@@ -48,7 +49,6 @@ from paperroute_testkit.core.strip_factories import (
     WEST,
     on_view,
 )
-from paperroute_testkit.device_pages import FACTS
 from paperroute_transit.app_render import MapRenderer, drawing
 from paperroute_transit.core.chains import Legs, leg_key
 from paperroute_transit.core.connection_model import way_legs

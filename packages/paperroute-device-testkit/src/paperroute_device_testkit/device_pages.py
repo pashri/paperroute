@@ -19,8 +19,8 @@ from paperroute_device.core.device_model import (
     WifiSetup,
     WifiStatus,
 )
+from paperroute_device_testkit.device_fakes import FakeKeys
 from paperroute_hardware.ports import PanelTimes
-from paperroute_testkit.device_fakes import FakeKeys
 
 KEY: Final[str] = 'already-set-key-123'
 NOW: Final[float] = 1_761_043_500.0  # 21 Oct 2025 21:45 at UTC+11

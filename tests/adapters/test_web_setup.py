@@ -8,10 +8,10 @@ import pytest
 from aiohttp import ClientResponse, web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute_device_testkit.device_pages import HOTSPOT, DeviceSite
 from paperroute_sydney.adapters.tfnsw import TFNSW_KEY
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_sydney.sydney_feeds import DAILY_LIMIT, feed_label
-from paperroute_testkit.device_pages import HOTSPOT, DeviceSite
 from paperroute_transit.adapters.web_display import WebDisplay
 
 Client = TestClient[web.Request, web.Application]

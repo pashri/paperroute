@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import paperroute_sydney
-from paperroute_testkit.paths import ROOT
+from paperroute_device_testkit.paths import ROOT
 
 
 def test_version_is_set() -> None:

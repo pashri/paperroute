@@ -20,7 +20,7 @@ from paperroute_device.core.device_model import (
     WifiPhase,
     WifiSetup,
 )
-from paperroute_testkit.device_pages import HOTSPOT, DeviceSite
+from paperroute_device_testkit.device_pages import HOTSPOT, DeviceSite
 from paperroute_testkit.page_markup import parse_page
 
 Client = TestClient[web.Request, web.Application]

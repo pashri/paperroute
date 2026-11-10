@@ -8,8 +8,8 @@ from typing import Final
 
 from paperroute_device.adapters.web_frame import SHELL_WEB
 from paperroute_device.assets import assets
+from paperroute_device_testkit.paths import ROOT
 from paperroute_sydney.asset_root import APP_ASSETS, use_app_assets
-from paperroute_testkit.paths import ROOT
 from paperroute_transit.adapters.board_web import BOARD_WEB, board_path
 
 ASSET_ROOT: Final[Path] = (

@@ -14,15 +14,15 @@ from paperroute_device.core.device_model import (
     ResetKind,
     WifiNetwork,
 )
-from paperroute_testkit.device_fakes import FakeKeys, FakeWifi
-from paperroute_testkit.fakes import (
-    FakeBuilder,
+from paperroute_device_testkit.device_fakes import (
+    FakeKeys,
     FakeProbe,
+    FakeWifi,
     HangingProbe,
     RecordingResets,
-    WatchingBuilder,
     device_facts,
 )
+from paperroute_testkit.fakes import FakeBuilder, WatchingBuilder
 from paperroute_transit import app_device
 from paperroute_transit.app_device import (
     DevicePorts,

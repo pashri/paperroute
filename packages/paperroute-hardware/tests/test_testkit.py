@@ -4,10 +4,10 @@ import subprocess
 import sys
 from typing import Final
 
-from paperroute_testkit.paths import ROOT
+from paperroute_device_testkit.paths import ROOT
 
 FAKES_IMPORTS: Final[str] = (
-    'import paperroute_testkit.hardware_fakes, sys; '
+    'import paperroute_device_testkit.hardware_fakes, sys; '
     'print(*sorted(sys.modules))'
 )
 HIGHER: Final[frozenset[str]] = frozenset({

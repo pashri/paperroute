@@ -6,5 +6,5 @@ from typing import Final
 from paperroute_device.assets import AssetRoot
 
 TEST_ASSETS: Final[AssetRoot] = AssetRoot(
-    web=files('paperroute_testkit') / 'assets' / 'web',
+    web=files('paperroute_device_testkit') / 'assets' / 'web',
 )

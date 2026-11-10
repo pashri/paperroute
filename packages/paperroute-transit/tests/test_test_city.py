@@ -7,6 +7,7 @@ from dataclasses import replace
 import pytest
 
 from paperroute_device.assets import assets
+from paperroute_device_testkit.fake_assets import TEST_ASSETS
 from paperroute_testkit.city_setting import (
     UNDER_TEST,
     city_under_test,
@@ -15,7 +16,6 @@ from paperroute_testkit.city_setting import (
     street_mode,
 )
 from paperroute_testkit.core.factories import START, TRAIN
-from paperroute_testkit.fake_assets import TEST_ASSETS
 from paperroute_testkit.fake_city import TEST_CITY
 from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.modes import mode_problems

@@ -3,7 +3,7 @@
 import pytest
 
 from paperroute_device.assets import use_assets
-from paperroute_testkit.fake_assets import TEST_ASSETS
+from paperroute_device_testkit.fake_assets import TEST_ASSETS
 
 
 def pytest_configure(config: pytest.Config) -> None:

@@ -13,7 +13,7 @@ from paperroute_device.adapters.web_frame import (
     nav_html,
     page_frame,
 )
-from paperroute_testkit.paths import ROOT
+from paperroute_device_testkit.paths import ROOT
 
 HIGHER: Final[frozenset[str]] = frozenset({
     'paperroute_transit',

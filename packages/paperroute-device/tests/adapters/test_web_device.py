@@ -34,9 +34,8 @@ from paperroute_device.core.device_model import (
     WifiStatus,
 )
 from paperroute_device.core.panel_views import confirm_view
-from paperroute_hardware.ports import PanelTimes
-from paperroute_testkit.device_fakes import FakeKeys
-from paperroute_testkit.device_pages import (
+from paperroute_device_testkit.device_fakes import FakeKeys
+from paperroute_device_testkit.device_pages import (
     FACTS,
     KEY,
     NOW,
@@ -44,6 +43,7 @@ from paperroute_testkit.device_pages import (
     ZONE,
     DeviceSite,
 )
+from paperroute_hardware.ports import PanelTimes
 
 Client = TestClient[web.Request, web.Application]
 GOOD_KEY = 'abcdefghij0123456789'

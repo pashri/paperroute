@@ -33,6 +33,7 @@ RT_PATH: Final[str] = 'gtfsrtdatafeed/'
 SIRI_PATH: Final[str] = 'datafeed/'
 COACH_OPERATORS: Final[tuple[str, ...]] = ('NATX', 'FLIX')
 BODY_LIMIT: Final[int] = 4 * 1024 * 1024  # bytes
+CHUNK: Final[int] = 64 * 1024  # bytes
 BODS_KEY_NAME: Final[str] = 'bods'
 BODS_DISPLAY_NAME: Final[str] = 'Bus data'
 BODS_KEY: Final[Credential] = Credential(
@@ -152,29 +153,35 @@ async def sent(
         On another non-200 status, a connection error or a body over the
         limit. Every one hides the request URL, which holds the key.
     """
+    failure: FeedError | None = None
     try:
         async with request.session.get(
             request.base_url + path,
             params={**params, 'api_key': request.key},
             timeout=aiohttp.ClientTimeout(total=request.timeout),
+            allow_redirects=False,
         ) as response:
             status = response.status
             if (response.content_length or 0) > BODY_LIMIT:
                 raise FeedError(f'{feed}: body too large')
-            body = await response.read()
+            body = bytearray()
+            async for chunk in response.content.iter_chunked(CHUNK):
+                body += chunk
+                if len(body) > BODY_LIMIT:
+                    raise FeedError(f'{feed}: body too large')
     except TimeoutError:
-        raise FeedTimedOut(f'{feed}: TimeoutError') from None
+        failure = FeedTimedOut(f'{feed}: TimeoutError')
     except aiohttp.ClientError as error:
-        raise FeedError(f'{feed}: {type(error).__name__}') from None
+        failure = FeedError(f'{feed}: {type(error).__name__}')
+    if failure is not None:
+        raise failure
     if status == HTTPStatus.TOO_MANY_REQUESTS:
         raise FeedThrottled(feed=feed, retry_after_s=None, detail='')
     if status >= HTTPStatus.INTERNAL_SERVER_ERROR:
         raise FeedUnavailable(f'{feed}: HTTP {status}')
     if status != HTTPStatus.OK:
         raise FeedError(f'{feed}: HTTP {status}')
-    if len(body) > BODY_LIMIT:
-        raise FeedError(f'{feed}: body too large')
-    return body
+    return bytes(body)
 
 
 async def raw_positions(
@@ -280,6 +287,39 @@ def sightings_of(
         return ()
 
 
+def joined(
+    *,
+    positions: bytes,
+    coaches: list[bytes | BaseException],
+    feed: str,
+) -> bytes:
+    """
+    Read the coach bodies and name the coaches in the positions.
+
+    Parameters
+    ----------
+    positions : bytes
+        The protobuf body.
+    coaches : list[bytes | BaseException]
+        One result per operator, in ``COACH_OPERATORS`` order.
+    feed : str
+        Feed path, for the log.
+
+    Returns
+    -------
+    bytes
+        Protobuf body, with coach route numbers in the labels.
+    """
+    sightings = [
+        found
+        for operator, result in zip(COACH_OPERATORS, coaches)
+        for found in sightings_of(
+            operator=operator, result=result, feed=feed,
+        )
+    ]
+    return named(data=positions, sightings=sightings)
+
+
 class BodsFeedsClient:
     """
     BODS feed client; the API key is sent but never logged or raised.
@@ -358,14 +398,9 @@ class BodsFeedsClient:
         )
         if isinstance(positions, BaseException):
             raise positions
-        sightings = [
-            found
-            for operator, result in zip(COACH_OPERATORS, coaches)
-            for found in sightings_of(
-                operator=operator, result=result, feed=feed,
-            )
-        ]
-        return named(data=positions, sightings=sightings)
+        return await asyncio.to_thread(
+            joined, positions=positions, coaches=coaches, feed=feed,
+        )
 
     async def close(self) -> None:
         """Close the HTTP session, unless it was passed in."""

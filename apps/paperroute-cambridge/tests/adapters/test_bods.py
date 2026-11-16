@@ -14,6 +14,7 @@ from aiohttp.test_utils import TestServer
 from multidict import CIMultiDict, CIMultiDictProxy
 from yarl import URL
 
+from paperroute_cambridge.__main__ import bods_feeds
 from paperroute_cambridge.adapters.bods import (
     BODY_LIMIT,
     BodsFeedsClient,
@@ -46,6 +47,7 @@ NATX_217: Final[bytes] = siri_body(
     activities=(('NATX', '217', '777', '777', AT_990),),
 )
 NO_COACH: Final[bytes] = siri_body(activities=())
+CHUNK_SIZE: Final[int] = 64 * 1024  # bytes
 Answer = tuple[int, bytes]
 
 
@@ -65,6 +67,10 @@ class BodsStub:
         Seconds each answer waits.
     declared : int
         Content-Length the positions answer claims, when not 0.
+    chunked : int
+        Bytes the positions answer streams without a Content-Length.
+    redirect : bool
+        Whether the positions path answers 301 to '/elsewhere/'.
     """
 
     def __init__(self) -> None:
@@ -73,6 +79,8 @@ class BodsStub:
         self.seen: list[tuple[str, dict[str, str]]] = []
         self.delay = 0.0
         self.declared = 0
+        self.chunked = 0
+        self.redirect = False
         self.server = TestServer(self.app(), skip_url_asserts=True)
         self.clients: list[BodsFeedsClient] = []
 
@@ -88,6 +96,7 @@ class BodsStub:
         app = web.Application()
         app.router.add_get('/gtfsrtdatafeed/', self.answer)
         app.router.add_get('/datafeed/', self.answer)
+        app.router.add_get('/elsewhere/', self.answer)
         return app
 
     async def answer(self, request: web.Request) -> web.StreamResponse:
@@ -106,6 +115,16 @@ class BodsStub:
         """
         self.seen.append((request.path, dict(request.query)))
         await asyncio.sleep(self.delay)
+        if self.redirect and request.path == '/gtfsrtdatafeed/':
+            raise web.HTTPMovedPermanently(location='/elsewhere/')
+        if self.chunked and request.path == '/gtfsrtdatafeed/':
+            response = web.StreamResponse()
+            response.enable_chunked_encoding()
+            await response.prepare(request)
+            for _ in range(self.chunked // CHUNK_SIZE):
+                await response.write(b'\x00' * CHUNK_SIZE)
+            await response.write_eof()
+            return response
         if self.declared and request.path == '/gtfsrtdatafeed/':
             response = web.StreamResponse()
             response.content_length = self.declared
@@ -378,7 +397,7 @@ async def test_fetch_errors_and_logs_never_hold_the_key(
         assert type(raised) is expected
         assert message in str(raised)
         assert raised.__cause__ is None
-        assert raised.__context__ is None or raised.__suppress_context__
+        assert raised.__context__ is None
     chain = traceback.format_exception(raised) if raised else []
     for text in (*chain, caplog.text):
         assert KEY not in text
@@ -476,3 +495,34 @@ async def test_fetch_returns_the_positions_for_valid_xml_that_is_not_siri(
     got = await stub.client(key=lambda: KEY).fetch(feed='bods/positions')
     assert labels(got) == ['', '']
     assert not [r for r in caplog.records if r.levelname == 'WARNING']
+
+
+async def test_fetch_refuses_a_chunked_body_over_the_limit(
+    stub: BodsStub,
+) -> None:
+    """A body with no declared length is refused once it passes the limit."""
+    stub.chunked = BODY_LIMIT + CHUNK_SIZE
+    with pytest.raises(FeedError, match='bods/positions: body too large'):
+        await stub.client(key=lambda: KEY).fetch(feed='bods/positions')
+
+
+async def test_fetch_does_not_follow_a_redirect(stub: BodsStub) -> None:
+    """A redirect is an error and its target is never requested."""
+    stub.redirect = True
+    with pytest.raises(FeedError, match='bods/positions: HTTP 301'):
+        await stub.client(key=lambda: KEY).fetch(feed='bods/positions')
+    assert '/elsewhere/' not in [path for path, _ in stub.seen]
+
+
+async def test_bods_feeds_without_a_key_file_sends_nothing(
+    stub: BodsStub, monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """A missing key file gives a client that refuses and sends nothing."""
+    monkeypatch.setenv('PAPERROUTE_KEY_FILE_BODS', str(tmp_path / 'absent'))
+    client = bods_feeds()
+    assert isinstance(client, BodsFeedsClient)
+    client.base_url = str(stub.server.make_url('/'))
+    with pytest.raises(FeedError, match='bods/positions: no API key'):
+        await client.fetch(feed='bods/positions')
+    assert not stub.seen
+    await client.close()

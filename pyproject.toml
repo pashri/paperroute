@@ -5,6 +5,7 @@ dev = [
     "isort>=5.13",
     "mypy>=1.15",
     "numpydoc>=1.8",
+    "paperroute-cambridge",
     "paperroute-device-testkit",
     "paperroute-sydney",
     "paperroute-testkit",
@@ -29,6 +30,7 @@ paperroute-transit = { workspace = true }
 paperroute-device-testkit = { workspace = true }
 paperroute-testkit = { workspace = true }
 paperroute-sydney = { workspace = true }
+paperroute-cambridge = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -44,6 +46,7 @@ python_version = "3.14"
 files = [
     "tests",
     "apps/paperroute-sydney/src",
+    "apps/paperroute-cambridge/src",
     "packages/paperroute-hardware/src",
     "packages/paperroute-device/src",
     "packages/paperroute-device-testkit/src",
@@ -69,6 +72,7 @@ include_trailing_comma = true
 line_length = 79
 known_first_party = [
     "paperroute_sydney",
+    "paperroute_cambridge",
     "paperroute_hardware",
     "paperroute_device",
     "paperroute_device_testkit",
@@ -78,6 +82,7 @@ known_first_party = [
 ]
 src_paths = [
     "apps/paperroute-sydney/src",
+    "apps/paperroute-cambridge/src",
     "tests",
     "packages/paperroute-hardware/src",
     "packages/paperroute-device/src",
@@ -94,6 +99,7 @@ extension-pkg-allow-list = ["skia", "osmium"]
 [tool.pylint.imports]
 known-first-party = [
     "paperroute_sydney",
+    "paperroute_cambridge",
     "paperroute_hardware",
     "paperroute_device",
     "paperroute_device_testkit",
@@ -122,6 +128,7 @@ exclude = ['\.__init__$']
 [tool.coverage.run]
 source = [
     "paperroute_sydney",
+    "paperroute_cambridge",
     "paperroute_hardware",
     "paperroute_device",
     "paperroute_transit",
@@ -132,4 +139,6 @@ omit = [
     "apps/paperroute-sydney/src/paperroute_sydney/__main__.py",
     "packages/paperroute-transit/src/paperroute_transit/board.py",
     "apps/paperroute-sydney/src/paperroute_sydney/build/__main__.py",
+    "apps/paperroute-cambridge/src/paperroute_cambridge/__main__.py",
+    "apps/paperroute-cambridge/src/paperroute_cambridge/build/__main__.py",
 ]

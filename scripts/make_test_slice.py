@@ -13,6 +13,7 @@ from typing import Final, TextIO
 from google.transit import gtfs_realtime_pb2
 
 from paperroute_transit.build.gtfs_files import read_rows
+from paperroute_transit.build.gtfs_slice import rows_where, write_tables
 
 BUS_ROUTES: Final[set[str]] = {'606'}
 RAIL_ROUTE: Final[str] = 'T1'
@@ -102,36 +103,7 @@ def write_slice(*, source: Path, out: Path, trips: set[str]) -> None:
     trips : set[str]
         Trips to keep.
     """
-    tables = slice_tables(source=source, trips=trips)
-    with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as archive:
-        for name, table in tables.items():
-            if table:
-                archive.writestr(name, csv_text(table=table))
-
-
-def rows_where(*, archive: Path, member: str, key: str,
-               keep: Collection[str]) -> list[dict[str, str]]:
-    """
-    Read the rows of a member whose column is in a set.
-
-    Parameters
-    ----------
-    archive : Path
-        GTFS zip.
-    member : str
-        File inside the zip.
-    key : str
-        Column compared.
-    keep : Collection[str]
-        Values kept.
-
-    Returns
-    -------
-    list[dict[str, str]]
-        The rows kept, in order.
-    """
-    return [row for row in read_rows(archive=archive, member=member)
-            if row[key] in keep]
+    write_tables(out=out, tables=slice_tables(source=source, trips=trips))
 
 
 def slice_tables(*, source: Path,
@@ -173,27 +145,6 @@ def slice_tables(*, source: Path,
             archive=source, member='calendar_dates.txt', key='service_id',
             keep=services),
         'trips.txt': trip_rows, 'stop_times.txt': times}
-
-
-def csv_text(*, table: list[dict[str, str]]) -> str:
-    """
-    Write rows as CSV with a header from the first row.
-
-    Parameters
-    ----------
-    table : list[dict[str, str]]
-        Rows; at least one.
-
-    Returns
-    -------
-    str
-        The CSV text.
-    """
-    buffer = io.StringIO()
-    writer = csv.DictWriter(buffer, fieldnames=list(table[0]))
-    writer.writeheader()
-    writer.writerows(table)
-    return buffer.getvalue()
 
 
 def write_feed_slice(*, source: Path, out: Path, trips: set[str]) -> None:

@@ -47,3 +47,9 @@ def test_coach_sightings_raise_feed_error_on_bad_xml() -> None:
     """Coach sightings raise feed error on bad xml."""
     with pytest.raises(FeedError):
         coach_sightings(data=b'<Siri><unclosed>')
+
+
+def test_coach_sightings_refuse_an_unknown_declared_encoding() -> None:
+    """Coach sightings refuse an encoding Python lacks."""
+    with pytest.raises(FeedError):
+        coach_sightings(data=b'<?xml version="1.0" encoding="nope"?><a/>')

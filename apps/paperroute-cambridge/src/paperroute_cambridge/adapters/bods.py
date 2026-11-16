@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from http import HTTPStatus
 from pathlib import Path
 from typing import Final
@@ -112,7 +112,7 @@ class BodsRequest:
     """
 
     session: aiohttp.ClientSession
-    key: str
+    key: str = field(repr=False)
     box: DegreeBox
     base_url: str = BASE_URL
     timeout: float = 10.0  # seconds
@@ -159,6 +159,8 @@ async def sent(
             timeout=aiohttp.ClientTimeout(total=request.timeout),
         ) as response:
             status = response.status
+            if (response.content_length or 0) > BODY_LIMIT:
+                raise FeedError(f'{feed}: body too large')
             body = await response.read()
     except TimeoutError:
         raise FeedTimedOut(f'{feed}: TimeoutError') from None

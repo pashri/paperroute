@@ -4,16 +4,21 @@ import asyncio
 import traceback
 from collections.abc import AsyncIterator, Callable
 from http import HTTPStatus
-from typing import Final
+from pathlib import Path
+from typing import Final, cast
 
 import aiohttp
 import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
+from multidict import CIMultiDict, CIMultiDictProxy
+from yarl import URL
 
 from paperroute_cambridge.adapters.bods import (
     BODY_LIMIT,
     BodsFeedsClient,
+    BodsRequest,
+    key_path_from_env,
     rt_box,
     siri_box,
 )
@@ -21,6 +26,7 @@ from paperroute_cambridge.area import CAMBRIDGE_BBOX
 from paperroute_transit.adapters.feed_errors import (
     FeedError,
     FeedThrottled,
+    FeedTimedOut,
     FeedUnavailable,
 )
 from tests.adapters.feed_bodies import (
@@ -57,6 +63,8 @@ class BodsStub:
         Path and query of each request.
     delay : float
         Seconds each answer waits.
+    declared : int
+        Content-Length the positions answer claims, when not 0.
     """
 
     def __init__(self) -> None:
@@ -64,6 +72,7 @@ class BodsStub:
         self.siri: dict[str, Answer] = {}
         self.seen: list[tuple[str, dict[str, str]]] = []
         self.delay = 0.0
+        self.declared = 0
         self.server = TestServer(self.app(), skip_url_asserts=True)
         self.clients: list[BodsFeedsClient] = []
 
@@ -81,7 +90,7 @@ class BodsStub:
         app.router.add_get('/datafeed/', self.answer)
         return app
 
-    async def answer(self, request: web.Request) -> web.Response:
+    async def answer(self, request: web.Request) -> web.StreamResponse:
         """
         Record a request and give its configured answer.
 
@@ -97,6 +106,11 @@ class BodsStub:
         """
         self.seen.append((request.path, dict(request.query)))
         await asyncio.sleep(self.delay)
+        if self.declared and request.path == '/gtfsrtdatafeed/':
+            response = web.StreamResponse()
+            response.content_length = self.declared
+            await response.prepare(request)
+            return response
         if request.path == '/gtfsrtdatafeed/':
             status, body = self.rt
         else:
@@ -161,6 +175,67 @@ async def _stub() -> AsyncIterator[BodsStub]:
     await stub.server.close()
 
 
+class RaisingSession:
+    """
+    A session whose requests fail with an error that holds the keyed URL.
+
+    Parameters
+    ----------
+    error : aiohttp.ClientError
+        What each request raises.
+    """
+
+    def __init__(self, *, error: aiohttp.ClientError) -> None:
+        self.error = error
+
+    def get(self, *args: object, **kwargs: object) -> None:
+        """
+        Raise the error.
+
+        Parameters
+        ----------
+        *args : object
+            Ignored.
+        **kwargs : object
+            Ignored.
+
+        Raises
+        ------
+        aiohttp.ClientError
+            Always.
+        """
+        del args, kwargs
+        raise self.error
+
+
+KEYED_URL: Final[URL] = URL('http://bods.test/gtfsrtdatafeed/?api_key=k-secret')
+
+
+def leaking_error(*, case: str) -> aiohttp.ClientError:
+    """
+    Build an aiohttp error whose text holds the keyed URL.
+
+    Parameters
+    ----------
+    case : str
+        'response-error' or 'invalid-url'.
+
+    Returns
+    -------
+    aiohttp.ClientError
+        The error.
+    """
+    if case == 'invalid-url':
+        return aiohttp.InvalidURL(KEYED_URL)
+    info = aiohttp.RequestInfo(
+        url=KEYED_URL,
+        method='GET',
+        headers=CIMultiDictProxy(CIMultiDict()),
+        real_url=KEYED_URL,
+    )
+    return aiohttp.ClientResponseError(info, (), status=HTTPStatus.OK)
+
+
 async def failure_of(stub: BodsStub, case: str) -> Exception | None:
     """
     Set the stub up for a failure, fetch, and give what was raised.
@@ -170,7 +245,8 @@ async def failure_of(stub: BodsStub, case: str) -> Exception | None:
     stub : BodsStub
         The stub.
     case : str
-        'forbidden', 'siri-500', 'closed-port' or 'timeout'.
+        'forbidden', 'siri-500', 'closed-port', 'timeout', 'response-error' or
+        'invalid-url'.
 
     Returns
     -------
@@ -180,7 +256,13 @@ async def failure_of(stub: BodsStub, case: str) -> Exception | None:
     stub.rt = (HTTPStatus.OK, ONE_COACH)
     stub.siri = {}
     client = stub.client(key=lambda: KEY)
-    if case == 'forbidden':
+    if case in {'response-error', 'invalid-url'}:
+        session = cast(
+            aiohttp.ClientSession,
+            RaisingSession(error=leaking_error(case=case)),
+        )
+        client = stub.client(key=lambda: KEY, session=session)
+    elif case == 'forbidden':
         stub.rt = (HTTPStatus.FORBIDDEN, b'')
     elif case == 'siri-500':
         stub.siri = dict.fromkeys(
@@ -272,27 +354,36 @@ async def test_fetch_raises_for_a_refused_positions_request(
         await stub.client(key=lambda: KEY).fetch(feed='bods/positions')
 
 
-@pytest.mark.parametrize(
-    'case', ['forbidden', 'siri-500', 'closed-port', 'timeout'],
-)
+LEAK_CASES: Final[dict[str, tuple[type[FeedError] | None, str]]] = {
+    'forbidden': (FeedError, 'HTTP 403'),
+    'siri-500': (None, ''),
+    'closed-port': (FeedError, 'ClientConnectorError'),
+    'timeout': (FeedTimedOut, 'TimeoutError'),
+    'response-error': (FeedError, 'ClientResponseError'),
+    'invalid-url': (FeedError, 'InvalidURL'),
+}
+
+
+@pytest.mark.parametrize('case', list(LEAK_CASES))
 async def test_fetch_errors_and_logs_never_hold_the_key(
     stub: BodsStub, caplog: pytest.LogCaptureFixture, case: str,
 ) -> None:
     """Fetch errors and logs never hold the key."""
+    expected, message = LEAK_CASES[case]
     raised = await failure_of(stub, case)
-    if case == 'siri-500':
+    if expected is None:
         assert raised is None
-    else:
-        assert raised is not None
-    chain = traceback.format_exception(raised) if raised else []
-    if case == 'siri-500':
         assert 'no coach names' in caplog.text
+    else:
+        assert type(raised) is expected
+        assert message in str(raised)
+        assert raised.__cause__ is None
+        assert raised.__context__ is None or raised.__suppress_context__
+    chain = traceback.format_exception(raised) if raised else []
     for text in (*chain, caplog.text):
         assert KEY not in text
         assert 'api_key' not in text
         assert 'http://' not in text
-    if raised:
-        assert raised.__context__ is None or raised.__suppress_context__
 
 
 async def test_fetch_refuses_a_body_over_the_limit(stub: BodsStub) -> None:
@@ -324,3 +415,64 @@ async def test_close_leaves_an_injected_session_open(stub: BodsStub) -> None:
     async with aiohttp.ClientSession() as session:
         await stub.client(key=lambda: KEY, session=session).close()
         assert not session.closed
+
+
+async def test_fetch_refuses_a_declared_length_over_the_limit(
+    stub: BodsStub,
+) -> None:
+    """Fetch refuses a declared length over the limit."""
+    stub.declared = BODY_LIMIT + 1
+    with pytest.raises(FeedError, match='bods/positions: body too large'):
+        await stub.client(key=lambda: KEY).fetch(feed='bods/positions')
+
+
+@pytest.mark.parametrize(
+    'body',
+    [
+        b'',
+        b'\xff\xfe<a>\xff</a>',
+        b'<?xml version="1.0" encoding="UTF-8"?><a>\xff</a>',
+        b'<a>\x00</a>',
+        b'<?xml version="1.0" encoding="nope"?><a/>',
+        b'<html><body><p>x<br></body></html>',
+    ],
+)
+async def test_fetch_returns_the_positions_for_any_coach_body(
+    stub: BodsStub, caplog: pytest.LogCaptureFixture, body: bytes,
+) -> None:
+    """Fetch returns the positions for any coach body."""
+    stub.rt = (HTTPStatus.OK, ONE_COACH)
+    stub.siri = {
+        'NATX': (HTTPStatus.OK, body),
+        'FLIX': (HTTPStatus.OK, body),
+    }
+    got = await stub.client(key=lambda: KEY).fetch(feed='bods/positions')
+    assert labels(got) == ['', '']
+    warnings = [r for r in caplog.records if r.levelname == 'WARNING']
+    assert len(warnings) == 2
+
+
+async def test_request_repr_hides_the_key(stub: BodsStub) -> None:
+    """A request's repr does not hold the key."""
+    async with aiohttp.ClientSession() as session:
+        request = BodsRequest(session=session, key=KEY, box=CAMBRIDGE_BBOX)
+        assert KEY not in repr(request)
+
+
+def test_key_path_from_env_reads_the_bods_variable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """The key path comes from PAPERROUTE_KEY_FILE_BODS."""
+    monkeypatch.setenv('PAPERROUTE_KEY_FILE_BODS', str(tmp_path / 'key'))
+    assert key_path_from_env() == tmp_path / 'key'
+
+
+async def test_fetch_returns_the_positions_for_valid_xml_that_is_not_siri(
+    stub: BodsStub, caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Valid XML that is not SIRI names nothing and does not warn."""
+    stub.rt = (HTTPStatus.OK, ONE_COACH)
+    stub.siri = dict.fromkeys(('NATX', 'FLIX'), (HTTPStatus.OK, b'<a><b/></a>'))
+    got = await stub.client(key=lambda: KEY).fetch(feed='bods/positions')
+    assert labels(got) == ['', '']
+    assert not [r for r in caplog.records if r.levelname == 'WARNING']

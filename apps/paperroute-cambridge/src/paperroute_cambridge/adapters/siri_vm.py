@@ -116,11 +116,11 @@ def coach_sightings(*, data: bytes) -> tuple[CoachSighting, ...]:
     Raises
     ------
     FeedError
-        When the body is not XML.
+        When the body is not XML, or declares an encoding Python lacks.
     """
     try:
         root = ElementTree.fromstring(data)
-    except ElementTree.ParseError as error:
+    except (ElementTree.ParseError, LookupError) as error:
         raise FeedError('SIRI-VM body is not XML') from error
     sightings = (
         to_sighting(activity=activity)

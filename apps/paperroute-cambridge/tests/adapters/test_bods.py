@@ -37,7 +37,7 @@ from tests.adapters.feed_bodies import (
 )
 
 KEY: Final[str] = 'k-secret'
-RT_BOX: Final[str] = '52.005,52.471,-0.482,0.499'
+RT_BOX: Final[str] = '-0.482,52.005,0.499,52.471'
 SIRI_BOX: Final[str] = '-0.482,52.005,0.499,52.471'
 ONE_COACH: Final[bytes] = positions_body(
     vehicles=(('217', '', '', '', 990), ('3300', 'VJ1', '57428', '', 990)),

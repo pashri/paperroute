@@ -54,10 +54,10 @@ def rt_box(*, box: DegreeBox) -> str:
     Returns
     -------
     str
-        'minLat,maxLat,minLon,maxLon'.
+        'minLon,minLat,maxLon,maxLat'.
     """
     west, south, east, north = box
-    return f'{south},{north},{west},{east}'
+    return f'{west},{south},{east},{north}'
 
 
 def siri_box(*, box: DegreeBox) -> str:

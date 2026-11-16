@@ -480,17 +480,33 @@ move_data() {
     done <<<"$left"
 }
 
+# Prints the app the single-app layout holds, from single_app_name, else
+# active_app; nothing when no single-app layout file is left.
+old_layout_app() {
+    local name
+    if [[ ! -e $OPT/releases && ! -e $SHARE/installed-app \
+        && ! -e $SHARE/app ]]; then
+        return 0
+    fi
+    name=$(single_app_name)
+    [[ -n $name ]] || name=$(active_app)
+    printf '%s\n' "$name"
+}
+
+# Fails when the single-app layout holds an app other than APP_NAME.
+refuse_other_app() {
+    local old
+    old=$(old_layout_app)
+    [[ -z $old || $old == "$APP_NAME" ]] \
+        || fail "this device holds $old in the old layout; provision $old first"
+}
+
 # Moves a device from the single-app layout to the per-app one: its
 # releases, data and record. Each step is safe to repeat; the marker
 # $SHARE/adopting stays until start_board starts the board again.
 adopt_single_app() {
     local old timer
-    if [[ ! -e $OPT/releases && ! -e $SHARE/installed-app \
-        && ! -e $SHARE/app ]]; then
-        return 0
-    fi
-    old=$(single_app_name)
-    [[ -n $old ]] || old=$(active_app)
+    old=$(old_layout_app)
     if [[ -z $old ]]; then
         if [[ -e $OPT/releases ]]; then
             rmdir -- "$OPT/releases" 2>/dev/null \
@@ -498,8 +514,7 @@ adopt_single_app() {
         fi
         return 0
     fi
-    [[ $old == "$APP_NAME" ]] \
-        || fail "this device holds $old in the old layout; provision $old first"
+    refuse_other_app
     for timer in $(old_timers); do
         systemctl stop "$timer"
     done
@@ -588,6 +603,7 @@ fi
     || fail 'kit/CONTRACT must hold a units contract number'
 check_app_units
 check_ready
+refuse_other_app
 [[ $EUID -eq 0 ]] || fail 'checks passed; provisioning needs root'
 [[ ! -e $PIN_FILE || -e /var/lib/paperroute/state.json ]] || fail 'deploy M4 first so state.json holds the pin'
 

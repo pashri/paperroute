@@ -1828,6 +1828,7 @@ def run_provision(
     copy: Path,
     sudo_user: str | None,
     app: str = 'demo',
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """
     Run provision-device over a staged copy as the current user.
@@ -1840,6 +1841,8 @@ def run_provision(
         The ``SUDO_USER`` to claim, or None to leave it unset.
     app : str
         The app to provision, demo unless given.
+    env : dict[str, str] | None
+        Variables to add, such as the folder overrides.
 
     Returns
     -------
@@ -1847,6 +1850,7 @@ def run_provision(
         The exit status and output.
     """
     extra = {} if sudo_user is None else {'SUDO_USER': sudo_user}
+    extra |= env or {}
     script = copy / 'kit' / 'bin' / 'provision-device'
     return subprocess.run(
         args=['bash', str(script), str(copy), app],
@@ -5503,6 +5507,8 @@ ADOPT_FUNCTIONS: Final[tuple[str, ...]] = (
     'active_app',
     'make_dir',
     'hold_install_lock',
+    'old_layout_app',
+    'refuse_other_app',
     'old_timers',
     'check_old_services',
     'move_releases',
@@ -5785,14 +5791,64 @@ def test_adopt_is_a_no_op_on_the_new_layout(tmp_path: Path) -> None:
 def test_adopt_refuses_another_app_on_the_old_layout(tmp_path: Path) -> None:
     """Another app is refused before anything is stopped, moved or written."""
     layout = old_layout(tmp_path=tmp_path)
-    (layout.share / 'apps' / 'demo').mkdir(parents=True)
     before = layout_snapshot(layout=layout)
     result, log = run_adopt(root=tmp_path, app='demo')
     assert (result.returncode, result.stderr) == (2, REFUSED_OTHER_APP)
     assert not log
     assert layout_snapshot(layout=layout) == before
+    assert not (layout.share / 'apps' / 'demo').exists()
     assert not (layout.share / 'active-app').exists()
     assert not (layout.share / 'adopting').exists()
+
+
+@pytest.mark.parametrize(
+    ('app', 'stderr'),
+    (
+        ('demo', REFUSED_OTHER_APP),
+        (
+            'sydney',
+            'provision-device: checks passed; provisioning needs root\n',
+        ),
+    ),
+    ids=('other', 'same'),
+)
+def test_provision_refuses_another_app_before_copying(
+    tmp_path: Path,
+    app: str,
+    stderr: str,
+) -> None:
+    """Provision refuses another app with the checks, before any copy."""
+    layout = old_layout(tmp_path=tmp_path)
+    copy = copy_deploy(tmp_path=tmp_path)
+    before = layout_snapshot(layout=layout)
+    result = run_provision(
+        copy=copy,
+        sudo_user=getpass.getuser(),
+        app=app,
+        env={
+            'PAPERROUTE_SHARE': str(layout.share),
+            'PAPERROUTE_OPT': str(layout.opt),
+            'PAPERROUTE_VAR': str(layout.var),
+        },
+    )
+    assert (result.returncode, result.stderr) == (2, stderr)
+    assert layout_snapshot(layout=layout) == before
+    assert not (layout.share / 'apps').exists()
+
+
+def test_adopt_refuses_when_it_cannot_name_the_app(tmp_path: Path) -> None:
+    """Old releases with no app named anywhere stop the adoption."""
+    layout = old_layout(tmp_path=tmp_path)
+    (layout.share / 'installed-app').unlink()
+    (layout.opt / 'current').unlink()
+    before = layout_snapshot(layout=layout)
+    result, log = run_adopt(root=tmp_path)
+    assert (result.returncode, result.stderr) == (
+        2,
+        'provision-device: cannot tell which app is installed\n',
+    )
+    assert not log
+    assert layout_snapshot(layout=layout) == before
 
 
 def test_adopt_drops_the_old_copy_when_the_same_app_is_provisioned(
@@ -5942,12 +5998,15 @@ def test_start_board_keeps_the_marker_when_the_start_fails(
     assert (layout.share / 'adopting').exists()
 
 
-def test_provision_adopts_after_the_app_copy_is_checked_and_starts_the_board_last() -> None:
-    """The app copy is checked, then the lock taken, then the device moved."""
+def test_provision_adopts_after_the_copy_check_and_starts_the_board_last(
+) -> None:
+    """Another app is refused first; the device moves once the lock is held."""
     lines = script_text(path=BIN / 'provision-device').splitlines()
     order = [
         lines.index(step)
         for step in (
+            'refuse_other_app',
+            'copy_deploy',
             'take_app_copy',
             'hold_install_lock',
             'adopt_single_app',

@@ -1,9 +1,10 @@
-"""Tell systemd the service is ready and still alive."""
+"""Tell systemd the service is ready and still alive, and run systemctl."""
 
+import asyncio
 import logging
 import os
 import socket
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
 from paperroute_device.core.device_model import DeviceStatus
 from paperroute_device.core.device_settings import DeviceSettings
@@ -49,6 +50,61 @@ def send_datagram(*, address: str, message: bytes) -> None:
     with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sock:
         sock.setblocking(False)
         sock.sendto(message, address)
+
+
+async def run_systemctl(
+    *,
+    systemctl: str,
+    args: Sequence[str],
+    timeout: float | None = None,
+) -> bool:
+    """
+    Run systemctl and wait for it, logging a failure with its output.
+
+    Parameters
+    ----------
+    systemctl : str
+        The systemctl program.
+    args : Sequence[str]
+        Its arguments.
+    timeout : float | None
+        Seconds to wait before killing it; None waits for ever.
+
+    Returns
+    -------
+    bool
+        True when it exited 0 in time.
+    """
+    try:
+        process = await asyncio.create_subprocess_exec(
+            systemctl,
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            stdin=asyncio.subprocess.DEVNULL,
+        )
+    except OSError:
+        logger.exception('systemctl could not start')
+        return False
+    try:
+        output, _ = await asyncio.wait_for(
+            process.communicate(), timeout=timeout,
+        )
+    except TimeoutError:
+        process.kill()
+        await process.wait()
+        logger.error(
+            'systemctl timed out', extra={'command': ' '.join(args)},
+        )
+        return False
+    if process.returncode != 0:
+        logger.error(
+            'systemctl failed: %s',
+            output.decode(errors='replace').strip(),
+            extra={'command': ' '.join(args), 'code': process.returncode},
+        )
+    return process.returncode == 0
+
 
 class SystemdNotifier:
     """

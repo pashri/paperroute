@@ -6,6 +6,7 @@ from datetime import datetime
 
 from paperroute_device.core.device_model import (
     DeviceFacts,
+    InstalledApp,
     JoinOutcome,
     JoinRequest,
     PowerAction,
@@ -317,6 +318,63 @@ class FakePower:
         shown = 0 if self.display is None else len(self.display.frames)
         self.calls.append((action, shown))
         return self.result
+
+
+@dataclass(kw_only=True)
+class FakeAppSwitch:
+    """
+    An app switch with a fixed list that records each switch asked for.
+
+    Attributes
+    ----------
+    apps : tuple[InstalledApp, ...]
+        What `installed` lists.
+    accepts : bool
+        What a switch to a listed app that is not active returns.
+    asked : list[str]
+        Each app a switch was accepted for.
+    refreshed : int
+        How many times `refresh` was called.
+    """
+
+    apps: tuple[InstalledApp, ...] = ()
+    accepts: bool = True
+    asked: list[str] = field(default_factory=list)
+    refreshed: int = 0
+
+    def installed(self) -> tuple[InstalledApp, ...]:
+        """
+        List the apps.
+
+        Returns
+        -------
+        tuple[InstalledApp, ...]
+            `apps`.
+        """
+        return self.apps
+
+    async def refresh(self) -> None:
+        """Count the refresh."""
+        self.refreshed += 1
+
+    async def switch(self, *, key: str) -> bool:
+        """
+        Note a switch to a listed app that is not active.
+
+        Parameters
+        ----------
+        key : str
+            The app.
+
+        Returns
+        -------
+        bool
+            False for an unknown or active app, else `accepts`.
+        """
+        if not any(app.key == key and not app.active for app in self.apps):
+            return False
+        self.asked.append(key)
+        return self.accepts
 
 
 def device_facts(*, missing_keys: tuple[str, ...] = ()) -> DeviceFacts:

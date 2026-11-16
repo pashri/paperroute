@@ -217,6 +217,26 @@ class AppCard:
 
 
 @dataclass(frozen=True)
+class InstalledApp:
+    """
+    An app installed on the device.
+
+    Attributes
+    ----------
+    key : str
+        The app's folder name.
+    card : AppCard
+        What the app says about itself.
+    active : bool
+        Whether it is the app the device runs.
+    """
+
+    key: str
+    card: AppCard
+    active: bool
+
+
+@dataclass(frozen=True)
 class AppRow:
     """
     A row the app adds to the Settings menu.

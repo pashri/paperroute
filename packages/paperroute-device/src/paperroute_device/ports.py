@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Protocol
 from paperroute_device.core.device_model import (
     DeviceFacts,
     DeviceStatus,
+    InstalledApp,
     JoinOutcome,
     JoinRequest,
     PowerAction,
@@ -109,6 +110,39 @@ class PowerControl(Protocol):
         -------
         bool
             True when the action was accepted.
+        """
+
+
+class AppSwitch(Protocol):
+    """Lists the installed apps and asks the system to switch."""
+
+    def installed(self) -> tuple[InstalledApp, ...]:
+        """
+        List the installed apps without waiting.
+
+        Returns
+        -------
+        tuple[InstalledApp, ...]
+            The apps the last refresh found, in key order; empty before
+            the first.
+        """
+
+    async def refresh(self) -> None:
+        """Find the installed apps and their cards again."""
+
+    async def switch(self, *, key: str) -> bool:
+        """
+        Ask the system to make an app the active one.
+
+        Parameters
+        ----------
+        key : str
+            The app.
+
+        Returns
+        -------
+        bool
+            True when the system accepted the switch.
         """
 
 

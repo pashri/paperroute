@@ -4,12 +4,17 @@ import logging
 import shutil
 import socket
 import tempfile
+import time
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
-from paperroute_device.adapters.systemd import SystemdNotifier, notify_address
+from paperroute_device.adapters.systemd import (
+    SystemdNotifier,
+    notify_address,
+    run_systemctl,
+)
 
 
 @pytest.fixture(name='sock_dir')
@@ -165,3 +170,18 @@ def test_work_done_and_app_status_are_accepted_and_ignored(
         with pytest.raises(TimeoutError):
             server.recv(64)
     assert results == (None, None)
+
+
+async def test_run_systemctl_gives_up_after_the_timeout(
+    tmp_path: Path,
+) -> None:
+    """A systemctl that does not finish in time is refused."""
+    program = tmp_path / 'systemctl'
+    program.write_text('#!/bin/bash\nexec sleep 5\n', encoding='utf-8')
+    program.chmod(0o755)
+    started = time.monotonic()
+    result = await run_systemctl(
+        systemctl=str(program), args=['start', 'x.service'], timeout=0.2,
+    )
+    assert result is False
+    assert time.monotonic() - started < 1

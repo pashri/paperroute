@@ -1,8 +1,8 @@
 """Shut the device down or restart it through systemctl."""
 
-import asyncio
 import logging
 
+from paperroute_device.adapters.systemd import run_systemctl
 from paperroute_device.core.device_model import PowerAction
 
 logger = logging.getLogger(__name__)
@@ -67,22 +67,6 @@ class SystemctlPower:
             True when systemctl exited 0.
         """
         logger.info('power action', extra={'action': action.value})
-        try:
-            process = await asyncio.create_subprocess_exec(
-                self.systemctl,
-                action.value,
-                stdin=asyncio.subprocess.DEVNULL,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-            )
-        except OSError:
-            logger.exception('systemctl could not start')
-            return False
-        output, _ = await process.communicate()
-        if process.returncode != 0:
-            logger.error(
-                'power action failed: %s',
-                output.decode(errors='replace').strip(),
-                extra={'code': process.returncode},
-            )
-        return process.returncode == 0
+        return await run_systemctl(
+            systemctl=self.systemctl, args=[action.value],
+        )

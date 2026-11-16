@@ -33,14 +33,11 @@ from paperroute_hardware.core.knob_events import (
     KnobsHeld,
     KnobTurned,
 )
-from paperroute_sydney.adapters.web_board import (
-    SETTINGS_NAV,
-    SYDNEY_HINT,
-    SYDNEY_NAV,
-)
+from paperroute_sydney.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV
 from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.kit_steps import settings_posted, step
 from paperroute_testkit.page_markup import parse_page
+from paperroute_transit.adapters.board_head import SETTINGS_NAV
 from paperroute_transit.adapters.board_pages import PinPages
 from paperroute_transit.core.messages import Event
 from paperroute_transit.core.saved import LiveView, Lookahead, Rate

@@ -6,6 +6,7 @@ from typing import Final
 
 import pytest
 
+from paperroute_device_testkit.css_rules import css_rules
 from paperroute_sydney.city import (
     SYDNEY,
     SYDNEY_MODES,
@@ -18,7 +19,6 @@ from paperroute_transit.adapters.board_web import BOARD_WEB
 from paperroute_transit.adapters.mode_css import MODES_MARK, board_css
 from paperroute_transit.core.city import Nouns
 from paperroute_transit.core.modes import RouteClass, mode_problems
-from tests.css_rules import css_rules
 
 MODE_IDS: Final[frozenset[str]] = frozenset({
     'bus', 'train', 'metro', 'light_rail', 'ferry', 'school', 'coach',

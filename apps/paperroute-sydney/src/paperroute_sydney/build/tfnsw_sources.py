@@ -1,7 +1,6 @@
 """Sydney's timetable zips and how to fetch them from TfNSW."""
 
-import http.client
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Final
 from urllib.request import Request
@@ -13,7 +12,7 @@ from paperroute_sydney.adapters.tfnsw import (
     api_key_from_env,
 )
 from paperroute_transit.build.source_state import SourceError, SourceState
-from paperroute_transit.build.sources import SourceSpec, open_source, stream_to
+from paperroute_transit.build.sources import SourceSpec, UrlDownloader
 
 SYDNEY_SOURCES: Final[tuple[SourceSpec, ...]] = (
     SourceSpec(name='sydneytrains', path='v1/gtfs/schedule/sydneytrains'),
@@ -46,13 +45,37 @@ class TfnswDownloader:
     ) -> None:
         self.key = key
         self.base_url = base_url
+        self.plain = UrlDownloader(base_url=base_url, headers=self.headers)
+
+    def headers(self, *, spec: SourceSpec) -> Mapping[str, str]:
+        """
+        Give the Authorization header for a source.
+
+        Parameters
+        ----------
+        spec : SourceSpec
+            Source.
+
+        Returns
+        -------
+        Mapping[str, str]
+            The header.
+
+        Raises
+        ------
+        SourceError
+            When the key can't be read; the message names the key file,
+            never the key.
+        """
+        try:
+            key = self.key()
+        except NoApiKey as error:
+            raise SourceError(f'{spec.name}: {error}') from error
+        return {'Authorization': f'apikey {key}'}
 
     def request(self, *, spec: SourceSpec, method: str) -> Request:
         """
         Build an authorised request for a source.
-
-        The key is an unredirected header, so a redirect to another host
-        doesn't carry it.
 
         Parameters
         ----------
@@ -65,20 +88,8 @@ class TfnswDownloader:
         -------
         Request
             The request.
-
-        Raises
-        ------
-        SourceError
-            When the key can't be read; the message names the key file,
-            never the key.
         """
-        try:
-            key = self.key()
-        except NoApiKey as error:
-            raise SourceError(f'{spec.name}: {error}') from error
-        built = Request(self.base_url + spec.path, method=method)
-        built.add_unredirected_header('Authorization', f'apikey {key}')
-        return built
+        return self.plain.request(spec=spec, method=method)
 
     def head(
         self,
@@ -104,17 +115,7 @@ class TfnswDownloader:
         SourceState
             The validators, with sha256 None.
         """
-        with open_source(
-            built=self.request(spec=spec, method='HEAD'),
-            name=spec.name,
-            timeout_s=timeout_s,
-            limiter=limiter,
-        ) as response:
-            return SourceState(
-                etag=response.headers.get('ETag'),
-                last_modified=response.headers.get('Last-Modified'),
-                sha256=None,
-            )
+        return self.plain.head(spec=spec, timeout_s=timeout_s, limiter=limiter)
 
     def download(
         self,
@@ -142,22 +143,7 @@ class TfnswDownloader:
         -------
         str
             SHA-256 hex digest of the zip.
-
-        Raises
-        ------
-        SourceError
-            On an HTTP error, a short body or a write failure. The message
-            holds the source name and the status or error class only.
         """
-        built = self.request(spec=spec, method='GET')
-        try:
-            with open_source(
-                built=built,
-                name=spec.name,
-                timeout_s=timeout_s,
-                limiter=limiter,
-            ) as response:
-                return stream_to(response=response, out=out)
-        except (http.client.HTTPException, OSError) as error:
-            message = f'{spec.name}: {type(error).__name__}'
-            raise SourceError(message) from error
+        return self.plain.download(
+            spec=spec, out=out, timeout_s=timeout_s, limiter=limiter,
+        )

@@ -12,10 +12,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute_device.adapters.web_frame import SHELL_WEB
-from paperroute_device_testkit.device_fakes import FakeKeys
-from paperroute_device_testkit.device_pages import KEY, STATUS
-from paperroute_device_testkit.paths import ROOT
-from tests.css_rules import (
+from paperroute_device_testkit.css_rules import (
     CssRule,
     css_rules,
     markup_tokens,
@@ -24,6 +21,9 @@ from tests.css_rules import (
     top_level_split,
     web_files,
 )
+from paperroute_device_testkit.device_fakes import FakeKeys
+from paperroute_device_testkit.device_pages import KEY, STATUS
+from paperroute_device_testkit.paths import ROOT
 from tests.golden.scenes import GOLDEN
 from tests.golden.test_golden_pages import check_text, display
 

@@ -33,12 +33,24 @@ class FeedState:
     gone: set[str] = field(default_factory=set)
     status: HTTPStatus | None = None
     auth_seen: dict[str, str | None] = field(default_factory=dict)
+    headers_seen: dict[str, str] = field(default_factory=dict)
 
 
 class FeedServer(ThreadingHTTPServer):
     """HTTP server carrying a FeedState."""
 
     state: FeedState
+
+    def last_headers(self) -> dict[str, str]:
+        """
+        Headers of the last request.
+
+        Returns
+        -------
+        dict[str, str]
+            Header names as sent, with their values.
+        """
+        return dict(self.state.headers_seen)
 
     @property
     def base_url(self) -> str:
@@ -110,6 +122,7 @@ class FeedHandler(BaseHTTPRequestHandler):
         """
         state = self.feeds.state
         state.hits[self.command] += 1
+        state.headers_seen = dict(self.headers.items())
         state.auth_seen[self.path] = self.headers.get('Authorization')
         if state.status is not None:
             self.send_error(state.status)

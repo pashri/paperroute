@@ -11,11 +11,10 @@ from multidict import MultiMapping
 
 from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_device.adapters.web_frame import LIVE_NAV
-from paperroute_sydney.adapters.web_board import PINS_NAV
 from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.connection_factories import WORK
 from paperroute_testkit.fake_pins import FakePinOptions
-from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.board_head import PINS_NAV, BoardHead
 from paperroute_transit.adapters.board_pages import PagePlug, PinPages
 from paperroute_transit.adapters.web_ways import WaysPages
 from paperroute_transit.core.messages import Event

@@ -1,7 +1,7 @@
 """Draw the Device page's Data section: timetable, tiles, calls, feeds."""
 
 import html
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime, tzinfo
 from typing import Final
 
@@ -29,12 +29,14 @@ DATA_SECTION: Final[str] = (
     '          </tbody>\n'
     '        </table>\n'
     '      </div>\n'
+    '{credits}'
     '    </section>'
 )
 FEED_ROW: Final[str] = (
     '            <tr><th scope="row">{label}</th>'
     '<td>{last}</td><td>{age}</td></tr>'
 )
+CREDIT_LINE: Final[str] = '      <p class="hint">{line}</p>\n'
 NO_FEEDS: Final[str] = '            <tr><td colspan="3">none yet</td></tr>'
 
 
@@ -225,6 +227,7 @@ def data_section(
     label: Callable[[str], str],
     daily_limit: int,
     zone: tzinfo,
+    credit_lines: Sequence[str] = (),
 ) -> str:
     """
     Draw the Device page's Data section.
@@ -245,16 +248,23 @@ def data_section(
         The API calls allowed each day.
     zone : tzinfo
         Time zone whose wall clock to show.
+    credit_lines : Sequence[str]
+        HTML lines written after the feed table, each as a hint
+        paragraph, as they are.
 
     Returns
     -------
     str
         The whole section, from its opening tag to its closing one.
-        Every value written into it is escaped.
+        Every value written into it is escaped, except the credit
+        lines.
     """
     return DATA_SECTION.format(
         rows=data_rows(
             status=status, facts=facts, daily_limit=daily_limit, zone=zone,
         ),
         feeds=feed_rows(feeds=feeds, now=now, label=label, zone=zone),
+        credits=''.join(
+            CREDIT_LINE.format(line=line) for line in credit_lines
+        ),
     )

@@ -2,11 +2,11 @@
 
 import pytest
 
+from paperroute_device_testkit.css_rules import css_rules
 from paperroute_sydney.city import SYDNEY
 from paperroute_transit.adapters.board_web import BOARD_WEB
 from paperroute_transit.adapters.mode_css import mode_css
 from paperroute_transit.core.modes import ModeSpec
-from tests.css_rules import css_rules
 
 OLD_CHIPS: dict[str, tuple[str, str]] = {
     'bus': ('#00b5ef', '#000000'),

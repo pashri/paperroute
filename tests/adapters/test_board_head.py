@@ -2,7 +2,12 @@
 
 import pytest
 
-from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_sydney.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV
+from paperroute_transit.adapters.board_head import (
+    BOARD_NAV,
+    BoardHead,
+    knob_hint,
+)
 from paperroute_transit.adapters.web_pin_edit import edit_page
 
 LIVE_LINK = '  <link rel="stylesheet" href="/live.css">\n'
@@ -47,3 +52,18 @@ def test_pin_name_with_scripts_mark_stays_text() -> None:
     assert '<p>{{scripts}} {{nav}}</p>' in page
     assert page.count('<script type="module" src="/suggest.js"></script>') == 1
     assert page.count('<nav ') == 1
+
+
+def test_board_nav_is_live_pins_settings_device() -> None:
+    """Board nav is live pins settings device."""
+    assert [item.href for item in BOARD_NAV] == [
+        '/', '/pins', '/settings', '/device',
+    ]
+    assert SYDNEY_NAV is BOARD_NAV
+
+
+def test_knob_hint_names_the_vehicle() -> None:
+    """Knob hint names the vehicle."""
+    assert 'to pick a bus:' in knob_hint(vehicle='bus')
+    assert 'train' not in knob_hint(vehicle='bus')
+    assert knob_hint(vehicle='train') == SYDNEY_HINT

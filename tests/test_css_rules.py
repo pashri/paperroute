@@ -4,7 +4,7 @@ from typing import Final
 
 import pytest
 
-from tests.css_rules import CssRule, css_rules, rule_line
+from paperroute_device_testkit.css_rules import CssRule, css_rules, rule_line
 
 SHEET: Final[str] = """
 /* a comment { with braces } */

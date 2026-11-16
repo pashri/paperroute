@@ -123,3 +123,18 @@ def test_feed_times_are_read_in_the_given_zone() -> None:
     utc = section(feeds={TRAINS: NOW - 12}, zone=UTC)
     assert '<td>21:44:48</td><td>12 s</td>' in sydney
     assert '<td>10:44:48</td><td>12 s</td>' in utc
+
+
+def test_data_section_without_credits_is_unchanged() -> None:
+    """Data section without credits is unchanged."""
+    assert section() == section(credit_lines=())
+    assert 'class="hint"' not in section()
+
+
+def test_data_section_writes_each_credit_after_the_feeds() -> None:
+    """Data section writes each credit after the feeds."""
+    text = section(credit_lines=('One <a href="/x">x</a>.', 'Two.'))
+    tail = text[text.index('</table>'):]
+    assert tail.index('<p class="hint">One <a href="/x">x</a>.</p>') < (
+        tail.index('<p class="hint">Two.</p>')
+    ) < tail.index('</section>')

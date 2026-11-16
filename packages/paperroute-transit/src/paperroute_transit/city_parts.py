@@ -89,6 +89,9 @@ class CityParts:
         What the board shows, at the head of its card's status line.
     rebuild_minutes : int
         The most minutes a timetable build takes, as the card says.
+    credits : tuple[str, ...]
+        HTML lines the city wrote, shown as they are on the Device
+        page's Data section.
     """
 
     assets: AssetRoot
@@ -101,3 +104,4 @@ class CityParts:
     sheets: tuple[str, ...]
     about: str = ''
     rebuild_minutes: int = 40
+    credits: tuple[str, ...] = ()

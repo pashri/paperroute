@@ -56,7 +56,9 @@ NSW: Final[re.Pattern[str]] = re.compile(r'(?i)\bnsw')
 TRANSIT_WORDS: Final[re.Pattern[str]] = re.compile(
     r'(?i)\b(timetable|rebuild|tiles|feeds?|transit|sydney|tfnsw)\b',
 )
-KEY_SCHEME: Final[re.Pattern[str]] = re.compile(r'(?i)\bapikey\b|BASE_URL')
+KEY_SCHEME: Final[re.Pattern[str]] = re.compile(
+    r'(?i)\bapikey\b|(?-i:BASE_URL)',
+)
 APP: Final[Path] = (
     ROOT / 'apps' / 'paperroute-sydney' / 'src' / 'paperroute_sydney'
 )

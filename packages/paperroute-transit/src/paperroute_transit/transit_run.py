@@ -411,6 +411,7 @@ class TransitRun:
                 label=lambda feed: feeds.label(feed=feed),
                 daily_limit=feeds.daily_limit,
                 zone=self.city.zone,
+                credit_lines=self.parts.credits,
             )
 
         return written

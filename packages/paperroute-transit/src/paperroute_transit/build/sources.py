@@ -3,6 +3,7 @@
 import hashlib
 import http.client
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -242,3 +243,169 @@ def needs_download(
         stored.etag,
         stored.last_modified,
     )
+
+
+class RequestHeaders(Protocol):
+    """Gives the headers to send with a source's requests."""
+
+    def __call__(self, *, spec: SourceSpec) -> Mapping[str, str]:
+        """
+        Give the headers.
+
+        Parameters
+        ----------
+        spec : SourceSpec
+            Source the request is for.
+
+        Returns
+        -------
+        Mapping[str, str]
+            Header names and values.
+        """
+
+
+def no_headers(*, spec: SourceSpec) -> Mapping[str, str]:
+    """
+    Give no headers.
+
+    Parameters
+    ----------
+    spec : SourceSpec
+        Source the request is for; unused.
+
+    Returns
+    -------
+    Mapping[str, str]
+        An empty mapping.
+    """
+    del spec
+    return {}
+
+
+class UrlDownloader:
+    """
+    Fetch timetable zips from a URL root.
+
+    Parameters
+    ----------
+    base_url : str
+        Root, ending in '/'; a source's path follows it.
+    headers : RequestHeaders | None
+        Gives the headers for each request, called for every one; none
+        sends only the defaults.
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        headers: RequestHeaders | None = None,
+    ) -> None:
+        self.base_url = base_url
+        self.headers = no_headers if headers is None else headers
+
+    def request(self, *, spec: SourceSpec, method: str) -> Request:
+        """
+        Build a request for a source.
+
+        Each header is unredirected, so a redirect to another host
+        doesn't carry it.
+
+        Parameters
+        ----------
+        spec : SourceSpec
+            Source.
+        method : str
+            'HEAD' or 'GET'.
+
+        Returns
+        -------
+        Request
+            The request.
+        """
+        built = Request(self.base_url + spec.path, method=method)
+        for name, value in self.headers(spec=spec).items():
+            built.add_unredirected_header(name, value)
+        return built
+
+    def head(
+        self,
+        *,
+        spec: SourceSpec,
+        timeout_s: float,
+        limiter: SyncStartLimiter | None,
+    ) -> SourceState:
+        """
+        Read a source's ETag and Last-Modified.
+
+        Parameters
+        ----------
+        spec : SourceSpec
+            Source.
+        timeout_s : float
+            Socket timeout in seconds.
+        limiter : SyncStartLimiter | None
+            Spaces out request starts; none means no limit.
+
+        Returns
+        -------
+        SourceState
+            The validators, with sha256 None.
+        """
+        with open_source(
+            built=self.request(spec=spec, method='HEAD'),
+            name=spec.name,
+            timeout_s=timeout_s,
+            limiter=limiter,
+        ) as response:
+            return SourceState(
+                etag=response.headers.get('ETag'),
+                last_modified=response.headers.get('Last-Modified'),
+                sha256=None,
+            )
+
+    def download(
+        self,
+        *,
+        spec: SourceSpec,
+        out: Path,
+        timeout_s: float,
+        limiter: SyncStartLimiter | None,
+    ) -> str:
+        """
+        Download a source's zip.
+
+        Parameters
+        ----------
+        spec : SourceSpec
+            Source.
+        out : Path
+            File to write.
+        timeout_s : float
+            Socket timeout in seconds.
+        limiter : SyncStartLimiter | None
+            Spaces out request starts; none means no limit.
+
+        Returns
+        -------
+        str
+            SHA-256 hex digest of the zip.
+
+        Raises
+        ------
+        SourceError
+            On an HTTP error, a short body or a write failure. The message
+            holds the source name and the status or error class only.
+        """
+        built = self.request(spec=spec, method='GET')
+        try:
+            with open_source(
+                built=built,
+                name=spec.name,
+                timeout_s=timeout_s,
+                limiter=limiter,
+            ) as response:
+                return stream_to(response=response, out=out)
+        except (http.client.HTTPException, OSError) as error:
+            message = f'{spec.name}: {type(error).__name__}'
+            raise SourceError(message) from error

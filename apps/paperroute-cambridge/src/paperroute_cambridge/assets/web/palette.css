@@ -1,1 +1,250 @@
-:root {}
+:root {
+  --page: #f3f1e7;
+  --surface: #ffffff;
+  --text: #111111;
+  --muted: #4a4a44;
+  --line: #111111;
+  --field: #111111;
+  --masthead: #01426a;
+  --navy: #01426a;
+  --blue: #111111;
+  --focus: #01426a;
+  --red: #e03c31;
+  --danger: #c2281d;
+  --danger-text: #ffffff;
+  --heading: #111111;
+  --secondary: #111111;
+  --current: #111111;
+  --main: #111111;
+  --main-text: #ffffff;
+  --current-bg: #d9d8d0;
+  --sign: #111111;
+  --sign-text: #ffffff;
+  --band: #d9d8d0;
+  --band-line: #ffffff;
+  --ticket: #e8d9a8;
+  --ticket-text: #111111;
+  --coach: #e03c31;
+  --mode-other: #4a4a44;
+  --font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  --bar: 0rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0e1a22;
+    --surface: #16252f;
+    --text: #e9e7dd;
+    --muted: #a9b1b5;
+    --line: #d9d8d0;
+    --field: #d9d8d0;
+    --masthead: #01426a;
+    --navy: #01426a;
+    --blue: #e9e7dd;
+    --focus: #d9d8d0;
+    --red: #e8554a;
+    --danger: #f0766c;
+    --danger-text: #0b0c0c;
+    --heading: #e9e7dd;
+    --secondary: #e9e7dd;
+    --current: #e9e7dd;
+    --main: #d9d8d0;
+    --main-text: #0b0c0c;
+    --current-bg: #1d3a4c;
+    --sign: #d9d8d0;
+    --sign-text: #0b0c0c;
+    --band: #8f8e86;
+    --band-line: #d9d8d0;
+    --ticket: #c9b97f;
+    --ticket-text: #0b0c0c;
+    --coach: #e8554a;
+    --mode-other: #a9b1b5;
+  }
+}
+
+body {
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.25;
+}
+
+header {
+  padding-block: 2.25rem 0.75rem;
+  border-block-start: 1.75rem solid var(--band);
+  box-shadow: inset 0 3px 0 var(--band-line);
+}
+
+header::after {
+  content: none;
+}
+
+h1 {
+  font-size: 2rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+h2 {
+  font-size: 1.75rem;
+  font-weight: 500;
+}
+
+body > nav {
+  position: static;
+  margin: 1rem;
+  border: 3px solid var(--line);
+  background: var(--surface);
+}
+
+.pages {
+  flex-direction: column;
+}
+
+.pages li + li {
+  border-block-start: 1px solid var(--line);
+}
+
+.pages a {
+  flex-direction: row;
+  justify-content: space-between;
+  min-height: 0;
+  padding: 0.375rem 0.75rem;
+  color: var(--text);
+  font-size: 1.125rem;
+}
+
+.pages svg {
+  display: none;
+}
+
+.pages a::after {
+  content: '\2192' / '';
+  font-weight: 700;
+}
+
+.pages a[aria-current='page'] {
+  background: var(--sign);
+  color: var(--sign-text);
+  box-shadow: none;
+}
+
+@media (min-width: 48em) {
+  body > nav {
+    margin: 1rem;
+    border: 3px solid var(--line);
+  }
+
+  .pages a[aria-current='page'] {
+    background: var(--sign);
+  }
+}
+
+.card {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.notice {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--ticket);
+  color: var(--ticket-text);
+  font-size: 0.875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.pins {
+  border-block-start: 3px solid var(--line);
+}
+
+.pins li:last-child {
+  border-block-end: 3px solid var(--line);
+}
+
+.chip.chip {
+  width: 4.25rem;
+  border-radius: 0;
+  font-size: 0.8125rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.chip.mode-coach {
+  --chip-fill: var(--coach);
+}
+
+label,
+label[for],
+label:has(select, input[type='time'], input[type='text']),
+legend {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.switch.switch,
+.apps label:has(input) {
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+select,
+input[type='text'],
+input[type='search'],
+input[type='time'],
+input[type='password'] {
+  border: 3px solid var(--line);
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.button,
+button {
+  border: 3px solid var(--line);
+  border-radius: 0;
+}
+
+.danger,
+.danger:hover {
+  color: var(--danger-text);
+}
+
+dialog {
+  border: 3px solid var(--line);
+  border-radius: 0;
+}
+
+.apps {
+  padding: 0;
+  border: 3px solid var(--line);
+  background: var(--surface);
+}
+
+.apps label:has(input) {
+  padding: 0.625rem 0.75rem;
+}
+
+.apps label + label {
+  border-block-start: 1px solid var(--line);
+}
+
+.apps input {
+  accent-color: var(--text);
+}
+
+.apps .now {
+  border-radius: 0;
+  background: var(--sign);
+  color: var(--sign-text);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

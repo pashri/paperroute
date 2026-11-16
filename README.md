@@ -168,18 +168,18 @@ device.
 
 ### Upgrade
 
-When the release changes the systemd units:
+When the release changes the systemd units, or when moving from a
+single-app install:
 
-1. Run `scripts/provision <user>@paperroute.local sydney`, without
-   `--reboot`.
-2. Straight away, run `scripts/deploy <user>@paperroute.local sydney`.
+1. Run `scripts/deploy <user>@paperroute.local sydney`.
+2. Straight away, run `scripts/provision <user>@paperroute.local sydney`,
+   without `--reboot`.
 
-Do not reboot between the two: the old release cannot run under the new
-units. When the units do not change, step 2 alone is enough.
+Do not reboot between the two. When the units do not change, step 1 alone is
+enough.
 
-Moving from a single-app install: deploy, then provision, with no reboot
-between. The provision moves the releases and /var/lib/paperroute into the
-app's own directories and restarts the board.
+On a single-app install, the provision moves the releases and
+/var/lib/paperroute into the app's own directories and restarts the board.
 
 A release whose units contract differs from the installed one is not
 switched back to; fix forward and redeploy.

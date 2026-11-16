@@ -1,9 +1,12 @@
 """Place constants, timetable builders and readers for the trim tests."""
 
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
+from pathlib import Path
 from typing import Final
 
+from paperroute_cambridge.area import COACH_BOX
+from paperroute_transit.build.gtfs_files import read_rows
 from paperroute_transit.build.timetable import create_schema
 
 NEAR: Final[tuple[str, float, float]] = ('near', 0.1300, 52.2060)
@@ -254,3 +257,231 @@ def stop_row(
         (stop_id,),
     ).fetchone()
     return row
+
+
+def short_names(conn: sqlite3.Connection) -> set[str]:
+    """
+    Read the route short names.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        The database.
+
+    Returns
+    -------
+    set[str]
+        Short names.
+    """
+    return {row[0] for row in conn.execute('SELECT short_name FROM routes')}
+
+
+def route_rows(conn: sqlite3.Connection) -> list[tuple[str, int, str]]:
+    """
+    Read each route's short name, type and agency id.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        The database.
+
+    Returns
+    -------
+    list[tuple[str, int, str]]
+        One row per route.
+    """
+    rows = conn.execute('SELECT short_name, type, agency_id FROM routes')
+    return [(short, kind, agency) for short, kind, agency in rows]
+
+
+def trips_of(
+    conn: sqlite3.Connection, *, shorts: Collection[str],
+) -> list[str]:
+    """
+    Read the trip ids of the routes with the given short names.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        The database.
+    shorts : Collection[str]
+        Route short names.
+
+    Returns
+    -------
+    list[str]
+        Trip ids, in id order.
+    """
+    rows = conn.execute(
+        'SELECT t.trip_id FROM trips t JOIN routes r '
+        'ON r.route_id = t.route_id ORDER BY t.trip_id',
+    )
+    wanted = {
+        trip
+        for (trip,) in rows
+        if short_of(conn=conn, trip=trip) in shorts
+    }
+    return sorted(wanted)
+
+
+def short_of(*, conn: sqlite3.Connection, trip: str) -> str:
+    """
+    Read the short name of a trip's route.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        The database.
+    trip : str
+        Trip id.
+
+    Returns
+    -------
+    str
+        The short name.
+    """
+    row = conn.execute(
+        'SELECT r.short_name FROM trips t JOIN routes r '
+        'ON r.route_id = t.route_id WHERE t.trip_id = ?',
+        (trip,),
+    ).fetchone()
+    return str(row[0])
+
+
+def all_trip_ids(conn: sqlite3.Connection) -> set[str]:
+    """
+    Read every trip id.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        The database.
+
+    Returns
+    -------
+    set[str]
+        Trip ids.
+    """
+    return {row[0] for row in conn.execute('SELECT trip_id FROM trips')}
+
+
+def call_count(conn: sqlite3.Connection, trip: str) -> int:
+    """
+    Count a trip's calls.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        The database.
+    trip : str
+        Trip id.
+
+    Returns
+    -------
+    int
+        The number of stop times.
+    """
+    row = conn.execute(
+        'SELECT COUNT(*) FROM stop_times WHERE trip_id = ?', (trip,),
+    ).fetchone()
+    return int(row[0])
+
+
+def zip_call_count(archive: Path, trip: str) -> int:
+    """
+    Count a trip's calls in a timetable zip.
+
+    Parameters
+    ----------
+    archive : Path
+        The zip.
+    trip : str
+        Trip id.
+
+    Returns
+    -------
+    int
+        The number of stop times.
+    """
+    return sum(
+        1
+        for row in read_rows(archive=archive, member='stop_times.txt')
+        if row['trip_id'] == trip
+    )
+
+
+def shape_ids(
+    conn: sqlite3.Connection, *, shorts: Collection[str],
+) -> set[str | None]:
+    """
+    Read the shape ids of the trips of the given routes.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        The database.
+    shorts : Collection[str]
+        Route short names.
+
+    Returns
+    -------
+    set[str | None]
+        Shape ids; None for a trip with no shape.
+    """
+    rows = conn.execute('SELECT trip_id, shape_id FROM trips')
+    return {
+        shape
+        for trip, shape in rows
+        if short_of(conn=conn, trip=trip) in shorts
+    }
+
+
+def agency_ids(archive: Path, *, nocs: Collection[str]) -> set[str]:
+    """
+    Read the agency ids of the agencies with the given NOCs.
+
+    Parameters
+    ----------
+    archive : Path
+        The timetable zip.
+    nocs : Collection[str]
+        National operator codes.
+
+    Returns
+    -------
+    set[str]
+        Agency ids.
+    """
+    return {
+        row['agency_id']
+        for row in read_rows(archive=archive, member='agency.txt')
+        if row.get('agency_noc') in nocs
+    }
+
+
+def flags(conn: sqlite3.Connection, trip: str) -> list[bool]:
+    """
+    Say, for each call in order, whether its stop lies outside the box.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        The database.
+    trip : str
+        Trip id.
+
+    Returns
+    -------
+    list[bool]
+        True for a call outside the coach box.
+    """
+    west, south, east, north = COACH_BOX
+    rows = conn.execute(
+        'SELECT s.lon, s.lat FROM stop_times st JOIN stops s '
+        'ON s.stop_id = st.stop_id WHERE st.trip_id = ? ORDER BY st.seq',
+        (trip,),
+    )
+    return [
+        not (west <= lon <= east and south <= lat <= north)
+        for lon, lat in rows
+    ]

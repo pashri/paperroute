@@ -14,6 +14,7 @@ from paperroute_device.adapters.device_form import (
 )
 from paperroute_device.core.device_settings import Window
 from paperroute_transit.core.messages import SettingsChanged
+from paperroute_transit.core.positions import ParkedAge
 from paperroute_transit.core.saved import (
     BoardSettings,
     ConnectionMap,
@@ -31,7 +32,7 @@ BOARD_SWITCHES: Final[tuple[str, ...]] = (
 BOARD_RADIOS: Final[tuple[str, ...]] = ('connection_map',)
 SLOTS: Final[tuple[str, ...]] = ('peak_1', 'peak_2')
 CHOICES: Final[frozenset[str]] = frozenset(
-    {'peak_rate', 'offpeak_rate', 'alert_lookahead'}
+    {'peak_rate', 'offpeak_rate', 'alert_lookahead', 'parked_age'}
 )
 STATUS_SWITCHES: Final[tuple[str, ...]] = (
     'auto_rebuild',
@@ -223,6 +224,9 @@ def changed_from(*, fields: Mapping[str, str]) -> SettingsChanged | None:
         ),
         skip_school_buses=switches.get('skip_school_buses'),
         skip_school_on_route_pins=switches.get('skip_school_on_route_pins'),
+        parked_age=optional_enum(
+            kind=ParkedAge, fields=fields, name='parked_age',
+        ),
     )
     return None if change == SettingsChanged() else change
 

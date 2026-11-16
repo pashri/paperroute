@@ -387,7 +387,7 @@ FILE_KEYS: Final[frozenset[str]] = frozenset({
     'inverted_lists', 'clean_after', 'swap_knobs',
     'auto_rebuild', 'peak_rate', 'offpeak_rate', 'peak_windows',
     'alert_lookahead', 'connection_map', 'skip_school_buses',
-    'skip_school_on_route_pins', 'start', 'end',
+    'skip_school_on_route_pins', 'parked_age', 'start', 'end',
     'pins', 'current', 'unpinned', 'view', 'quota', 'auto',
     'origin', 'destination', 'kind', 'routes', 'nickname', 'only',
     'windows', 'ways', 'never', 'stop_id', 'name', 'x', 'y', 'days',

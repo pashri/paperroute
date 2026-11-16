@@ -12,6 +12,7 @@ from paperroute_transit.core.feed_plan import FeedPlan
 from paperroute_transit.core.geo import DegreeBox, Projection
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.modes import Classifier, ModeSpec, spec_of
+from paperroute_transit.core.positions import ParkedAge
 
 
 @dataclass(frozen=True)
@@ -252,6 +253,8 @@ class City:
         `source_nouns`.
     feeds : FeedPlan
         Its realtime feeds.
+    parked_age : ParkedAge
+        The parked-vehicle age a new board starts with.
     """
 
     name: str
@@ -268,6 +271,7 @@ class City:
     source_nouns: Mapping[str, Nouns]
     noun_overrides: Mapping[tuple[str, str], Nouns]
     feeds: FeedPlan
+    parked_age: ParkedAge = ParkedAge.OFF
 
     def mode(self, *, mode_id: str | None) -> ModeSpec | None:
         """

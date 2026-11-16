@@ -12,6 +12,7 @@ from paperroute_device.adapters.state_file import (
 )
 from paperroute_transit.core import saved
 from paperroute_transit.core.city import City
+from paperroute_transit.core.positions import ParkedAge
 from paperroute_transit.core.saved import (
     BoardSettings,
     ConnectionMap,
@@ -41,6 +42,7 @@ class BoardSettingsModel(BaseModel):
     connection_map: ConnectionMap
     skip_school_buses: bool = True
     skip_school_on_route_pins: bool = False
+    parked_age: ParkedAge = ParkedAge.OFF
 
     @field_validator('peak_windows')
     @classmethod
@@ -102,6 +104,7 @@ def board_settings_to_model(*, settings: BoardSettings) -> BoardSettingsModel:
         connection_map=settings.connection_map,
         skip_school_buses=settings.skip_school_buses,
         skip_school_on_route_pins=settings.skip_school_on_route_pins,
+        parked_age=settings.parked_age,
     )
 
 
@@ -130,6 +133,7 @@ def board_settings_from_model(*, model: BoardSettingsModel) -> BoardSettings:
         connection_map=model.connection_map,
         skip_school_buses=model.skip_school_buses,
         skip_school_on_route_pins=model.skip_school_on_route_pins,
+        parked_age=model.parked_age,
     )
 
 

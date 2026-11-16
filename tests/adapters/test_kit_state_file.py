@@ -204,6 +204,6 @@ def test_v12_file_reaches_13_as_the_board_migrates_it(tmp_path: Path) -> None:
     states.save(saved=KitSaved(device=loaded.device, app=loaded.app))
     board = BoardStates(path=board_path, city=SYDNEY)
     board.save(saved=board.load().saved)
-    assert json.loads(kit_path.read_text()) == json.loads(
-        board_path.read_text(),
-    )
+    written = json.loads(board_path.read_text())
+    del written['board']['settings']['parked_age']
+    assert json.loads(kit_path.read_text()) == written

@@ -54,7 +54,7 @@ from paperroute_transit.core.model import (
 )
 from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.patterns import TripPattern
-from paperroute_transit.core.positions import PositionsSnapshot
+from paperroute_transit.core.positions import ParkedAge, PositionsSnapshot
 from paperroute_transit.core.reach import Reach, StripKey
 from paperroute_transit.core.realtime import RealtimeSnapshot
 from paperroute_transit.core.saved import ConnectionMap, Lookahead, Rate
@@ -383,6 +383,8 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
         Whether school routes are left out.
     skip_school_on_route_pins : bool | None
         Whether school routes are also left out of pins without a To.
+    parked_age : ParkedAge | None
+        How long since a vehicle was heard before the Map hides it.
     """
 
     auto_rebuild: bool | None = None
@@ -393,6 +395,7 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
     connection_map: ConnectionMap | None = None
     skip_school_buses: bool | None = None
     skip_school_on_route_pins: bool | None = None
+    parked_age: ParkedAge | None = None
 
 
 @dataclass(frozen=True)

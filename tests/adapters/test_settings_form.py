@@ -30,10 +30,12 @@ from paperroute_transit.adapters.settings_form import (
     BOARD_RADIOS,
     BOARD_SWITCHES,
     ERRORS,
+    board_values,
     changed_from,
     form_values,
 )
 from paperroute_transit.core.messages import SettingsChanged
+from paperroute_transit.core.positions import ParkedAge
 from paperroute_transit.core.saved import (
     BoardSettings,
     ConnectionMap,
@@ -440,7 +442,7 @@ async def test_clean_after_selects_its_option() -> None:
     for count in CLEAN_CHOICES:
         assert f'>{count} changes</option>' in plain
     assert '<option value="15" selected>' in plain
-    assert plain.count(' selected>') == 4
+    assert plain.count(' selected>') == 5
 
 
 async def test_swap_knobs_switch_shown_checked() -> None:
@@ -455,3 +457,15 @@ async def test_swap_knobs_switch_shown_checked() -> None:
         ' value="on" checked>'
     ) in plain
     assert 'Swap knobs' in plain
+
+
+def test_changed_from_reads_parked_age() -> None:
+    """Changed from reads parked age."""
+    assert changed_from(fields={'parked_age': '10min'}) == SettingsChanged(
+        parked_age=ParkedAge.TEN,
+    )
+
+
+def test_board_values_write_parked_age() -> None:
+    """Board values write parked age."""
+    assert board_values(settings=BoardSettings())['parked_age'] == 'off'

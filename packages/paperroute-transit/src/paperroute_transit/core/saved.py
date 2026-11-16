@@ -10,6 +10,7 @@ from paperroute_device.core.device_settings import DeviceSettings, Window
 from paperroute_transit.core.auto_model import AutoState
 from paperroute_transit.core.city import City
 from paperroute_transit.core.model import Pin
+from paperroute_transit.core.positions import ParkedAge
 
 
 class LiveView(StrEnum):
@@ -94,6 +95,8 @@ class BoardSettings:
     skip_school_on_route_pins : bool
         Whether school routes are also left out of pins without a To;
         it has no effect while `skip_school_buses` is off.
+    parked_age : ParkedAge
+        How long since a vehicle was heard before the Map hides it.
     """
 
     auto_rebuild: bool = True
@@ -104,6 +107,7 @@ class BoardSettings:
     connection_map: ConnectionMap = ConnectionMap.CHANGES
     skip_school_buses: bool = True
     skip_school_on_route_pins: bool = False
+    parked_age: ParkedAge = ParkedAge.OFF
 
     @property
     def school_off_route_pins(self) -> bool:
@@ -235,9 +239,14 @@ def default_settings(*, city: City) -> Settings:
     Returns
     -------
     Settings
-        The defaults, with the city's peak windows.
+        The defaults, with the city's peak windows and parked age.
     """
-    return Settings(board=BoardSettings(peak_windows=city.peak_windows))
+    return Settings(
+        board=BoardSettings(
+            peak_windows=city.peak_windows,
+            parked_age=city.parked_age,
+        ),
+    )
 
 
 def default_saved(*, city: City) -> Saved:

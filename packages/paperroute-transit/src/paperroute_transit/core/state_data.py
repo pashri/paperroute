@@ -17,6 +17,7 @@ from paperroute_transit.core.messages import (
     StripFailed,
     StripLoaded,
 )
+from paperroute_transit.core.positions import PARKED, without_parked
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import settled
 from paperroute_transit.core.strip_state import strip_failed, strip_loaded
@@ -59,9 +60,13 @@ def on_map_event(
         case PositionsFetched(feed=feed, snapshot=snapshot):
             draw = not answered_late(state=state, feed=feed)
             state = answered(state=state, feed=feed)
+            kept = without_parked(
+                snapshot=snapshot,
+                limit=PARKED[state.settings.board.parked_age],
+            )
             map_state = replace(
                 map_state,
-                positions={**map_state.positions, feed: snapshot},
+                positions={**map_state.positions, feed: kept},
             )
         case MapDataFailed():
             map_state = failed(map_state=map_state, event=event, now=state.now)

@@ -1,9 +1,11 @@
 """Tests for what the device keeps between restarts."""
 
+from dataclasses import replace
 from datetime import time
 
 from paperroute_device.core.device_settings import DeviceSettings, Window
 from paperroute_sydney.city import SYDNEY, TOWN_HALL
+from paperroute_transit.core.positions import ParkedAge
 from paperroute_transit.core.saved import (
     BoardSettings,
     ConnectionMap,
@@ -27,6 +29,7 @@ def test_board_settings_defaults() -> None:
     assert settings.skip_school_buses is True
     assert settings.skip_school_on_route_pins is False
     assert settings.school_off_route_pins is False
+    assert settings.parked_age is ParkedAge.OFF
 
 
 def test_settings_defaults_to_both_parts() -> None:
@@ -55,3 +58,10 @@ def test_seeded_takes_city_settings() -> None:
     assert saved.pins == (SYDNEY.default_pin,)
     assert saved.unpinned is None
     assert saved.settings == default_settings(city=SYDNEY)
+
+
+def test_default_settings_take_the_citys_parked_age() -> None:
+    """Default settings take the citys parked age."""
+    assert default_settings(city=SYDNEY).board.parked_age is ParkedAge.OFF
+    ten = replace(SYDNEY, parked_age=ParkedAge.TEN)
+    assert default_settings(city=ten).board.parked_age is ParkedAge.TEN

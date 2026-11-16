@@ -56,6 +56,21 @@ from tests.golden.scenes import GOLDEN
 
 GOLDEN_STATE: Final[Path] = GOLDEN / 'state.json'
 
+
+def golden_before_parked_age() -> dict[str, Any]:
+    """
+    Read the golden state without the key a migration does not add.
+
+    Returns
+    -------
+    dict[str, Any]
+        The golden file less the board's `parked_age` setting.
+    """
+    golden: dict[str, Any] = json.loads(GOLDEN_STATE.read_text())
+    del golden['board']['settings']['parked_age']
+    return golden
+
+
 WINDOW: Final[dict[str, object]] = {
     'days': ['mon', 'tue'], 'start': '07:00', 'end': '08:30',
 }
@@ -665,7 +680,7 @@ def test_v11_golden_migrates_to_the_golden() -> None:
     data = migrated(
         data=json.loads(STATE_V11.read_text()), city=SYDNEY,
     )
-    assert data == json.loads(GOLDEN_STATE.read_text())
+    assert data == golden_before_parked_age()
     board = data['board']
     assert isinstance(board, dict)
     assert [pin['kind'] for pin in board['pins']] == [
@@ -740,7 +755,7 @@ def test_v12_golden_becomes_v13_keeping_every_value() -> None:
     device['quiet_mode'] = 'app'
     data = migrated(data=v12, city=SYDNEY)
     assert data == expected
-    assert data == json.loads(GOLDEN_STATE.read_text())
+    assert data == golden_before_parked_age()
     board: Any = data['board']
     assert board['settings']['auto_rebuild'] is False
 

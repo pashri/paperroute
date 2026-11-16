@@ -22,6 +22,7 @@ from paperroute_transit.adapters.state_settings import (
     default_device_settings,
     default_settings,
 )
+from paperroute_transit.core.positions import ParkedAge
 from paperroute_transit.core.saved import (
     DEVICE_FIELDS,
     BoardSettings,
@@ -31,7 +32,7 @@ from paperroute_transit.core.saved import (
 
 
 def test_settings_model_keys_unchanged() -> None:
-    """The settings older files kept stay today's fifteen flat keys."""
+    """The settings older files kept stay today's sixteen flat keys."""
     assert set(default_settings(city=SYDNEY)) == {
         'auto_rebuild',
         'peak_rate',
@@ -43,6 +44,7 @@ def test_settings_model_keys_unchanged() -> None:
         'larger_text',
         'inverted_lists',
         'alert_lookahead',
+        'parked_age',
         'connection_map',
         'skip_school_buses',
         'skip_school_on_route_pins',
@@ -149,3 +151,18 @@ def test_settings_round_trip_swap_knobs() -> None:
 def test_v11_device_fields_snapshot() -> None:
     """The frozen v11 field names are today's device fields and the switch."""
     assert V11_DEVICE_FIELDS == DEVICE_FIELDS | {'auto_rebuild'}
+
+
+def test_settings_without_parked_age_load_as_off() -> None:
+    """Settings without parked age load as off."""
+    stored = board_settings_to_model(settings=BoardSettings()).model_dump()
+    del stored['parked_age']
+    model = BoardSettingsModel.model_validate(stored)
+    assert board_settings_from_model(model=model).parked_age is ParkedAge.OFF
+
+
+def test_settings_round_trip_parked_age() -> None:
+    """Settings round trip parked age."""
+    settings = BoardSettings(parked_age=ParkedAge.THIRTY)
+    model = board_settings_to_model(settings=settings)
+    assert board_settings_from_model(model=model) == settings

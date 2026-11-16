@@ -2,12 +2,32 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from enum import StrEnum
 from typing import Final
 
 from paperroute_transit.core.geo import Point
 
 LABEL_LENGTH: Final[int] = 4
+
+
+class ParkedAge(StrEnum):
+    """How long since a vehicle was heard before it is hidden."""
+
+    OFF = 'off'
+    FIVE = '5min'
+    TEN = '10min'
+    THIRTY = '30min'
+    HOUR = '60min'
+
+
+PARKED: Final[dict[ParkedAge, timedelta | None]] = {
+    ParkedAge.OFF: None,
+    ParkedAge.FIVE: timedelta(minutes=5),
+    ParkedAge.TEN: timedelta(minutes=10),
+    ParkedAge.THIRTY: timedelta(minutes=30),
+    ParkedAge.HOUR: timedelta(hours=1),
+}
 
 
 @dataclass(frozen=True)
@@ -75,5 +95,38 @@ def with_labels(
             if vehicle.trip_id in labels
             else vehicle
             for vehicle in snapshot.vehicles
+        ),
+    )
+
+
+def without_parked(
+    *, snapshot: PositionsSnapshot, limit: timedelta | None
+) -> PositionsSnapshot:
+    """
+    Leave out vehicles last heard longer ago than a limit.
+
+    Parameters
+    ----------
+    snapshot : PositionsSnapshot
+        Snapshot to filter.
+    limit : timedelta | None
+        The longest age kept, measured from the feed's header time; None
+        keeps every vehicle. A timestamp of 0 counts as just heard.
+
+    Returns
+    -------
+    PositionsSnapshot
+        The snapshot itself when there is no limit, else a new one.
+    """
+    if limit is None:
+        return snapshot
+    seconds = limit.total_seconds()
+    return replace(
+        snapshot,
+        vehicles=tuple(
+            vehicle
+            for vehicle in snapshot.vehicles
+            if not vehicle.timestamp
+            or snapshot.header_time - vehicle.timestamp <= seconds
         ),
     )

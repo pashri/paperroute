@@ -21,7 +21,7 @@ def test_card_describes_cambridge(tmp_path: Path) -> None:
     )
     assert card.name == 'Cambridge'
     assert card.status == f'Buses and coaches{DOT}no timetable yet'
-    assert 'for up to 40 minutes' in card.wait
+    assert 'for up to 10 minutes' in card.wait
 
 
 def test_keys_are_the_one_bus_data_key(

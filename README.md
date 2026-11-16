@@ -138,7 +138,7 @@ the Pi. In Raspberry Pi Imager choose:
 - Device: Raspberry Pi Zero 2 W
 - OS: Raspberry Pi OS (other), then Raspberry Pi OS Lite (64-bit), Trixie
 - Hostname `paperroute`, your username and a password
-- Wi-Fi (2.4 GHz) with country AU
+- Wi-Fi (2.4 GHz) with the country the device is in (GB, AU)
 - Time zone UTC
 - SSH with your public key
 
@@ -186,6 +186,13 @@ until it is chosen under "App" on the Device page. `sudo paperroute-switch-app
 <app>` does the same from a shell. Each app's files are under
 `/var/lib/paperroute/apps/<app>/`, for example `/var/lib/paperroute/apps/sydney/`.
 
+`scripts/provision <user>@paperroute.local cambridge` and
+`scripts/deploy <user>@paperroute.local cambridge` install Cambridge beside
+Sydney. It waits until it is chosen under "App" on the Device page. Its data
+is in `/var/lib/paperroute/apps/cambridge/`. Type the bus data key under "Bus
+data API key" on the Device page while Cambridge is showing. Its timetable
+builds at 06:30 UK time.
+
 Reset settings and Erase everything act on the app that is showing. Other
 installed apps keep their settings and data; Wi-Fi is forgotten for the whole
 device.
@@ -228,6 +235,10 @@ switched back to; fix forward and redeploy.
 
 After any rollback across this upgrade, restore the state.json backup: an
 older release sets a newer file aside and starts with defaults.
+
+For a card imaged for another country, set the Wi-Fi country on the Pi:
+
+    ssh -t <user>@paperroute.local sudo raspi-config nonint do_wifi_country GB
 
 A provision that changes an app timer's calendar drops that timer's zone
 drop-in; the next deploy writes it again.

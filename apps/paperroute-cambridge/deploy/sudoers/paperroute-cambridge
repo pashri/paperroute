@@ -1,0 +1,2 @@
+# Lets the deploy user install the map tiles without a password.
+pashri ALL=(root) NOPASSWD: /usr/local/sbin/paperroute-cambridge-install-tiles ""

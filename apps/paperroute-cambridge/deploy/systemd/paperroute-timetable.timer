@@ -1,0 +1,8 @@
+[Timer]
+# UTC here; install-release adds the city's zone in a drop-in
+OnCalendar=*-*-* 06:30:00
+Persistent=true
+RandomizedDelaySec=0
+
+[Install]
+WantedBy=timers.target

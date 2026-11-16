@@ -2,32 +2,29 @@
 # Installed as /usr/local/sbin/paperroute-install-release (root).
 # Usage: paperroute-install-release SHA APP
 # Builds the staged release of the app as its owner, takes it over as
-# root, switches current to it, and rolls back if the app doesn't come up.
-# Once it is healthy, moves the app's timers to the app's zone.
+# root and switches the app's current to it. For the active app it then
+# restarts the board, rolls back if the board doesn't come up, and once
+# it is healthy moves the app's timers to the app's zone; any other app
+# is left installed and stopped.
 set -euo pipefail
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export LC_ALL=C
 umask 022
 
 STAGE=/var/cache/paperroute-stage
-R=/opt/paperroute/releases
 OPT=/opt/paperroute
-CURRENT=$OPT/current
 LOCK=/run/paperroute-install.lock
 KEEP=3
 HEALTH_WAIT=90
 SHA_RE='^[0-9a-f]{7,12}$'
 APP_RE='^[a-z][a-z0-9]*$'
 ZONE_RE='^[A-Za-z]+(/[A-Za-z0-9_+-]+)*$'
-TIMER_RE='^paperroute-[a-z0-9-]+\.timer$'
-NAMED_ZONE_RE='^([A-Za-z_]+/[A-Za-z0-9_+/-]+|UTC)$'
 SHARE=/usr/local/share/paperroute
-ETC=/etc/systemd/system
 INCOMING=
 CONTRACT=
-TIMERS=
 ZONE=
 prev=
+reason=
 
 fail() {
     printf 'install-release: %s\n' "$1" >&2
@@ -40,15 +37,31 @@ cleanup() {
     fi
 }
 
-# Refuses an app other than the one provision recorded as installed; with
-# no record yet, any app passes.
-installed_app_ok() {
-    local name=
-    [[ -f $SHARE/installed-app ]] || return 0
-    IFS= read -r name <"$SHARE/installed-app" || true
-    [[ $name != "$APP_NAME" ]] || return 0
-    fail "the device runs $name, not $APP_NAME. Run scripts/provision HOST\
+# Refuses an app provision has not added to the device.
+app_provisioned() {
+    local app=$SHARE/apps/$APP_NAME
+    [[ -d $app && -f $app/timers ]] && return 0
+    fail "the device has no app $APP_NAME. Run scripts/provision HOST\
  $APP_NAME first."
+}
+
+# Succeeds when the app's timer list names a timer.
+has_timers() {
+    [[ -s $SHARE/apps/$APP_NAME/timers ]]
+}
+
+# Prints the app the device's record names as active; nothing without one.
+active_app() {
+    local name=
+    if [[ -f $SHARE/active-app ]]; then
+        IFS= read -r name <"$SHARE/active-app" || true
+    fi
+    printf '%s\n' "$name"
+}
+
+# Succeeds when the device's record names the app as the active one.
+is_active() {
+    [[ $(active_app) == "$APP_NAME" ]]
 }
 
 # Checks the app and the staged tree; sets APP, TREE and OWNER.
@@ -56,7 +69,7 @@ validate() {
     local uid bad project
     [[ $APP_NAME =~ $APP_RE ]] \
         || fail 'the app must be lowercase letters and digits'
-    installed_app_ok
+    app_provisioned
     APP=paperroute-$APP_NAME
     TREE=$STAGE/$SHA
     if [[ ! -d $TREE || -L $TREE ]]; then
@@ -115,17 +128,6 @@ contract_ok() {
     exit 1
 }
 
-# Prints the timers in provision's manifest, each name checked.
-manifest_timers() {
-    local name
-    [[ -f $SHARE/app-timers ]] \
-        || fail "$SHARE/app-timers is missing; run scripts/provision"
-    while IFS= read -r name || [[ -n $name ]]; do
-        [[ $name =~ $TIMER_RE ]] || fail 'the timer manifest names a bad timer'
-        printf '%s\n' "$name"
-    done <"$SHARE/app-timers"
-}
-
 # Runs the project's build backend, so never as root. The venv is
 # relocatable, so its scripts still run once the tree has moved. Sets ZONE
 # when the app has timers.
@@ -138,7 +140,7 @@ build() {
         UV_LINK_MODE=copy \
         uv sync --frozen --package "$APP" --no-default-groups \
         --no-editable --compile-bytecode --project "$TREE" 9>&-
-    [[ -n $TIMERS ]] || return 0
+    has_timers || return 0
     ZONE=$(runuser -u "$OWNER" -- \
         "$TREE/.venv/bin/paperroute-board" zone 9>&-) || ZONE=
     if [[ ! $ZONE =~ $ZONE_RE || ! -f "/usr/share/zoneinfo/$ZONE" ]]; then
@@ -146,43 +148,6 @@ build() {
             'the release names no installed time zone' >&2
         exit 1
     fi
-}
-
-# Prints the OnCalendar= values of an installed timer's [Timer] section,
-# one per line; an empty assignment clears the ones before it.
-calendar_of() {
-    local line section= values= header='^\[(.*)\]$'
-    local calendar='^OnCalendar=(.*)$'
-    while IFS= read -r line || [[ -n $line ]]; do
-        if [[ $line =~ $header ]]; then
-            section=${BASH_REMATCH[1]}
-        elif [[ $section == Timer && $line =~ $calendar ]]; then
-            line=${BASH_REMATCH[1]}
-            line=${line%"${line##*[![:space:]]}"}
-            if [[ -z $line ]]; then
-                values=
-            else
-                values+=$line$'\n'
-            fi
-        fi
-    done <"$1" || return
-    printf '%s' "$values"
-}
-
-# Refuses a manifest timer whose own calendar already names a zone.
-check_calendars() {
-    local timer values value
-    for timer in $TIMERS; do
-        values=$(calendar_of "$ETC/$timer") \
-            || fail "cannot read $timer; run scripts/provision"
-        while IFS= read -r value; do
-            [[ -n $value && ${value##* } =~ $NAMED_ZONE_RE ]] || continue
-            printf 'install-release: %s %s %s\n' "$timer" \
-                'already names a time zone;' \
-                "the app's timer must leave it to the device." >&2
-            exit 1
-        done <<<"$values"
-    done
 }
 
 # Prints the first link under the tree that resolves outside it and the
@@ -293,44 +258,6 @@ roll_back() {
     exit 1
 }
 
-# Usage: set_timer_zone TIMER ZONE
-# Restates the installed timer's own calendar in the zone, in a drop-in;
-# reloads when it changed or when systemd says a reload is still due, so
-# a failed reload is retried. Returns non-zero at the first failed step
-# (set -e is off under `if`).
-set_timer_zone() {
-    local timer=$1 zone=$2 conf values value tmp
-    conf=$ETC/$timer.d/app-zone.conf
-    values=$(calendar_of "$ETC/$timer") || return
-    mkdir -p -- "${conf%/*}" || return
-    tmp=$(mktemp "$conf.XXXXXX") || return
-    {
-        printf '[Timer]\nOnCalendar=\n'
-        while IFS= read -r value; do
-            [[ -z $value ]] || printf 'OnCalendar=%s %s\n' "$value" "$zone"
-        done <<<"$values"
-    } >"$tmp" || return
-    chmod 644 "$tmp" || return
-    if ! cmp -s "$tmp" "$conf"; then
-        mv -f -- "$tmp" "$conf" || return
-    else
-        rm -f -- "$tmp"
-        if [[ $(systemctl show -p NeedDaemonReload --value "$timer") == no ]]
-        then
-            return 0
-        fi
-    fi
-    systemctl daemon-reload
-}
-
-# Gives every manifest timer the zone; stops at the first failure.
-set_timer_zones() {
-    local timer
-    for timer in $TIMERS; do
-        set_timer_zone "$timer" "$ZONE" || return
-    done
-}
-
 # Keeps current, prev and the newest releases, up to KEEP in all.
 prune() {
     local kept=" $SHA " count=1 name prev_name=${prev##*/}
@@ -359,9 +286,12 @@ SHA=$1
 APP_NAME=$2
 if [[ $EUID -ne 0 ]]; then
     STAGE=${PAPERROUTE_STAGE:-$STAGE}
-    R=${PAPERROUTE_RELEASES:-$R}
+    OPT=${PAPERROUTE_OPT:-$OPT}
+    SHARE=${PAPERROUTE_SHARE:-$SHARE}
 fi
 validate
+R=$OPT/apps/$APP_NAME/releases
+CURRENT=$OPT/apps/$APP_NAME/current
 exec 9>"$LOCK"
 if ! flock -n 9; then
     printf 'install-release: another install is running\n' >&2
@@ -370,9 +300,8 @@ fi
 trap cleanup EXIT
 
 contract_ok
-TIMERS=$(manifest_timers) || exit
 build
-check_calendars
+paperroute-set-timer-zones check "$APP_NAME"
 if [[ $(readlink -- "$CURRENT" || true) == "$R/$SHA" ]]; then
     remove_stage
 else
@@ -380,11 +309,19 @@ else
 fi
 prev=$(readlink -- "$CURRENT" || true)
 switch_to "$R/$SHA"
+if ! is_active; then
+    prune
+    printf 'install-release: %s is installed for %s; %s stays on the panel\n' \
+        "$SHA" "$APP_NAME" "$(active_app)"
+    exit 0
+fi
 
 if ! systemctl restart paperroute || ! healthy; then
     roll_back
 fi
-if ! reason=$(set_timer_zones 2>&1); then
+if has_timers \
+    && ! reason=$(paperroute-set-timer-zones apply "$APP_NAME" "$ZONE" 2>&1)
+then
     reason=${reason//$'\n'/; }
     printf 'install-release: %s is live, but the timer zone was not set: %s\n' \
         "$SHA" "${reason:-no reason given}" >&2

@@ -37,7 +37,9 @@ BIN_SCRIPTS: Final[tuple[str, ...]] = (
     'install-release',
     'paperroute-led',
     'provision-device',
+    'set-timer-zones',
 )
+SET_ZONES: Final[Path] = BIN / 'set-timer-zones'
 OFF_HOOK: Final[Path] = DEPLOY / 'system-shutdown' / 'paperroute-off-screen'
 SHELL_SCRIPTS: Final[tuple[Path, ...]] = (
     OFF_HOOK,
@@ -292,11 +294,11 @@ class UnitParser(configparser.ConfigParser):
 
 @dataclass(frozen=True)
 class Sandbox:
-    """Stage and releases directories that override the real ones."""
+    """Stage, opt and share directories that override the real ones."""
 
     root: Path
     stage: Path
-    releases: Path
+    opt: Path
     env: dict[str, str]
 
 
@@ -659,7 +661,8 @@ def last_section(text: str) -> list[str]:
 @pytest.fixture(name='sandbox')
 def fixture_sandbox(tmp_path: Path) -> Sandbox:
     """
-    Make empty stage and releases directories and an environment that
+    Make an empty stage, an opt holding Sydney's releases directory and a
+    share holding Sydney's empty timer list, and an environment that
     points the install scripts at them.
 
     Parameters
@@ -675,14 +678,18 @@ def fixture_sandbox(tmp_path: Path) -> Sandbox:
     if os.geteuid() == 0:
         pytest.fail('run the install script tests as a normal user')
     stage = tmp_path / 'stage'
-    releases = tmp_path / 'releases'
+    opt = tmp_path / 'opt'
+    share = tmp_path / 'share'
     stage.mkdir()
-    releases.mkdir()
+    (opt / 'apps' / APP_NAME / 'releases').mkdir(parents=True)
+    (share / 'apps' / APP_NAME).mkdir(parents=True)
+    (share / 'apps' / APP_NAME / 'timers').write_text('', encoding='utf-8')
     env = user_env(
         PAPERROUTE_STAGE=str(stage),
-        PAPERROUTE_RELEASES=str(releases),
+        PAPERROUTE_OPT=str(opt),
+        PAPERROUTE_SHARE=str(share),
     )
-    return Sandbox(root=tmp_path, stage=stage, releases=releases, env=env)
+    return Sandbox(root=tmp_path, stage=stage, opt=opt, env=env)
 
 
 def stage_tree(stage: Path) -> Path:
@@ -738,7 +745,10 @@ def test_kit_deploy_names_no_app() -> None:
     """The kit's units and root scripts name no timetable, city or agency."""
     paths = [
         *sorted(SYSTEMD.iterdir()),
-        *(BIN / name for name in ('install-files', 'install-release')),
+        *(
+            BIN / name
+            for name in ('install-files', 'install-release', 'set-timer-zones')
+        ),
         BIN / 'paperroute-led',
         ROOT / 'scripts' / 'provision',
     ]
@@ -747,7 +757,7 @@ def test_kit_deploy_names_no_app() -> None:
         for path in paths
         if APP_WORDS.search(script_text(path=path))
     ]
-    assert len(paths) == 7
+    assert len(paths) == 8
     assert not named
 
 
@@ -1279,7 +1289,7 @@ def test_install_release_checks_the_zone(
     tree = zone_stage(root=tmp_path, output=output)
     program = (
         f'OWNER=me TREE={tree} OPT=/opt APP=paperroute-{APP_NAME}\n'
-        'TIMERS=paperroute-timetable.timer\n'
+        'has_timers() { :; }\n'
         f'{ZONE_RE}\n'
         f'CURRENT={tmp_path / "current"} R={tmp_path / "releases"}\n'
         'runuser() { shift 3; "$@"; }\n'
@@ -1337,11 +1347,16 @@ ZONE_FUNCTIONS: Final[tuple[str, ...]] = (
     'set_timer_zone',
     'set_timer_zones',
 )
+APPLY_ZONE: Final[str] = (
+    '\nif has_timers \\\n'
+    '    && ! reason=$(paperroute-set-timer-zones apply "$APP_NAME" "$ZONE"'
+    ' 2>&1)\nthen\n'
+)
 
 
 def test_install_release_skips_unchanged_zone(tmp_path: Path) -> None:
     """With no reload due, set_timer_zone reloads only on a change."""
-    body = script_function(path=BIN / 'install-release', name='set_timer_zone')
+    body = script_function(path=SET_ZONES, name='set_timer_zone')
     assert body.index('cmp -s') < body.index('systemctl daemon-reload')
     timer = 'paperroute-timetable.timer'
     etc = timer_etc(root=tmp_path, timers={timer: '*-*-* 03:30:00'})
@@ -1361,6 +1376,7 @@ def test_install_release_skips_unchanged_zone(tmp_path: Path) -> None:
         names=ZONE_FUNCTIONS,
         program=program,
         env=user_env(),
+        script=SET_ZONES,
     )
     assert (result.returncode, result.stderr) == (0, '')
     assert conf.read_text(encoding='utf-8') == (
@@ -2034,22 +2050,20 @@ def test_install_release_records_the_app() -> None:
 def test_install_release_sets_timer_zone_after_health() -> None:
     """The timers' zone changes only once the new release is healthy."""
     text = script_text(path=BIN / 'install-release')
-    body = script_function(path=BIN / 'install-release', name='set_timer_zone')
-    call = text.index('\nif ! reason=$(set_timer_zones 2>&1); then\n')
-    assert text.count('set_timer_zones 2>&1') == 1
+    body = script_function(path=SET_ZONES, name='set_timer_zone')
+    call = text.index(APPLY_ZONE)
+    assert text.count('paperroute-set-timer-zones apply') == 1
     assert text.rindex('healthy') < call
     assert "printf '[Timer]\\nOnCalendar=\\n'" in body
     assert 'systemctl daemon-reload' in body
     assert 'restart paperroute-' not in text
-    assert script_value(path=BIN / 'install-release', name='ETC') == (
-        '/etc/systemd/system'
-    )
+    assert script_value(path=SET_ZONES, name='ETC') == '/etc/systemd/system'
 
 
 def test_install_release_reports_unset_timer_zone() -> None:
     """A failed zone write says the release is live, why, and exits 1."""
     text = script_text(path=BIN / 'install-release')
-    call = text.index('\nif ! reason=$(set_timer_zones 2>&1); then\n')
+    call = text.index(APPLY_ZONE)
     said = text.index(
         "'install-release: %s is live, but the timer zone was not set: %s\\n'",
     )
@@ -2075,6 +2089,7 @@ def test_set_timer_zone_fails_at_first_step(tmp_path: Path) -> None:
         names=ZONE_FUNCTIONS,
         program=program,
         env=user_env(),
+        script=SET_ZONES,
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.startswith('failed: mkdir')
@@ -2083,7 +2098,7 @@ def test_set_timer_zone_fails_at_first_step(tmp_path: Path) -> None:
 
 def test_set_timer_zone_retries_failed_reload(tmp_path: Path) -> None:
     """A failed reload keeps the drop-in; systemd's flag retries it."""
-    body = script_function(path=BIN / 'install-release', name='set_timer_zone')
+    body = script_function(path=SET_ZONES, name='set_timer_zone')
     assert (
         'systemctl show -p NeedDaemonReload --value "$timer") == no ]]'
     ) in body
@@ -2117,6 +2132,7 @@ def test_set_timer_zone_retries_failed_reload(tmp_path: Path) -> None:
         names=ZONE_FUNCTIONS,
         program=program,
         env=user_env(),
+        script=SET_ZONES,
     )
     assert (result.returncode, result.stderr) == (0, '')
     assert result.stdout == 'failed: Failed to reload daemon\n'
@@ -2155,7 +2171,13 @@ def test_install_release_starts_without_timetable() -> None:
     assert lines[last] == (
         'if ! systemctl restart paperroute || ! healthy; then'
     )
-    assert 'exit 0' not in lines[:last]
+    early = [
+        index
+        for index, line in enumerate(lines[:last])
+        if 'exit 0' in line
+    ]
+    assert [lines[index] for index in early] == ['    exit 0']
+    assert lines.index('if ! is_active; then') < early[0]
 
 
 TILES_SCRIPT: Final[Path] = SYDNEY_BIN / 'install-tiles'
@@ -2671,10 +2693,10 @@ def test_install_tiles_stamps_portably() -> None:
 
 
 def test_provision_installs_only_the_kit_tools() -> None:
-    """provision installs the kit's two tools; the tiles are Sydney's."""
+    """provision installs the kit's three tools; the tiles are Sydney's."""
     script = BIN / 'provision-device'
     assert script_value(path=script, name='KIT_TOOLS') == (
-        "'install-release install-files'"
+        "'install-release install-files set-timer-zones'"
     )
     assert 'tiles' not in script_text(path=script)
     assert commands(path=script, word='install -m 0755') == [
@@ -3923,6 +3945,7 @@ def provision_tools(
     kit_bin = share / 'deploy' / 'bin'
     kit_bin.mkdir()
     (kit_bin / 'install-release').write_text('new release\n', encoding='utf-8')
+    (kit_bin / 'set-timer-zones').write_text('new zones\n', encoding='utf-8')
     (kit_bin / 'install-files').write_text(
         install_files_stub(root=root),
         encoding='utf-8',
@@ -4014,6 +4037,7 @@ def test_an_allowed_app_part_installs_tools_then_sudoers(
     assert tree_files(root=tmp_path / 'sbin') == {
         'paperroute-install-release': 'new release\n',
         'paperroute-install-files': install_files_stub(root=tmp_path),
+        'paperroute-set-timer-zones': 'new zones\n',
         'paperroute-demo-install-tiles': 'new tiles\n',
     }
     assert sudoers_rules(
@@ -5154,33 +5178,37 @@ def release_functions(
     names: tuple[str, ...],
     program: str,
     env: dict[str, str] | None = None,
+    script: Path = BIN / 'install-release',
 ) -> subprocess.CompletedProcess[str]:
     """
-    Run install-release's named functions, with ``fail`` and its regexes.
+    Run a release script's named functions, with ``fail`` and the regexes.
 
     Parameters
     ----------
     names : tuple[str, ...]
-        The functions to take from install-release.
+        The functions to take from the script.
     program : str
         Variables, stubs and calls, run after the definitions.
     env : dict[str, str] | None
         The environment, this process's without ``SUDO_USER`` unless given.
+    script : Path
+        The script, install-release unless given; the regexes always come
+        from set-timer-zones.
 
     Returns
     -------
     subprocess.CompletedProcess[str]
         The exit status and output.
     """
-    script = BIN / 'install-release'
     regexes = ''.join(
-        f'{name}={script_value(path=script, name=name)}\n'
+        f'{name}={script_value(path=SET_ZONES, name=name)}\n'
         for name in RELEASE_REGEXES
     )
     return run_functions(
         names=('fail', *names),
         program=f'{regexes}{program}',
         env=user_env() if env is None else env,
+        script=script,
     )
 
 
@@ -5198,16 +5226,21 @@ def test_install_release_validates_manifest_names(
     tmp_path: Path,
     line: str,
 ) -> None:
-    """install-release refuses a manifest line that is not a timer name."""
-    manifest = tmp_path / 'app-timers'
+    """The zone tool refuses a manifest line that is not a timer name."""
+    manifest = tmp_path / 'apps' / 'demo' / 'timers'
+    manifest.parent.mkdir(parents=True)
     manifest.write_text(f'paperroute-job.timer\n{line}\n', encoding='utf-8')
     result = release_functions(
         names=('manifest_timers',),
-        program=f'SHARE={tmp_path}\nTIMERS=$(manifest_timers) || exit\n',
+        program=(
+            f'SHARE={tmp_path} APP_NAME=demo\n'
+            'TIMERS=$(manifest_timers) || exit\n'
+        ),
+        script=SET_ZONES,
     )
     assert (result.returncode, result.stderr) == (
         2,
-        'install-release: the timer manifest names a bad timer\n',
+        'set-timer-zones: the timer manifest names a bad timer\n',
     )
 
 
@@ -5252,6 +5285,8 @@ def test_install_release_refuses_other_contract(
 ) -> None:
     """A release built for other units is refused and its stage removed."""
     tree = contract_tree(root=tmp_path, contract=release)
+    (tmp_path / 'apps' / APP_NAME).mkdir(parents=True)
+    (tmp_path / 'apps' / APP_NAME / 'timers').write_text('', encoding='utf-8')
     if device is not None:
         (tmp_path / 'units-contract').write_text(device, encoding='utf-8')
     result = release_functions(
@@ -5270,47 +5305,167 @@ def test_install_release_refuses_other_contract(
     lines = script_text(path=BIN / 'install-release').splitlines()
     steps = [
         lines.index(step)
-        for step in ('validate', 'contract_ok', 'build', 'check_calendars')
+        for step in (
+            'validate',
+            'contract_ok',
+            'build',
+            'paperroute-set-timer-zones check "$APP_NAME"',
+        )
     ]
     assert steps == sorted(steps)
     assert steps[-1] < lines.index('    take_over')
 
 
-@pytest.mark.parametrize(
-    ('installed', 'status', 'stderr'),
-    (
-        (
-            'sydney\n',
-            2,
-            'install-release: the device runs sydney, not clock. Run'
-            ' scripts/provision HOST clock first.\n',
-        ),
-        ('clock\n', 0, ''),
-        (None, 0, ''),
-    ),
-    ids=('another', 'same', 'unrecorded'),
-)
-def test_install_release_refuses_another_app(
-    *,
-    tmp_path: Path,
-    installed: str | None,
-    status: int,
-    stderr: str,
-) -> None:
-    """A release of an app provision did not install is refused first."""
-    if installed is not None:
-        (tmp_path / 'installed-app').write_text(installed, encoding='utf-8')
-    result = release_functions(
-        names=('installed_app_ok',),
-        program=f'SHARE={tmp_path} APP_NAME=clock\ninstalled_app_ok\n',
+def test_install_release_needs_the_app_provisioned(sandbox: Sandbox) -> None:
+    """A release of an app provision did not add is refused first."""
+    stage_tree(stage=sandbox.stage)
+    share = sandbox.root / 'share' / 'apps'
+    shutil.rmtree(share / APP_NAME)
+    (share / 'first').mkdir()
+    (share / 'first' / 'timers').write_text('', encoding='utf-8')
+    before = snapshot(root=sandbox.root)
+    result = run_script(
+        name='install-release',
+        args=(SHA, APP_NAME),
+        env=sandbox.env,
     )
-    assert (result.returncode, result.stderr) == (status, stderr)
-    body = script_function(path=BIN / 'install-release', name='validate')
-    calls = body.splitlines()
-    assert '    installed_app_ok' in calls
-    assert calls.index('    installed_app_ok') < calls.index(
+    assert (result.returncode, result.stderr) == (
+        2,
+        'install-release: the device has no app sydney. Run scripts/provision'
+        ' HOST sydney first.\n',
+    )
+    assert snapshot(root=sandbox.root) == before
+    calls = script_function(
+        path=BIN / 'install-release',
+        name='validate',
+    ).splitlines()
+    assert calls.index('    app_provisioned') < calls.index(
         '    APP=paperroute-$APP_NAME',
     )
+
+
+# BSD find has no -printf; glob order stands in for age, later is newer.
+FIND_STUB: Final[str] = (
+    'find() { local i=0 path; for path in "$1"/*; do i=$((i + 1));'
+    ' printf \'%s %s\\n\' "$i" "${path##*/}"; done; }'
+)
+
+
+RELEASE_TAIL_FUNCTIONS: Final[tuple[str, ...]] = (
+    'fail',
+    'has_timers',
+    'active_app',
+    'is_active',
+    'switch_to',
+    'prune',
+)
+
+
+def run_release_tail(
+    *,
+    sandbox: Sandbox,
+    active: str,
+) -> subprocess.CompletedProcess[str]:
+    """
+    Run install-release from ``build`` on, with the build, the take-over,
+    the health check and the zone tool stubbed.
+
+    Parameters
+    ----------
+    sandbox : Sandbox
+        The directories; ``systemctl.log`` goes in its root.
+    active : str
+        The app the device's record names as active.
+
+    Returns
+    -------
+    subprocess.CompletedProcess[str]
+        The exit status and output.
+    """
+    script = BIN / 'install-release'
+    text = script_text(path=script)
+    tail = text[text.index('\nbuild\n'):]
+    releases = sandbox.opt / 'apps' / APP_NAME / 'releases'
+    log = sandbox.root / 'systemctl.log'
+    (sandbox.root / 'share' / 'active-app').write_text(
+        f'{active}\n',
+        encoding='utf-8',
+    )
+    definitions = '\n'.join(
+        script_function(path=script, name=name)
+        for name in RELEASE_TAIL_FUNCTIONS
+    )
+    program = (
+        f'set -euo pipefail\n{definitions}\n'
+        f'SHA={SHA} APP_NAME={APP_NAME} SHARE={sandbox.root / "share"}\n'
+        f'R={releases} CURRENT={releases.parent / "current"} prev= reason=\n'
+        f'KEEP=3 SHA_RE={script_value(path=script, name="SHA_RE")}\n'
+        'build() { :; }\ntake_over() { mkdir -- "$R/$SHA"; }\n'
+        'healthy() { :; }\npaperroute-set-timer-zones() { :; }\n'
+        f'systemctl() {{ printf "%s\\n" "$*" >>{log}; }}\n'
+        f'{MV_STUB}\n{FIND_STUB}\n{tail}'
+    )
+    return subprocess.run(
+        args=['bash', '-c', program],
+        env=user_env(),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+
+def test_release_for_another_app_restarts_nothing(sandbox: Sandbox) -> None:
+    """A release of an app not on the panel becomes its current, alone."""
+    (sandbox.opt / 'apps' / 'first' / 'releases').mkdir(parents=True)
+    result = run_release_tail(sandbox=sandbox, active='first')
+    releases = sandbox.opt / 'apps' / APP_NAME / 'releases'
+    assert (result.returncode, result.stderr) == (0, '')
+    assert os.readlink(releases.parent / 'current') == str(releases / SHA)
+    assert not (sandbox.root / 'systemctl.log').exists()
+    assert result.stdout == (
+        f'install-release: {SHA} is installed for sydney; first stays on the'
+        ' panel\n'
+    )
+    assert sorted(path.name for path in sandbox.opt.iterdir()) == ['apps']
+
+
+def test_release_for_the_active_app_keeps_to_its_directory(
+    sandbox: Sandbox,
+) -> None:
+    """The active app's release goes live under apps/APP and nowhere else."""
+    result = run_release_tail(sandbox=sandbox, active=APP_NAME)
+    releases = sandbox.opt / 'apps' / APP_NAME / 'releases'
+    assert (result.returncode, result.stderr) == (0, '')
+    assert result.stdout == f'install-release: {SHA} is live\n'
+    assert os.readlink(releases.parent / 'current') == str(releases / SHA)
+    assert (sandbox.root / 'systemctl.log').read_text(encoding='utf-8') == (
+        'restart paperroute\n'
+    )
+    assert sorted(path.name for path in sandbox.opt.iterdir()) == ['apps']
+    text = script_text(path=BIN / 'install-release')
+    for old in ('/opt/paperroute/releases', '$OPT/current', 'installed-app'):
+        assert old not in text
+
+
+def test_releases_are_pruned_per_app(tmp_path: Path) -> None:
+    """Pruning one app's releases leaves another app's alone."""
+    shas = ('abc1231', 'abc1232', 'abc1233', SHA)
+    for app in (APP_NAME, 'first'):
+        for sha in shas:
+            (tmp_path / 'apps' / app / 'releases' / sha).mkdir(parents=True)
+    script = BIN / 'install-release'
+    program = (
+        f'SHA={SHA} prev= KEEP=3 R={tmp_path}/apps/{APP_NAME}/releases\n'
+        f'SHA_RE={script_value(path=script, name="SHA_RE")}\n'
+        f'{FIND_STUB}\nprune\n'
+    )
+    result = run_functions(names=('prune',), program=program, env=user_env())
+    assert (result.returncode, result.stderr) == (0, '')
+    assert [
+        len(list((tmp_path / 'apps' / app / 'releases').iterdir()))
+        for app in (APP_NAME, 'first')
+    ] == [3, 4]
 
 
 def test_install_release_accepts_the_same_contract(tmp_path: Path) -> None:
@@ -5341,15 +5496,20 @@ def test_install_release_sets_zone_only_for_manifest_timers(
             'paperroute-other.timer': '*-*-* 04:00:00',
         },
     )
-    (tmp_path / 'app-timers').write_text(manifest, encoding='utf-8')
+    (tmp_path / 'apps' / 'demo').mkdir(parents=True)
+    (tmp_path / 'apps' / 'demo' / 'timers').write_text(
+        manifest,
+        encoding='utf-8',
+    )
     log = tmp_path / 'systemctl.log'
     result = release_functions(
         names=('manifest_timers', *ZONE_FUNCTIONS),
         program=(
-            f'SHARE={tmp_path} ETC={etc} ZONE=Australia/Sydney\n'
+            f'SHARE={tmp_path} ETC={etc} APP_NAME=demo ZONE=Australia/Sydney\n'
             f'systemctl() {{ printf "%s\\n" "$*" >>{log}; }}\n'
             'TIMERS=$(manifest_timers) || exit\nset_timer_zones\n'
         ),
+        script=SET_ZONES,
     )
     assert (result.returncode, result.stderr) == (0, '')
     zoned = sorted(str(path.relative_to(etc)) for path in etc.glob('*.d/*'))
@@ -5365,7 +5525,7 @@ def test_install_release_asks_no_zone_without_timers(tmp_path: Path) -> None:
     tree = zone_stage(root=tmp_path, output='not a zone')
     program = (
         f'OWNER=me TREE={tree} OPT=/opt APP=paperroute-{APP_NAME}\n'
-        f'TIMERS= ZONE=\n{ZONE_RE}\n'
+        f'has_timers() {{ return 1; }}\nZONE=\n{ZONE_RE}\n'
         'runuser() { shift 3; "$@"; }\n'
         'build\nprintf "[%s]\\n" "$ZONE"\n'
     )
@@ -5422,6 +5582,7 @@ def test_zone_drop_in_restates_the_timers_calendar(
             f'ETC={etc}\nsystemctl() {{ :; }}\n'
             'set_timer_zone paperroute-job.timer Australia/Sydney\n'
         ),
+        script=SET_ZONES,
     )
     assert (result.returncode, result.stderr) == (0, '')
     conf = etc / 'paperroute-job.timer.d' / 'app-zone.conf'
@@ -5446,18 +5607,91 @@ def test_zone_drop_in_refuses_a_timer_that_names_a_zone(
     status: int,
 ) -> None:
     """A timer naming its own zone stops the deploy before take-over."""
-    etc = timer_etc(root=tmp_path, timers={'paperroute-job.timer': calendar})
+    systemd = tmp_path / 'apps' / 'demo' / 'systemd'
+    systemd.mkdir(parents=True)
+    (systemd / 'paperroute-job.timer').write_text(
+        f'[Timer]\nOnCalendar={calendar}\n',
+        encoding='utf-8',
+    )
     result = release_functions(
         names=('calendar_of', 'check_calendars'),
-        program=f'ETC={etc} TIMERS=paperroute-job.timer\ncheck_calendars\n',
+        program=(
+            f'SHARE={tmp_path} APP_NAME=demo TIMERS=paperroute-job.timer\n'
+            'check_calendars\n'
+        ),
+        script=SET_ZONES,
     )
     assert result.returncode == status
     assert result.stderr == (
-        'install-release: paperroute-job.timer already names a time zone;'
+        'set-timer-zones: paperroute-job.timer already names a time zone;'
         " the app's timer must leave it to the device.\n"
         if status
         else ''
     )
+
+
+def test_zone_check_reads_the_apps_own_timers(tmp_path: Path) -> None:
+    """check reads the named app's timers, not another app's."""
+    for app, calendar in (
+        ('demo', '*-*-* 03:30:00 Europe/London'),
+        ('first', '*-*-* 03:30:00'),
+    ):
+        systemd = tmp_path / 'apps' / app / 'systemd'
+        systemd.mkdir(parents=True)
+        (systemd / f'paperroute-{app}.timer').write_text(
+            f'[Timer]\nOnCalendar={calendar}\n',
+            encoding='utf-8',
+        )
+        (systemd.parent / 'timers').write_text(
+            f'paperroute-{app}.timer\n',
+            encoding='utf-8',
+        )
+    results = [
+        run_script(
+            name='set-timer-zones',
+            args=('check', app),
+            env=user_env(PAPERROUTE_SHARE=str(tmp_path)),
+        )
+        for app in ('first', 'demo')
+    ]
+    assert [result.returncode for result in results] == [0, 1]
+    assert results[1].stderr == (
+        'set-timer-zones: paperroute-demo.timer already names a time zone;'
+        " the app's timer must leave it to the device.\n"
+    )
+
+
+@pytest.mark.parametrize(
+    'args',
+    (
+        (),
+        ('apply', 'demo'),
+        ('apply', 'Demo', 'UTC'),
+        ('apply', 'demo', 'No/Such_Zone'),
+        ('undo', 'demo'),
+    ),
+)
+def test_set_timer_zones_rejects_bad_arguments(
+    tmp_path: Path,
+    args: tuple[str, ...],
+) -> None:
+    """A missing, malformed or unknown argument exits 2."""
+    (tmp_path / 'apps' / 'demo').mkdir(parents=True)
+    (tmp_path / 'apps' / 'demo' / 'timers').write_text('', encoding='utf-8')
+    result = run_script(
+        name='set-timer-zones',
+        args=args,
+        env=user_env(PAPERROUTE_SHARE=str(tmp_path)),
+    )
+    assert result.returncode == 2
+    assert result.stderr.startswith('set-timer-zones: ')
+
+
+def test_install_release_leaves_zones_to_the_tool() -> None:
+    """install-release reads no calendar and writes no zone drop-in."""
+    text = script_text(path=BIN / 'install-release')
+    assert 'calendar_of' not in text
+    assert 'set_timer_zone()' not in text
 
 
 @pytest.mark.parametrize('contract', (None, '2\n'))

@@ -25,7 +25,7 @@ PIN_FILE=$PIN_DIR/m2a.env
 SUDOERS_NEW=/etc/sudoers.d/.paperroute-deploy.new
 SBIN=/usr/local/sbin
 LOCK=/run/paperroute-install.lock
-KIT_TOOLS='install-release install-files'
+KIT_TOOLS='install-release install-files set-timer-zones'
 TOOL_RE='^[a-z][a-z0-9-]*$'
 APP_RULE_RE='^ALL=\(root\) NOPASSWD: /usr/local/sbin/paperroute-([a-z][a-z0-9]*)-([a-z][a-z0-9-]*) ""$'
 APP_RE='^[a-z][a-z0-9]*$'
@@ -176,7 +176,7 @@ write_contract() {
     printf '%s\n' "$value" >"$SHARE/units-contract"
 }
 
-# Lists the app's timers, the only ones install-release gives a zone.
+# Lists the app's timers, the only ones set-timer-zones gives a zone.
 write_manifest() {
     local path name names= app=$SHARE/apps/$APP_NAME
     for path in "$app"/systemd/*.timer; do
@@ -587,7 +587,7 @@ case $APP_NAME in
     install | set | switch) fail 'that name is kept for the device' ;;
 esac
 [[ -d $DIR && ! -L $DIR ]] || fail 'DIR is not a directory'
-for need in bin/install-files bin/install-release \
+for need in bin/install-files bin/install-release bin/set-timer-zones \
     bin/paperroute-led sudoers/paperroute-deploy \
     polkit/50-paperroute-power.rules polkit/51-paperroute-network.rules; do
     [[ -f $DIR/kit/$need ]] || fail "DIR has no kit/$need"

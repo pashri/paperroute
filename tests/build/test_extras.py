@@ -1,5 +1,6 @@
 """Tests for building the run tables in a child process."""
 
+import dataclasses
 import shutil
 import sqlite3
 import subprocess
@@ -119,6 +120,49 @@ def test_run_extras_prints_each_phase(
     assert lines[-1].startswith('progress extras peak ')
     assert lines[-1].endswith('MB')
     assert RUN_TABLES <= tables_of(db=db)
+
+
+def free_pages_after_extras(*, db: Path, compact: bool) -> int:
+    """
+    Leave free pages in a timetable, run the extras and count them.
+
+    Parameters
+    ----------
+    db : Path
+        Timetable file.
+    compact : bool
+        Whether the city vacuums its finished timetable.
+
+    Returns
+    -------
+    int
+        Free pages left in the file.
+    """
+    with closing(sqlite3.connect(db)) as conn:
+        conn.execute('CREATE TABLE ballast (x BLOB)')
+        conn.executemany(
+            'INSERT INTO ballast VALUES (?)', [(bytes(4096),)] * 200,
+        )
+        conn.execute('DROP TABLE ballast')
+        conn.commit()
+    city = dataclasses.replace(
+        SYDNEY,
+        timetable=dataclasses.replace(SYDNEY.timetable, compact=compact),
+    )
+    extras.run_extras(path=db, city=city)
+    with closing(sqlite3.connect(db)) as conn:
+        return int(conn.execute('PRAGMA freelist_count').fetchone()[0])
+
+
+@pytest.mark.parametrize('compact', [False, True])
+def test_run_extras_vacuums_only_a_compact_city(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, compact: bool,
+) -> None:
+    """Only a city that asks for it gets a file with no free pages."""
+    monkeypatch.setattr(timetable, 'build_extras', skip_extras)
+    db = network_build(folder=tmp_path)
+    left = free_pages_after_extras(db=db, compact=compact)
+    assert (left == 0) is compact
 
 
 def test_extras_run_in_a_child(

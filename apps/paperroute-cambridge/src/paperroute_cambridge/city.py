@@ -250,7 +250,9 @@ CAMBRIDGE: Final[City] = City(
     modes=CAMBRIDGE_MODES,
     classify=classify_cambridge,
     catalogue=CAMBRIDGE_CATALOGUE,
-    timetable=TimetableRules(merge=merge_cambridge, holiday_source='bods'),
+    timetable=TimetableRules(
+        merge=merge_cambridge, holiday_source='bods', compact=True,
+    ),
     alerts=CAMBRIDGE_ALERTS,
     default_pin=Pin(origin=DRUMMER_STREET, kind=CambridgeMode.BUS),
     peak_windows=PEAK_WINDOWS,

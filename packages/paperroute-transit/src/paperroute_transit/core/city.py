@@ -141,10 +141,14 @@ class TimetableRules:
         Runs once every source is loaded.
     holiday_source : str
         Name of the source whose calendar gives the public holidays.
+    compact : bool
+        Whether the finished timetable file is vacuumed, so it holds no
+        free pages.
     """
 
     merge: MergeHook
     holiday_source: str
+    compact: bool = False
 
 
 @dataclass(frozen=True)

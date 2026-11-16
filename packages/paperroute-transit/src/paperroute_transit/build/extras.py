@@ -97,6 +97,8 @@ def run_extras(*, path: Path, city: City) -> None:
             ),
         )
         conn.commit()
+        if city.timetable.compact:
+            conn.execute('VACUUM')
     print(f'progress extras peak {peak_rss_mb():.0f}MB', flush=True)
 
 

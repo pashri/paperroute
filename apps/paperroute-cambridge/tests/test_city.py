@@ -132,3 +132,7 @@ def test_the_source_name_is_the_holiday_source_and_the_route_prefix() -> None:
     assert CAMBRIDGE.timetable.holiday_source == name
     assert CAMBRIDGE.alerts.route_prefixes == (f'{name}:',)
 
+
+def test_the_cambridge_timetable_is_compacted() -> None:
+    """Cambridge asks for a vacuumed timetable file."""
+    assert CAMBRIDGE.timetable.compact

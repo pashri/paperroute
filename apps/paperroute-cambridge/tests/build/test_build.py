@@ -138,3 +138,8 @@ def test_chooser_offers_bus_and_coach_with_no_line_mode(
     assert coach is not None
     assert {choice.badge for choice in coach.items} >= {'777', 'UK083'}
 
+
+
+def test_build_leaves_no_free_pages(built: sqlite3.Connection) -> None:
+    """The built timetable file is compact."""
+    assert built.execute('PRAGMA freelist_count').fetchone() == (0,)

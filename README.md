@@ -95,7 +95,7 @@ and rebuilds `data/cambridge/timetable.db`:
     uv run python -m paperroute_cambridge.build refresh --data-dir data/cambridge
 
 On the Mac, the build of the 2026-11-16 feed (version 20261116_042604) took
-21.8 s with a peak of 85 MB and made an 83 MB file with 56 routes and 5,735
+21.8 s with a peak of 86 MB and made a 26 MB file with 56 routes and 5,735
 trips, 370 of them coach trips.
 
 Download Geofabrik's `cambridgeshire`, `bedfordshire`, `hertfordshire`,

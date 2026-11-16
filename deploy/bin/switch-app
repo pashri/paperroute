@@ -1,0 +1,204 @@
+#!/bin/bash
+# Installed as /usr/local/sbin/paperroute-switch-app (root).
+# Usage: paperroute-switch-app APP | --apply APP
+# APP refuses a switch that cannot go ahead, or schedules --apply three
+# seconds later. --apply stops the active app, makes APP the active one
+# and starts the board; when APP does not start, the previous app goes
+# back on the panel.
+set -euo pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export LC_ALL=C
+umask 022
+
+SHARE=/usr/local/share/paperroute
+OPT=/opt/paperroute
+ETC=/etc/systemd/system
+LOCK=/run/paperroute-install.lock
+APP_RE='^[a-z][a-z0-9]*$'
+TIMER_RE='^paperroute-[a-z0-9-]+\.timer$'
+READY_RE='^paperroute-[a-z0-9-]+\.service$'
+USAGE='usage: switch-app APP | --apply APP'
+# Tests point these at temp directories; root always uses the real ones.
+if [[ $EUID -ne 0 ]]; then
+    SHARE=${PAPERROUTE_SHARE:-$SHARE}
+    OPT=${PAPERROUTE_OPT:-$OPT}
+    ETC=${PAPERROUTE_ETC:-$ETC}
+fi
+
+fail() {
+    printf 'switch-app: %s\n' "$1" >&2
+    exit 2
+}
+
+refuse() {
+    printf 'switch-app: %s\n' "$1" >&2
+    exit 1
+}
+
+# Prints the app named in $SHARE/active-app; fails when none is.
+active_app() {
+    local name=
+    if [[ -f $SHARE/active-app ]]; then
+        IFS= read -r name <"$SHARE/active-app" || true
+    fi
+    [[ $name =~ $APP_RE ]] || fail 'no active app; run scripts/provision'
+    printf '%s\n' "$name"
+}
+
+# Prints the service the app's ready file names; nothing without one.
+ready_unit() {
+    local file=$SHARE/apps/$1/ready name=
+    if [[ -f $file ]]; then
+        IFS= read -r name <"$file" || true
+    fi
+    if [[ $name =~ $READY_RE ]]; then
+        printf '%s\n' "$name"
+    fi
+}
+
+# Prints the timers in the app's timers file, one per line.
+app_timers() {
+    local file=$SHARE/apps/$1/timers name
+    [[ -f $file ]] || return 0
+    while IFS= read -r name || [[ -n $name ]]; do
+        if [[ $name =~ $TIMER_RE ]]; then
+            printf '%s\n' "$name"
+        fi
+    done <"$file"
+}
+
+# Succeeds while the app's ready unit is running.
+busy() {
+    local unit state
+    unit=$(ready_unit "$1")
+    [[ -n $unit ]] || return 1
+    state=$(systemctl is-active "$unit" || true)
+    [[ $state == active || $state == activating || $state == reloading ]]
+}
+
+# Succeeds while a switch is scheduled or being applied.
+scheduled() {
+    local unit
+    for unit in paperroute-switch-apply.{timer,service}; do
+        if systemctl is-active --quiet "$unit"; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Stops the app's timers and its ready unit, and removes the timers' zone
+# drop-ins.
+quiet() {
+    local timer unit
+    for timer in $(app_timers "$1"); do
+        systemctl stop "$timer" || true
+        rm -f -- "$ETC/$timer.d/app-zone.conf" || true
+    done
+    unit=$(ready_unit "$1")
+    if [[ -n $unit ]]; then
+        systemctl stop "$unit" || true
+    fi
+}
+
+# Records the app as the active one, installs its units and gives its
+# timers the app's zone. Returns 1 when the record or the units fail and
+# 2 when only the zone does.
+activate() {
+    local zone board=$OPT/apps/$1/current/.venv/bin/paperroute-board
+    printf '%s\n' "$1" >"$SHARE/active-app.new" || return 1
+    mv -f -- "$SHARE/active-app.new" "$SHARE/active-app" || return 1
+    paperroute-install-files || return 1
+    [[ -s $SHARE/apps/$1/timers ]] || return 0
+    zone=$(runuser -u paperroute -- "$board" zone 9>&-) || return 2
+    paperroute-set-timer-zones apply "$1" "$zone" || return 2
+}
+
+# Usage: go_back PREVIOUS
+# Puts the previous app back after APP failed, always starts the board
+# again, and exits 1.
+go_back() {
+    local clean=yes
+    systemctl stop paperroute || true
+    quiet "$APP"
+    activate "$1" || clean=no
+    systemctl start paperroute || clean=no
+    printf 'switch-app: %s did not start; back on %s\n' "$APP" "$1" >&2
+    if [[ $clean == no ]]; then
+        refuse "could not go back to $1 cleanly; run scripts/provision"
+    fi
+    exit 1
+}
+
+# Usage: apply_switch PREVIOUS
+# Stops the previous app, makes APP the active one, starts the board and
+# then APP's ready unit.
+apply_switch() {
+    local status=0 unit
+    systemctl stop paperroute
+    quiet "$1"
+    activate "$APP" || status=$?
+    if [[ $status -eq 1 ]] || ! systemctl start paperroute; then
+        go_back "$1"
+    fi
+    unit=$(ready_unit "$APP")
+    if [[ -n $unit ]]; then
+        systemctl start --no-block "$unit"
+    fi
+    if [[ $status -eq 2 ]]; then
+        refuse "$APP is showing, but the timer zone was not set"
+    fi
+    printf 'switch-app: %s is showing\n' "$APP"
+}
+
+# Refuses a switch to APP that cannot go ahead; otherwise schedules the
+# apply.
+check_switch() {
+    local active
+    active=$(active_app)
+    [[ $APP != "$active" ]] || refuse "$APP is already showing"
+    if [[ ! -x $OPT/apps/$APP/current/.venv/bin/paperroute-board ]]; then
+        refuse "$APP has no release; deploy it first"
+    fi
+    flock -n 9 9>"$LOCK" || refuse 'an install is running'
+    if busy "$active"; then
+        refuse "$active is still being made ready"
+    fi
+    if scheduled; then
+        refuse 'a switch is already under way'
+    fi
+    systemd-run --quiet --collect --on-active=3 \
+        --unit=paperroute-switch-apply \
+        /usr/local/sbin/paperroute-switch-app --apply "$APP"
+    printf 'switch-app: switching to %s\n' "$APP"
+}
+
+# Takes the install lock for the rest of the run, checks the active app
+# again and switches to APP.
+apply_locked() {
+    local active
+    exec 9>"$LOCK"
+    flock -w 30 9 || refuse 'an install is still running; not switched'
+    active=$(active_app)
+    if busy "$active"; then
+        refuse "$active is still being made ready"
+    fi
+    apply_switch "$active"
+}
+
+apply=no
+if [[ $# -eq 2 && $1 == --apply ]]; then
+    apply=yes
+    shift
+fi
+[[ $# -eq 1 ]] || fail "$USAGE"
+APP=$1
+[[ $APP =~ $APP_RE ]] || fail 'the app must be lowercase letters and digits'
+[[ -d $SHARE/apps/$APP && ! -L $SHARE/apps/$APP ]] \
+    || fail "no app $APP is installed"
+if [[ $apply == yes ]]; then
+    [[ $EUID -eq 0 ]] || fail 'applying needs root'
+    apply_locked
+else
+    check_switch
+fi

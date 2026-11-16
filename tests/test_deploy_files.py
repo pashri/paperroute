@@ -38,6 +38,7 @@ BIN_SCRIPTS: Final[tuple[str, ...]] = (
     'paperroute-led',
     'provision-device',
     'set-timer-zones',
+    'switch-app',
 )
 SET_ZONES: Final[Path] = BIN / 'set-timer-zones'
 OFF_HOOK: Final[Path] = DEPLOY / 'system-shutdown' / 'paperroute-off-screen'
@@ -242,6 +243,13 @@ KIT_UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
             'ExecStart': '/usr/local/bin/paperroute-led boot',
         },
         'Install': {'WantedBy': 'sysinit.target'},
+    },
+    'paperroute-switch@.service': {
+        'Unit': {'Description': 'paperroute app switch'},
+        'Service': {
+            'Type': 'oneshot',
+            'ExecStart': '/usr/local/sbin/paperroute-switch-app %i',
+        },
     },
 }
 SYDNEY_UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
@@ -747,7 +755,12 @@ def test_kit_deploy_names_no_app() -> None:
         *sorted(SYSTEMD.iterdir()),
         *(
             BIN / name
-            for name in ('install-files', 'install-release', 'set-timer-zones')
+            for name in (
+                'install-files',
+                'install-release',
+                'set-timer-zones',
+                'switch-app',
+            )
         ),
         BIN / 'paperroute-led',
         ROOT / 'scripts' / 'provision',
@@ -757,7 +770,7 @@ def test_kit_deploy_names_no_app() -> None:
         for path in paths
         if APP_WORDS.search(script_text(path=path))
     ]
-    assert len(paths) == 8
+    assert len(paths) == 10
     assert not named
 
 
@@ -1603,7 +1616,7 @@ def test_edit_config_appends_all_section(tmp_path: Path) -> None:
 
 
 def test_bin_holds_the_planned_scripts() -> None:
-    """deploy/bin holds the five scripts and nothing else."""
+    """deploy/bin holds the six scripts and nothing else."""
     assert sorted(path.name for path in BIN.iterdir()) == list(BIN_SCRIPTS)
 
 
@@ -1711,7 +1724,7 @@ def test_no_unit_reads_m2a_env() -> None:
         for path in sorted(folder.rglob('*'))
         if path.is_file()
     ]
-    assert len(units) == 6
+    assert len(units) == 7
     for unit in units:
         text = unit.read_text(encoding='utf-8')
         assert 'EnvironmentFile' not in text, unit.name
@@ -2693,11 +2706,17 @@ def test_install_tiles_stamps_portably() -> None:
 
 
 def test_provision_installs_only_the_kit_tools() -> None:
-    """provision installs the kit's three tools; the tiles are Sydney's."""
+    """provision installs the kit's four tools; the tiles are Sydney's."""
     script = BIN / 'provision-device'
     assert script_value(path=script, name='KIT_TOOLS') == (
-        "'install-release install-files set-timer-zones'"
+        "'install-release install-files set-timer-zones switch-app'"
     )
+    needed = ' '.join(
+        line
+        for line in commands(path=script, word='need')
+        if line.startswith('for need in')
+    ).split()
+    assert {'bin/install-release', 'bin/switch-app'} <= set(needed)
     assert 'tiles' not in script_text(path=script)
     assert commands(path=script, word='install -m 0755') == [
         'install -m 0755 -o root -g root "$path"'
@@ -3020,7 +3039,7 @@ def test_network_polkit_rule_allows_only_nm_actions() -> None:
 
 
 def test_install_files_installs_polkit_rules() -> None:
-    """Both rule files are installed root-owned, power first."""
+    """The three rule files are installed root-owned, power first."""
     assert commands(path=BIN / 'install-files', word='polkit') == [
         'install -D -m 0644 -o root -g root'
         ' "$SRC/polkit/50-paperroute-power.rules"'
@@ -3028,17 +3047,21 @@ def test_install_files_installs_polkit_rules() -> None:
         'install -D -m 0644 -o root -g root'
         ' "$SRC/polkit/51-paperroute-network.rules"'
         ' /etc/polkit-1/rules.d/51-paperroute-network.rules',
+        'install -D -m 0644 -o root -g root'
+        ' "$SRC/polkit/52-paperroute-switch.rules"'
+        ' /etc/polkit-1/rules.d/52-paperroute-switch.rules',
     ]
 
 
 def test_provision_installs_polkitd() -> None:
-    """provision installs polkitd and needs the rule file."""
+    """provision installs polkitd and needs the rule files."""
     installs = commands(path=BIN / 'provision-device', word='apt-get')
     assert 'polkitd' in installs[-1].split()
     needed = commands(path=BIN / 'provision-device', word='polkit')
     assert any(
         line.startswith('for need in') and line.endswith(
-            ' polkit/51-paperroute-network.rules; do',
+            ' polkit/51-paperroute-network.rules'
+            ' polkit/52-paperroute-switch.rules; do',
         )
         for line in needed
     )
@@ -3121,7 +3144,8 @@ def test_provision_installs_network_manager() -> None:
     assert any(
         line.startswith('for need in') and line.endswith(
             ' polkit/50-paperroute-power.rules'
-            ' polkit/51-paperroute-network.rules; do',
+            ' polkit/51-paperroute-network.rules'
+            ' polkit/52-paperroute-switch.rules; do',
         )
         for line in needed
     )
@@ -3946,6 +3970,7 @@ def provision_tools(
     kit_bin.mkdir()
     (kit_bin / 'install-release').write_text('new release\n', encoding='utf-8')
     (kit_bin / 'set-timer-zones').write_text('new zones\n', encoding='utf-8')
+    (kit_bin / 'switch-app').write_text('new switch\n', encoding='utf-8')
     (kit_bin / 'install-files').write_text(
         install_files_stub(root=root),
         encoding='utf-8',
@@ -4038,6 +4063,7 @@ def test_an_allowed_app_part_installs_tools_then_sudoers(
         'paperroute-install-release': 'new release\n',
         'paperroute-install-files': install_files_stub(root=tmp_path),
         'paperroute-set-timer-zones': 'new zones\n',
+        'paperroute-switch-app': 'new switch\n',
         'paperroute-demo-install-tiles': 'new tiles\n',
     }
     assert sudoers_rules(
@@ -6309,3 +6335,490 @@ def test_pin_check_accepts_state_moved_by_an_interrupted_run(
         ),
     )
     assert (result.returncode, result.stderr) == (2 if stderr else 0, stderr)
+
+
+SWITCH_APP: Final[Path] = BIN / 'switch-app'
+SWITCH_RULE: Final[Path] = DEPLOY / 'polkit' / '52-paperroute-switch.rules'
+SWITCH_FUNCTIONS: Final[tuple[str, ...]] = (
+    'fail',
+    'refuse',
+    'active_app',
+    'ready_unit',
+    'app_timers',
+    'busy',
+    'scheduled',
+    'quiet',
+    'activate',
+    'go_back',
+    'apply_switch',
+    'check_switch',
+    'apply_locked',
+)
+SCHEDULE_LINE: Final[str] = (
+    'systemd-run --quiet --collect --on-active=3'
+    ' --unit=paperroute-switch-apply'
+    ' /usr/local/sbin/paperroute-switch-app --apply demo'
+)
+# Answers is-active from UNIT_STATES (UNIT=STATE words) and logs the rest;
+# the first start of the board fails while SWITCH_ROOT/start-fails exists.
+SWITCH_SYSTEMCTL: Final[str] = '''#!/bin/bash
+if [[ $1 == is-active ]]; then
+    quiet=no
+    if [[ $2 == --quiet ]]; then
+        quiet=yes
+        shift
+    fi
+    state=inactive
+    for pair in ${UNIT_STATES:-}; do
+        if [[ ${pair%%=*} == "$2" ]]; then
+            state=${pair#*=}
+        fi
+    done
+    [[ $quiet == yes ]] || printf '%s\\n' "$state"
+    [[ $state == active || $state == reloading ]]
+    exit
+fi
+printf 'systemctl %s\\n' "$*" >>"$SWITCH_ROOT/switch.log"
+if [[ $* == 'start paperroute' && -e $SWITCH_ROOT/start-fails ]]; then
+    rm -f "$SWITCH_ROOT/start-fails"
+    exit 1
+fi
+'''
+# Logs the record; fails once, or always, as SWITCH_ROOT/install-fails says.
+SWITCH_INSTALL_FILES: Final[str] = '''#!/bin/bash
+printf 'paperroute-install-files (active: %s)\\n' \\
+    "$(cat "$SWITCH_ROOT/share/active-app")" >>"$SWITCH_ROOT/switch.log"
+fails=$SWITCH_ROOT/install-fails
+if [[ -e $fails ]]; then
+    [[ $(cat "$fails") == always ]] || rm -f "$fails"
+    exit 1
+fi
+'''
+SWITCH_RUNUSER: Final[str] = '''#!/bin/bash
+printf 'runuser %s\\n' "$*" >>"$SWITCH_ROOT/switch.log"
+shift 3
+exec "$@"
+'''
+SWITCH_SET_ZONES: Final[str] = '''#!/bin/bash
+printf 'paperroute-set-timer-zones %s\\n' "$*" >>"$SWITCH_ROOT/switch.log"
+exit "${ZONES_STATUS:-0}"
+'''
+SWITCH_RUN: Final[str] = '''#!/bin/bash
+printf 'systemd-run %s\\n' "$*" >>"$SWITCH_ROOT/switch.log"
+'''
+
+
+@dataclass(frozen=True)
+class SwitchBox:
+    """A device with apps first (active) and demo, and logging stubs."""
+
+    root: Path
+    share: Path
+    opt: Path
+    etc: Path
+    board: Path
+    env: dict[str, str]
+
+
+def add_release(*, opt: Path, app: str, zone: str) -> Path:
+    """
+    Give an app a current release whose board prints a zone.
+
+    Parameters
+    ----------
+    opt : Path
+        The device's opt folder.
+    app : str
+        The app.
+    zone : str
+        What ``paperroute-board zone`` prints.
+
+    Returns
+    -------
+    Path
+        The board, reached through the app's current link.
+    """
+    home = opt / 'apps' / app
+    board = home / 'releases' / SHA / '.venv' / 'bin' / 'paperroute-board'
+    board.parent.mkdir(parents=True)
+    board.write_text(f'#!/bin/sh\necho {zone}\n', encoding='utf-8')
+    board.chmod(0o755)
+    (home / 'current').symlink_to(home / 'releases' / SHA)
+    return home / 'current' / '.venv' / 'bin' / 'paperroute-board'
+
+
+@pytest.fixture(name='switch_box')
+def fixture_switch_box(tmp_path: Path) -> SwitchBox:
+    """
+    Make a device holding first, active, and demo, with stubs on PATH.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Pytest's temporary directory.
+
+    Returns
+    -------
+    SwitchBox
+        The folders, demo's board and the environment.
+    """
+    share, opt, etc = tmp_path / 'share', tmp_path / 'opt', tmp_path / 'etc'
+    for app, ready, timers in (
+        ('first', 'paperroute-one.service', ''),
+        ('demo', 'paperroute-job.service', 'paperroute-job.timer\n'),
+    ):
+        (share / 'apps' / app).mkdir(parents=True)
+        (share / 'apps' / app / 'ready').write_text(
+            f'{ready}\n',
+            encoding='utf-8',
+        )
+        (share / 'apps' / app / 'timers').write_text(
+            timers,
+            encoding='utf-8',
+        )
+    (share / 'active-app').write_text('first\n', encoding='utf-8')
+    etc.mkdir()
+    add_release(opt=opt, app='first', zone='UTC')
+    board = add_release(opt=opt, app='demo', zone='Europe/London')
+    stubs = stub_commands(
+        root=tmp_path,
+        scripts={
+            'systemctl': SWITCH_SYSTEMCTL,
+            'flock': '#!/bin/sh\nexit "${FLOCK_STATUS:-0}"\n',
+            'paperroute-install-files': SWITCH_INSTALL_FILES,
+            'runuser': SWITCH_RUNUSER,
+            'paperroute-set-timer-zones': SWITCH_SET_ZONES,
+            'systemd-run': SWITCH_RUN,
+        },
+    )
+    env = user_env(
+        PATH=f'{stubs}:{os.environ["PATH"]}',
+        SWITCH_ROOT=str(tmp_path),
+    )
+    return SwitchBox(
+        root=tmp_path,
+        share=share,
+        opt=opt,
+        etc=etc,
+        board=board,
+        env=env,
+    )
+
+
+def run_switch(
+    *,
+    box: SwitchBox,
+    call: str,
+    app: str = 'demo',
+    **env: str,
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    """
+    Run one of switch-app's bodies over the device under stubs.
+
+    Parameters
+    ----------
+    box : SwitchBox
+        The device.
+    call : str
+        check_switch or apply_locked.
+    app : str
+        The app asked for, demo unless given.
+    **env : str
+        Variables for the stubs: UNIT_STATES, FLOCK_STATUS, ZONES_STATUS.
+
+    Returns
+    -------
+    tuple[subprocess.CompletedProcess[str], list[str]]
+        The exit status and output, and the logged commands.
+    """
+    regexes = ''.join(
+        f'{name}={script_value(path=SWITCH_APP, name=name)}\n'
+        for name in ('APP_RE', 'TIMER_RE', 'READY_RE')
+    )
+    result = run_functions(
+        names=SWITCH_FUNCTIONS,
+        program=(
+            f'{regexes}SHARE={box.share}\nOPT={box.opt}\nETC={box.etc}\n'
+            f'LOCK={box.root / "lock"}\nAPP={app}\n{call}\n'
+        ),
+        env=box.env | env,
+        script=SWITCH_APP,
+    )
+    log = box.root / 'switch.log'
+    if not log.exists():
+        return result, []
+    return result, log.read_text(encoding='utf-8').splitlines()
+
+
+def record(box: SwitchBox) -> str:
+    """
+    Read the device's active-app record.
+
+    Parameters
+    ----------
+    box : SwitchBox
+        The device.
+
+    Returns
+    -------
+    str
+        The record's text.
+    """
+    return (box.share / 'active-app').read_text(encoding='utf-8')
+
+
+def test_switch_check_schedules_the_apply(switch_box: SwitchBox) -> None:
+    """A switch that can go ahead is scheduled, and nothing else runs."""
+    result, log = run_switch(box=switch_box, call='check_switch')
+    assert (result.returncode, result.stdout, result.stderr) == (
+        0,
+        'switch-app: switching to demo\n',
+        '',
+    )
+    assert log == [SCHEDULE_LINE]
+    assert record(box=switch_box) == 'first\n'
+
+
+@pytest.mark.parametrize(
+    ('app', 'release', 'env', 'reason'),
+    (
+        ('first', True, {}, 'first is already showing'),
+        ('demo', False, {}, 'demo has no release; deploy it first'),
+        ('demo', True, {'FLOCK_STATUS': '1'}, 'an install is running'),
+        (
+            'demo',
+            True,
+            {'UNIT_STATES': 'paperroute-one.service=activating'},
+            'first is still being made ready',
+        ),
+    ),
+    ids=('showing', 'no-release', 'installing', 'making-ready'),
+)
+def test_switch_check_refuses(
+    *,
+    switch_box: SwitchBox,
+    app: str,
+    release: bool,
+    env: dict[str, str],
+    reason: str,
+) -> None:
+    """Each refusal exits 1 with its reason and changes nothing."""
+    if not release:
+        switch_box.board.unlink()
+    result, log = run_switch(
+        box=switch_box,
+        call='check_switch',
+        app=app,
+        **env,
+    )
+    assert (result.returncode, result.stderr) == (1, f'switch-app: {reason}\n')
+    assert not log
+    assert record(box=switch_box) == 'first\n'
+
+
+def test_switch_refuses_while_a_switch_is_scheduled(
+    switch_box: SwitchBox,
+) -> None:
+    """A second switch is refused while the first is still to apply."""
+    result, log = run_switch(
+        box=switch_box,
+        call='check_switch',
+        UNIT_STATES='paperroute-switch-apply.timer=active',
+    )
+    assert (result.returncode, result.stderr) == (
+        1,
+        'switch-app: a switch is already under way\n',
+    )
+    assert not log
+
+
+@pytest.mark.parametrize('app', ('', 'Demo', '../x', 'nosuch'))
+def test_switch_rejects_a_bad_or_unknown_app(
+    switch_box: SwitchBox,
+    app: str,
+) -> None:
+    """A bad name, or an app that is not installed, exits 2."""
+    result = run_script(
+        name='switch-app',
+        args=(app,),
+        env=switch_box.env | {'PAPERROUTE_SHARE': str(switch_box.share)},
+    )
+    assert result.returncode == 2
+    assert result.stderr.startswith('switch-app: ')
+
+
+def test_switch_apply_stops_the_board_before_the_record_changes(
+    switch_box: SwitchBox,
+) -> None:
+    """The board stops, the app's units go in, then the board starts."""
+    result, log = run_switch(box=switch_box, call='apply_locked')
+    assert (result.returncode, result.stdout, result.stderr) == (
+        0,
+        'switch-app: demo is showing\n',
+        '',
+    )
+    assert log == [
+        'systemctl stop paperroute',
+        'systemctl stop paperroute-one.service',
+        'paperroute-install-files (active: demo)',
+        f'runuser -u paperroute -- {switch_box.board} zone',
+        'paperroute-set-timer-zones apply demo Europe/London',
+        'systemctl start paperroute',
+        'systemctl start --no-block paperroute-job.service',
+    ]
+    assert record(box=switch_box) == 'demo\n'
+
+
+def test_switch_apply_goes_back_when_the_app_does_not_start(
+    switch_box: SwitchBox,
+) -> None:
+    """A board that does not come up puts the previous app back."""
+    (switch_box.root / 'start-fails').touch()
+    result, log = run_switch(box=switch_box, call='apply_locked')
+    assert result.returncode == 1
+    assert record(box=switch_box) == 'first\n'
+    assert log[-5:] == [
+        'systemctl stop paperroute',
+        'systemctl stop paperroute-job.timer',
+        'systemctl stop paperroute-job.service',
+        'paperroute-install-files (active: first)',
+        'systemctl start paperroute',
+    ]
+    assert result.stderr.endswith(
+        'switch-app: demo did not start; back on first\n',
+    )
+
+
+def test_switch_apply_goes_back_when_install_files_fails(
+    switch_box: SwitchBox,
+) -> None:
+    """Units that do not install put the previous app back."""
+    (switch_box.root / 'install-fails').write_text('once', encoding='utf-8')
+    result, _ = run_switch(box=switch_box, call='apply_locked')
+    assert result.returncode == 1
+    assert record(box=switch_box) == 'first\n'
+
+
+def test_go_back_starts_the_board_even_when_it_cannot_reinstall(
+    switch_box: SwitchBox,
+) -> None:
+    """The board is started again, and the owner is told to provision."""
+    (switch_box.root / 'install-fails').write_text('always', encoding='utf-8')
+    result, log = run_switch(box=switch_box, call='apply_locked')
+    assert result.returncode == 1
+    assert log[-1] == 'systemctl start paperroute'
+    assert 'could not go back to first cleanly; run scripts/provision' in (
+        result.stderr
+    )
+
+
+def test_switch_apply_stops_the_outgoing_apps_units_first(
+    switch_box: SwitchBox,
+) -> None:
+    """The outgoing app's timers and ready unit stop, and lose their zone."""
+    (switch_box.share / 'active-app').write_text('demo\n', encoding='utf-8')
+    zone = switch_box.etc / 'paperroute-job.timer.d' / 'app-zone.conf'
+    zone.parent.mkdir()
+    zone.write_text('[Timer]\n', encoding='utf-8')
+    result, log = run_switch(box=switch_box, call='apply_locked', app='first')
+    assert (result.returncode, result.stderr) == (0, '')
+    assert log[:3] == [
+        'systemctl stop paperroute',
+        'systemctl stop paperroute-job.timer',
+        'systemctl stop paperroute-job.service',
+    ]
+    assert log.index('paperroute-install-files (active: first)') == 3
+    assert not zone.exists()
+
+
+def test_failed_zone_step_leaves_no_other_apps_zone(
+    switch_box: SwitchBox,
+) -> None:
+    """A shared timer keeps no zone from the app that went."""
+    (switch_box.share / 'apps' / 'first' / 'timers').write_text(
+        'paperroute-job.timer\n',
+        encoding='utf-8',
+    )
+    zone = switch_box.etc / 'paperroute-job.timer.d' / 'app-zone.conf'
+    zone.parent.mkdir()
+    zone.write_text('[Timer]\n', encoding='utf-8')
+    result, _ = run_switch(
+        box=switch_box,
+        call='apply_locked',
+        ZONES_STATUS='1',
+    )
+    assert result.returncode == 1
+    assert result.stderr.endswith(
+        'switch-app: demo is showing, but the timer zone was not set\n',
+    )
+    assert not list(switch_box.etc.rglob('app-zone.conf'))
+    assert record(box=switch_box) == 'demo\n'
+
+
+def test_switch_apply_gives_up_when_the_lock_stays_held(
+    switch_box: SwitchBox,
+) -> None:
+    """An install that keeps the lock leaves the device as it was."""
+    result, log = run_switch(
+        box=switch_box,
+        call='apply_locked',
+        FLOCK_STATUS='1',
+    )
+    assert (result.returncode, result.stderr) == (
+        1,
+        'switch-app: an install is still running; not switched\n',
+    )
+    assert not log
+    assert record(box=switch_box) == 'first\n'
+
+
+def test_switch_apply_skips_zones_for_an_app_without_timers(
+    switch_box: SwitchBox,
+) -> None:
+    """An app with no timers gets no zone step."""
+    (switch_box.share / 'active-app').write_text('demo\n', encoding='utf-8')
+    result, log = run_switch(box=switch_box, call='apply_locked', app='first')
+    assert (result.returncode, result.stderr) == (0, '')
+    assert not [line for line in log if 'zone' in line]
+
+
+def test_switch_apply_rechecks_ready(switch_box: SwitchBox) -> None:
+    """A make-ready step started since the check stops the apply."""
+    result, log = run_switch(
+        box=switch_box,
+        call='apply_locked',
+        UNIT_STATES='paperroute-one.service=activating',
+    )
+    assert (result.returncode, result.stderr) == (
+        1,
+        'switch-app: first is still being made ready\n',
+    )
+    assert 'systemctl stop paperroute' not in log
+
+
+def test_switch_unit_runs_the_check_for_its_instance() -> None:
+    """The templated unit runs the check for the app it is named after."""
+    assert read_unit(name='paperroute-switch@.service')['Service'] == {
+        'Type': 'oneshot',
+        'ExecStart': '/usr/local/sbin/paperroute-switch-app %i',
+    }
+
+
+def test_polkit_lets_the_service_user_start_only_the_switch_unit() -> None:
+    """The rule lets paperroute start a switch unit and nothing else."""
+    code = rule_code(path=SWITCH_RULE)
+    for part in (
+        'subject.user != "paperroute"',
+        'org.freedesktop.systemd1.manage-units',
+        'action.lookup("verb") == "start"',
+        r'/^paperroute-switch@[a-z][a-z0-9]*\.service$/',
+    ):
+        assert part in code
+    assert code.count('polkit.Result') == 1
+
+
+def test_install_files_installs_the_switch_rule() -> None:
+    """install-files installs the switch rule beside the other two."""
+    assert '52-paperroute-switch.rules' in script_text(
+        path=BIN / 'install-files',
+    )

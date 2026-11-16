@@ -1,0 +1,6 @@
+[Unit]
+Description=paperroute app switch
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/paperroute-switch-app %i

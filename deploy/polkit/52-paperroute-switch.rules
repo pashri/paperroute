@@ -1,0 +1,14 @@
+// Installed as /etc/polkit-1/rules.d/52-paperroute-switch.rules (root, 0644).
+// Lets the paperroute service user start paperroute-switch@APP.service
+// through systemctl; every other request falls through to the defaults.
+polkit.addRule(function (action, subject) {
+    if (subject.user != "paperroute") {
+        return;
+    }
+    if (action.id == "org.freedesktop.systemd1.manage-units" &&
+        action.lookup("verb") == "start" &&
+        /^paperroute-switch@[a-z][a-z0-9]*\.service$/.test(
+            action.lookup("unit"))) {
+        return polkit.Result.YES;
+    }
+});

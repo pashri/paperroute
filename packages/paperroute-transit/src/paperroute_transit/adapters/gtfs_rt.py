@@ -1,7 +1,8 @@
 """Parse GTFS-realtime trip updates, converting each trip on first use."""
 
 import logging
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import replace
 from datetime import date, datetime
 from typing import Any, Final
 
@@ -489,6 +490,66 @@ def to_vehicle(
     )
 
 
+def read_positions(
+    *,
+    data: bytes,
+    fetched_at: datetime,
+    projection: Projection,
+    label: Callable[[Any], str] | None = None,
+) -> PositionsSnapshot:
+    """
+    Read every positioned vehicle in a vehicle-positions feed.
+
+    Parameters
+    ----------
+    data : bytes
+        Serialised FeedMessage.
+    fetched_at : datetime
+        When it was downloaded.
+    projection : Projection
+        The projection to place the vehicles in.
+    label : Callable[[Any], str] | None
+        Gives each vehicle's label from its gtfs_realtime_pb2.VehiclePosition;
+        None keeps the label `to_vehicle` gives.
+
+    Returns
+    -------
+    PositionsSnapshot
+        Vehicles with a position; the header time is the feed's, or the
+        fetch time when the feed has none.
+
+    Raises
+    ------
+    FeedError
+        When the body is empty or yields no entity at all.
+    """
+    entities, stamp = decode_feed(data=data)
+    header_time = stamp or int(fetched_at.timestamp())
+    positioned = [
+        entity.vehicle
+        for entity in entities
+        if entity.HasField('vehicle') and entity.vehicle.HasField('position')
+    ]
+    vehicles = tuple(
+        to_vehicle(
+            vehicle=vehicle,
+            header_time=header_time,
+            projection=projection,
+        )
+        for vehicle in positioned
+    )
+    if label is not None:
+        vehicles = tuple(
+            replace(vehicle, label=label(source))
+            for vehicle, source in zip(vehicles, positioned, strict=True)
+        )
+    return PositionsSnapshot(
+        fetched_at=fetched_at,
+        header_time=header_time,
+        vehicles=vehicles,
+    )
+
+
 def parse_positions(
     *, data: bytes, fetched_at: datetime, projection: Projection
 ) -> PositionsSnapshot:
@@ -515,19 +576,6 @@ def parse_positions(
     FeedError
         When the body is empty or yields no entity at all.
     """
-    entities, stamp = decode_feed(data=data)
-    header_time = stamp or int(fetched_at.timestamp())
-    return PositionsSnapshot(
-        fetched_at=fetched_at,
-        header_time=header_time,
-        vehicles=tuple(
-            to_vehicle(
-                vehicle=entity.vehicle,
-                header_time=header_time,
-                projection=projection,
-            )
-            for entity in entities
-            if entity.HasField('vehicle')
-            and entity.vehicle.HasField('position')
-        ),
+    return read_positions(
+        data=data, fetched_at=fetched_at, projection=projection,
     )

@@ -116,6 +116,16 @@ install_uv() {
     rm -f -- "$tmp"
 }
 
+# Fails while the M2a pin file is left and no state.json holds the pin:
+# neither $VAR's nor, once the data has moved, the active app's.
+check_pin_saved() {
+    local app
+    [[ -e $PIN_FILE && ! -e $VAR/state.json ]] || return 0
+    app=$(active_app)
+    [[ -n $app && -e $VAR/apps/$app/state.json ]] \
+        || fail 'deploy M4 first so state.json holds the pin'
+}
+
 # The M2a pin moved into state.json; remove the old root-owned copy.
 retire_pin() {
     [[ ! -L $PIN_DIR ]] || fail "$PIN_DIR is a symlink"
@@ -605,7 +615,7 @@ check_app_units
 check_ready
 refuse_other_app
 [[ $EUID -eq 0 ]] || fail 'checks passed; provisioning needs root'
-[[ ! -e $PIN_FILE || -e /var/lib/paperroute/state.json ]] || fail 'deploy M4 first so state.json holds the pin'
+check_pin_saved
 
 apt-get update
 apt-get install -y rsync curl sqlite3 avahi-daemon libegl1 libgl1 polkitd \

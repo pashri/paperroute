@@ -1715,10 +1715,7 @@ def test_provision_retires_pin_after_installing_files() -> None:
 def test_provision_refuses_before_m4_saved_the_pin() -> None:
     """Provision stops before installing anything if state.json is missing."""
     lines = script_text(path=BIN / 'provision-device').splitlines()
-    gate = lines.index(
-        "[[ ! -e $PIN_FILE || -e /var/lib/paperroute/state.json ]] ||"
-        " fail 'deploy M4 first so state.json holds the pin'"
-    )
+    gate = lines.index('check_pin_saved')
     assert gate < lines.index('copy_deploy')
     assert gate < lines.index('install_tools')
 
@@ -6038,3 +6035,43 @@ def test_provision_refuses_while_the_install_lock_is_held(
     assert script_value(path=BIN / 'provision-device', name='LOCK') == (
         '/run/paperroute-install.lock'
     )
+
+
+@pytest.mark.parametrize(
+    ('pin', 'state', 'stderr'),
+    (
+        (False, None, ''),
+        (True, 'state.json', ''),
+        (True, 'apps/sydney/state.json', ''),
+        (
+            True,
+            None,
+            'provision-device: deploy M4 first so state.json holds the pin\n',
+        ),
+    ),
+    ids=('no-pin', 'old-state', 'moved-state', 'no-state'),
+)
+def test_pin_check_accepts_state_moved_by_an_interrupted_run(
+    *,
+    tmp_path: Path,
+    pin: bool,
+    state: str | None,
+    stderr: str,
+) -> None:
+    """A re-run after the data moved passes the M4 pin check."""
+    layout = new_layout(tmp_path=tmp_path)
+    (layout.var / 'apps' / 'sydney' / 'state.json').unlink()
+    (layout.share / 'adopting').touch()
+    pin_file = tmp_path / 'm2a.env'
+    if pin:
+        pin_file.write_text('PIN=1\n', encoding='utf-8')
+    if state is not None:
+        (layout.var / state).write_text('{}\n', encoding='utf-8')
+    result = provision_functions(
+        names=('active_app', 'check_pin_saved'),
+        program=(
+            f'PIN_FILE={pin_file}\nSHARE={layout.share}\nVAR={layout.var}\n'
+            'check_pin_saved\n'
+        ),
+    )
+    assert (result.returncode, result.stderr) == (2 if stderr else 0, stderr)

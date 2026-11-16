@@ -19,10 +19,16 @@ import { pathToFileURL } from 'node:url';
 const withSwitch = process.argv[3] === 'switch';
 const sent = [];
 const replies = [];
+let release = () => {};
 globalThis.fetch = (url, init) => {
   sent.push([url, JSON.parse(init.body)]);
   const reply = replies.shift() ?? { ok: true };
   if (reply === 'throw') return Promise.reject(new Error('offline'));
+  if (reply === 'hold') {
+    return new Promise((resolve) => {
+      release = () => resolve({ ok: true });
+    });
+  }
   return Promise.resolve(reply);
 };
 const on = () => {
@@ -59,6 +65,7 @@ for (const action of ['reboot', 'poweroff']) {
 const radios = [
   { value: 'first', disabled: true, checked: false, dataset: {} },
   { value: 'demo', checked: true, dataset: { name: 'Demo' } },
+  { value: 'third', checked: false, dataset: { name: 'Third' } },
 ];
 const button = { textContent: 'Switch' };
 const switchForm = {
@@ -66,6 +73,9 @@ const switchForm = {
   querySelector: (selector) => ({
     'input[name="app"]:checked': radios.find((radio) => radio.checked),
     'button[type="submit"]': button,
+    ...Object.fromEntries(radios.map((radio) => [
+      `input[name="app"][value="${radio.value}"]`, radio,
+    ])),
   })[selector] ?? null,
 };
 const switchDialog = modal({ switch: 'demo' });
@@ -142,6 +152,14 @@ if (withSwitch) {
   switchDialog.close('confirm');
   await tick();
   app.refused = status.textContent;
+  replies.push('hold');
+  ask();
+  switchDialog.close('confirm');
+  radios[1].checked = false;
+  radios[2].checked = true;
+  release();
+  await tick();
+  app.rechosen = status.textContent;
 }
 app.status = status.textContent;
 console.log(JSON.stringify({ power, app }));
@@ -203,6 +221,11 @@ def test_switch_cancel_sends_nothing(pages: dict[str, Any]) -> None:
 def test_switch_refusal_says_not_switched(pages: dict[str, Any]) -> None:
     """A refused switch says it did not happen."""
     assert pages['switch']['app']['refused'] == 'Not switched'
+
+
+def test_switch_names_the_app_it_posted(pages: dict[str, Any]) -> None:
+    """A radio chosen while the post is out does not change the name."""
+    assert pages['switch']['app']['rechosen'] == 'Switching to Demo...'
 
 
 def test_button_names_the_chosen_app(pages: dict[str, Any]) -> None:

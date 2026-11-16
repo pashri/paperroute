@@ -438,13 +438,13 @@ async def serve_web(  # pylint: disable=too-many-arguments
         The physical knobs; stopped before the loop ends, so their
         thread never posts to a closed loop.
     apps : AppSwitch | None
-        The installed apps, refreshed once serving starts.
+        The installed apps, listed once serving starts, which starts their
+        first refresh.
     """
     loop = asyncio.get_running_loop()
     async with serving(app=display.app(), host=host, port=port):
-        refresh = None if apps is None else asyncio.create_task(
-            apps.refresh(),
-        )
+        if apps is not None:
+            apps.installed()
         try:
             await run(
                 app=app,
@@ -457,8 +457,6 @@ async def serve_web(  # pylint: disable=too-many-arguments
                 max_events=max_events,
             )
         finally:
-            if refresh is not None:
-                refresh.cancel()
             if knobs is not None:
                 knobs.stop()
             remove_stop_signals(loop=loop)

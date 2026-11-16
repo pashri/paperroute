@@ -30,11 +30,7 @@ from paperroute_device.core.device_model import AppCard, DeviceKey
 from paperroute_device.core.kit_events import QuitRequested
 from paperroute_device.logs import LastError
 from paperroute_device.runtime.ports import KitPorts
-from paperroute_device_testkit.device_fakes import (
-    FakeAppSwitch,
-    FakeKeys,
-    FixedClock,
-)
+from paperroute_device_testkit.device_fakes import FakeKeys, FixedClock
 from paperroute_device_testkit.device_pages import TEST_KEY
 from tests.core.fake_app import START, FakeApp
 
@@ -574,11 +570,19 @@ async def test_serve_web_runs_and_stops(tmp_path: Path) -> None:
         await asyncio.gather(server, return_exceptions=True)
 
 
-async def test_serve_web_refreshes_the_apps_once_serving(
+async def test_serve_web_starts_the_switchs_first_refresh(
     tmp_path: Path,
 ) -> None:
-    """Serving starts one refresh of the installed apps."""
-    app, display, apps = FakeApp(), WebDisplay(), FakeAppSwitch()
+    """Serving starts the first refresh through the switch's own task."""
+    app, display = FakeApp(), WebDisplay()
+    (tmp_path / 'share').mkdir()
+    (tmp_path / 'share' / 'active-app').write_text('first\n', encoding='utf-8')
+    apps = SystemAppSwitch(
+        own=lambda: AppCard(name='First'),
+        share=tmp_path / 'share',
+        opt=tmp_path / 'opt',
+        data=tmp_path / 'data',
+    )
     ports = KitPorts(
         display=display,
         clock=FixedClock(at=START),
@@ -596,7 +600,9 @@ async def test_serve_web_refreshes_the_apps_once_serving(
             max_events=1,
             apps=apps,
         )
-    assert apps.refreshed == 1
+    assert apps.task is not None
+    await apps.task
+    assert apps.refreshed_at is not None
 
 
 def test_web_main_logs_a_bind_failure(

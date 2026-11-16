@@ -975,11 +975,10 @@ class DevicePages:
             page saying so for a plain form.
         """
         fields = await form_fields(request=request)
-        apps = self._apps
         app = switchable(apps=self._installed(), key=fields.get('app', ''))
-        if apps is None or app is None:
+        if self._apps is None or app is None:
             return web.Response(status=HTTPStatus.BAD_REQUEST)
-        accepted = await apps.switch(key=app.key)
+        accepted = await self._apps.switch(key=app.key)
         if request.content_type == 'application/json':
             return web.Response(
                 status=HTTPStatus.NO_CONTENT if accepted

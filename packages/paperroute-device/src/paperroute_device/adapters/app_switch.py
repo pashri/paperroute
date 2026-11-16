@@ -240,17 +240,19 @@ class SystemAppSwitch:
         return card or AppCard(name=key.capitalize())
 
     async def refresh(self) -> None:
-        """Find the installed apps and their cards again."""
+        """Find the installed apps again and read their cards together."""
         active = active_key(record=self.share / 'active-app')
         keys = () if active is None else release_keys(apps=self.opt / 'apps')
-        self.apps = tuple([
-            InstalledApp(
-                key=key,
-                card=await self.card(key=key, active=key == active),
-                active=key == active,
-            )
-            for key in keys
-        ])
+        cards = await asyncio.gather(
+            *(
+                self.card(key=key, active=key == active)
+                for key in keys
+            ),
+        )
+        self.apps = tuple(
+            InstalledApp(key=key, card=card, active=key == active)
+            for key, card in zip(keys, cards, strict=True)
+        )
         self.refreshed_at = self.clock()
 
     def installed(self) -> tuple[InstalledApp, ...]:

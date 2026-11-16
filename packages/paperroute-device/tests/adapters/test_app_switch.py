@@ -210,6 +210,27 @@ async def test_broken_card_falls_back_to_the_key(
     assert len(warnings) == 1
 
 
+async def test_hung_cards_are_read_at_the_same_time(
+    box: Box,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Two hung cards take about one timeout, each warned about once."""
+    monkeypatch.setattr(app_switch, 'CARD_TIMEOUT', 0.5)
+    box.add_app(key='demo', script='sleep 5 & wait')
+    box.add_app(key='third', script='sleep 5 & wait')
+    started = time.monotonic()
+    await box.switch.refresh()
+    assert time.monotonic() - started < 0.9
+    assert box.switch.installed() == (
+        InstalledApp(key='demo', card=AppCard(name='Demo'), active=False),
+        InstalledApp(key='first', card=OWN, active=True),
+        InstalledApp(key='third', card=AppCard(name='Third'), active=False),
+    )
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 2
+
+
 async def test_board_that_cannot_start_falls_back_to_the_key(
     box: Box,
 ) -> None:

@@ -120,15 +120,15 @@ class AppSwitch(Protocol):
         """
         List the installed apps without waiting.
 
+        Starts a refresh in the background when the list is missing or
+        stale.
+
         Returns
         -------
         tuple[InstalledApp, ...]
             The apps the last refresh found, in key order; empty before
             the first.
         """
-
-    async def refresh(self) -> None:
-        """Find the installed apps and their cards again."""
 
     async def switch(self, *, key: str) -> bool:
         """

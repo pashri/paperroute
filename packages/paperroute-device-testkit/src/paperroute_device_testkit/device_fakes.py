@@ -333,14 +333,11 @@ class FakeAppSwitch:
         What a switch to a listed app that is not active returns.
     asked : list[str]
         Each app a switch was accepted for.
-    refreshed : int
-        How many times `refresh` was called.
     """
 
     apps: tuple[InstalledApp, ...] = ()
     accepts: bool = True
     asked: list[str] = field(default_factory=list)
-    refreshed: int = 0
 
     def installed(self) -> tuple[InstalledApp, ...]:
         """
@@ -352,10 +349,6 @@ class FakeAppSwitch:
             `apps`.
         """
         return self.apps
-
-    async def refresh(self) -> None:
-        """Count the refresh."""
-        self.refreshed += 1
 
     async def switch(self, *, key: str) -> bool:
         """

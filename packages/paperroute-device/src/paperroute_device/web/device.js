@@ -77,6 +77,15 @@ function chosenApp() {
 }
 
 /**
+ * Find the switch form's radio for an app.
+ * @param {string} key - The app.
+ * @returns {HTMLInputElement | null} The radio, or null.
+ */
+function appRadio(key) {
+  return switchForm.querySelector(`input[name="app"][value="${key}"]`);
+}
+
+/**
  * Open the chosen app's confirm dialog instead of the confirm page.
  * @param {SubmitEvent} event - The switch form's submit.
  * @returns {void}
@@ -97,9 +106,10 @@ function askSwitch(event) {
 async function confirmSwitch(event) {
   const dialog = event.currentTarget;
   if (dialog.returnValue !== 'confirm') return;
-  const outcome = await postJson('/switch', { app: dialog.dataset.switch });
+  const key = dialog.dataset.switch;
+  const outcome = await postJson('/switch', { app: key });
   switchStatus.textContent = outcome === 'ok'
-    ? `Switching to ${chosenApp().dataset.name}...`
+    ? `Switching to ${appRadio(key).dataset.name}...`
     : NOT_SWITCHED[outcome];
 }
 

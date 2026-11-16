@@ -1,5 +1,7 @@
-/** Confirm the Device page's power actions in a dialog before sending. */
+/** Confirm the Device page's power and app switch in a dialog first. */
 const deviceStatus = document.querySelector('#device-status');
+const switchStatus = document.querySelector('#switch-status');
+const switchForm = document.querySelector('form[data-switch]');
 const NOT_SENT = {
   refused: 'Not sent',
   network: 'Not sent: network error',
@@ -7,6 +9,10 @@ const NOT_SENT = {
 const POWER_STATUS = {
   poweroff: 'Shutting down...',
   reboot: 'Restarting...',
+};
+const NOT_SWITCHED = {
+  refused: 'Not switched',
+  network: NOT_SENT.network,
 };
 
 /**
@@ -61,3 +67,65 @@ for (const form of document.querySelectorAll('form[data-power]')) {
 for (const dialog of document.querySelectorAll('dialog[data-power]')) {
   dialog.addEventListener('close', confirmPower);
 }
+
+/**
+ * Find the app chosen in the switch form.
+ * @returns {HTMLInputElement | null} The checked radio, or null.
+ */
+function chosenApp() {
+  return switchForm.querySelector('input[name="app"]:checked');
+}
+
+/**
+ * Open the chosen app's confirm dialog instead of the confirm page.
+ * @param {SubmitEvent} event - The switch form's submit.
+ * @returns {void}
+ */
+function askSwitch(event) {
+  event.preventDefault();
+  const key = chosenApp().value;
+  const dialog = document.querySelector(`#switch-${key}-dialog`);
+  dialog.returnValue = '';
+  dialog.showModal();
+}
+
+/**
+ * Send the switch when its dialog closes confirmed.
+ * @param {Event} event - The dialog's close.
+ * @returns {Promise<void>}
+ */
+async function confirmSwitch(event) {
+  const dialog = event.currentTarget;
+  if (dialog.returnValue !== 'confirm') return;
+  const outcome = await postJson('/switch', { app: dialog.dataset.switch });
+  switchStatus.textContent = outcome === 'ok'
+    ? `Switching to ${chosenApp().dataset.name}...`
+    : NOT_SWITCHED[outcome];
+}
+
+/**
+ * Name the chosen app on the switch button.
+ * @returns {void}
+ */
+function nameButton() {
+  const button = switchForm.querySelector('button[type="submit"]');
+  const chosen = chosenApp();
+  if (!button || !chosen) return;
+  button.textContent = `Switch to ${chosen.dataset.name}`;
+}
+
+/**
+ * Ask in a dialog before switching, and name the chosen app.
+ * @param {HTMLFormElement} form - The switch form.
+ * @returns {void}
+ */
+function wireSwitch(form) {
+  form.addEventListener('submit', askSwitch);
+  form.addEventListener('change', nameButton);
+  for (const dialog of document.querySelectorAll('dialog[data-switch]')) {
+    dialog.addEventListener('close', confirmSwitch);
+  }
+  nameButton();
+}
+
+if (switchForm) wireSwitch(switchForm);

@@ -139,7 +139,8 @@ async def test_device_page_sections(client: Client) -> None:
     assert (
         '<p class="hint">Reset settings clears pins, settings, Wi-Fi and the '
         'key. Erase everything also deletes the timetable. The map is kept. '
-        'Both are confirmed on the device.</p>'
+        'Other installed apps keep their own. Both are confirmed on the '
+        'device.</p>'
     ) in text
     assert '{{' not in text
 

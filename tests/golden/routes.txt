@@ -61,7 +61,11 @@ GET /suggest.js
 HEAD /device/power
 GET /device/power
 POST /device/power
+HEAD /device/switch
+GET /device/switch
+POST /device/switch
 POST /power
+POST /switch
 HEAD /setup
 GET /setup
 HEAD /setup.js

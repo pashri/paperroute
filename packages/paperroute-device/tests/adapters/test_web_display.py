@@ -773,6 +773,7 @@ def test_app_routes_must_place_every_kit_route(order: str) -> None:
     '/status',
     '/fonts/{name}',
     '/setup.js',
+    '/switch',
 ])
 def test_app_route_shadowing_a_kit_path_is_refused(path: str) -> None:
     """An app route on a kit path or a catch-all segment is refused."""
@@ -784,6 +785,7 @@ def test_app_route_shadowing_a_kit_path_is_refused(path: str) -> None:
 @pytest.mark.parametrize(('path', 'shadowed'), [
     *((path, True) for path in KIT_PATHS),
     ('/device/power', True),
+    ('/switch', True),
     ('/{name}/x', True),
     ('/pins', False),
     ('/vendor/{name}', False),

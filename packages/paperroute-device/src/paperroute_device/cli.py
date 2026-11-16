@@ -12,6 +12,7 @@ from datetime import UTC, tzinfo
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
+from paperroute_device.adapters.app_switch import SystemAppSwitch
 from paperroute_device.adapters.clocks import SystemClock
 from paperroute_device.adapters.device_probe import SystemProbe
 from paperroute_device.adapters.power import NullPower, SystemctlPower
@@ -26,6 +27,7 @@ from paperroute_device.core.app import App
 from paperroute_device.core.kit_events import QuitRequested
 from paperroute_device.logs import LastError, configure_logging
 from paperroute_device.ports import (
+    AppSwitch,
     Clock,
     KeyStore,
     PowerControl,
@@ -55,7 +57,6 @@ STOP_SIGNALS: Final[tuple[signal.Signals, ...]] = (
     signal.SIGTERM,
     signal.SIGINT,
 )
-DATA_DIR: Final[Path] = Path('/var/lib/paperroute')
 NO_ZONE: Final[str] = 'paperroute-board: this app has no time zone'
 
 
@@ -186,7 +187,6 @@ def resets_for(
     keys: Sequence[KeyStore],
     wifi: WifiControl,
     erased: Sequence[Path],
-    data_dir: Path = DATA_DIR,
 ) -> Resets:
     """
     Choose how the settings are reset and everything erased.
@@ -201,19 +201,18 @@ def resets_for(
         Forgets the saved Wi-Fi networks.
     erased : Sequence[Path]
         The app's files that Erase everything deletes.
-    data_dir : Path
-        The only directory a reset deletes files from.
 
     Returns
     -------
     Resets
-        Resets over the data directory with --power; otherwise
-        resets that never act, so a development run keeps its data.
+        With --power, resets that delete files only inside the folder
+        the state file resolves to; otherwise resets that never act, so
+        a development run keeps its data.
     """
     if not args.power:
         return NullResets()
     return FileResets(
-        data_dir=data_dir,
+        data_dir=args.state.resolve().parent,
         state=args.state,
         keys=keys,
         wifi=wifi,
@@ -260,6 +259,35 @@ def device_for(
         erased=app.erased(args=args),
     )
     return DevicePorts(wifi=wifi, probe=probe, keys=keys, resets=resets)
+
+
+def apps_for(
+    *, args: argparse.Namespace, app: App[Any], clock: Clock,
+) -> AppSwitch | None:
+    """
+    Choose how the installed apps are listed and switched.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed arguments.
+    app : App[Any]
+        The app running now, which gives its own card.
+    clock : Clock
+        The run's clock, for the card's time.
+
+    Returns
+    -------
+    AppSwitch | None
+        The system's apps with --power; otherwise None.
+    """
+    if not args.power:
+        return None
+    return SystemAppSwitch(
+        own=lambda: app.card(
+            data_dir=args.state.resolve().parent, now=clock.now(),
+        ),
+    )
 
 
 def clock_for(*, app: App[Any], zone: tzinfo) -> Clock:
@@ -383,6 +411,7 @@ async def serve_web(  # pylint: disable=too-many-arguments
     tick_every: float = 5.0,
     max_events: int | None = None,
     knobs: KnobReader | None = None,
+    apps: AppSwitch | None = None,
 ) -> None:
     """
     Run the app and serve its display until it quits.
@@ -408,9 +437,14 @@ async def serve_web(  # pylint: disable=too-many-arguments
     knobs : KnobReader | None
         The physical knobs; stopped before the loop ends, so their
         thread never posts to a closed loop.
+    apps : AppSwitch | None
+        The installed apps, refreshed once serving starts.
     """
     loop = asyncio.get_running_loop()
     async with serving(app=display.app(), host=host, port=port):
+        refresh = None if apps is None else asyncio.create_task(
+            apps.refresh(),
+        )
         try:
             await run(
                 app=app,
@@ -423,6 +457,8 @@ async def serve_web(  # pylint: disable=too-many-arguments
                 max_events=max_events,
             )
         finally:
+            if refresh is not None:
+                refresh.cancel()
             if knobs is not None:
                 knobs.stop()
             remove_stop_signals(loop=loop)
@@ -501,6 +537,7 @@ def serve_or_exit(  # pylint: disable=too-many-arguments
     display: WebDisplay,
     zone: tzinfo,
     knobs: KnobReader | None = None,
+    apps: AppSwitch | None = None,
 ) -> None:
     """
     Serve the display; exit 1 if the port can't be used.
@@ -519,6 +556,8 @@ def serve_or_exit(  # pylint: disable=too-many-arguments
         Local time zone.
     knobs : KnobReader | None
         The physical knobs, if any.
+    apps : AppSwitch | None
+        The installed apps, if any.
     """
     try:
         asyncio.run(
@@ -530,6 +569,7 @@ def serve_or_exit(  # pylint: disable=too-many-arguments
                 port=args.port,
                 zone=zone,
                 knobs=knobs,
+                apps=apps,
             )
         )
     except BindError:
@@ -585,6 +625,7 @@ def device_pages_for(
     display: WebDisplay,
     device: DevicePorts,
     knob_state: Callable[[], bool | None] = lambda: None,
+    apps: AppSwitch | None = None,
 ) -> DevicePages:
     """
     Build the phone setup pages.
@@ -606,6 +647,8 @@ def device_pages_for(
         The device's adapters, whose keys the pages show and store.
     knob_state : Callable[[], bool | None]
         Whether the knobs are answering, or None when not asked for.
+    apps : AppSwitch | None
+        The installed apps, or None for no App section.
 
     Returns
     -------
@@ -624,6 +667,7 @@ def device_pages_for(
         reset_hint=app.reset_hint,
         sheets=web.sheets,
         data=web.data,
+        apps=apps,
     )
 
 
@@ -662,6 +706,10 @@ def web_main(
             web = app.web(args=args, timings=timings)
             display = board_display(web=web, app=app, timings=timings)
             device = device_for(args=args, app=app, last_error=last_error)
+            clock = clock_for(app=app, zone=zone)
+            apps = None if app.replaying() else apps_for(
+                args=args, app=app, clock=clock,
+            )
             if not app.replaying():
                 display.device = device_pages_for(
                     args=args,
@@ -673,10 +721,11 @@ def web_main(
                     knob_state=lambda: knobs_state_for(
                         wanted=args.knobs, knobs=knobs,
                     ),
+                    apps=apps,
                 )
             ports = KitPorts(
                 display=Displays(displays=[display, *shown]),
-                clock=clock_for(app=app, zone=zone),
+                clock=clock,
                 states=StateFile(path=args.state, app=app),
                 power=power_for(args=args),
                 device=device,
@@ -689,6 +738,7 @@ def web_main(
                 display=display,
                 zone=zone,
                 knobs=knobs,
+                apps=apps,
             )
     finally:
         if panel is not None:

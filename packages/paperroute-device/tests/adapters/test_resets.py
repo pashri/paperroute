@@ -217,3 +217,22 @@ async def test_file_resets_refuse_a_linked_directory(
     )
     await resets.reset(kind=ResetKind.ERASE)
     assert outside.exists()
+
+
+async def test_erase_never_reaches_another_apps_files(tmp_path: Path) -> None:
+    """An erase in one app's folder keeps another app's files."""
+    first, demo = tmp_path / 'apps' / 'first', tmp_path / 'apps' / 'demo'
+    first.mkdir(parents=True)
+    demo.mkdir()
+    theirs = demo / 'state.json'
+    theirs.write_text('x', encoding='utf-8')
+    (first / 'theirs.json').symlink_to(theirs)
+    resets = FileResets(
+        data_dir=first,
+        state=first / 'state.json',
+        keys=(FakeKeys(),),
+        wifi=FakeWifi(),
+        erased=(theirs, first / 'theirs.json'),
+    )
+    await resets.reset(kind=ResetKind.ERASE)
+    assert theirs.exists()

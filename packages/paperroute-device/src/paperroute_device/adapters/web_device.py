@@ -11,7 +11,9 @@ from typing import Final
 from aiohttp import web
 
 from paperroute_device.adapters.device_page import (
+    NOT_SWITCHED,
     RESETS,
+    apps_section,
     device_notice,
     key_text,
     knob_rows,
@@ -19,6 +21,9 @@ from paperroute_device.adapters.device_page import (
     notice,
     panel_rows,
     power_status,
+    switch_status,
+    switch_text,
+    switchable,
     system_rows,
 )
 from paperroute_device.adapters.web_common import form_fields
@@ -42,12 +47,14 @@ from paperroute_device.core.device_model import (
     ConfirmAction,
     DeviceKey,
     DeviceStatus,
+    InstalledApp,
     JoinRequest,
     PowerAction,
     WifiNetwork,
     WifiPhase,
     missing_keys,
 )
+from paperroute_device.ports import AppSwitch
 from paperroute_hardware.ports import PanelTimes
 
 logger = logging.getLogger(__name__)
@@ -60,6 +67,7 @@ KEY_LABEL_MARK: Final[str] = '{{key_label}}'
 FORM_MARK: Final[str] = '{{form}}'
 RESET_MARK: Final[str] = '{{reset_hint}}'
 DATA_LINE: Final[str] = '    {{data}}\n'
+APPS_LINE: Final[str] = '    {{apps}}\n'
 DOWNLOAD_TYPES: Final[dict[str, str]] = {
     'errors.jsonl': 'application/x-ndjson',
     'state.json': 'application/json',
@@ -326,6 +334,9 @@ class DevicePages:
     data : Callable[[], str] | None
         The Device page's Data section as HTML, called at request time;
         None leaves the section out.
+    apps : AppSwitch | None
+        The installed apps and the switch between them; None, or no apps
+        listed, leaves the App section out.
     """
 
     def __init__(  # pylint: disable=too-many-arguments,too-many-locals
@@ -343,6 +354,7 @@ class DevicePages:
         reset_hint: str = KIT_RESET_HINT,
         sheets: Sequence[str] = (),
         data: Callable[[], str] | None = None,
+        apps: AppSwitch | None = None,
     ) -> None:
         self._status = status
         self._panel = panel
@@ -356,6 +368,7 @@ class DevicePages:
         self._reset_hint = reset_hint
         self._sheets = tuple(sheets)
         self._data = data
+        self._apps = apps
 
     def _routes(self) -> list[web.RouteDef]:
         """
@@ -364,13 +377,17 @@ class DevicePages:
         Returns
         -------
         list[web.RouteDef]
-            The power confirm page and post, the setup page, the Device
-            page, their scripts, form posts and downloads.
+            The power and switch confirm pages and posts, the setup
+            page, the Device page, their scripts, form posts and
+            downloads.
         """
         return [
             web.get('/device/power', self._power_page),
             web.post('/device/power', self._power_page),
+            web.get('/device/switch', self._switch_page),
+            web.post('/device/switch', self._switch_page),
             web.post('/power', self._power),
+            web.post('/switch', self._switch),
             web.get('/setup', self._setup_page),
             web.get('/setup.js', self._setup_js),
             web.post('/setup', self._setup),
@@ -610,7 +627,7 @@ class DevicePages:
         return None
 
     def _device(
-        self, *, news: str = '', power: str = '',
+        self, *, news: str = '', power: str = '', switching: str = '',
         status: HTTPStatus = HTTPStatus.OK,
     ) -> web.Response:
         """
@@ -622,6 +639,8 @@ class DevicePages:
             HTML for the top of the page.
         power : str
             The power action under way, or empty.
+        switching : str
+            The switch under way, or empty.
         status : HTTPStatus
             The response status.
 
@@ -660,10 +679,24 @@ class DevicePages:
         for mark, value in marks.items():
             page = page.replace(mark, value)
         data = '' if self._data is None else f'    {self._data()}\n'
-        page = page.replace(DATA_LINE, data)
+        section = apps_section(apps=self._installed(), status=switching)
+        page = page.replace(DATA_LINE, data).replace(
+            APPS_LINE, f'    {section}\n' if section else '',
+        )
         return web.Response(
             text=page, content_type='text/html', status=status,
         )
+
+    def _installed(self) -> tuple[InstalledApp, ...]:
+        """
+        List the installed apps without waiting.
+
+        Returns
+        -------
+        tuple[InstalledApp, ...]
+            The apps; empty with no app switch.
+        """
+        return () if self._apps is None else self._apps.installed()
 
     async def _device_page(self, request: web.Request) -> web.Response:
         """
@@ -672,7 +705,8 @@ class DevicePages:
         Parameters
         ----------
         request : web.Request
-            The incoming request; `asked`, `key` or `power` after a post.
+            The incoming request; `asked`, `key`, `power` or `switch`
+            after a post.
 
         Returns
         -------
@@ -682,6 +716,9 @@ class DevicePages:
         return self._device(
             news=device_notice(query=request.query),
             power=power_status(query=request.query),
+            switching=switch_status(
+                query=request.query, apps=self._installed(),
+            ),
         )
 
     async def _device_js(self, request: web.Request) -> web.Response:
@@ -893,3 +930,64 @@ class DevicePages:
         if request.content_type == 'application/json':
             return web.Response(status=HTTPStatus.NO_CONTENT)
         raise web.HTTPSeeOther(location=f'/device?power={action.value}')
+
+    async def _switch_page(self, request: web.Request) -> web.Response:
+        """
+        Serve the page that confirms a switch to another app.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request; `app` in the query or the form.
+
+        Returns
+        -------
+        web.Response
+            The page, or 400 for an app not listed or already showing.
+        """
+        fields = await form_fields(request=request)
+        app = switchable(
+            apps=self._installed(),
+            key=fields.get('app', request.query.get('app', '')),
+        )
+        if app is None:
+            return web.Response(status=HTTPStatus.BAD_REQUEST)
+        page = self._frame(name='switch.html', current='/device').replace(
+            '{{app}}', html.escape(app.key),
+        ).replace('{{text}}', switch_text(app=app, apps=self._installed()))
+        return web.Response(text=page, content_type='text/html')
+
+    async def _switch(self, request: web.Request) -> web.Response:
+        """
+        Ask the system to switch to another app.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request; `app` in the form or JSON body.
+
+        Returns
+        -------
+        web.Response
+            400 for an app not listed or already showing. Once accepted,
+            204 to the script's JSON, or 303 to the Device page for a
+            plain form; once refused, 409 to the script, or the Device
+            page saying so for a plain form.
+        """
+        fields = await form_fields(request=request)
+        apps = self._apps
+        app = switchable(apps=self._installed(), key=fields.get('app', ''))
+        if apps is None or app is None:
+            return web.Response(status=HTTPStatus.BAD_REQUEST)
+        accepted = await apps.switch(key=app.key)
+        if request.content_type == 'application/json':
+            return web.Response(
+                status=HTTPStatus.NO_CONTENT if accepted
+                else HTTPStatus.CONFLICT,
+            )
+        if accepted:
+            raise web.HTTPSeeOther(location=f'/device?switch={app.key}')
+        return self._device(
+            news=notice(text=NOT_SWITCHED, alert=True),
+            status=HTTPStatus.CONFLICT,
+        )

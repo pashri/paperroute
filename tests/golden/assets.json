@@ -14,7 +14,7 @@
   "/device.js": {
     "cache_control": null,
     "content_type": "text/javascript; charset=utf-8",
-    "sha256": "13fb5ac102c5af858aaa58ab572768b403d6deb95146d654447838514f4fa0a7",
+    "sha256": "0eab87d52e9bdcad946892877191dc7bc58481fcc505489366ca4d45964c310e",
     "status": 200
   },
   "/fonts/public-sans.woff2": {
@@ -26,7 +26,7 @@
   "/live.css": {
     "cache_control": null,
     "content_type": "text/css; charset=utf-8",
-    "sha256": "60a76bbeecc8c56a0c7a2975ad5ddeb224e4836e89ced1f8b0ff3dfcb1d335a1",
+    "sha256": "1ab4b5c0003ed02d8a7bed580394a52711bf9ede74099d75c6cd94e7b4bb62a8",
     "status": 200
   },
   "/live.js": {

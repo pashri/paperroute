@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Confirm - paperroute</title>
+  <link rel="stylesheet" href="/live.css">
+  {{sheets}}
+</head>
+<body>
+  <header>
+    <h1>paperroute</h1>
+  </header>
+  {{nav}}
+  <main>
+    <section class="card setting" aria-labelledby="app">
+      <h2 id="app">App</h2>
+      <form method="post" action="/switch">{{text}}
+        <input type="hidden" name="app" value="{{app}}">
+        <div class="buttons">
+          <a class="button secondary" href="/device">Cancel</a>
+          <button type="submit">Switch</button>
+        </div>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

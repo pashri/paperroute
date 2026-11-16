@@ -218,7 +218,7 @@ def test_device_pages_only_for_live_feeds(
     bare = web_app(live=live.live, device=None).router.routes()
     assert sum(route.method != 'HEAD' for route in pages) - sum(
         route.method != 'HEAD' for route in bare
-    ) == 13
+    ) == 16
     replayed = served(
         monkeypatch=monkeypatch,
         app=sydney_app(),
@@ -574,7 +574,7 @@ def test_resets_for_without_power_is_null(tmp_path: Path) -> None:
     )
     assert isinstance(off, NullResets)
     assert isinstance(on, FileResets)
-    assert on.data_dir == Path('/var/lib/paperroute')
+    assert on.data_dir == tmp_path
     assert on.erased == (args.timetable,)
 
 

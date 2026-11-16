@@ -190,7 +190,7 @@
           <button type="submit" class="danger">Erase everything</button>
         </form>
       </div>
-      <p class="hint">Reset settings clears pins, settings, Wi-Fi and the key. Erase everything also deletes the timetable. The map is kept. Both are confirmed on the device.</p>
+      <p class="hint">Reset settings clears pins, settings, Wi-Fi and the key. Erase everything also deletes the timetable. The map is kept. Other installed apps keep their own. Both are confirmed on the device.</p>
     </section>
   </main>
 </body>

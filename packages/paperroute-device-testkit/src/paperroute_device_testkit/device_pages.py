@@ -20,6 +20,7 @@ from paperroute_device.core.device_model import (
     WifiSetup,
     WifiStatus,
 )
+from paperroute_device.ports import AppSwitch
 from paperroute_device_testkit.device_fakes import FakeKeys
 from paperroute_hardware.ports import PanelTimes
 
@@ -100,6 +101,8 @@ class DeviceSite:
         Extra stylesheets each page links.
     data : Callable[[], str] | None
         The Device page's Data section, or None for none.
+    apps : AppSwitch | None
+        The installed apps, or None for no App section.
     """
 
     status: DeviceStatus | None = STATUS
@@ -118,6 +121,7 @@ class DeviceSite:
     reset_hint: str = KIT_RESET_HINT
     sheets: tuple[str, ...] = ()
     data: Callable[[], str] | None = None
+    apps: AppSwitch | None = None
 
     def pages(self) -> DevicePages:
         """
@@ -150,4 +154,5 @@ class DeviceSite:
             reset_hint=self.reset_hint,
             sheets=self.sheets,
             data=self.data,
+            apps=self.apps,
         )

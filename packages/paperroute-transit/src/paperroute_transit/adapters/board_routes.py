@@ -17,8 +17,8 @@ VENDORED: Final[dict[str, str]] = {
 }
 RESET_HINT: Final[str] = (
     'Reset settings clears pins, settings, Wi-Fi and the key. Erase '
-    'everything also deletes the timetable. The map is kept. Both are '
-    'confirmed on the device.'
+    'everything also deletes the timetable. The map is kept. Other '
+    'installed apps keep their own. Both are confirmed on the device.'
 )
 
 

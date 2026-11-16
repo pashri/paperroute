@@ -35,6 +35,7 @@ KIT_PATHS: Final[frozenset[str]] = frozenset({
     '/setup',
     '/setup.js',
     '/power',
+    '/switch',
 })
 KIT_PREFIXES: Final[tuple[str, ...]] = ('/device/', '/fonts/')
 

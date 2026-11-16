@@ -29,8 +29,8 @@ if TYPE_CHECKING:
 
 KIT_RESET_HINT: Final[str] = (
     'Reset settings clears the settings, Wi-Fi and the keys. Erase '
-    'everything also deletes the saved data. Both are confirmed on the '
-    'device.'
+    'everything also deletes the saved data. Other installed apps keep '
+    'their own. Both are confirmed on the device.'
 )
 KIT_CARD: Final[AppCard] = AppCard(name='paperroute')
 

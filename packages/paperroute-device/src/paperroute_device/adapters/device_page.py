@@ -1,13 +1,14 @@
 """Draw the Device page's facts and news."""
 
 import html
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Final
 
 from paperroute_device.core.device_model import (
     POWER_ACTIONS,
     ConfirmAction,
     DeviceFacts,
+    InstalledApp,
     PowerAction,
 )
 from paperroute_device.core.panel_views import (
@@ -48,6 +49,49 @@ ROW: Final[str] = """        <div>
           <dt>{label}</dt>
           <dd>{value}</dd>
         </div>"""
+SWITCH_QUESTION: Final[str] = 'Switch this panel to {name}?'
+SWITCH_KEPT: Final[str] = 'Everything saved for {name} is kept.'
+SWITCHING: Final[str] = (
+    'Switching to {name}... The panel restarts in a few seconds.'
+)
+NOT_SWITCHED: Final[str] = (
+    'Not switched. The panel is installing or getting an app ready. '
+    'Try again when it has finished.'
+)
+APP_SECTION: Final[str] = (
+    '<section class="card setting" aria-labelledby="app">\n'
+    '      <h2 id="app">App</h2>\n'
+    '      <form method="post" action="/device/switch" data-switch>\n'
+    '        <fieldset class="apps">\n'
+    '          <legend>Installed on this panel</legend>\n'
+    '{labels}\n'
+    '        </fieldset>{button}\n'
+    '      </form>\n'
+    '      <p id="switch-status" class="hint" aria-live="polite">{status}'
+    '</p>{dialogs}\n'
+    '    </section>'
+)
+APP_LABEL: Final[str] = (
+    '          <label>\n'
+    '            <input type="radio" name="app" value="{key}"{choice}>\n'
+    '            <span>{name}{status}</span>{now}\n'
+    '          </label>'
+)
+SHOWING: Final[str] = '\n            <strong class="now">Showing</strong>'
+SWITCH_BUTTON: Final[str] = '\n        <button type="submit">Switch</button>'
+SWITCH_DIALOG: Final[str] = (
+    '\n      <dialog id="switch-{key}-dialog" data-switch="{key}" '
+    'aria-labelledby="switch-{key}-question">\n'
+    '        <form method="dialog">\n'
+    '          <p id="switch-{key}-question">{question}</p>{lines}\n'
+    '          <div class="buttons">\n'
+    '            <button value="cancel" class="secondary" autofocus>'
+    'Cancel</button>\n'
+    '            <button value="confirm">Switch</button>\n'
+    '          </div>\n'
+    '        </form>\n'
+    '      </dialog>'
+)
 
 
 def notice(*, text: str, alert: bool = False) -> str:
@@ -403,3 +447,222 @@ def power_status(*, query: Mapping[str, str]) -> str:
     """
     action = POWER_ACTIONS.get(query.get('power', ''))
     return '' if action is None else POWER_STATUS[action]
+
+
+def paragraphs(*, lines: Iterable[str], indent: str) -> str:
+    """
+    Draw lines of text as paragraphs, each on a line of its own.
+
+    Parameters
+    ----------
+    lines : Iterable[str]
+        The lines; escaped here.
+    indent : str
+        The space before each paragraph.
+
+    Returns
+    -------
+    str
+        A newline, the indent and a paragraph for each line; empty with
+        no lines.
+    """
+    return ''.join(f'\n{indent}<p>{html.escape(line)}</p>' for line in lines)
+
+
+def switch_lines(
+    *, app: InstalledApp, apps: Sequence[InstalledApp],
+) -> tuple[str, ...]:
+    """
+    Say what switching to an app takes and keeps.
+
+    Parameters
+    ----------
+    app : InstalledApp
+        The app switched to.
+    apps : Sequence[InstalledApp]
+        The installed apps.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The app's wait, when it has one, then that the app showing keeps
+        its data, when one is showing.
+    """
+    kept = next(
+        (
+            SWITCH_KEPT.format(name=other.card.name)
+            for other in apps
+            if other.active
+        ),
+        '',
+    )
+    return tuple(line for line in (app.card.wait, kept) if line)
+
+
+def switch_text(*, app: InstalledApp, apps: Sequence[InstalledApp]) -> str:
+    """
+    Draw the confirm page's question, the wait and what is kept.
+
+    Parameters
+    ----------
+    app : InstalledApp
+        The app switched to.
+    apps : Sequence[InstalledApp]
+        The installed apps.
+
+    Returns
+    -------
+    str
+        Paragraphs, each after a newline.
+    """
+    return paragraphs(
+        lines=(
+            SWITCH_QUESTION.format(name=app.card.name),
+            *switch_lines(app=app, apps=apps),
+        ),
+        indent=' ' * 8,
+    )
+
+
+def app_label(*, app: InstalledApp, checked: bool) -> str:
+    """
+    Draw one app's radio, name and status line.
+
+    Parameters
+    ----------
+    app : InstalledApp
+        The app.
+    checked : bool
+        Whether its radio starts chosen.
+
+    Returns
+    -------
+    str
+        A label; the app showing is marked and can't be chosen.
+    """
+    name = html.escape(app.card.name)
+    if app.active:
+        choice, now = ' disabled', SHOWING
+    else:
+        choice = f' data-name="{name}" required' + (
+            ' checked' if checked else ''
+        )
+        now = ''
+    status = html.escape(app.card.status)
+    return APP_LABEL.format(
+        key=html.escape(app.key),
+        choice=choice,
+        name=name,
+        status=status and f'<small>{status}</small>',
+        now=now,
+    )
+
+
+def switch_dialog(
+    *, app: InstalledApp, apps: Sequence[InstalledApp],
+) -> str:
+    """
+    Draw the dialog that confirms a switch to an app.
+
+    Parameters
+    ----------
+    app : InstalledApp
+        The app switched to.
+    apps : Sequence[InstalledApp]
+        The installed apps.
+
+    Returns
+    -------
+    str
+        The dialog, after a newline.
+    """
+    return SWITCH_DIALOG.format(
+        key=html.escape(app.key),
+        question=html.escape(SWITCH_QUESTION.format(name=app.card.name)),
+        lines=paragraphs(
+            lines=switch_lines(app=app, apps=apps), indent=' ' * 10,
+        ),
+    )
+
+
+def apps_section(
+    *, apps: Sequence[InstalledApp], status: str = '',
+) -> str:
+    """
+    Draw the App section: the installed apps and the switch.
+
+    Parameters
+    ----------
+    apps : Sequence[InstalledApp]
+        The installed apps, in list order.
+    status : str
+        The switch under way, or empty; escaped here.
+
+    Returns
+    -------
+    str
+        The section, with a button and a dialog per app not showing when
+        there is more than one app; empty with no apps.
+    """
+    if not apps:
+        return ''
+    chosen = next((app.key for app in apps if not app.active), None)
+    several = len(apps) > 1
+    return APP_SECTION.format(
+        labels='\n'.join(
+            app_label(app=app, checked=app.key == chosen) for app in apps
+        ),
+        button=SWITCH_BUTTON if several else '',
+        status=html.escape(status),
+        dialogs=''.join(
+            switch_dialog(app=app, apps=apps)
+            for app in apps
+            if several and not app.active
+        ),
+    )
+
+
+def switchable(
+    *, apps: Sequence[InstalledApp], key: str,
+) -> InstalledApp | None:
+    """
+    Find an installed app that is not the one showing.
+
+    Parameters
+    ----------
+    apps : Sequence[InstalledApp]
+        The installed apps.
+    key : str
+        The app.
+
+    Returns
+    -------
+    InstalledApp | None
+        The app, or None when it is not listed or is showing.
+    """
+    return next(
+        (app for app in apps if app.key == key and not app.active), None,
+    )
+
+
+def switch_status(
+    *, query: Mapping[str, str], apps: Sequence[InstalledApp],
+) -> str:
+    """
+    Say which app a switch is under way to.
+
+    Parameters
+    ----------
+    query : Mapping[str, str]
+        The page's query; `switch` names the app.
+    apps : Sequence[InstalledApp]
+        The installed apps.
+
+    Returns
+    -------
+    str
+        `SWITCHING` for an app listed, else empty.
+    """
+    key = query.get('switch')
+    app = next((app for app in apps if app.key == key), None)
+    return '' if app is None else SWITCHING.format(name=app.card.name)

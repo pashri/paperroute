@@ -20,15 +20,21 @@ import pytest
 
 import paperroute_device.adapters.tk_monitor as tk_monitor
 from paperroute_device import cli
+from paperroute_device.adapters.app_switch import SystemAppSwitch
 from paperroute_device.adapters.clocks import SystemClock
 from paperroute_device.adapters.resets import FileResets, NullResets
 from paperroute_device.adapters.state_file import DEFAULT_PATH, StateFile
 from paperroute_device.adapters.web_display import WebDisplay
+from paperroute_device.adapters.wifi import NullWifi
 from paperroute_device.core.device_model import AppCard, DeviceKey
 from paperroute_device.core.kit_events import QuitRequested
 from paperroute_device.logs import LastError
 from paperroute_device.runtime.ports import KitPorts
-from paperroute_device_testkit.device_fakes import FakeKeys, FixedClock
+from paperroute_device_testkit.device_fakes import (
+    FakeAppSwitch,
+    FakeKeys,
+    FixedClock,
+)
 from paperroute_device_testkit.device_pages import TEST_KEY
 from tests.core.fake_app import START, FakeApp
 
@@ -378,6 +384,47 @@ async def test_device_for_probes_and_resets_every_key(
     assert isinstance(keyless.resets, NullResets)
 
 
+def test_resets_are_kept_to_the_state_files_directory(
+    tmp_path: Path,
+) -> None:
+    """Resets delete only inside the folder the state file resolves to."""
+    (tmp_path / 'apps' / 'first').mkdir(parents=True)
+    (tmp_path / 'link').symlink_to(tmp_path / 'apps' / 'first')
+    args = cli.parse_args(
+        app=FakeApp(),
+        argv=['run', '--power', '--state', str(tmp_path / 'link/state.json')],
+    )
+    resets = cli.resets_for(args=args, keys=(), wifi=NullWifi(), erased=())
+    assert isinstance(resets, FileResets)
+    assert resets.data_dir == tmp_path / 'apps' / 'first'
+
+
+def test_power_wires_the_app_switch(tmp_path: Path) -> None:
+    """With --power the app switch reads the running app's own card."""
+    (tmp_path / 'apps' / 'first').mkdir(parents=True)
+    (tmp_path / 'link').symlink_to(tmp_path / 'apps' / 'first')
+    app = CardApp(card=AppCard(name='First'))
+    args = cli.parse_args(
+        app=app,
+        argv=['run', '--power', '--state', str(tmp_path / 'link/state.json')],
+    )
+    apps = cli.apps_for(args=args, app=app, clock=FixedClock(at=START))
+    assert isinstance(apps, SystemAppSwitch)
+    assert apps.own() == AppCard(name='First')
+    assert app.asked == [tmp_path / 'apps' / 'first']
+
+
+def test_no_power_has_no_app_switch(tmp_path: Path) -> None:
+    """Without --power, as on a development machine, there is no switch."""
+    args = cli.parse_args(
+        app=FakeApp(),
+        argv=['run', '--state', str(tmp_path / 'state.json')],
+    )
+    assert cli.apps_for(
+        args=args, app=FakeApp(), clock=FixedClock(at=START),
+    ) is None
+
+
 class ReplayApp(KeyedApp):
     """A keyed app replaying recordings on a clock of its own."""
 
@@ -525,6 +572,31 @@ async def test_serve_web_runs_and_stops(tmp_path: Path) -> None:
     finally:
         server.cancel()
         await asyncio.gather(server, return_exceptions=True)
+
+
+async def test_serve_web_refreshes_the_apps_once_serving(
+    tmp_path: Path,
+) -> None:
+    """Serving starts one refresh of the installed apps."""
+    app, display, apps = FakeApp(), WebDisplay(), FakeAppSwitch()
+    ports = KitPorts(
+        display=display,
+        clock=FixedClock(at=START),
+        states=StateFile(path=tmp_path / 'state.json', app=app),
+    )
+    async with asyncio.timeout(30):
+        await cli.serve_web(
+            app=app,
+            ports=ports,
+            display=display,
+            host='127.0.0.1',
+            port=free_port(),
+            zone=UTC,
+            tick_every=0.01,
+            max_events=1,
+            apps=apps,
+        )
+    assert apps.refreshed == 1
 
 
 def test_web_main_logs_a_bind_failure(

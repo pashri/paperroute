@@ -11,7 +11,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute_device.adapters.device_page import ASKED as DEVICE_ASKED
-from paperroute_device.adapters.device_page import ago_text
+from paperroute_device.adapters.device_page import NOT_SWITCHED, ago_text
 from paperroute_device.adapters.web_device import RESET_MARK, DevicePages
 from paperroute_device.adapters.web_live import LiveView
 from paperroute_device.adapters.web_shell import web_app
@@ -22,16 +22,18 @@ from paperroute_device.core.device_events import (
     PowerRequested,
 )
 from paperroute_device.core.device_model import (
+    AppCard,
     Confirm,
     ConfirmAction,
     Credential,
     DeviceKey,
+    InstalledApp,
     Origin,
     PowerAction,
     WifiStatus,
 )
 from paperroute_device.core.panel_views import KIT_CONFIRM_COPY, confirm_view
-from paperroute_device_testkit.device_fakes import FakeKeys
+from paperroute_device_testkit.device_fakes import FakeAppSwitch, FakeKeys
 from paperroute_device_testkit.device_pages import (
     FACTS,
     HOTSPOT,
@@ -51,6 +53,48 @@ B_KEY = Credential(
     refusal='Bad second key.',
     not_saved='Second key not saved.',
 )
+APPS = (
+    InstalledApp(
+        key='first', card=AppCard(name='First', status='here'), active=True,
+    ),
+    InstalledApp(
+        key='demo',
+        card=AppCard(name='Demo', status='s', wait='w'),
+        active=False,
+    ),
+)
+APP_SECTION = """<section class="card setting" aria-labelledby="app">
+      <h2 id="app">App</h2>
+      <form method="post" action="/device/switch" data-switch>
+        <fieldset class="apps">
+          <legend>Installed on this panel</legend>
+          <label>
+            <input type="radio" name="app" value="first" disabled>
+            <span>First<small>here</small></span>
+            <strong class="now">Showing</strong>
+          </label>
+          <label>
+            <input type="radio" name="app" value="demo" data-name="Demo" \
+required checked>
+            <span>Demo<small>s</small></span>
+          </label>
+        </fieldset>
+        <button type="submit">Switch</button>
+      </form>
+      <p id="switch-status" class="hint" aria-live="polite"></p>
+      <dialog id="switch-demo-dialog" data-switch="demo" \
+aria-labelledby="switch-demo-question">
+        <form method="dialog">
+          <p id="switch-demo-question">Switch this panel to Demo?</p>
+          <p>w</p>
+          <p>Everything saved for First is kept.</p>
+          <div class="buttons">
+            <button value="cancel" class="secondary" autofocus>Cancel</button>
+            <button value="confirm">Switch</button>
+          </div>
+        </form>
+      </dialog>
+    </section>"""
 ASKED_AT = datetime(2025, 10, 21, 21, 45, tzinfo=ZONE)
 ASKED = {
     'join_wifi': (
@@ -68,10 +112,16 @@ ASKED = {
 }
 
 
+@pytest.fixture(name='fake')
+def _fake() -> FakeAppSwitch:
+    """An app switch listing `APPS`."""
+    return FakeAppSwitch(apps=APPS)
+
+
 @pytest.fixture(name='device')
-def _device() -> DeviceSite:
-    """Device pages over a status and a key."""
-    return DeviceSite()
+def _device(fake: FakeAppSwitch) -> DeviceSite:
+    """Device pages over a status, a key and the installed apps."""
+    return DeviceSite(apps=fake)
 
 
 async def _start(*, device: DeviceSite) -> Client:
@@ -584,6 +634,7 @@ async def test_reset_hint_is_a_parameter() -> None:
         finally:
             await client.close()
     assert f'<p class="hint">{KIT_RESET_HINT}</p>' in texts[0]
+    assert 'Other installed apps keep their own.' in texts[0]
     assert '<p class="hint">Wipes &lt;it&gt; all.</p>' in texts[1]
     assert KIT_RESET_HINT not in texts[1]
     assert RESET_MARK not in texts[0] + texts[1]
@@ -599,3 +650,146 @@ async def test_error_with_reset_mark_stays_text(
     text = await (await client.get('/device')).text()
     assert _row(label='Last error', value=RESET_MARK) in text
     assert text.count(KIT_RESET_HINT) == 1
+
+
+async def _device_text(*, device: DeviceSite, path: str = '/device') -> str:
+    """Serve one page of a site and give its text."""
+    client = await _start(device=device)
+    try:
+        return await (await client.get(path)).text()
+    finally:
+        await client.close()
+
+
+@pytest.mark.parametrize('apps', [None, FakeAppSwitch()])
+async def test_device_page_has_no_app_section_without_apps(
+    apps: FakeAppSwitch | None,
+) -> None:
+    """With no app switch, or no apps listed, the page is as before."""
+    text = await _device_text(device=DeviceSite(apps=apps))
+    assert 'id="app"' not in text
+    assert '{{apps}}' not in text
+    assert text == await _device_text(device=DeviceSite())
+
+
+async def test_device_page_lists_apps_and_marks_the_one_showing(
+    client: Client,
+) -> None:
+    """Each app has a radio; the one showing is marked and not chosen."""
+    text = await (await client.get('/device')).text()
+    assert f'<main>\n    \n    {APP_SECTION}\n' in text
+    assert '<legend>Installed on this panel</legend>' in text
+    assert text.count('<strong class="now">Showing</strong>') == 1
+    assert '<input type="radio" name="app" value="first" disabled>' in text
+    assert 'value="demo" data-name="Demo" required checked>' in text
+    assert '<p id="switch-demo-question">Switch this panel to Demo?</p>' in (
+        text
+    )
+    assert '<p>w</p>' in text
+    assert '<p>Everything saved for First is kept.</p>' in text
+    assert 'switch-first-dialog' not in text
+
+
+async def test_single_app_has_no_switch_button() -> None:
+    """With one app there is nothing to switch to."""
+    text = await _device_text(
+        device=DeviceSite(apps=FakeAppSwitch(apps=APPS[:1])),
+    )
+    assert 'Showing' in text
+    assert '<button type="submit">Switch</button>' not in text
+    assert '<dialog id="switch-' not in text
+
+
+async def test_app_text_is_escaped() -> None:
+    """Every name, line and wait an app gives is escaped."""
+    odd = replace(
+        APPS[1], card=AppCard(name='<b>', status='a & b', wait='<i>x</i>'),
+    )
+    text = await _device_text(
+        device=DeviceSite(apps=FakeAppSwitch(apps=(APPS[0], odd))),
+    )
+    assert '&lt;b&gt;' in text
+    assert 'a &amp; b' in text
+    assert '&lt;i&gt;x&lt;/i&gt;' in text
+    assert '<b>' not in text
+    assert '<i>' not in text
+
+
+@pytest.mark.parametrize('method', ['GET', 'POST'])
+async def test_switch_page_asks_with_the_wait(
+    client: Client, method: str,
+) -> None:
+    """The confirm page asks, says the wait and posts the app."""
+    if method == 'GET':
+        response = await client.get('/device/switch?app=demo')
+    else:
+        response = await client.post('/device/switch', data={'app': 'demo'})
+    text = await response.text()
+    assert response.status == HTTPStatus.OK
+    assert 'Switch this panel to Demo?' in text
+    assert '<p>w</p>' in text
+    assert 'Everything saved for First is kept.' in text
+    assert '<input type="hidden" name="app" value="demo">' in text
+
+
+@pytest.mark.parametrize('key', ['first', 'nosuch', ''])
+async def test_switch_refuses_unknown_and_active_apps(
+    fake: FakeAppSwitch, client: Client, key: str,
+) -> None:
+    """Only an app listed and not showing can be switched to."""
+    page = await client.get(f'/device/switch?app={key}')
+    post = await client.post('/switch', data={'app': key})
+    assert page.status == HTTPStatus.BAD_REQUEST
+    assert post.status == HTTPStatus.BAD_REQUEST
+    assert fake.asked == []
+
+
+async def test_switch_post_starts_the_switch(
+    fake: FakeAppSwitch, client: Client,
+) -> None:
+    """A form post goes back to the page; the script gets no redirect."""
+    form = await client.post(
+        '/switch', data={'app': 'demo'}, allow_redirects=False,
+    )
+    script = await client.post('/switch', json={'app': 'demo'})
+    assert form.status == HTTPStatus.SEE_OTHER
+    assert form.headers['Location'] == '/device?switch=demo'
+    assert script.status == HTTPStatus.NO_CONTENT
+    assert fake.asked == ['demo', 'demo']
+
+
+async def test_switch_post_reports_a_refusal(
+    fake: FakeAppSwitch, client: Client,
+) -> None:
+    """A switch the system refuses says so, to the form and the script."""
+    fake.accepts = False
+    form = await client.post('/switch', data={'app': 'demo'})
+    text = await form.text()
+    script = await client.post('/switch', json={'app': 'demo'})
+    assert form.status == HTTPStatus.CONFLICT
+    assert NOT_SWITCHED in text
+    assert 'role="alert"' in text
+    assert script.status == HTTPStatus.CONFLICT
+
+
+async def test_device_page_says_a_switch_is_under_way(
+    client: Client,
+) -> None:
+    """The page a form post lands on says which app is coming."""
+    under_way = await (await client.get('/device?switch=demo')).text()
+    unknown = await (await client.get('/device?switch=nosuch')).text()
+    assert (
+        '<p id="switch-status" class="hint" aria-live="polite">Switching to '
+        'Demo... The panel restarts in a few seconds.</p>'
+    ) in under_way
+    assert 'Switching to' not in unknown
+
+
+async def test_switch_post_is_refused_without_apps() -> None:
+    """Pages with no app switch refuse a switch."""
+    client = await _start(device=DeviceSite(apps=None))
+    try:
+        response = await client.post('/switch', data={'app': 'demo'})
+    finally:
+        await client.close()
+    assert response.status == HTTPStatus.BAD_REQUEST

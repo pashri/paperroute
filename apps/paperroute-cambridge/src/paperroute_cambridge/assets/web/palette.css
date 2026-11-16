@@ -99,6 +99,7 @@ body > nav {
 
 .pages {
   flex-direction: column;
+  gap: 0;
 }
 
 .pages li + li {
@@ -131,7 +132,9 @@ body > nav {
 
 @media (min-width: 48em) {
   body > nav {
+    align-self: start;
     margin: 1rem;
+    padding-block: 0;
     border: 3px solid var(--line);
   }
 
@@ -224,8 +227,10 @@ dialog {
 }
 
 .apps {
+  gap: 0;
   padding: 0;
   border: 3px solid var(--line);
+  border-radius: 0;
   background: var(--surface);
 }
 

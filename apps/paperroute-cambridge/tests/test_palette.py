@@ -337,3 +337,20 @@ def test_coach_chip_follows_the_scheme() -> None:
     light = resolved(scheme='light')['--coach']
     assert light == '#e03c31' == CAMBRIDGE.modes[1].chip
     assert resolved(scheme='dark')['--coach'] == '#e8554a'
+
+
+def test_wide_nav_hugs_its_rows_and_lists_have_no_gap() -> None:
+    """Wide nav hugs its rows and lists have no gap."""
+    rules = css_rules(css=PALETTE_CSS)
+    (wide,) = [
+        rule
+        for rule in rules
+        if rule.context == '@media (min-width: 48em)'
+        and rule.selector == 'body > nav'
+    ]
+    assert {'align-self: start', 'padding-block: 0'} <= set(wide.body)
+    for selector in ('.pages', '.apps'):
+        (rule,) = [r for r in rules if r.selector == selector]
+        assert 'gap: 0' in rule.body
+    (apps,) = [r for r in rules if r.selector == '.apps']
+    assert 'border-radius: 0' in apps.body

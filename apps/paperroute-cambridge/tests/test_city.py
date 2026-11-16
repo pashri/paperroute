@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from paperroute_cambridge.build.bods_sources import CAMBRIDGE_SOURCES
 from paperroute_cambridge.city import (
     CAMBRIDGE,
     DRUMMER_STREET,
@@ -123,3 +124,11 @@ def test_merge_cambridge_trims_then_groups(
         == parents(conn)['0500CCITY486']
         == 'cambridge-drummer-street'
     )
+
+
+def test_the_source_name_is_the_holiday_source_and_the_route_prefix() -> None:
+    """The build's source name is the name the city looks up."""
+    name = CAMBRIDGE_SOURCES[0].name
+    assert CAMBRIDGE.timetable.holiday_source == name
+    assert CAMBRIDGE.alerts.route_prefixes == (f'{name}:',)
+

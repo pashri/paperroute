@@ -258,7 +258,8 @@ class City:
     route_fallback : bool
         Whether a vehicle whose trip is not in the timetable is drawn by
         its route; its positions reader labels it '' unless the feed
-        named it.
+        named it. The fallback resolves routes through
+        ``alerts.route_prefixes``.
     """
 
     name: str

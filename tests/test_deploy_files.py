@@ -2588,11 +2588,12 @@ def test_install_tiles_constants() -> None:
     """The real paths, and the lock install-release takes."""
     values = {
         name: script_value(path=TILES_SCRIPT, name=name)
-        for name in ('STAGED', 'DATA', 'LOCK')
+        for name in ('APP', 'STAGED', 'DATA', 'LOCK')
     }
     assert values == {
-        'STAGED': '/var/cache/paperroute-stage/tiles/tiles.db',
-        'DATA': '/var/lib/paperroute',
+        'APP': 'sydney',
+        'STAGED': '/var/cache/paperroute-stage/tiles/$APP/tiles.db',
+        'DATA': '/var/lib/paperroute/apps/$APP',
         'LOCK': script_value(path=BIN / 'install-release', name='LOCK'),
     }
 
@@ -2757,7 +2758,7 @@ def test_before_release_installs_tiles_after_staging_them() -> None:
     """A failed tiles install fails the hook; it stages before installing."""
     text = script_text(path=BEFORE_RELEASE)
     assert commands(path=BEFORE_RELEASE, word='TILES') == [
-        'TILES=/usr/local/sbin/paperroute-install-tiles',
+        'TILES=/usr/local/sbin/paperroute-sydney-install-tiles',
         'if ! ssh -- "$host" sudo -n -l "$TILES" >/dev/null 2>&1; then',
         'ssh -- "$host" sudo -n "$TILES" || exit',
     ]
@@ -2766,9 +2767,10 @@ def test_before_release_installs_tiles_after_staging_them() -> None:
         for part in (
             "check-tiles data/tiles.db",
             'if ! ssh -- "$host" sudo -n -l "$TILES"',
-            "printf 'deploy: run scripts/provision first (tiles)\\n' >&2",
-            'ssh -- "$host" mkdir -p "$STAGE/tiles"',
-            'rsync -a --partial data/tiles.db "$host:$STAGE/tiles/tiles.db"',
+            'tiles not installed: run scripts/provision HOST sydney',
+            'ssh -- "$host" mkdir -p "$STAGE/tiles/sydney"',
+            'rsync -a --partial data/tiles.db '
+            '"$host:$STAGE/tiles/sydney/tiles.db"',
             'sudo -n "$TILES" || exit',
         )
     ]
@@ -2776,6 +2778,45 @@ def test_before_release_installs_tiles_after_staging_them() -> None:
     assert script_value(path=BEFORE_RELEASE, name='STAGE') == (
         script_value(path=DEPLOY_SCRIPT, name='STAGE')
     )
+
+
+def test_before_release_moves_the_old_staged_tiles_first() -> None:
+    """The tiles staged before the per-app layout move before the upload."""
+    text = script_text(path=BEFORE_RELEASE)
+    move = 'mv $STAGE/tiles/tiles.db $STAGE/tiles/sydney/tiles.db'
+    assert 0 < text.index(move) < text.index('rsync')
+
+
+def test_before_release_carries_on_without_the_tile_tool(
+    tmp_path: Path,
+) -> None:
+    """With no tile tool on the Pi the hook says so, uploads nothing, exits 0."""
+    script = tmp_path / 'apps' / 'paperroute-sydney' / 'scripts' / 'before-release'
+    script.parent.mkdir(parents=True)
+    shutil.copy(BEFORE_RELEASE, script)
+    (tmp_path / 'data').mkdir()
+    (tmp_path / 'data' / 'tiles.db').write_bytes(b'')
+    log = tmp_path / 'log'
+    stubs = stub_commands(
+        root=tmp_path,
+        scripts={
+            'uv': '#!/bin/sh\nexit 0\n',
+            'ssh': f'#!/bin/sh\necho "$*" >> {log}\nexit 1\n',
+        },
+    )
+    result = subprocess.run(
+        [str(script), 'pi'],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, 'PATH': f'{stubs}:{os.environ["PATH"]}'},
+    )
+    assert result.returncode == 0
+    assert result.stderr.endswith(
+        'deploy: tiles not installed: run scripts/provision HOST sydney, '
+        'then deploy again\n'
+    )
+    assert 'rsync' not in log.read_text(encoding='utf-8')
 
 
 @dataclass(frozen=True)

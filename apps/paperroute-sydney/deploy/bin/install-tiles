@@ -1,5 +1,5 @@
 #!/bin/bash
-# Installed as /usr/local/sbin/paperroute-install-tiles (root, no arguments).
+# Installed as /usr/local/sbin/paperroute-<app>-install-tiles (root, no arguments).
 # Installs the staged map tiles atomically when their size or mtime differ
 # from the last install. Root reads the stage only as its owner and touches
 # the data directory only as the service user. Their output never reaches the
@@ -9,8 +9,9 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export LC_ALL=C
 umask 022
 
-STAGED=/var/cache/paperroute-stage/tiles/tiles.db
-DATA=/var/lib/paperroute
+APP=sydney
+STAGED=/var/cache/paperroute-stage/tiles/$APP/tiles.db
+DATA=/var/lib/paperroute/apps/$APP
 LOCK=/run/paperroute-install.lock
 OWNER=
 tmp=

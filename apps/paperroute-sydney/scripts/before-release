@@ -3,12 +3,12 @@
 # Run by scripts/deploy once the release is staged. Without data/tiles.db it
 # does nothing. Otherwise it warns when the tiles do not match this release,
 # copies them to the Pi only when they have changed, and installs them with
-# the passwordless install-tiles. Never prompts.
+# the passwordless tile tool. Never prompts.
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 
 STAGE=/var/cache/paperroute-stage
-TILES=/usr/local/sbin/paperroute-install-tiles
+TILES=/usr/local/sbin/paperroute-sydney-install-tiles
 
 if [[ $# -ne 1 || ! $1 =~ ^[A-Za-z0-9][A-Za-z0-9._@-]*$ ]]; then
     printf 'usage: before-release HOST\n' >&2
@@ -19,14 +19,15 @@ host=$1
 [[ -f data/tiles.db ]] || exit 0
 uv run python -m paperroute_sydney.build check-tiles data/tiles.db || printf 'deploy: warning: tiles do not match this release; deploying anyway\n' >&2
 if ! ssh -- "$host" sudo -n -l "$TILES" >/dev/null 2>&1; then
-    printf 'deploy: run scripts/provision first (tiles)\n' >&2
-    exit 1
+    printf 'deploy: tiles not installed: run scripts/provision HOST sydney, then deploy again\n' >&2
+    exit 0
 fi
+ssh -- "$host" "mkdir -p $STAGE/tiles/sydney && { [ ! -f $STAGE/tiles/tiles.db ] || [ -e $STAGE/tiles/sydney/tiles.db ] || mv $STAGE/tiles/tiles.db $STAGE/tiles/sydney/tiles.db; }"
 NUMBER='^(0|[1-9][0-9]*)$'
 free=$(ssh -- "$host" df -Pk "$STAGE" | awk 'NR == 2 { print $4 }') \
     || free=
 remote=$(ssh -- "$host" \
-    "stat -c '%s %Y' $STAGE/tiles/tiles.db 2>/dev/null || echo '0 0'") \
+    "stat -c '%s %Y' $STAGE/tiles/sydney/tiles.db 2>/dev/null || echo '0 0'") \
     || remote=
 staged_size=${remote%% *}
 staged_mtime=${remote##* }
@@ -48,6 +49,6 @@ if [[ $staged_size -ne $size || $staged_mtime -ne $mtime ]]; then
         exit 1
     fi
 fi
-ssh -- "$host" mkdir -p "$STAGE/tiles"
-rsync -a --partial data/tiles.db "$host:$STAGE/tiles/tiles.db"
+ssh -- "$host" mkdir -p "$STAGE/tiles/sydney"
+rsync -a --partial data/tiles.db "$host:$STAGE/tiles/sydney/tiles.db"
 ssh -- "$host" sudo -n "$TILES" || exit

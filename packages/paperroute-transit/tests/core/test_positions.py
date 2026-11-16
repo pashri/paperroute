@@ -10,6 +10,7 @@ from paperroute_transit.core.positions import (
     VehiclePosition,
     fallback_label,
     with_labels,
+    with_route_labels,
     without_parked,
 )
 
@@ -86,3 +87,25 @@ def test_without_parked_drops_vehicles_heard_before_the_limit() -> None:
 def test_without_parked_off_returns_the_same_snapshot() -> None:
     """Without parked off returns the same snapshot."""
     assert without_parked(snapshot=SNAPSHOT, limit=None) is SNAPSHOT
+
+
+def test_with_route_labels_sorts_the_four_cases() -> None:
+    """With route labels sorts the four cases."""
+    cases = (
+        ('t1', '10', 'A'),
+        ('x9', '57428', ''),
+        ('', '', '777'),
+        ('x8', '999', ''),
+    )
+    snapshot = PositionsSnapshot(
+        fetched_at=datetime(2026, 10, 16, tzinfo=ZONE),
+        header_time=5,
+        vehicles=tuple(
+            replace(vehicle(trip_id=trip, label=label), route_id=route)
+            for trip, route, label in cases
+        ),
+    )
+    result = with_route_labels(
+        snapshot=snapshot, trips={'t1'}, routes={'57428': 'PR1'},
+    )
+    assert [v.label for v in result.vehicles] == ['A', 'PR1', '777']

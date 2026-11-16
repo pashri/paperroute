@@ -1,6 +1,6 @@
 """Live vehicle positions, as plain data."""
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from enum import StrEnum
@@ -97,6 +97,40 @@ def with_labels(
             for vehicle in snapshot.vehicles
         ),
     )
+
+
+def with_route_labels(
+    *,
+    snapshot: PositionsSnapshot,
+    trips: Collection[str],
+    routes: Mapping[str, str],
+) -> PositionsSnapshot:
+    """
+    Draw a vehicle by its route when its trip is not in the timetable.
+
+    Parameters
+    ----------
+    snapshot : PositionsSnapshot
+        Snapshot to relabel.
+    trips : Collection[str]
+        Trip IDs the timetable knows.
+    routes : Mapping[str, str]
+        Route short name by feed route ID.
+
+    Returns
+    -------
+    PositionsSnapshot
+        A new snapshot. A vehicle on a known trip is kept; of the rest,
+        one with a label is kept, one on a known route takes the route's
+        name, and the others are left out.
+    """
+    kept: list[VehiclePosition] = []
+    for vehicle in snapshot.vehicles:
+        if vehicle.trip_id in trips or vehicle.label:
+            kept.append(vehicle)
+        elif vehicle.route_id in routes:
+            kept.append(replace(vehicle, label=routes[vehicle.route_id]))
+    return replace(snapshot, vehicles=tuple(kept))
 
 
 def without_parked(

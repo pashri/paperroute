@@ -255,6 +255,10 @@ class City:
         Its realtime feeds.
     parked_age : ParkedAge
         The parked-vehicle age a new board starts with.
+    route_fallback : bool
+        Whether a vehicle whose trip is not in the timetable is drawn by
+        its route; its positions reader labels it '' unless the feed
+        named it.
     """
 
     name: str
@@ -272,6 +276,7 @@ class City:
     noun_overrides: Mapping[tuple[str, str], Nouns]
     feeds: FeedPlan
     parked_age: ParkedAge = ParkedAge.OFF
+    route_fallback: bool = False
 
     def mode(self, *, mode_id: str | None) -> ModeSpec | None:
         """

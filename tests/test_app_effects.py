@@ -7,6 +7,7 @@ import sqlite3
 from collections.abc import Collection
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
+from typing import Final
 
 import numpy as np
 import pytest
@@ -27,6 +28,7 @@ from paperroute_sydney.city import (
     SydneyMode,
 )
 from paperroute_sydney.sydney_feeds import SydneyFeeds
+from paperroute_testkit.adapters.rt_factory import feed as rt_feed
 from paperroute_testkit.core.factories import pin_of, place
 from paperroute_testkit.core.kit_steps import QUIET_PARTS
 from paperroute_testkit.fakes import (
@@ -43,7 +45,11 @@ from paperroute_testkit.render.factories import (
     view_of,
 )
 from paperroute_transit.adapters.tiles_db import NullTiles
-from paperroute_transit.app_effects import VersionWatch, parse_feed
+from paperroute_transit.app_effects import (
+    VersionWatch,
+    labelled_positions,
+    parse_feed,
+)
 from paperroute_transit.app_ports import Ports
 from paperroute_transit.app_render import MapRenderer
 from paperroute_transit.core.alert_model import (
@@ -81,7 +87,10 @@ from paperroute_transit.core.messages import (
     TimetableSeen,
 )
 from paperroute_transit.core.model import Pin, ServiceSpan, StopPlace
-from paperroute_transit.core.positions import PositionsSnapshot
+from paperroute_transit.core.positions import (
+    PositionsSnapshot,
+    VehiclePosition,
+)
 from paperroute_transit.core.reach import (
     ReachInput,
     RunTail,
@@ -1094,3 +1103,144 @@ async def test_alert_fetch_failure_posts_feed_failed() -> None:
         effects=[FetchFeed(feed=ALERTS_FEED, kind=FeedKind.ALERTS)],
     )
     assert [type(event).__name__ for event in posted] == ['FeedFailed']
+
+
+VEHICLES: Final[tuple[tuple[str, str, str], ...]] = (
+    ('t1', '10', 'A'),
+    ('x9', '57428', ''),
+    ('', '', '777'),
+    ('x8', '999', ''),
+)
+
+
+@dataclass
+class StubTimetable(EmptyPlacedTimetable):
+    """A timetable that knows one trip's label and one route's name."""
+
+    asked: int = 0
+
+    def route_labels(self, *, trip_ids: Collection[str]) -> dict[str, str]:
+        """
+        Know trip 't1' as 'A'.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Trip IDs asked about.
+
+        Returns
+        -------
+        dict[str, str]
+            The label of 't1' when asked about it.
+        """
+        return {'t1': 'A'} if 't1' in trip_ids else {}
+
+    def alert_places(
+        self,
+        *,
+        route_ids: Collection[str],
+        stop_ids: Collection[str],
+        route_type: int | None = None,
+    ) -> AlertPlaces:
+        """
+        Know route '57428' as 'PR1' and count the question.
+
+        Parameters
+        ----------
+        route_ids : Collection[str]
+            Route IDs asked about.
+        stop_ids : Collection[str]
+            Ignored.
+        route_type : int | None
+            Ignored.
+
+        Returns
+        -------
+        AlertPlaces
+            The name of '57428' when asked about it.
+        """
+        self.asked += 1
+        names = {'57428': 'PR1'}
+        return AlertPlaces(
+            routes={r: names[r] for r in route_ids if r in names},
+            stops={},
+        )
+
+
+def unnamed_positions(
+    *, data: bytes, fetched_at: datetime,
+) -> PositionsSnapshot:
+    """
+    Read four vehicles, the unnamed ones labelled ''.
+
+    Parameters
+    ----------
+    data : bytes
+        Feed body, ignored.
+    fetched_at : datetime
+        When it was downloaded.
+
+    Returns
+    -------
+    PositionsSnapshot
+        The vehicles in `VEHICLES`.
+    """
+    del data
+    return PositionsSnapshot(
+        fetched_at=fetched_at,
+        header_time=0,
+        vehicles=tuple(
+            VehiclePosition(
+                trip_id=trip,
+                route_id=route,
+                label=label,
+                point=(0.0, 0.0),
+                bearing=None,
+                timestamp=0,
+                start_date=None,
+            )
+            for trip, route, label in VEHICLES
+        ),
+    )
+
+
+def labels(timetable: StubTimetable) -> list[str]:
+    """
+    Run `labelled_positions` over `VEHICLES` and list the labels.
+
+    Parameters
+    ----------
+    timetable : StubTimetable
+        Answers the lookups.
+
+    Returns
+    -------
+    list[str]
+        The label of each vehicle drawn.
+    """
+    recorder = RecordingParsers()
+    snapshot = labelled_positions(
+        timetable=timetable,
+        parsers=FeedParsers(
+            trips=recorder.trips,
+            positions=unnamed_positions,
+            alerts=recorder.alerts,
+        ),
+        data=rt_feed(trips=[]),
+        fetched_at=AT,
+    )
+    return [vehicle.label for vehicle in snapshot.vehicles]
+
+
+def test_labelled_positions_leaves_sydney_vehicles_alone() -> None:
+    """Labelled positions leaves sydney vehicles alone."""
+    timetable = StubTimetable(city=SYDNEY)
+    assert len(labels(timetable)) == 4
+    assert timetable.asked == 0
+
+
+def test_labelled_positions_falls_back_to_the_route() -> None:
+    """Labelled positions falls back to the route."""
+    timetable = StubTimetable(city=replace(SYDNEY, route_fallback=True))
+    assert labels(timetable) == ['A', 'PR1', '777']
+    assert timetable.asked == 1

@@ -54,7 +54,11 @@ from paperroute_transit.core.messages import (
     TimetableSeen,
 )
 from paperroute_transit.core.model import Pin, StopPlace
-from paperroute_transit.core.positions import PositionsSnapshot, with_labels
+from paperroute_transit.core.positions import (
+    PositionsSnapshot,
+    with_labels,
+    with_route_labels,
+)
 from paperroute_transit.core.reach import build_reach
 from paperroute_transit.measures import StopMeasures
 from paperroute_transit.ports import NetworkRepository, TimetableRepository
@@ -585,13 +589,26 @@ def labelled_positions(
     Returns
     -------
     PositionsSnapshot
-        Vehicles labelled with their routes' short names where known.
+        Vehicles labelled with their routes' short names where known; for
+        a city with `route_fallback`, also those on unknown trips whose
+        route is known, and no others without a label.
     """
     snapshot = parsers.positions(data=data, fetched_at=fetched_at)
     labels = timetable.route_labels(
         trip_ids={vehicle.trip_id for vehicle in snapshot.vehicles}
     )
-    return with_labels(snapshot=snapshot, labels=labels)
+    labelled = with_labels(snapshot=snapshot, labels=labels)
+    if not timetable.city.route_fallback:
+        return labelled
+    route_ids = {
+        vehicle.route_id
+        for vehicle in labelled.vehicles
+        if vehicle.trip_id not in labels
+    }
+    places = timetable.alert_places(route_ids=route_ids, stop_ids=())
+    return with_route_labels(
+        snapshot=labelled, trips=labels.keys(), routes=places.routes,
+    )
 
 
 def informed_with(

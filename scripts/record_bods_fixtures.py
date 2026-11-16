@@ -12,7 +12,6 @@ from collections.abc import Collection, Mapping, Sequence
 from datetime import date, datetime
 from pathlib import Path
 from typing import Final
-from xml.etree import ElementTree
 from zoneinfo import ZoneInfo
 
 import aiohttp
@@ -25,13 +24,20 @@ from paperroute_cambridge.adapters.bods import (
     raw_positions,
 )
 from paperroute_cambridge.adapters.bods_positions import named, parse_positions
+from paperroute_cambridge.adapters.siri_cut import (
+    activity_count,
+    activity_places,
+    cut_siri,
+)
 from paperroute_cambridge.adapters.siri_vm import (
-    SIRI,
     CoachSighting,
     coach_sightings,
-    to_sighting,
 )
-from paperroute_cambridge.area import CAMBRIDGE_BBOX, CAMBRIDGE_PROJECTION
+from paperroute_cambridge.area import (
+    CAMBRIDGE_BBOX,
+    CAMBRIDGE_PROJECTION,
+    TRIM_RADIUS,
+)
 from paperroute_device.adapters.secrets_file import SecretsFile
 from paperroute_transit.adapters.feed_errors import FeedError
 from paperroute_transit.build.gtfs_files import active_dates, read_rows
@@ -57,6 +63,10 @@ KEPT: Final[tuple[tuple[str, str], ...]] = (
 )
 BY_ROUTE: Final[tuple[str, str]] = ('SCCM', '4')
 FAR_LIMIT: Final[float] = 30_000  # metres
+UNKNOWN_TRIP: Final[str] = (
+    'a live vehicle on {short} has a trip the timetable lacks: '
+    'download the timetable again'
+)
 ZONE: Final[ZoneInfo] = ZoneInfo('Europe/London')
 POSITIONS_RAW: Final[str] = 'bods_positions_raw.pb'
 POSITIONS_JOINED: Final[str] = 'bods_positions.pb'
@@ -65,12 +75,6 @@ RECORDED_NAME: Final[str] = 'recorded.json'
 SIRI_NAMES: Final[dict[str, str]] = {
     operator: f'siri_{operator.lower()}.xml' for operator in COACH_OPERATORS
 }
-JOURNEY_TAGS: Final[tuple[str, ...]] = (
-    'LineRef',
-    'PublishedLineName',
-    'OperatorRef',
-    'VehicleRef',
-)
 Route = tuple[str, str]
 
 
@@ -121,14 +125,106 @@ def running_services(*, source: Path, day: date) -> set[str]:
     return set(active_dates(archive=source, start=day, days=1))
 
 
-def far_route(*, source: Path) -> tuple[str, str]:
+def route_reach(*, source: Path) -> dict[str, float]:
     """
-    Find the first route none of whose stops is near the centre.
+    Find how close each route comes to the centre.
 
     Parameters
     ----------
     source : Path
         The timetable zip.
+
+    Returns
+    -------
+    dict[str, float]
+        Route id to the distance in metres of its nearest stop; a route
+        with no stop times is absent.
+    """
+    metres = {
+        row['stop_id']: math.hypot(
+            *to_metres(
+                lon=float(row['stop_lon']),
+                lat=float(row['stop_lat']),
+                projection=CAMBRIDGE_PROJECTION,
+            ),
+        )
+        for row in read_rows(archive=source, member='stops.txt')
+    }
+    trip_route = trip_routes(source=source)
+    reach: dict[str, float] = {}
+    for row in read_rows(archive=source, member='stop_times.txt'):
+        route = trip_route[row['trip_id']]
+        reach[route] = min(
+            reach.get(route, math.inf), metres.get(row['stop_id'], math.inf),
+        )
+    return reach
+
+
+def trip_routes(*, source: Path) -> dict[str, str]:
+    """
+    Map each trip id to its route id.
+
+    Parameters
+    ----------
+    source : Path
+        The timetable zip.
+
+    Returns
+    -------
+    dict[str, str]
+        Route id by trip id.
+    """
+    return {
+        row['trip_id']: row['route_id']
+        for row in read_rows(archive=source, member='trips.txt')
+    }
+
+
+def matched_routes(
+    *,
+    source: Path,
+    reach: Mapping[str, float],
+) -> dict[str, Route]:
+    """
+    Find the routes that match a KEPT pair and lie near the centre.
+
+    Parameters
+    ----------
+    source : Path
+        The timetable zip.
+    reach : Mapping[str, float]
+        Each route's nearest stop, from ``route_reach``.
+
+    Returns
+    -------
+    dict[str, Route]
+        Route id to its operator code and short name; a route with no
+        stop within the trim radius is left out.
+    """
+    return {
+        route_id: route
+        for route_id, route in route_index(source=source).items()
+        if route in KEPT and reach.get(route_id, math.inf) <= TRIM_RADIUS
+    }
+
+
+def far_route(
+    *,
+    source: Path,
+    day: date,
+    reach: Mapping[str, float],
+) -> tuple[str, str]:
+    """
+    Find the first far route with a trip running on the day.
+
+    Parameters
+    ----------
+    source : Path
+        The timetable zip.
+    day : date
+        The day.
+    reach : Mapping[str, float]
+        Each route's nearest stop, from ``route_reach``.
 
     Returns
     -------
@@ -138,35 +234,19 @@ def far_route(*, source: Path) -> tuple[str, str]:
     Raises
     ------
     ValueError
-        When every route has a stop within the limit.
+        When no route with a trip on the day lies beyond the limit.
     """
-    near_stops = {
-        row['stop_id']
-        for row in read_rows(archive=source, member='stops.txt')
-        if math.hypot(
-            *to_metres(
-                lon=float(row['stop_lon']),
-                lat=float(row['stop_lat']),
-                projection=CAMBRIDGE_PROJECTION,
-            ),
-        )
-        <= FAR_LIMIT
-    }
-    trip_route = {
-        row['trip_id']: row['route_id']
+    services = running_services(source=source, day=day)
+    running = {
+        row['route_id']
         for row in read_rows(archive=source, member='trips.txt')
+        if row['service_id'] in services
     }
-    served: set[str] = set()
-    near: set[str] = set()
-    for row in read_rows(archive=source, member='stop_times.txt'):
-        route = trip_route[row['trip_id']]
-        served.add(route)
-        if row['stop_id'] in near_stops:
-            near.add(route)
     for row in read_rows(archive=source, member='routes.txt'):
-        if row['route_id'] in served - near:
-            return row['route_id'], row['route_short_name']
-    raise ValueError('no route far from the centre')
+        route = row['route_id']
+        if route in running and reach.get(route, 0.0) > FAR_LIMIT:
+            return route, row['route_short_name']
+    raise ValueError('no route far from the centre runs on the day')
 
 
 def chosen_trips(
@@ -323,9 +403,10 @@ def cut_zip(
     str
         The short name of the far route added.
     """
-    routes = route_index(source=source)
-    far_id, far_name = far_route(source=source)
-    kept = {rid for rid, route in routes.items() if route in KEPT}
+    reach = route_reach(source=source)
+    routes = matched_routes(source=source, reach=reach)
+    far_id, far_name = far_route(source=source, day=day, reach=reach)
+    kept = set(routes)
     trips = chosen_trips(
         source=source,
         kept=kept | {far_id},
@@ -493,117 +574,6 @@ def fetched(*, key: str) -> dict[str, bytes]:
     return asyncio.run(fetch_all(key=key))
 
 
-def siri_root(*, body: bytes) -> ElementTree.Element:
-    """
-    Parse a SIRI-VM body.
-
-    Parameters
-    ----------
-    body : bytes
-        The XML document.
-
-    Returns
-    -------
-    ElementTree.Element
-        The root element.
-
-    Raises
-    ------
-    FeedError
-        When the body is not XML.
-    """
-    try:
-        return ElementTree.fromstring(body)
-    except (ElementTree.ParseError, LookupError) as error:
-        raise FeedError('SIRI-VM body is not XML') from error
-
-
-def activity_places(*, body: bytes) -> list[tuple[float, float]]:
-    """
-    List the VehicleLocation of each activity that has one.
-
-    Parameters
-    ----------
-    body : bytes
-        The SIRI-VM document.
-
-    Returns
-    -------
-    list[tuple[float, float]]
-        Longitude and latitude of each located activity.
-    """
-    places = []
-    for activity in siri_root(body=body).iter(f'{SIRI}VehicleActivity'):
-        place = activity.find(f'.//{SIRI}VehicleLocation')
-        if place is None:
-            continue
-        try:
-            places.append(
-                (
-                    float(place.findtext(f'{SIRI}Longitude') or ''),
-                    float(place.findtext(f'{SIRI}Latitude') or ''),
-                ),
-            )
-        except ValueError:
-            continue
-    return places
-
-
-def activity_count(*, body: bytes) -> int:
-    """
-    Count the VehicleActivity elements in a SIRI-VM body.
-
-    Parameters
-    ----------
-    body : bytes
-        The SIRI-VM document.
-
-    Returns
-    -------
-    int
-        The count.
-    """
-    return sum(1 for _ in siri_root(body=body).iter(f'{SIRI}VehicleActivity'))
-
-
-def cut_siri(*, body: bytes) -> bytes:
-    """
-    Keep only the elements the sightings reader uses.
-
-    Parameters
-    ----------
-    body : bytes
-        The SIRI-VM document.
-
-    Returns
-    -------
-    bytes
-        A document with each complete activity's RecordedAtTime and the
-        journey's line, operator and vehicle elements.
-    """
-    ElementTree.register_namespace('', SIRI[1:-1])
-    root = ElementTree.Element(f'{SIRI}Siri')
-    delivery = ElementTree.SubElement(
-        ElementTree.SubElement(root, f'{SIRI}ServiceDelivery'),
-        f'{SIRI}VehicleMonitoringDelivery',
-    )
-    for activity in siri_root(body=body).iter(f'{SIRI}VehicleActivity'):
-        journey = activity.find(f'{SIRI}MonitoredVehicleJourney')
-        if to_sighting(activity=activity) is None or journey is None:
-            continue
-        kept = ElementTree.SubElement(delivery, f'{SIRI}VehicleActivity')
-        stamp = ElementTree.SubElement(kept, f'{SIRI}RecordedAtTime')
-        stamp.text = activity.findtext(f'{SIRI}RecordedAtTime')
-        kept_journey = ElementTree.SubElement(
-            kept, f'{SIRI}MonitoredVehicleJourney',
-        )
-        for tag in JOURNEY_TAGS:
-            child = journey.find(f'{SIRI}{tag}')
-            if child is not None:
-                kept_journey.append(child)
-    return ElementTree.tostring(root, xml_declaration=True)
-
-
 def live_problem(
     *,
     bodies: Mapping[str, bytes],
@@ -655,7 +625,8 @@ def live_problem(
 def joined_problem(
     *,
     joined: bytes,
-    source: Path,
+    matched: Mapping[str, Route],
+    trip_route: Mapping[str, str],
     at: datetime,
 ) -> str | None:
     """
@@ -665,8 +636,10 @@ def joined_problem(
     ----------
     joined : bytes
         The positions with the coaches named.
-    source : Path
-        The full timetable zip.
+    matched : Mapping[str, Route]
+        The kept routes near the centre, by route id.
+    trip_route : Mapping[str, str]
+        The timetable's route id by trip id.
     at : datetime
         When the positions were fetched.
 
@@ -680,48 +653,51 @@ def joined_problem(
     ).vehicles
     if not any(v.label and not v.trip_id for v in vehicles):
         return 'no coach in the box: record again in the daytime'
-    if not trips_of(vehicles=vehicles, source=source, only_by_route=True):
+    by_route = {rid for rid, route in matched.items() if route == BY_ROUTE}
+    trips = trips_on(vehicles=vehicles, routes=by_route, trip_route=trip_route)
+    if not trips:
         return f'no live vehicle on route {BY_ROUTE[1]}'
+    for vehicle in vehicles:
+        route = matched.get(vehicle.route_id)
+        if (
+            route
+            and route != BY_ROUTE
+            and vehicle.trip_id
+            and vehicle.trip_id not in trip_route
+        ):
+            return UNKNOWN_TRIP.format(short=route[1])
     return None
 
 
-def trips_of(
+def trips_on(
     *,
     vehicles: Collection[VehiclePosition],
-    source: Path,
-    only_by_route: bool,
+    routes: Collection[str],
+    trip_route: Mapping[str, str],
 ) -> set[str]:
     """
-    List the trips of the vehicles, or only those on the by-route route.
+    List the trips of the vehicles that are on the given routes.
 
     Parameters
     ----------
     vehicles : Collection[VehiclePosition]
         The parsed vehicles.
-    source : Path
-        The full timetable zip.
-    only_by_route : bool
-        True to list only the trips on the by-route route.
+    routes : Collection[str]
+        Route ids.
+    trip_route : Mapping[str, str]
+        The timetable's route id by trip id.
 
     Returns
     -------
     set[str]
-        Trip ids; a vehicle with none is left out.
+        Trip ids; a vehicle with none is left out. A trip the timetable
+        lacks is placed by the vehicle's own route id.
     """
-    wanted = {
-        route_id
-        for route_id, route in route_index(source=source).items()
-        if route == BY_ROUTE or not only_by_route
-    }
-    trip_route = {
-        row['trip_id']: row['route_id']
-        for row in read_rows(archive=source, member='trips.txt')
-    }
     return {
         vehicle.trip_id
         for vehicle in vehicles
         if vehicle.trip_id
-        and trip_route.get(vehicle.trip_id, vehicle.route_id) in wanted
+        and trip_route.get(vehicle.trip_id, vehicle.route_id) in routes
     }
 
 
@@ -802,7 +778,16 @@ def fixtures(
         found for body in cut.values() for found in coach_sightings(data=body)
     ]
     joined = named(data=bodies[POSITIONS_RAW], sightings=sightings)
-    problem = joined_problem(joined=joined, source=source, at=at)
+    matched = matched_routes(source=source, reach=route_reach(source=source))
+    for pair in KEPT:
+        ids = sorted(rid for rid, route in matched.items() if route == pair)
+        print(f'{pair[0]} {pair[1]}: {len(ids)} routes: {", ".join(ids)}')
+    problem = joined_problem(
+        joined=joined,
+        matched=matched,
+        trip_route=trip_routes(source=source),
+        at=at,
+    )
     if problem:
         print(f'record: {problem}', file=sys.stderr)
         return {}
@@ -813,9 +798,7 @@ def fixtures(
         source=source,
         out=work / ZIP_NAME,
         day=at.date(),
-        live_trips=trips_of(
-            vehicles=vehicles, source=source, only_by_route=False,
-        ),
+        live_trips={v.trip_id for v in vehicles if v.trip_id},
     )
     summary = {
         'at': at.isoformat(timespec='seconds'),

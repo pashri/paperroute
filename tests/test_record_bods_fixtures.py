@@ -124,14 +124,18 @@ def source_zip(*, path: Path) -> Path:
         ('4', 'OP1'),
         ('777', 'OP5050'),
         ('9', 'OP1'),
+        ('X98', 'OP9'),
         ('X99', 'OP9'),
     ]
     trips = [
         row
         for short, _ in routes
-        for row in trip_rows(route=short, count=6)
+        for row in trip_rows(route=short, count=0 if short == 'X98' else 6)
+    ] + [
+        {**row, 'route_id': 'r-4-far', 'trip_id': row['trip_id'] + 'far'}
+        for row in trip_rows(route='4', count=6)
     ]
-    far = {'x99-1', 'x99-2', 'x99-3', 'x99-4', 'x99-5', 'x99-6', 'x99-7'}
+    far = {'r-X98', 'r-X99', 'r-4-far'}
     return write_feed(
         path=path,
         files={
@@ -147,12 +151,19 @@ def source_zip(*, path: Path) -> Path:
                     'route_short_name': short,
                 }
                 for short, agency in routes
+            ]
+            + [
+                {
+                    'route_id': 'r-4-far',
+                    'agency_id': 'OP1',
+                    'route_short_name': '4',
+                },
             ],
             'trips.txt': trips,
             'stop_times.txt': [
                 {
                     'trip_id': row['trip_id'],
-                    'stop_id': 's-far' if row['trip_id'] in far else 's-near',
+                    'stop_id': 's-far' if row['route_id'] in far else 's-near',
                     'stop_sequence': '1',
                 }
                 for row in trips
@@ -354,9 +365,22 @@ def snapshot_at(*places: tuple[float, float]) -> PositionsSnapshot:
     )
 
 
-def positions_body() -> bytes:
+def positions_body(
+    vehicles: tuple[tuple[str, str, str], ...] = (
+        ('c1', '', ''),
+        ('b1', '4-2', 'r-4'),
+    ),
+    label: str = '',
+) -> bytes:
     """
-    Build a positions body with a coach and a vehicle on route 4.
+    Build a positions body, by default a coach and a vehicle on route 4.
+
+    Parameters
+    ----------
+    vehicles : tuple[tuple[str, str, str], ...]
+        Vehicle id, trip id and route id of each.
+    label : str
+        Label of every vehicle.
 
     Returns
     -------
@@ -366,12 +390,11 @@ def positions_body() -> bytes:
     message = gtfs_realtime_pb2.FeedMessage()
     message.header.gtfs_realtime_version = '2.0'
     message.header.timestamp = STAMP
-    for number, (vehicle, trip, route) in enumerate(
-        (('c1', '', ''), ('b1', '4-2', 'r-4')),
-    ):
+    for number, (vehicle, trip, route) in enumerate(vehicles):
         entity = message.entity.add()
         entity.id = str(number)
         entity.vehicle.vehicle.id = vehicle
+        entity.vehicle.vehicle.label = label
         entity.vehicle.trip.trip_id = trip
         entity.vehicle.trip.route_id = route
         entity.vehicle.timestamp = STAMP
@@ -633,6 +656,7 @@ def test_main_records_the_files_and_prints_only_sizes(
     printed = capsys.readouterr()
     assert KEY not in printed.out + printed.err
     assert 'replay from: ' in printed.out
+    assert 'SCCM 4: 1 routes: r-4\n' in printed.out
 
 
 def test_main_check_writes_nothing(
@@ -671,3 +695,131 @@ def test_main_exits_2_without_a_key(
     monkeypatch.setenv('PAPERROUTE_KEY_FILE_BODS', str(tmp_path / 'missing'))
     assert recorder.main(['--check']) == 2
     assert capsys.readouterr().err == 'record: no key file\n'
+
+
+def test_cut_zip_adds_the_first_far_route_that_runs_on_the_day(
+    tmp_path: Path,
+) -> None:
+    """Cut zip skips a far route with no trip on the day."""
+    source = source_zip(path=tmp_path / 'source.zip')
+    out = tmp_path / 'bods.zip'
+    assert recorder.cut_zip(
+        source=source, out=out, day=DAY, live_trips=(),
+    ) == 'X99'
+    assert trip_ids(out, route='X99')
+    assert not trip_ids(out, route='X98')
+
+
+def test_cut_zip_leaves_out_a_same_named_route_far_from_the_centre(
+    tmp_path: Path,
+) -> None:
+    """Cut zip keeps a KEPT route only when it has a stop near the centre."""
+    source = source_zip(path=tmp_path / 'source.zip')
+    out = tmp_path / 'bods.zip'
+    recorder.cut_zip(source=source, out=out, day=DAY, live_trips=())
+    assert trip_ids(out, route='4')
+    assert not trip_ids(out, route='4-far')
+    assert not {t for t in all_trip_ids(out) if t.endswith('far')}
+
+
+def run_main(
+    *,
+    keyed: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    bodies: dict[str, bytes],
+) -> tuple[int, Path]:
+    """
+    Run the recorder offline on the given bodies.
+
+    Parameters
+    ----------
+    keyed : Path
+        The directory holding the key file.
+    monkeypatch : pytest.MonkeyPatch
+        Environment patcher.
+    bodies : dict[str, bytes]
+        What `fetched` gives.
+
+    Returns
+    -------
+    tuple[int, Path]
+        The exit status and the output directory.
+    """
+    source = source_zip(path=keyed / 'source.zip')
+    monkeypatch.setattr(recorder, 'fetched', lambda *, key: bodies)
+    out = keyed / 'out'
+    return recorder.main(['--gtfs', str(source), '--out', str(out)]), out
+
+
+def test_main_refuses_a_live_vehicle_whose_trip_the_timetable_lacks(
+    keyed: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Main refuses a kept-route vehicle whose trip is not in the zip."""
+    bodies = live() | {
+        'bods_positions_raw.pb': positions_body(
+            vehicles=(
+                ('c1', '', ''),
+                ('b1', '4-2', 'r-4'),
+                ('b2', 'ghost', 'r-PR2'),
+            ),
+        ),
+    }
+    status, out = run_main(keyed=keyed, monkeypatch=monkeypatch, bodies=bodies)
+    assert status == 1
+    assert not out.exists()
+    assert capsys.readouterr().err == (
+        'record: a live vehicle on PR2 has a trip the timetable lacks: '
+        'download the timetable again\n'
+    )
+
+
+def test_main_refuses_a_key_in_the_raw_positions_body(
+    keyed: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Main writes nothing when the raw positions body holds the key."""
+    bodies = live() | {'bods_positions_raw.pb': positions_body(label=KEY)}
+    status, out = run_main(keyed=keyed, monkeypatch=monkeypatch, bodies=bodies)
+    printed = capsys.readouterr()
+    assert status == 1
+    assert not out.exists()
+    assert 'the key is in bods_positions_raw.pb; nothing written' in printed.err
+    assert KEY not in printed.out + printed.err
+
+
+@pytest.mark.parametrize(
+    ('vehicles', 'natx', 'message'),
+    [
+        ((), ('c1',), 'no vehicle in the GTFS-RT answer'),
+        (
+            (('b1', '4-2', 'r-4'),),
+            ('c1',),
+            'no coach in the box: record again in the daytime',
+        ),
+        (
+            (('c1', '', ''), ('b1', '4far-2', 'r-4-far')),
+            ('c1',),
+            'no live vehicle on route 4',
+        ),
+    ],
+)
+def test_main_names_what_the_recording_lacks(
+    keyed: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    vehicles: tuple[tuple[str, str, str], ...],
+    natx: tuple[str, ...],
+    message: str,
+) -> None:
+    """Main exits 1 naming the missing kind of vehicle, writing nothing."""
+    bodies = live() | {
+        'bods_positions_raw.pb': positions_body(vehicles=vehicles),
+        'siri_natx.xml': siri_body(vehicles=natx),
+    }
+    status, out = run_main(keyed=keyed, monkeypatch=monkeypatch, bodies=bodies)
+    assert status == 1
+    assert not out.exists()
+    assert f'record: {message}\n' in capsys.readouterr().err

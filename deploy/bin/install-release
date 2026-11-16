@@ -309,6 +309,8 @@ else
 fi
 prev=$(readlink -- "$CURRENT" || true)
 switch_to "$R/$SHA"
+[[ -n $(active_app) ]] || fail "the device has no active app. Run\
+ scripts/provision HOST $APP_NAME first."
 if ! is_active; then
     prune
     printf 'install-release: %s is installed for %s; %s stays on the panel\n' \

@@ -135,15 +135,15 @@ go_back() {
 # then APP's ready unit.
 apply_switch() {
     local status=0 unit
-    systemctl stop paperroute
     quiet "$1"
+    systemctl stop paperroute
     activate "$APP" || status=$?
     if [[ $status -eq 1 ]] || ! systemctl start paperroute; then
         go_back "$1"
     fi
     unit=$(ready_unit "$APP")
-    if [[ -n $unit ]]; then
-        systemctl start --no-block "$unit"
+    if [[ -n $unit ]] && ! systemctl start --no-block "$unit"; then
+        printf 'switch-app: could not start %s\n' "$unit" >&2
     fi
     if [[ $status -eq 2 ]]; then
         refuse "$APP is showing, but the timer zone was not set"

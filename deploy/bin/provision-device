@@ -652,10 +652,10 @@ fi
 edit_config "$CONFIG"
 rpi-usb-gadget on
 
+hold_install_lock
 make_dir root 0755 "$SHARE"
 copy_deploy
 take_app_copy
-hold_install_lock
 adopt_single_app
 write_contract
 write_manifest

@@ -3653,7 +3653,7 @@ def test_no_sudoers_rule_points_into_releases(
     assert rules[0] == kit
     assert len(rules) == 2
     assert all(line == kit or APP_RULE.match(line) for line in rules)
-    assert not any('/opt/paperroute/releases' in line for line in rules)
+    assert not any('/releases' in line for line in rules)
     shipped = [
         *sudoers_rules(path=DEPLOY / 'sudoers' / 'paperroute-deploy'),
         *sudoers_rules(path=SYDNEY_SUDOERS / 'paperroute-sydney'),
@@ -5497,6 +5497,18 @@ def test_release_for_another_app_restarts_nothing(sandbox: Sandbox) -> None:
     assert sorted(path.name for path in sandbox.opt.iterdir()) == ['apps']
 
 
+def test_release_without_an_active_app_fails(sandbox: Sandbox) -> None:
+    """A device with no active app is told to provision; nothing restarts."""
+    result = run_release_tail(sandbox=sandbox, active='')
+    assert (result.returncode, result.stdout, result.stderr) == (
+        2,
+        '',
+        'install-release: the device has no active app. Run scripts/provision'
+        f' HOST {APP_NAME} first.\n',
+    )
+    assert not (sandbox.root / 'systemctl.log').exists()
+
+
 def test_release_for_the_active_app_keeps_to_its_directory(
     sandbox: Sandbox,
 ) -> None:
@@ -6304,9 +6316,9 @@ def test_provision_adopts_after_the_copy_check_and_starts_the_board_last(
         lines.index(step)
         for step in (
             'refuse_other_app',
+            'hold_install_lock',
             'copy_deploy',
             'take_app_copy',
-            'hold_install_lock',
             'adopt_single_app',
             'write_contract',
             'install_tools',
@@ -6401,7 +6413,8 @@ SCHEDULE_LINE: Final[str] = (
     ' /usr/local/sbin/paperroute-switch-app --apply demo'
 )
 # Answers is-active from UNIT_STATES (UNIT=STATE words) and logs the rest;
-# the first start of the board fails while SWITCH_ROOT/start-fails exists.
+# the first start of the board fails while SWITCH_ROOT/start-fails exists,
+# and the command SYSTEMCTL_FAILS names always fails.
 SWITCH_SYSTEMCTL: Final[str] = '''#!/bin/bash
 if [[ $1 == is-active ]]; then
     quiet=no
@@ -6424,6 +6437,7 @@ if [[ $* == 'start paperroute' && -e $SWITCH_ROOT/start-fails ]]; then
     rm -f "$SWITCH_ROOT/start-fails"
     exit 1
 fi
+[[ $* != "${SYSTEMCTL_FAILS:-}" ]]
 '''
 # Logs the record; fails once, or always, as SWITCH_ROOT/install-fails says.
 SWITCH_INSTALL_FILES: Final[str] = '''#!/bin/bash
@@ -6691,7 +6705,7 @@ def test_switch_rejects_a_bad_or_unknown_app(
 def test_switch_apply_stops_the_board_before_the_record_changes(
     switch_box: SwitchBox,
 ) -> None:
-    """The board stops, the app's units go in, then the board starts."""
+    """The old app's units and the board stop, then the new units go in."""
     result, log = run_switch(box=switch_box, call='apply_locked')
     assert (result.returncode, result.stdout, result.stderr) == (
         0,
@@ -6699,8 +6713,8 @@ def test_switch_apply_stops_the_board_before_the_record_changes(
         '',
     )
     assert log == [
-        'systemctl stop paperroute',
         'systemctl stop paperroute-one.service',
+        'systemctl stop paperroute',
         'paperroute-install-files (active: demo)',
         f'runuser -u paperroute -- {switch_box.board} zone',
         'paperroute-set-timer-zones apply demo Europe/London',
@@ -6728,6 +6742,23 @@ def test_switch_apply_goes_back_when_the_app_does_not_start(
     assert result.stderr.endswith(
         'switch-app: demo did not start; back on first\n',
     )
+
+
+def test_switch_apply_carries_on_when_the_ready_unit_does_not_start(
+    switch_box: SwitchBox,
+) -> None:
+    """A ready unit that does not start is reported; the app still shows."""
+    result, _ = run_switch(
+        box=switch_box,
+        call='apply_locked',
+        SYSTEMCTL_FAILS='start --no-block paperroute-job.service',
+    )
+    assert (result.returncode, result.stdout, result.stderr) == (
+        0,
+        'switch-app: demo is showing\n',
+        'switch-app: could not start paperroute-job.service\n',
+    )
+    assert record(box=switch_box) == 'demo\n'
 
 
 def test_switch_apply_goes_back_when_install_files_fails(
@@ -6764,9 +6795,9 @@ def test_switch_apply_stops_the_outgoing_apps_units_first(
     result, log = run_switch(box=switch_box, call='apply_locked', app='first')
     assert (result.returncode, result.stderr) == (0, '')
     assert log[:3] == [
-        'systemctl stop paperroute',
         'systemctl stop paperroute-job.timer',
         'systemctl stop paperroute-job.service',
+        'systemctl stop paperroute',
     ]
     assert log.index('paperroute-install-files (active: first)') == 3
     assert not zone.exists()

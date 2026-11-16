@@ -8,7 +8,7 @@ User=paperroute
 Group=paperroute
 SupplementaryGroups=spi gpio
 Environment=FONTCONFIG_FILE=/opt/paperroute/current/packages/paperroute-device/src/paperroute_device/fontconfig/fonts.conf
-ExecStart=/opt/paperroute/current/.venv/bin/paperroute-board run --display web --panel --knobs --state /var/lib/paperroute/state.json --error-log /var/lib/paperroute/log/errors.jsonl --power --wifi --version-file /opt/paperroute/current/VERSION $PAPERROUTE_APP_ARGS
+ExecStart=/opt/paperroute/current/.venv/bin/paperroute-board run --display web --panel --knobs --state /opt/paperroute/data/state.json --error-log /opt/paperroute/data/log/errors.jsonl --power --wifi --version-file /opt/paperroute/current/VERSION $PAPERROUTE_APP_ARGS
 # The app's drop-in, paperroute.service.d/app.conf, sets PAPERROUTE_APP_ARGS
 # + runs it as root: the paperroute user can't write delay_on or delay_off
 ExecStopPost=+/usr/local/bin/paperroute-led boot

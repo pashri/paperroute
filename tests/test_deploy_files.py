@@ -116,7 +116,8 @@ FONTS_CONF: Final[str] = (
 FONTS_ENVIRONMENT: Final[str] = (
     f'FONTCONFIG_FILE=/opt/paperroute/current/{FONTS_CONF}'
 )
-SECRETS: Final[str] = '/var/lib/paperroute/secrets'
+SYDNEY_DATA: Final[str] = '/var/lib/paperroute/apps/sydney'
+SECRETS: Final[str] = f'{SYDNEY_DATA}/secrets'
 TIMETABLE_ENVIRONMENT: Final[str] = (
     f'PAPERROUTE_KEY_FILE_TFNSW={SECRETS}'
     f' PAPERROUTE_API_KEY_FILE={SECRETS}'
@@ -124,9 +125,9 @@ TIMETABLE_ENVIRONMENT: Final[str] = (
 )
 APP_ARGS: Final[tuple[str, ...]] = (
     '--timetable',
-    '/var/lib/paperroute/timetable.db',
+    f'{SYDNEY_DATA}/timetable.db',
     '--tiles',
-    '/var/lib/paperroute/tiles.db',
+    f'{SYDNEY_DATA}/tiles.db',
     '--rebuild',
 )
 APP_CONF_ENVIRONMENT: Final[dict[str, str]] = {
@@ -146,8 +147,8 @@ APP_SERVICE: Final[dict[str, str]] = {
     'Environment': FONTS_ENVIRONMENT,
     'ExecStart': (
         f'{VENV_BIN}/paperroute-board run --display web --panel --knobs'
-        ' --state /var/lib/paperroute/state.json'
-        ' --error-log /var/lib/paperroute/log/errors.jsonl'
+        ' --state /opt/paperroute/data/state.json'
+        ' --error-log /opt/paperroute/data/log/errors.jsonl'
         ' --power --wifi'
         ' --version-file /opt/paperroute/current/VERSION'
         ' $PAPERROUTE_APP_ARGS'
@@ -173,10 +174,10 @@ TIMETABLE_SERVICE: Final[dict[str, str]] = {
     'Environment': TIMETABLE_ENVIRONMENT,
     'ExecStartPre': '+/usr/local/bin/paperroute-led busy',
     'ExecStart': (
-        '/usr/bin/env TMPDIR=/var/lib/paperroute/work'
+        f'/usr/bin/env TMPDIR={SYDNEY_DATA}/work'
         f' {VENV_BIN}/paperroute-build refresh'
-        ' --data-dir /var/lib/paperroute'
-        ' --error-log /var/lib/paperroute/log/errors.jsonl'
+        f' --data-dir {SYDNEY_DATA}'
+        f' --error-log {SYDNEY_DATA}/log/errors.jsonl'
     ),
     'ExecStartPost': '+/usr/bin/systemctl start --no-block paperroute',
     'ExecStopPost': '+/usr/local/bin/paperroute-led restore',
@@ -218,7 +219,7 @@ KIT_UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
                 '/opt/paperroute/current/.venv/bin/python'
                 ' -m paperroute_device.screen --image'
                 ' /usr/local/share/paperroute/deploy/screens/on.raw'
-                ' --state /var/lib/paperroute/state.json'
+                ' --state /opt/paperroute/data/state.json'
             ),
         },
         'Install': {'WantedBy': 'multi-user.target'},
@@ -822,12 +823,41 @@ def test_timetable_unit_logs_errors_and_uses_work_tmp() -> None:
     """The refresh logs errors to the file and spills temp files to disk."""
     service = read_unit(name='paperroute-timetable.service')['Service']
     assert service['ExecStart'].endswith(
-        '--error-log /var/lib/paperroute/log/errors.jsonl'
+        f'--error-log {SYDNEY_DATA}/log/errors.jsonl'
     )
     assert service['ExecStart'].startswith(
-        '/usr/bin/env TMPDIR=/var/lib/paperroute/work '
+        f'/usr/bin/env TMPDIR={SYDNEY_DATA}/work '
     )
     assert (service['Nice'], service['OOMScoreAdjust']) == ('19', '500')
+
+
+def test_kit_units_reach_data_through_the_link() -> None:
+    """No kit unit or the off hook names the service directory."""
+    for path in (*(SYSTEMD / name for name in KIT_UNITS), OFF_HOOK):
+        assert '/var/lib/paperroute/' not in script_text(path=path)
+
+
+def test_sydney_units_name_their_own_directory() -> None:
+    """Sydney's units use its directory, never the link."""
+    for path in SYDNEY_SYSTEMD.rglob('*'):
+        if not path.is_file():
+            continue
+        text = script_text(path=path)
+        assert '/opt/paperroute/data' not in text
+        for line in text.splitlines():
+            for word in re.findall(r'/var/lib/paperroute\S*', line):
+                assert (
+                    line.strip() == 'ReadWritePaths=/var/lib/paperroute'
+                    or word.startswith(f'{SYDNEY_DATA}/')
+                    or word == SYDNEY_DATA
+                ), (path, line)
+
+
+def test_sydney_names_its_ready_unit() -> None:
+    """The app ships the name of the unit that makes it ready."""
+    assert (SYDNEY_DEPLOY / 'ready').read_text(encoding='utf-8') == (
+        'paperroute-timetable.service\n'
+    )
 
 
 def sudoers_rules(*, path: Path) -> list[str]:
@@ -3099,7 +3129,7 @@ def test_off_hook_draws_on_poweroff_only(
             '--image',
             '/usr/local/share/paperroute/deploy/screens/off.raw',
             '--state',
-            '/var/lib/paperroute/state.json',
+            '/opt/paperroute/data/state.json',
         ]
 
 

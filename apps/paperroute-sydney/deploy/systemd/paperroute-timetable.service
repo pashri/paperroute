@@ -7,11 +7,11 @@ Wants=network-online.target
 Type=oneshot
 User=paperroute
 Group=paperroute
-Environment=PAPERROUTE_KEY_FILE_TFNSW=/var/lib/paperroute/secrets PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets FONTCONFIG_FILE=/opt/paperroute/current/packages/paperroute-device/src/paperroute_device/fontconfig/fonts.conf
+Environment=PAPERROUTE_KEY_FILE_TFNSW=/var/lib/paperroute/apps/sydney/secrets PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/apps/sydney/secrets FONTCONFIG_FILE=/opt/paperroute/current/packages/paperroute-device/src/paperroute_device/fontconfig/fonts.conf
 ExecStartPre=+/usr/local/bin/paperroute-led busy
 # TMPDIR keeps temp files off the RAM-backed /tmp; set here, not unit-wide,
 # so the root + lines never get a directory the service user can write
-ExecStart=/usr/bin/env TMPDIR=/var/lib/paperroute/work /opt/paperroute/current/.venv/bin/paperroute-build refresh --data-dir /var/lib/paperroute --error-log /var/lib/paperroute/log/errors.jsonl
+ExecStart=/usr/bin/env TMPDIR=/var/lib/paperroute/apps/sydney/work /opt/paperroute/current/.venv/bin/paperroute-build refresh --data-dir /var/lib/paperroute/apps/sydney --error-log /var/lib/paperroute/apps/sydney/log/errors.jsonl
 # Runs only after a successful refresh, so the first one starts the app
 ExecStartPost=+/usr/bin/systemctl start --no-block paperroute
 ExecStopPost=+/usr/local/bin/paperroute-led restore

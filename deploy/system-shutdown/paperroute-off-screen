@@ -11,7 +11,7 @@ poweroff | halt)
         "${PAPERROUTE_PYTHON:-/opt/paperroute/current/.venv/bin/python}" \
         -m paperroute_device.screen \
         --image /usr/local/share/paperroute/deploy/screens/off.raw \
-        --state /var/lib/paperroute/state.json || true
+        --state /opt/paperroute/data/state.json || true
     ;;
 esac
 exit 0

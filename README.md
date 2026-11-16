@@ -75,7 +75,10 @@ file but deploys anyway.
 The first upload takes about 12.5 minutes, and later deploys print "tiles
 unchanged". The Pi needs about twice the tiles file's size free, plus
 64 MB, while deploy installs it (about 1 GB), and deploy says so before
-copying when it doesn't.
+copying when it doesn't. On a Pi that is not provisioned yet, deploy prints
+"deploy: tiles not installed: run scripts/provision HOST sydney, then deploy
+again" and carries on; the tiles go in through `paperroute-sydney-install-tiles`
+on the next deploy.
 
 Press the bottom knob to switch views; on the Map, turn it to zoom. Hollow badges are timetable positions. A small "4m" tab means
 the bus was last heard 4 minutes ago.
@@ -134,7 +137,34 @@ unplug the data cable.
 5. Open `http://paperroute.local`, or the Pi's IP address.
 
 The app logs to the journal (`journalctl -u paperroute`), and warnings and
-errors also go to `/var/lib/paperroute/log/errors.jsonl`.
+errors also go to `/opt/paperroute/data/log/errors.jsonl`.
+
+A second app is provisioned and deployed the same way as the first and waits
+until it is chosen under "App" on the Device page. `sudo paperroute-switch-app
+<app>` does the same from a shell. Each app's files are under
+`/var/lib/paperroute/apps/<app>/`, for example `/var/lib/paperroute/apps/sydney/`.
+
+Reset settings and Erase everything act on the app that is showing. Other
+installed apps keep their settings and data; Wi-Fi is forgotten for the whole
+device.
+
+### Where things live
+
+```
+/opt/paperroute/python/                        shared Python
+/opt/paperroute/apps/<app>/releases/<sha>/     that app's releases, three kept
+/opt/paperroute/apps/<app>/current             -> releases/<sha>
+/opt/paperroute/current                        -> /opt/paperroute/apps/<active>/current
+/opt/paperroute/data                           -> /var/lib/paperroute/apps/<active>
+/var/lib/paperroute/apps/<app>/                state.json and its set-aside copies, secrets,
+                                               log/, sources/, work/, the app's own files
+/usr/local/share/paperroute/deploy/            the kit's copy
+/usr/local/share/paperroute/apps/<app>/        the app's deploy/ copy, with timers and ready
+/usr/local/share/paperroute/active-app         one line: the active app
+/usr/local/share/paperroute/units-contract     the units contract
+/usr/local/sbin/paperroute-<app>-<tool>        each app's root tools
+/var/cache/paperroute-stage/tiles/sydney/      Sydney's staged tiles
+```
 
 ### Upgrade
 
@@ -147,7 +177,9 @@ When the release changes the systemd units:
 Do not reboot between the two: the old release cannot run under the new
 units. When the units do not change, step 2 alone is enough.
 
-This release changes the units: run the provision and the deploy together.
+Moving from a single-app install: deploy, then provision, with no reboot
+between. The provision moves the releases and /var/lib/paperroute into the
+app's own directories and restarts the board.
 
 A release whose units contract differs from the installed one is not
 switched back to; fix forward and redeploy.
@@ -158,8 +190,8 @@ older release sets a newer file aside and starts with defaults.
 A provision that changes an app timer's calendar drops that timer's zone
 drop-in; the next deploy writes it again.
 
-Provisioning a different app from the one installed renames
-`/var/lib/paperroute/state.json` to `state.json.<old app>-<time>` and keeps it.
+Each app keeps its own state file; provisioning another app leaves the first
+untouched.
 
 When a release changes the timetable format, the route chooser shows
 "Routes need a timetable update" for about 40 minutes while the board
@@ -176,7 +208,7 @@ rebuilds the timetable itself.
 Make pins with the route chooser on the device or on its web page, and hold
 to pin. On the web page, double-click a Press button, or hold it for about
 0.8 s. The pins live in
-`/var/lib/paperroute/state.json`. A new device starts on Town Hall's map.
+`/opt/paperroute/data/state.json`. A new device starts on Town Hall's map.
 
 The timetable refreshes nightly at 03:30 Sydney time. If refreshes keep
 failing, the board's banner says "Timetable ends <weekday>" from three days

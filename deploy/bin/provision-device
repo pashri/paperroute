@@ -1,7 +1,8 @@
 #!/bin/bash
 # Usage: provision-device DIR APP   (root, on the Pi)
 # DIR holds kit/, the copied deploy/, and app/, the copied deploy/ of the
-# app named APP (empty when it has none). One-time device setup.
+# app named APP (empty when it has none). Sets up the device and adds the
+# app beside any already installed; the first app becomes the active one.
 # Idempotent: run it again after changing any file under either.
 set -euo pipefail
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -14,26 +15,29 @@ UV_INSTALLER_SHA256=d3f5412d38c99f9d024901843bf98206f0d2c6dbe64df40d0b740e2751ca
 KMS_OFF='s/^dtoverlay=vc4-kms-v3d/#&/'
 CONFIG=/boot/firmware/config.txt
 SHARE=/usr/local/share/paperroute
+OPT=/opt/paperroute
+VAR=/var/lib/paperroute
 PYTHON_DIR=/opt/paperroute/python
 SUDOERS=/etc/sudoers.d/paperroute-deploy
 PIN_DIR=/etc/paperroute
 PIN_FILE=$PIN_DIR/m2a.env
 SUDOERS_NEW=/etc/sudoers.d/.paperroute-deploy.new
-STATE=/var/lib/paperroute/state.json
-CURRENT=/opt/paperroute/current
 SBIN=/usr/local/sbin
 KIT_TOOLS='install-release install-files'
 TOOL_RE='^[a-z][a-z0-9-]*$'
-APP_RULE_RE='^ALL=\(root\) NOPASSWD: /usr/local/sbin/paperroute-([a-z][a-z0-9-]*) ""$'
+APP_RULE_RE='^ALL=\(root\) NOPASSWD: /usr/local/sbin/paperroute-([a-z][a-z0-9]*)-([a-z][a-z0-9-]*) ""$'
 APP_RE='^[a-z][a-z0-9]*$'
 CONTRACT_RE='^[1-9][0-9]*$'
 TIMER_RE='^paperroute-[a-z0-9-]+\.timer$'
+READY_RE='^paperroute-[a-z0-9-]+\.service$'
 UNIT_RE='^paperroute-[a-z0-9-]+\.(service|timer)$'
 DROP_IN_DIR_RE='^paperroute(-[a-z0-9-]+)?\.(service|timer)\.d$'
 DROP_IN_RE='^[a-z0-9-]+\.conf$'
 # Tests point it at a temp directory; root always uses the real one.
 if [[ $EUID -ne 0 ]]; then
     SHARE=${PAPERROUTE_SHARE:-$SHARE}
+    OPT=${PAPERROUTE_OPT:-$OPT}
+    VAR=${PAPERROUTE_VAR:-$VAR}
 fi
 
 fail() {
@@ -73,22 +77,25 @@ make_dir() {
     install -d -o "$owner" -g "$(id -gn -- "$owner")" -m "$mode" "$dir"
 }
 
-# Inside a service-owned directory, so made as the service user, not root.
-make_service_dir() {
-    if ! setsid -w runuser -u paperroute -- install -d -m 0750 "$1" \
+# Makes the app's data folders as the service user, with an empty key
+# file the app can rewrite (an existing key is kept), and its release
+# folders as root.
+make_app_dirs() {
+    local home=$VAR/apps/$APP_NAME
+    if ! setsid -w runuser -u paperroute -- install -d -m 0750 "$VAR/apps" \
+        "$home" "$home/sources" "$home/work" "$home/log" \
         </dev/null >/dev/null 2>&1; then
-        printf 'provision-device: paperroute could not create %s\n' "$1" >&2
+        printf 'provision-device: paperroute could not create %s\n' "$home" >&2
         exit 1
     fi
-}
-
-# An empty key file the app can rewrite; an existing key is kept.
-make_secrets() {
-    if ! setsid -w runuser -u paperroute -- sh -c 'umask 077 && { [ -e /var/lib/paperroute/secrets ] || : >/var/lib/paperroute/secrets; }' \
+    if ! setsid -w runuser -u paperroute -- sh -c 'umask 077 && { [ -e "$1/secrets" ] || : >"$1/secrets"; }' sh "$home" \
         </dev/null >/dev/null 2>&1; then
         printf 'provision-device: paperroute could not create the key file\n' >&2
         exit 1
     fi
+    make_dir root 0755 "$OPT/apps"
+    make_dir root 0755 "$OPT/apps/$APP_NAME"
+    make_dir root 0755 "$OPT/apps/$APP_NAME/releases"
 }
 
 install_uv() {
@@ -140,10 +147,12 @@ copy_tree() {
 }
 
 # The kit's copy stays at $SHARE/deploy, where the screen units look. The
-# app's waits at $SHARE/app.new until take_app_copy has checked it.
+# app's waits at $SHARE/apps/APP_NAME.new until take_app_copy has checked
+# it.
 copy_deploy() {
     copy_tree "$DIR/kit" deploy
-    stage_copy "$DIR/app" app
+    make_dir root 0755 "$SHARE/apps"
+    stage_copy "$DIR/app" "apps/$APP_NAME"
 }
 
 # Records the kit's units contract for install-release.
@@ -157,14 +166,14 @@ write_contract() {
 
 # Lists the app's timers, the only ones install-release gives a zone.
 write_manifest() {
-    local path name names=
-    for path in "$SHARE"/app/systemd/*.timer; do
+    local path name names= app=$SHARE/apps/$APP_NAME
+    for path in "$app"/systemd/*.timer; do
         [[ -f $path ]] || continue
         name=${path##*/}
         [[ $name =~ $TIMER_RE ]] || fail "the app's timer $name has a bad name"
         names+=$name$'\n'
     done
-    printf '%s' "$names" >"$SHARE/app-timers"
+    printf '%s' "$names" >"$app/timers"
 }
 
 # Fails on anything under app/systemd that is not a paperroute unit the
@@ -199,38 +208,70 @@ check_app_units() {
     done
 }
 
-# Prints the app recorded as installed: provision's record, else the live
-# release's; empty when neither names one.
-installed_app() {
+# Fails unless app/ready, when present, is one line naming one of the
+# app's own services.
+check_ready() {
+    local file=$DIR/app/ready line name= count=0
+    [[ -e $file || -L $file ]] || return 0
+    if [[ -f $file && ! -L $file ]]; then
+        while IFS= read -r line || [[ -n $line ]]; do
+            name=$line
+            count=$((count + 1))
+        done <"$file"
+    fi
+    if [[ $count -ne 1 || ! $name =~ $READY_RE \
+        || ! -f $DIR/app/systemd/$name ]]; then
+        fail "the app's ready file must name one of its own services"
+    fi
+}
+
+# Prints the app a single-app device recorded: provision's record, else
+# the live release's; empty when neither names one.
+single_app_name() {
     local name=
     if [[ -f $SHARE/installed-app ]]; then
         IFS= read -r name <"$SHARE/installed-app" || true
-    elif [[ -f $CURRENT/APP ]]; then
-        IFS= read -r name <"$CURRENT/APP" || true
+    elif [[ -f $OPT/current/APP ]]; then
+        IFS= read -r name <"$OPT/current/APP" || true
         name=${name#paperroute-}
     fi
     [[ $name =~ $APP_RE ]] || name=
     printf '%s\n' "$name"
 }
 
-# Another app's settings are not this app's: stops the board, renames its
-# state file aside (kept), and records the app now installed.
-set_state_aside() {
-    local old
-    old=$(installed_app)
-    if [[ -n $old && $old != "$APP_NAME" ]] && [[ -e $STATE || -L $STATE ]]
-    then
-        systemctl stop paperroute
-        mv -T -- "$STATE" "$STATE.$old-$(date -u +%s)"
-    fi
-    printf '%s\n' "$APP_NAME" >"$SHARE/installed-app"
+# Prints the apps in $SHARE/apps, sorted, one per line.
+installed_apps() {
+    local path name
+    for path in "$SHARE"/apps/*; do
+        name=${path##*/}
+        if [[ -d $path && ! -L $path && $name =~ $APP_RE ]]; then
+            printf '%s\n' "$name"
+        fi
+    done
 }
 
-# Prints the names of the tools in the app's root-owned copy (APP_COPY,
-# else $SHARE/app), one per line; refuses a non-file, a bad name or a kit
-# tool's name.
+# Prints the app named in $SHARE/active-app, or nothing.
+active_app() {
+    local name=
+    if [[ -f $SHARE/active-app ]]; then
+        IFS= read -r name <"$SHARE/active-app" || true
+    fi
+    if [[ $name =~ $APP_RE ]]; then
+        printf '%s\n' "$name"
+    fi
+}
+
+# Records APP_NAME as the active app when no app is.
+record_active() {
+    [[ -z $(active_app) ]] || return 0
+    printf '%s\n' "$APP_NAME" >"$SHARE/active-app"
+}
+
+# Prints the names of the tools in an app's root-owned copy, the folder
+# given, one per line; refuses a non-file, a bad name or a kit tool's
+# name.
 app_tool_names() {
-    local path name app=${APP_COPY:-$SHARE/app}
+    local path name app=$1
     for path in "$app"/bin/* "$app"/bin/.[!.]* "$app"/bin/..?*; do
         [[ -e $path || -L $path ]] || continue
         name=${path##*/}
@@ -244,17 +285,26 @@ app_tool_names() {
     done
 }
 
-# Installs the checked TOOLS from the app's root-owned copy as
-# paperroute-NAME and removes any paperroute tool neither the kit nor the
-# app ships.
+# Installs every installed app's tools from its root-owned copy as
+# paperroute-APP-TOOL and removes any paperroute tool neither the kit nor
+# an installed app ships. Every app's tools are checked before any is
+# installed.
 install_app_tools() {
-    local tools=$1 path name keep
-    for name in $tools; do
-        path=$SHARE/app/bin/$name
-        install -m 0755 -o root -g root "$path" "$SBIN/paperroute-$name" \
-            || exit 1
+    local app tools tool name path wanted= keep
+    for app in $(installed_apps); do
+        tools=$(app_tool_names "$SHARE/apps/$app") || exit 1
+        for name in $tools; do
+            wanted+=$app-$name$'\n'
+        done
     done
-    keep=$'\n'${KIT_TOOLS// /$'\n'}$'\n'$tools$'\n'
+    for tool in $wanted; do
+        app=${tool%%-*}
+        name=${tool#*-}
+        path=$SHARE/apps/$app/bin/$name
+        install -m 0755 -o root -g root "$path" \
+            "$SBIN/paperroute-$app-$name" || exit 1
+    done
+    keep=$'\n'${KIT_TOOLS// /$'\n'}$'\n'$wanted
     for path in "$SBIN"/paperroute-*; do
         [[ -e $path || -L $path ]] || continue
         name=${path##*/paperroute-}
@@ -264,90 +314,100 @@ install_app_tools() {
     done
 }
 
-# Succeeds when a rendered line from the KIND (kit or app) sudoers file is
-# blank, a "# " comment, or a rule that file may hold: the kit rule in the
-# kit's, one no-argument rule for a just-installed TOOLS entry in the app's.
+# Succeeds when a rendered sudoers LINE is blank, a "# " comment, or a
+# rule its file may hold: KIT_RULE in the kit's file; in APP's, one
+# no-argument rule for one of APP's TOOLS (one per line).
 allowed_sudoers_line() {
-    local kind=$1 line=$2 tools=$3 kit_rule=$4 rest
+    local line=$1 kit_rule=$2 app=${3:-} tools=${4:-} rest
     [[ $line != *\\ ]] || return 1
     if [[ $line =~ ^[[:space:]]*$ || $line == '#' || $line == '# '* ]]; then
         return 0
     fi
-    if [[ $kind == kit ]]; then
+    if [[ -z $app ]]; then
         [[ $line == "$kit_rule" ]]
         return
     fi
     [[ $line == "$DEPLOY_USER "* ]] || return 1
     rest=${line#"$DEPLOY_USER "}
     [[ $rest =~ $APP_RULE_RE ]] || return 1
-    [[ " $KIT_TOOLS " != *" ${BASH_REMATCH[1]} "* \
-        && $'\n'$tools$'\n' == *$'\n'"${BASH_REMATCH[1]}"$'\n'* ]]
+    [[ ${BASH_REMATCH[1]} == "$app" \
+        && $'\n'$tools$'\n' == *$'\n'"${BASH_REMATCH[2]}"$'\n'* ]]
 }
 
-# Prints the kit's sudoers file, then the app's, with the deploy user in
-# place of the shipped default; refuses the lot if any line is not allowed.
-# TOOLS are the app's checked tools, one per line; the app's file comes
-# from APP_COPY, else $SHARE/app.
+# Prints one sudoers FILE with the deploy user in place of the shipped
+# default; exits at a line allowed_sudoers_line refuses for KIT_RULE and,
+# for an app's file, APP and TOOLS.
+sudoers_file() {
+    local file=$1 kit_rule=$2 app=${3:-} tools=${4:-} line
+    if [[ ! -f $file || -L $file ]]; then
+        printf 'provision-device: %s is not a file\n' "$file" >&2
+        exit 1
+    fi
+    while IFS= read -r line || [[ -n $line ]]; do
+        line=${line/#pashri /$DEPLOY_USER }
+        if ! allowed_sudoers_line "$line" "$kit_rule" "$app" "$tools"; then
+            if [[ $line == *[[:cntrl:]]* ]]; then
+                line=$(printf '%q' "$line")
+            fi
+            printf 'provision-device: sudoers line not allowed: %s\n' \
+                "$line" >&2
+            exit 1
+        fi
+        printf '%s\n' "$line"
+    done <"$file"
+}
+
+# Prints the kit's sudoers file, then each installed app's, refusing the
+# lot if any line or app tool is not allowed. While APP_COPY holds the
+# staged copy of APP_NAME, that copy stands in for APP_NAME's.
 sudoers_text() {
-    local tools=$1 kit=$SHARE/deploy/sudoers/paperroute-deploy file kind
-    local line text= kit_rule app=${APP_COPY:-$SHARE/app}
+    local kit_rule text apps app dir tools file
     kit_rule="$DEPLOY_USER ALL=(root) NOPASSWD:"
     kit_rule+=' /usr/local/sbin/paperroute-install-release,'
     kit_rule+=' /usr/local/sbin/paperroute-install-files ""'
-    for file in "$kit" "$app"/sudoers/*; do
-        [[ -e $file || -L $file ]] || continue
-        kind=app
-        [[ $file != "$kit" ]] || kind=kit
-        if [[ ! -f $file || -L $file ]]; then
-            printf 'provision-device: %s is not a file\n' "$file" >&2
-            exit 1
-        fi
-        while IFS= read -r line || [[ -n $line ]]; do
-            line=${line/#pashri /$DEPLOY_USER }
-            if ! allowed_sudoers_line "$kind" "$line" "$tools" "$kit_rule"
-            then
-                if [[ $line == *[[:cntrl:]]* ]]; then
-                    line=$(printf '%q' "$line")
-                fi
-                printf 'provision-device: sudoers line not allowed: %s\n' \
-                    "$line" >&2
-                exit 1
-            fi
-            text+=$line$'\n'
-        done <"$file"
-    done
-    if [[ $'\n'$text != *$'\n'"$kit_rule"$'\n'* ]]; then
+    text=$(sudoers_file "$SHARE/deploy/sudoers/paperroute-deploy" \
+        "$kit_rule") || exit 1
+    if [[ $'\n'$text$'\n' != *$'\n'"$kit_rule"$'\n'* ]]; then
         printf 'provision-device: sudoers check failed\n' >&2
         exit 1
     fi
-    printf '%s' "$text"
+    printf '%s\n' "$text"
+    apps=$(
+        installed_apps
+        [[ -z ${APP_COPY:-} ]] || printf '%s\n' "$APP_NAME"
+    )
+    for app in $(sort -u <<<"$apps"); do
+        dir=$SHARE/apps/$app
+        [[ -z ${APP_COPY:-} || $app != "$APP_NAME" ]] || dir=$APP_COPY
+        tools=$(app_tool_names "$dir") || exit 1
+        for file in "$dir"/sudoers/*; do
+            [[ -e $file || -L $file ]] || continue
+            sudoers_file "$file" "$kit_rule" "$app" "$tools" || exit 1
+        done
+    done
 }
 
-# Prints the app's tool names once they and every sudoers line pass, so a
-# refusal comes before any tool or sudoers file is installed.
+# Checks every app's tools and sudoers lines, so a refusal comes before
+# any tool or sudoers file is installed.
 check_app_part() {
-    local tools
-    tools=$(app_tool_names) || exit 1
-    sudoers_text "$tools" >/dev/null || exit 1
-    printf '%s\n' "$tools"
+    sudoers_text >/dev/null || exit 1
 }
 
-# Checks the app's staged copy and moves it to $SHARE/app, then prints
-# its tool names; a refused copy is removed and the old one kept.
+# Checks the app's staged copy and moves it to $SHARE/apps/APP_NAME; a
+# refused copy is removed and the old one kept.
 take_app_copy() {
-    local tools
-    if ! tools=$(APP_COPY=$SHARE/app.new check_app_part); then
-        rm -rf -- "${SHARE:?}/app.new"
+    if ! (APP_COPY=$SHARE/apps/$APP_NAME.new check_app_part); then
+        rm -rf -- "${SHARE:?}/apps/$APP_NAME.new"
         exit 1
     fi
-    move_in app
-    printf '%s\n' "$tools"
+    move_in "apps/$APP_NAME"
 }
 
-# Writes the sudoers file for the checked TOOLS and checks it with visudo.
+# Writes the sudoers file for every installed app and checks it with
+# visudo.
 install_sudoers() {
     local text
-    text=$(sudoers_text "$1") || exit 1
+    text=$(sudoers_text) || exit 1
     rm -f -- "$SUDOERS_NEW"
     (umask 0337 && printf '%s\n' "$text" >"$SUDOERS_NEW")
     if ! visudo -cf "$SUDOERS_NEW"; then
@@ -358,19 +418,19 @@ install_sudoers() {
     mv -T -- "$SUDOERS_NEW" "$SUDOERS"
 }
 
-# Installs the kit's tools and the checked TOOLS, runs install-files, then
-# writes the sudoers file.
+# Installs the kit's tools and every installed app's, runs install-files,
+# then writes the sudoers file.
 install_tools() {
-    local tools=$1 name
+    local name
     make_dir root 0755 "$SBIN"
     for name in $KIT_TOOLS; do
         install -m 0755 -o root -g root "$SHARE/deploy/bin/$name" \
             "$SBIN/paperroute-$name"
     done
-    install_app_tools "$tools"
+    install_app_tools
     "$SBIN/paperroute-install-files"
     retire_pin
-    install_sudoers "$tools"
+    install_sudoers
 }
 
 [[ $# -eq 2 ]] || fail 'usage: provision-device DIR APP'
@@ -378,6 +438,9 @@ DIR=$1
 APP_NAME=$2
 [[ $APP_NAME =~ $APP_RE ]] \
     || fail 'the app must be lowercase letters and digits'
+case $APP_NAME in
+    install | set | switch) fail 'that name is kept for the device' ;;
+esac
 [[ -d $DIR && ! -L $DIR ]] || fail 'DIR is not a directory'
 for need in bin/install-files bin/install-release \
     bin/paperroute-led sudoers/paperroute-deploy \
@@ -404,6 +467,7 @@ fi
 [[ $contract =~ $CONTRACT_RE ]] \
     || fail 'kit/CONTRACT must hold a units contract number'
 check_app_units
+check_ready
 [[ $EUID -eq 0 ]] || fail 'checks passed; provisioning needs root'
 [[ ! -e $PIN_FILE || -e /var/lib/paperroute/state.json ]] || fail 'deploy M4 first so state.json holds the pin'
 
@@ -426,14 +490,9 @@ if ! id paperroute >/dev/null 2>&1; then
         --no-create-home --shell /usr/sbin/nologin paperroute
 fi
 
-make_dir root 0755 /opt/paperroute
-make_dir root 0755 /opt/paperroute/releases
+make_dir root 0755 "$OPT"
 make_dir root 0755 "$PYTHON_DIR"
-make_dir paperroute 0750 /var/lib/paperroute
-make_service_dir /var/lib/paperroute/sources
-make_service_dir /var/lib/paperroute/work
-make_service_dir /var/lib/paperroute/log
-make_secrets
+make_dir paperroute 0750 "$VAR"
 make_dir "$DEPLOY_USER" 0700 /var/cache/paperroute-stage
 
 install_uv
@@ -448,9 +507,10 @@ rpi-usb-gadget on
 
 make_dir root 0755 "$SHARE"
 copy_deploy
-tools=$(take_app_copy) || exit
+take_app_copy
 write_contract
 write_manifest
-set_state_aside
-install_tools "$tools"
+record_active
+make_app_dirs
+install_tools
 printf 'Provisioned: reboot to apply config.txt\n'

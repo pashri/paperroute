@@ -1,2 +1,2 @@
 # Lets the deploy user install the map tiles without a password.
-pashri ALL=(root) NOPASSWD: /usr/local/sbin/paperroute-install-tiles ""
+pashri ALL=(root) NOPASSWD: /usr/local/sbin/paperroute-sydney-install-tiles ""

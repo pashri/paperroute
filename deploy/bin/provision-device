@@ -3,6 +3,7 @@
 # DIR holds kit/, the copied deploy/, and app/, the copied deploy/ of the
 # app named APP (empty when it has none). Sets up the device and adds the
 # app beside any already installed; the first app becomes the active one.
+# A device in the single-app layout is first moved to the per-app one.
 # Idempotent: run it again after changing any file under either.
 set -euo pipefail
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -23,6 +24,7 @@ PIN_DIR=/etc/paperroute
 PIN_FILE=$PIN_DIR/m2a.env
 SUDOERS_NEW=/etc/sudoers.d/.paperroute-deploy.new
 SBIN=/usr/local/sbin
+LOCK=/run/paperroute-install.lock
 KIT_TOOLS='install-release install-files'
 TOOL_RE='^[a-z][a-z0-9-]*$'
 APP_RULE_RE='^ALL=\(root\) NOPASSWD: /usr/local/sbin/paperroute-([a-z][a-z0-9]*)-([a-z][a-z0-9-]*) ""$'
@@ -84,12 +86,12 @@ make_app_dirs() {
     local home=$VAR/apps/$APP_NAME
     if ! setsid -w runuser -u paperroute -- install -d -m 0750 "$VAR/apps" \
         "$home" "$home/sources" "$home/work" "$home/log" \
-        </dev/null >/dev/null 2>&1; then
+        </dev/null >/dev/null 2>&1 9>&-; then
         printf 'provision-device: paperroute could not create %s\n' "$home" >&2
         exit 1
     fi
     if ! setsid -w runuser -u paperroute -- sh -c 'umask 077 && { [ -e "$1/secrets" ] || : >"$1/secrets"; }' sh "$home" \
-        </dev/null >/dev/null 2>&1; then
+        </dev/null >/dev/null 2>&1 9>&-; then
         printf 'provision-device: paperroute could not create the key file\n' >&2
         exit 1
     fi
@@ -403,6 +405,124 @@ take_app_copy() {
     move_in "apps/$APP_NAME"
 }
 
+# Takes the install lock on fd 9 for the rest of the run.
+hold_install_lock() {
+    exec 9>"$LOCK"
+    if ! flock -n 9; then
+        printf 'provision-device: an install or a switch is running\n' >&2
+        exit 1
+    fi
+}
+
+# Prints the timers the single-app layout's app-timers lists, one per line.
+old_timers() {
+    local name
+    [[ -f $SHARE/app-timers ]] || return 0
+    while IFS= read -r name || [[ -n $name ]]; do
+        [[ ! $name =~ $TIMER_RE ]] || printf '%s\n' "$name"
+    done <"$SHARE/app-timers"
+}
+
+# Exits 1, with the old app's timers started again, while one of its
+# services is running.
+check_old_services() {
+    local path name state timer
+    for path in "$SHARE"/app/systemd/*.service; do
+        [[ -f $path ]] || continue
+        name=${path##*/}
+        state=$(systemctl is-active "$name" || true)
+        [[ $state == active || $state == activating \
+            || $state == reloading ]] || continue
+        for timer in $(old_timers); do
+            systemctl start "$timer" || true
+        done
+        printf 'provision-device: %s is running; %s\n' "$name" \
+            'try again when it has finished' >&2
+        exit 1
+    done
+}
+
+# Moves $OPT/releases to $OPT/apps/OLD/releases and points that app's
+# current at the release $OPT/current names there.
+move_releases() {
+    local apps=$OPT/apps/$1 target
+    make_dir root 0755 "$OPT/apps"
+    make_dir root 0755 "$apps"
+    if [[ -e $OPT/releases && ! -e $apps/releases ]]; then
+        mv -T -- "$OPT/releases" "$apps/releases"
+    fi
+    target=$(readlink -- "$OPT/current" || true)
+    if [[ $target == "$OPT/releases/"* ]]; then
+        ln -sfn -- "$apps/releases/${target#"$OPT/releases/"}" "$apps/current"
+    fi
+}
+
+# Moves every entry of $VAR but apps into $VAR/apps/OLD as the service
+# user, never over a name already there, then names what is left.
+move_data() {
+    local home=$VAR/apps/$1 left name
+    if ! setsid -w runuser -u paperroute -- install -d -m 0750 "$VAR/apps" \
+        "$home" </dev/null >/dev/null 2>&1 9>&-; then
+        printf 'provision-device: paperroute could not create %s\n' "$home" >&2
+        exit 1
+    fi
+    if ! setsid -w runuser -u paperroute -- sh -c 'for path in "$1"/* "$1"/.[!.]* "$1"/..?*; do [ -e "$path" ] || [ -L "$path" ] || continue; [ "${path##*/}" != apps ] || continue; [ -e "$2/${path##*/}" ] || [ -L "$2/${path##*/}" ] || mv -- "$path" "$2/" || exit 1; done' sh "$VAR" "$home" \
+        </dev/null >/dev/null 2>&1 9>&-; then
+        printf 'provision-device: could not move %s into apps/%s; %s\n' \
+            "$VAR" "$1" 'nothing was removed' >&2
+        exit 1
+    fi
+    left=$(setsid -w runuser -u paperroute -- ls -A -- "$VAR" \
+        </dev/null 2>/dev/null 9>&-) || left=
+    while IFS= read -r name; do
+        [[ -z $name || $name == apps ]] \
+            || printf 'provision-device: left in %s: %s\n' "$VAR" "$name" >&2
+    done <<<"$left"
+}
+
+# Moves a device from the single-app layout to the per-app one: its
+# releases, data and record. Each step is safe to repeat; the marker
+# $SHARE/adopting stays until start_board starts the board again.
+adopt_single_app() {
+    local old timer
+    if [[ ! -e $OPT/releases && ! -e $SHARE/installed-app \
+        && ! -e $SHARE/app ]]; then
+        return 0
+    fi
+    old=$(single_app_name)
+    [[ -n $old ]] || old=$(active_app)
+    if [[ -z $old ]]; then
+        if [[ -e $OPT/releases ]]; then
+            rmdir -- "$OPT/releases" 2>/dev/null \
+                || fail 'cannot tell which app is installed'
+        fi
+        return 0
+    fi
+    [[ $old == "$APP_NAME" ]] \
+        || fail "this device holds $old in the old layout; provision $old first"
+    for timer in $(old_timers); do
+        systemctl stop "$timer"
+    done
+    check_old_services
+    : >"$SHARE/adopting"
+    systemctl stop paperroute
+    printf '%s\n' "$old" >"$SHARE/active-app"
+    move_releases "$old"
+    move_data "$old"
+    rm -rf -- "$SHARE/app" "$SHARE/app-timers"
+    rm -f -- "$SHARE/installed-app"
+}
+
+# Starts the board the migration stopped once a release can run it, then
+# removes the marker.
+start_board() {
+    [[ -e $SHARE/adopting ]] || return 0
+    [[ -x $OPT/current/.venv/bin/paperroute-board ]] || return 0
+    if systemctl start --no-block paperroute; then
+        rm -f -- "$SHARE/adopting"
+    fi
+}
+
 # Writes the sudoers file for every installed app and checks it with
 # visudo.
 install_sudoers() {
@@ -508,9 +628,12 @@ rpi-usb-gadget on
 make_dir root 0755 "$SHARE"
 copy_deploy
 take_app_copy
+hold_install_lock
+adopt_single_app
 write_contract
 write_manifest
 record_active
 make_app_dirs
 install_tools
+start_board
 printf 'Provisioned: reboot to apply config.txt\n'

@@ -1906,18 +1906,26 @@ def test_service_units_block_debug_syscalls() -> None:
 
 
 def test_provision_runs_service_user_detached() -> None:
-    """runuser in provision gets no terminal, so it can't inject input."""
+    """runuser in provision gets no terminal and never the install lock."""
     found = commands(path=BIN / 'provision-device', word='runuser')
-    assert len(found) == 2
-    for command in found:
-        assert command.startswith(
-            'if ! setsid -w runuser -u paperroute -- ',
-        )
-        assert command.endswith(' </dev/null >/dev/null 2>&1; then')
-    assert script_function(
-        path=BIN / 'provision-device',
-        name='make_app_dirs',
-    ).count('runuser') == 2
+    assert len(found) == 5
+    checked = [
+        command
+        for command in found
+        if command.startswith('if ! setsid -w runuser -u paperroute -- ')
+    ]
+    assert len(checked) == 4
+    for command in checked:
+        assert command.endswith(' </dev/null >/dev/null 2>&1 9>&-; then')
+    assert set(found) - set(checked) == {
+        'left=$(setsid -w runuser -u paperroute -- ls -A -- "$VAR"'
+        ' </dev/null 2>/dev/null 9>&-) || left=',
+    }
+    for name, count in (('make_app_dirs', 2), ('move_data', 3)):
+        assert script_function(
+            path=BIN / 'provision-device',
+            name=name,
+        ).count('runuser') == count
 
 
 def test_install_release_writes_version() -> None:
@@ -5488,3 +5496,486 @@ def test_roll_back_stops_across_contracts(
     )
     assert os.readlink(current) == str(new)
     assert log.read_text(encoding='utf-8') == 'stop paperroute\n'
+
+
+ADOPT_FUNCTIONS: Final[tuple[str, ...]] = (
+    'single_app_name',
+    'active_app',
+    'make_dir',
+    'hold_install_lock',
+    'old_timers',
+    'check_old_services',
+    'move_releases',
+    'move_data',
+    'adopt_single_app',
+    'start_board',
+)
+# Logs all but is-active, which prints BUSY_UNIT's state as activating.
+ADOPT_SYSTEMCTL: Final[str] = '''#!/bin/sh
+if [ "$1" = is-active ]; then
+    if [ "$2" = "${BUSY_UNIT:-}" ]; then
+        echo activating
+        exit 0
+    fi
+    echo inactive
+    exit 3
+fi
+printf '%s\\n' "$*" >>"$ADOPT_LOG"
+[ "$1" != start ] || exit "${START_STATUS:-0}"
+'''
+# Logs, drops -T (BSD mv has none) and fails on a path named MV_FAILS.
+ADOPT_MV: Final[str] = '''#!/bin/bash
+printf 'mv %s\\n' "$*" >>"$ADOPT_LOG"
+args=()
+for arg in "$@"; do
+    [[ $arg == -T ]] && continue
+    [[ -n ${MV_FAILS:-} && ${arg##*/} == "$MV_FAILS" ]] && exit 1
+    args+=("$arg")
+done
+PATH=${PATH#*:} exec mv "${args[@]}"
+'''
+# The service user's commands run as this user, without setsid's -w.
+ADOPT_RUNUSER: Final[str] = '#!/bin/sh\nshift 3\nexec "$@"\n'
+ADOPT_SETSID: Final[str] = '#!/bin/sh\nshift\nexec "$@"\n'
+OLD_DATA: Final[tuple[str, ...]] = (
+    'state.json',
+    'state.json.bad-1',
+    'timetable.db',
+    'tiles.db',
+    'tiles.stamp',
+    'secrets',
+    'log/errors.jsonl',
+    'sources/a',
+    '.cache/b',
+)
+HOME_NAMES: Final[list[str]] = [
+    '.cache',
+    'log',
+    'secrets',
+    'sources',
+    'state.json',
+    'state.json.bad-1',
+    'tiles.db',
+    'tiles.stamp',
+    'timetable.db',
+]
+REFUSED_OTHER_APP: Final[str] = (
+    'provision-device: this device holds sydney in the old layout;'
+    ' provision sydney first\n'
+)
+
+
+@dataclass(frozen=True)
+class Layout:
+    """A device's opt, var and share folders."""
+
+    opt: Path
+    var: Path
+    share: Path
+
+
+def layout_at(root: Path) -> Layout:
+    """
+    Name a device's folders under a directory.
+
+    Parameters
+    ----------
+    root : Path
+        Pytest's temporary directory.
+
+    Returns
+    -------
+    Layout
+        Its ``opt``, ``var`` and ``share`` folders.
+    """
+    return Layout(opt=root / 'opt', var=root / 'var', share=root / 'share')
+
+
+def old_layout(tmp_path: Path) -> Layout:
+    """
+    Make a device that holds sydney in the single-app layout.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Pytest's temporary directory.
+
+    Returns
+    -------
+    Layout
+        The device's folders.
+    """
+    layout = layout_at(root=tmp_path)
+    release = layout.opt / 'releases' / SHA
+    release.mkdir(parents=True)
+    (release / 'APP').write_text('paperroute-sydney\n', encoding='utf-8')
+    (release / 'VERSION').write_text(f'{SHA}\n', encoding='utf-8')
+    (layout.opt / 'current').symlink_to(release)
+    for name in OLD_DATA:
+        (layout.var / name).parent.mkdir(parents=True, exist_ok=True)
+        (layout.var / name).write_text(f'{name}\n', encoding='utf-8')
+    old_share(share=layout.share)
+    return layout
+
+
+def old_share(*, share: Path) -> None:
+    """
+    Write sydney's single-app copy, timer list and record into a share.
+
+    Parameters
+    ----------
+    share : Path
+        The share folder.
+    """
+    systemd = share / 'app' / 'systemd'
+    systemd.mkdir(parents=True)
+    for name in ('paperroute-job.service', 'paperroute-job.timer'):
+        (systemd / name).write_text('[Unit]\n', encoding='utf-8')
+    (share / 'app-timers').write_text(
+        'paperroute-job.timer\n',
+        encoding='utf-8',
+    )
+    (share / 'installed-app').write_text('sydney\n', encoding='utf-8')
+
+
+def new_layout(tmp_path: Path) -> Layout:
+    """
+    Make a device that holds sydney, active, in the per-app layout.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Pytest's temporary directory.
+
+    Returns
+    -------
+    Layout
+        The device's folders.
+    """
+    layout = layout_at(root=tmp_path)
+    app = layout.opt / 'apps' / 'sydney'
+    board = app / 'releases' / SHA / '.venv' / 'bin' / 'paperroute-board'
+    board.parent.mkdir(parents=True)
+    board.write_text('#!/bin/sh\n', encoding='utf-8')
+    board.chmod(0o755)
+    (app / 'current').symlink_to(app / 'releases' / SHA)
+    (layout.opt / 'current').symlink_to(app / 'current')
+    (layout.var / 'apps' / 'sydney').mkdir(parents=True)
+    (layout.var / 'apps' / 'sydney' / 'state.json').write_text(
+        '{}\n',
+        encoding='utf-8',
+    )
+    (layout.share / 'apps' / 'sydney' / 'systemd').mkdir(parents=True)
+    (layout.share / 'active-app').write_text('sydney\n', encoding='utf-8')
+    return layout
+
+
+def layout_snapshot(layout: Layout) -> list[dict[str, str | bytes]]:
+    """
+    Describe every path under a device's folders.
+
+    Parameters
+    ----------
+    layout : Layout
+        The device's folders.
+
+    Returns
+    -------
+    list[dict[str, str | bytes]]
+        The snapshot of ``opt``, ``var`` and ``share``.
+    """
+    return [
+        snapshot(root=folder)
+        for folder in (layout.opt, layout.var, layout.share)
+    ]
+
+
+def run_adopt(
+    *,
+    root: Path,
+    calls: str = 'adopt_single_app',
+    app: str = APP_NAME,
+    **env: str,
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    """
+    Run provision's adopt and board steps over a device under stubs.
+
+    Parameters
+    ----------
+    root : Path
+        Pytest's temporary directory, holding the device's folders.
+    calls : str
+        The steps to run, adopt_single_app unless given.
+    app : str
+        The app being provisioned, sydney unless given.
+    **env : str
+        Variables for the stubs: BUSY_UNIT, START_STATUS, MV_FAILS.
+
+    Returns
+    -------
+    tuple[subprocess.CompletedProcess[str], list[str]]
+        The exit status and output, and the systemctl and mv calls.
+    """
+    layout = layout_at(root=root)
+    log = root / 'adopt.log'
+    stubs = stub_commands(
+        root=root,
+        scripts={
+            'systemctl': ADOPT_SYSTEMCTL,
+            'mv': ADOPT_MV,
+            'runuser': ADOPT_RUNUSER,
+            'setsid': ADOPT_SETSID,
+            'install': FAKE_INSTALL,
+        },
+    )
+    result = provision_functions(
+        names=ADOPT_FUNCTIONS,
+        program=(
+            f'SHARE={layout.share}\nOPT={layout.opt}\nVAR={layout.var}\n'
+            f'APP_NAME={app}\n{calls}\n'
+        ),
+        env=user_env(
+            PATH=f'{stubs}:{os.environ["PATH"]}',
+            ADOPT_LOG=str(log),
+            **env,
+        ),
+    )
+    calls_made = (
+        log.read_text(encoding='utf-8').splitlines() if log.exists() else []
+    )
+    return result, calls_made
+
+
+def test_adopt_moves_releases_data_and_record(tmp_path: Path) -> None:
+    """Sydney's releases, data and record move into the per-app layout."""
+    layout = old_layout(tmp_path=tmp_path)
+    state = (layout.var / 'state.json').read_bytes()
+    result, log = run_adopt(root=tmp_path)
+    assert (result.returncode, result.stderr) == (0, '')
+    home = layout.var / 'apps' / 'sydney'
+    assert (home / 'state.json').read_bytes() == state
+    assert sorted(path.name for path in layout.var.iterdir()) == ['apps']
+    assert sorted(path.name for path in home.iterdir()) == HOME_NAMES
+    assert os.readlink(layout.opt / 'apps' / 'sydney' / 'current') == str(
+        layout.opt / 'apps' / 'sydney' / 'releases' / SHA,
+    )
+    assert not (layout.opt / 'releases').exists()
+    assert (layout.share / 'active-app').read_text(encoding='utf-8') == (
+        'sydney\n'
+    )
+    assert sorted(path.name for path in layout.share.iterdir()) == [
+        'active-app',
+        'adopting',
+    ]
+    assert log[0] == 'stop paperroute-job.timer'
+    moves = [index for index, line in enumerate(log) if line.startswith('mv ')]
+    assert log.index('stop paperroute') < moves[0]
+
+
+def test_adopt_is_a_no_op_on_the_new_layout(tmp_path: Path) -> None:
+    """A device already in the per-app layout is left as it is."""
+    layout = new_layout(tmp_path=tmp_path)
+    before = layout_snapshot(layout=layout)
+    result, log = run_adopt(root=tmp_path)
+    assert (result.returncode, result.stderr) == (0, '')
+    assert layout_snapshot(layout=layout) == before
+    assert not log
+
+
+def test_adopt_refuses_another_app_on_the_old_layout(tmp_path: Path) -> None:
+    """Another app is refused before anything is stopped, moved or written."""
+    layout = old_layout(tmp_path=tmp_path)
+    (layout.share / 'apps' / 'demo').mkdir(parents=True)
+    before = layout_snapshot(layout=layout)
+    result, log = run_adopt(root=tmp_path, app='demo')
+    assert (result.returncode, result.stderr) == (2, REFUSED_OTHER_APP)
+    assert not log
+    assert layout_snapshot(layout=layout) == before
+    assert not (layout.share / 'active-app').exists()
+    assert not (layout.share / 'adopting').exists()
+
+
+def test_adopt_drops_the_old_copy_when_the_same_app_is_provisioned(
+    tmp_path: Path,
+) -> None:
+    """The copy just provisioned is kept and the old one removed."""
+    layout = old_layout(tmp_path=tmp_path)
+    (layout.share / 'apps' / 'sydney').mkdir(parents=True)
+    (layout.share / 'apps' / 'sydney' / 'new').write_text(
+        'new\n',
+        encoding='utf-8',
+    )
+    result, _ = run_adopt(root=tmp_path)
+    assert (result.returncode, result.stderr) == (0, '')
+    assert (layout.share / 'apps' / 'sydney' / 'new').is_file()
+    assert not (layout.share / 'app').exists()
+    assert not (layout.share / 'app-timers').exists()
+
+
+def test_adopt_stops_at_a_failed_move(tmp_path: Path) -> None:
+    """A failed data move stops the adoption with the old record kept."""
+    layout = old_layout(tmp_path=tmp_path)
+    result, _ = run_adopt(root=tmp_path, MV_FAILS='state.json')
+    assert result.returncode == 1
+    assert result.stderr == (
+        f'provision-device: could not move {layout.var} into apps/sydney;'
+        ' nothing was removed\n'
+    )
+    assert (layout.share / 'installed-app').is_file()
+    assert (layout.var / 'state.json').is_file()
+    assert not (layout.var / 'apps' / 'sydney' / 'state.json').exists()
+    assert (layout.share / 'adopting').is_file()
+
+
+def test_adopt_names_what_it_left_behind(tmp_path: Path) -> None:
+    """A name already in the app's folder is left and named."""
+    layout = old_layout(tmp_path=tmp_path)
+    home = layout.var / 'apps' / 'sydney'
+    home.mkdir(parents=True)
+    (home / 'state.json').write_text('{}\n', encoding='utf-8')
+    result, _ = run_adopt(root=tmp_path)
+    assert result.returncode == 0
+    assert result.stderr == (
+        f'provision-device: left in {layout.var}: state.json\n'
+    )
+
+
+def test_adopt_finishes_an_interrupted_run(tmp_path: Path) -> None:
+    """A run stopped after the data moved finishes the releases and record."""
+    layout = old_layout(tmp_path=tmp_path)
+    state = (layout.var / 'state.json').read_bytes()
+    home = layout.var / 'apps' / 'sydney'
+    home.mkdir(parents=True)
+    for path in layout.var.iterdir():
+        if path.name != 'apps':
+            path.rename(home / path.name)
+    (layout.share / 'active-app').write_text('sydney\n', encoding='utf-8')
+    result, _ = run_adopt(root=tmp_path)
+    assert (result.returncode, result.stderr) == (0, '')
+    assert (home / 'state.json').read_bytes() == state
+    assert (layout.opt / 'apps' / 'sydney' / 'releases' / SHA).is_dir()
+    assert not (layout.share / 'installed-app').exists()
+
+
+def test_adopt_never_overwrites_moved_state(tmp_path: Path) -> None:
+    """A state file already moved is never replaced by a later one."""
+    layout = old_layout(tmp_path=tmp_path)
+    home = layout.var / 'apps' / 'sydney'
+    home.mkdir(parents=True)
+    (home / 'state.json').write_bytes(b'kept')
+    (layout.var / 'state.json').write_bytes(b'late')
+    result, _ = run_adopt(root=tmp_path)
+    assert result.returncode == 0
+    assert (home / 'state.json').read_bytes() == b'kept'
+    assert (layout.var / 'state.json').read_bytes() == b'late'
+
+
+def test_adopt_waits_for_a_running_app_service(tmp_path: Path) -> None:
+    """A running app service stops the adoption and its timers restart."""
+    layout = old_layout(tmp_path=tmp_path)
+    before = layout_snapshot(layout=layout)
+    result, log = run_adopt(root=tmp_path, BUSY_UNIT='paperroute-job.service')
+    assert (result.returncode, result.stderr) == (
+        1,
+        'provision-device: paperroute-job.service is running;'
+        ' try again when it has finished\n',
+    )
+    assert layout_snapshot(layout=layout) == before
+    assert log == ['stop paperroute-job.timer', 'start paperroute-job.timer']
+
+
+def test_adopt_reads_the_app_from_the_live_release(tmp_path: Path) -> None:
+    """With no record, the live release names the app."""
+    layout = old_layout(tmp_path=tmp_path)
+    (layout.share / 'installed-app').unlink()
+    result, _ = run_adopt(root=tmp_path)
+    assert (result.returncode, result.stderr) == (0, '')
+    assert (layout.share / 'active-app').read_text(encoding='utf-8') == (
+        'sydney\n'
+    )
+
+
+def test_a_rerun_after_a_failed_provision_starts_the_board(
+    tmp_path: Path,
+) -> None:
+    """The board an earlier run stopped is started, then the marker goes."""
+    layout = new_layout(tmp_path=tmp_path)
+    (layout.share / 'adopting').touch()
+    result, log = run_adopt(
+        root=tmp_path,
+        calls='adopt_single_app\nstart_board',
+    )
+    assert (result.returncode, result.stderr) == (0, '')
+    assert log == ['start --no-block paperroute']
+    assert not (layout.share / 'adopting').exists()
+
+
+def test_a_provision_with_no_marker_does_not_start_a_stopped_board(
+    tmp_path: Path,
+) -> None:
+    """With no marker, the board is left as it is."""
+    new_layout(tmp_path=tmp_path)
+    result, log = run_adopt(root=tmp_path, calls='start_board')
+    assert (result.returncode, result.stderr) == (0, '')
+    assert not log
+
+
+def test_start_board_waits_for_a_release(tmp_path: Path) -> None:
+    """With no runnable release, the board is not started yet."""
+    layout = new_layout(tmp_path=tmp_path)
+    (layout.share / 'adopting').touch()
+    (layout.opt / 'current').unlink()
+    (layout.opt / 'current').symlink_to(layout.opt / 'missing')
+    result, log = run_adopt(root=tmp_path, calls='start_board')
+    assert (result.returncode, result.stderr) == (0, '')
+    assert not log
+    assert (layout.share / 'adopting').exists()
+
+
+def test_start_board_keeps_the_marker_when_the_start_fails(
+    tmp_path: Path,
+) -> None:
+    """A failed start keeps the marker, so the next run tries again."""
+    layout = new_layout(tmp_path=tmp_path)
+    (layout.share / 'adopting').touch()
+    run_adopt(root=tmp_path, calls='start_board', START_STATUS='1')
+    assert (layout.share / 'adopting').exists()
+
+
+def test_provision_adopts_after_the_app_copy_is_checked_and_starts_the_board_last() -> None:
+    """The app copy is checked, then the lock taken, then the device moved."""
+    lines = script_text(path=BIN / 'provision-device').splitlines()
+    order = [
+        lines.index(step)
+        for step in (
+            'take_app_copy',
+            'hold_install_lock',
+            'adopt_single_app',
+            'write_contract',
+            'install_tools',
+            'start_board',
+        )
+    ]
+    assert order == sorted(order)
+
+
+def test_provision_refuses_while_the_install_lock_is_held(
+    tmp_path: Path,
+) -> None:
+    """Provision stops while an install or a switch holds the lock."""
+    stubs = stub_commands(
+        root=tmp_path,
+        scripts={'flock': '#!/bin/sh\nexit 1\n'},
+    )
+    result = provision_functions(
+        names=('hold_install_lock',),
+        program=f'LOCK={tmp_path / "lock"}\nhold_install_lock\n',
+        env=user_env(PATH=f'{stubs}:{os.environ["PATH"]}'),
+    )
+    assert (result.returncode, result.stderr) == (
+        1,
+        'provision-device: an install or a switch is running\n',
+    )
+    assert script_value(path=BIN / 'provision-device', name='LOCK') == (
+        '/run/paperroute-install.lock'
+    )

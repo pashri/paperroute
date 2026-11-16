@@ -74,6 +74,7 @@ SYDNEY_PARTS: Final[CityParts] = CityParts(
     suggest=sydney_suggest,
     status_line=sydney_status_line,
     sheets=('palette.css',),
+    about='Buses, trains and ferries',
 )
 
 

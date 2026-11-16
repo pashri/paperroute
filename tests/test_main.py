@@ -351,7 +351,7 @@ def test_main_accepts_neither_or_both_seeds(
     args = parsed(argv=['run', '--timetable', 'x.db', *given])
     board.require_both_or_neither(args=args)
     assert (seed_for(args=args) is not None) == seeded
-    assert args.state == Path('/var/lib/paperroute/state.json')
+    assert args.state == Path('/opt/paperroute/data/state.json')
 
 
 @pytest.mark.parametrize('given', [['--from', 'a'], ['--to', 'b']])

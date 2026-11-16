@@ -41,7 +41,7 @@ from paperroute_hardware.ports import CLEAN_AFTER
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PATH: Final[Path] = Path('/var/lib/paperroute/state.json')
+DEFAULT_PATH: Final[Path] = Path('/opt/paperroute/data/state.json')
 TEMP_PREFIX: Final[str] = '.state.json.'
 BAD_PREFIX: Final[str] = 'state.json.bad-'
 BAD_KEPT: Final[int] = 2

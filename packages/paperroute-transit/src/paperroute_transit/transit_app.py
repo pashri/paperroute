@@ -4,16 +4,18 @@ import logging
 from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime
+from pathlib import Path
 from typing import Final, cast
 
 from paperroute_device.core.app import App
-from paperroute_device.core.device_model import AppRow
+from paperroute_device.core.device_model import AppCard, AppRow
 from paperroute_device.core.device_state import Banner, DeviceState
 from paperroute_device.core.kit_events import Tick
 from paperroute_device.core.kit_state import Step
 from paperroute_device.core.panel_views import InfoRow
 from paperroute_device.ports import Frame
 from paperroute_hardware.core.knob_events import KnobEvent
+from paperroute_transit.adapters.app_card import built_at, transit_card
 from paperroute_transit.adapters.board_routes import RESET_HINT
 from paperroute_transit.app_effects import filled
 from paperroute_transit.app_pins import pins_shown, report_pins
@@ -191,6 +193,32 @@ class TransitApp(TransitRun, App[State]):
     menu_rows = (REBUILD_ROW,)
     reset_hint = RESET_HINT
     confirm_copy = TRANSIT_CONFIRM_COPY
+
+    def card(self, *, data_dir: Path, now: datetime) -> AppCard:
+        """
+        Give the city's name and its timetable's age.
+
+        Parameters
+        ----------
+        data_dir : Path
+            The app's data directory, holding ``timetable.db``.
+        now : datetime
+            The time.
+
+        Returns
+        -------
+        AppCard
+            The card `transit_card` makes from the timetable's build time.
+        """
+        return transit_card(
+            name=self.city.name,
+            about=self.parts.about,
+            minutes=self.parts.rebuild_minutes,
+            built=built_at(
+                city=self.city, timetable=data_dir / 'timetable.db',
+            ),
+            now=now,
+        )
 
     async def before_tick(self) -> object | None:
         """

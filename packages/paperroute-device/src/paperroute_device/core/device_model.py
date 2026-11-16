@@ -196,6 +196,27 @@ class MenuRow(StrEnum):
 
 
 @dataclass(frozen=True)
+class AppCard:
+    """
+    What an app tells the kit about itself.
+
+    Attributes
+    ----------
+    name : str
+        The app's display name.
+    status : str
+        One line on the app's state.
+    wait : str
+        The sentence saying what making the app ready will take; empty
+        when nothing is due.
+    """
+
+    name: str
+    status: str = ''
+    wait: str = ''
+
+
+@dataclass(frozen=True)
 class AppRow:
     """
     A row the app adds to the Settings menu.

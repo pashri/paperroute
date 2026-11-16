@@ -2,6 +2,8 @@
 
 import argparse
 import asyncio
+import dataclasses
+import json
 import logging
 import signal
 import sys
@@ -132,6 +134,8 @@ def parse_args(
     app.add_arguments(parser=runner)
     sub.add_parser('selftest', help='test the e-paper panel')
     sub.add_parser('zone', help="print the app's IANA time zone")
+    card = sub.add_parser('card', help="print the app's card as JSON")
+    card.add_argument('--data-dir', type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == 'run':
         app.check_arguments(args=args)
@@ -708,6 +712,22 @@ def zone_main(*, app: App[Any]) -> None:
     print(str(zone))
 
 
+def card_main(*, app: App[Any], data_dir: Path) -> None:
+    """
+    Print the app's card as one line of JSON.
+
+    Parameters
+    ----------
+    app : App[Any]
+        The app.
+    data_dir : Path
+        The app's data directory.
+    """
+    now = clock_for(app=app, zone=app.zone() or UTC).now()
+    card = app.card(data_dir=data_dir, now=now)
+    print(json.dumps(dataclasses.asdict(card)))
+
+
 def main(*, app: App[Any], argv: Sequence[str] | None = None) -> None:
     """
     Run an app on the device: in a window, in browsers or on the panel.
@@ -724,6 +744,9 @@ def main(*, app: App[Any], argv: Sequence[str] | None = None) -> None:
         sys.exit(selftest_main())
     if args.command == 'zone':
         zone_main(app=app)
+        return
+    if args.command == 'card':
+        card_main(app=app, data_dir=args.data_dir)
         return
     last_error = LastError(zone=app.zone() or UTC)
     configure_logging(error_file=args.error_log, last_error=last_error)

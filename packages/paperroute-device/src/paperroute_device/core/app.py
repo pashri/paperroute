@@ -8,7 +8,7 @@ from datetime import datetime, tzinfo
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
 
-from paperroute_device.core.device_model import AppRow, DeviceKey
+from paperroute_device.core.device_model import AppCard, AppRow, DeviceKey
 from paperroute_device.core.device_state import Banner, DeviceState
 from paperroute_device.core.kit_events import Tick
 from paperroute_device.core.kit_state import Step
@@ -32,6 +32,7 @@ KIT_RESET_HINT: Final[str] = (
     'everything also deletes the saved data. Both are confirmed on the '
     'device.'
 )
+KIT_CARD: Final[AppCard] = AppCard(name='paperroute')
 
 type MigrationStep = Callable[[dict[str, object]], dict[str, object]]
 
@@ -128,6 +129,25 @@ class App[S](ABC):
             The step that brings each version up one; by default none.
         """
         return {}
+
+    def card(self, *, data_dir: Path, now: datetime) -> AppCard:
+        """
+        Give the app's name, status line and wait.
+
+        Parameters
+        ----------
+        data_dir : Path
+            The app's data directory.
+        now : datetime
+            The time.
+
+        Returns
+        -------
+        AppCard
+            By default the kit's name alone.
+        """
+        del data_dir, now
+        return KIT_CARD
 
     # pylint: disable-next=useless-return
     def zone(self) -> tzinfo | None:

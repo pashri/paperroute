@@ -74,7 +74,7 @@ from paperroute_transit.core.strip_times import (
     strip_departures,
 )
 
-DEFAULT_PATH: Final[Path] = Path('/var/lib/paperroute/timetable.db')
+DEFAULT_PATH: Final[Path] = Path('/opt/paperroute/data/timetable.db')
 CHUNK: Final[int] = 500
 LABEL_LIMIT: Final[int] = 20_000
 NO_SHAPE: Final[str] = 'NULL'

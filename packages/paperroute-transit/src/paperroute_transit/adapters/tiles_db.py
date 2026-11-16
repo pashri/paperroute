@@ -24,7 +24,7 @@ from paperroute_transit.render.tile_codec import unpack_bits, unpack_grey
 
 Built = tuple[tuple[int, ...] | None, str | None, str | None]
 
-DEFAULT_TILES: Final[Path] = Path('/var/lib/paperroute/tiles.db')
+DEFAULT_TILES: Final[Path] = Path('/opt/paperroute/data/tiles.db')
 GROW_X: Final[float] = 200.0
 GROW_Y: Final[float] = 30.0
 STREETS: Final[str] = """

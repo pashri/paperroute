@@ -9,7 +9,7 @@ import signal
 import socket
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from datetime import UTC, tzinfo
+from datetime import UTC, datetime, tzinfo
 from http import HTTPStatus
 from pathlib import Path
 from typing import Final
@@ -24,7 +24,7 @@ from paperroute_device.adapters.clocks import SystemClock
 from paperroute_device.adapters.resets import FileResets, NullResets
 from paperroute_device.adapters.state_file import DEFAULT_PATH, StateFile
 from paperroute_device.adapters.web_display import WebDisplay
-from paperroute_device.core.device_model import DeviceKey
+from paperroute_device.core.device_model import AppCard, DeviceKey
 from paperroute_device.core.kit_events import QuitRequested
 from paperroute_device.logs import LastError
 from paperroute_device.runtime.ports import KitPorts
@@ -130,6 +130,47 @@ class KeyedApp(FakeApp):
         return (self._data,)
 
 
+class CardApp(FakeApp):
+    """
+    An app that gives a set card and records each data directory asked.
+
+    Parameters
+    ----------
+    card : AppCard
+        The card it gives.
+
+    Attributes
+    ----------
+    asked : list[Path]
+        The data directory of each call to `card`.
+    """
+
+    def __init__(self, *, card: AppCard) -> None:
+        super().__init__()
+        self._card = card
+        self.asked: list[Path] = []
+
+    def card(self, *, data_dir: Path, now: datetime) -> AppCard:
+        """
+        Record the data directory and give the set card.
+
+        Parameters
+        ----------
+        data_dir : Path
+            The app's data directory.
+        now : datetime
+            The time.
+
+        Returns
+        -------
+        AppCard
+            The set card.
+        """
+        del now
+        self.asked.append(data_dir)
+        return self._card
+
+
 class CrashApp(FakeApp):
     """An app whose adapters fail to open."""
 
@@ -192,6 +233,32 @@ def test_zone_without_a_zone_exits_one(
     assert info.value.code == cli.NO_ZONE
     assert cli.NO_ZONE == 'paperroute-board: this app has no time zone'
     assert capsys.readouterr().out == ''
+
+
+def test_card_prints_the_apps_card_as_json(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The card command prints the app's card as one JSON object."""
+    app = CardApp(card=AppCard(name='Demo', status='ok', wait='A while.'))
+    cli.main(app=app, argv=['card', '--data-dir', str(tmp_path)])
+    assert json.loads(capsys.readouterr().out) == {
+        'name': 'Demo',
+        'status': 'ok',
+        'wait': 'A while.',
+    }
+    assert app.asked == [tmp_path]
+
+
+def test_card_defaults_to_the_kit_name(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """An app that declares no card is called by the kit's name."""
+    cli.main(app=FakeApp(), argv=['card', '--data-dir', str(tmp_path)])
+    assert json.loads(capsys.readouterr().out) == {
+        'name': 'paperroute',
+        'status': '',
+        'wait': '',
+    }
 
 
 def test_zone_needs_no_key_environment(

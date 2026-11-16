@@ -85,6 +85,10 @@ class CityParts:
     sheets : tuple[str, ...]
         The city's stylesheets in its web directory, linked by every
         page straight after `/live.css`.
+    about : str
+        What the board shows, at the head of its card's status line.
+    rebuild_minutes : int
+        The most minutes a timetable build takes, as the card says.
     """
 
     assets: AssetRoot
@@ -95,3 +99,5 @@ class CityParts:
     suggest: SuggestFor
     status_line: StatusLine
     sheets: tuple[str, ...]
+    about: str = ''
+    rebuild_minutes: int = 40

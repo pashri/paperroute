@@ -46,6 +46,7 @@ def loaded(
     trips: Sequence[tuple[str, str]],
     calls: Sequence[tuple[str, str]],
     parent_of: dict[str, str] | None = None,
+    names: dict[str, str] | None = None,
 ) -> sqlite3.Connection:
     """
     Build a timetable from plain rows.
@@ -62,6 +63,8 @@ def loaded(
         Rows of trip id and stop id, in call order.
     parent_of : dict[str, str] | None
         Parent station by stop id.
+    names : dict[str, str] | None
+        Stop name by stop id; a stop not named has its id as its name.
 
     Returns
     -------
@@ -70,10 +73,17 @@ def loaded(
     """
     conn = new_connection()
     parent_of = parent_of or {}
+    names = names or {}
     conn.executemany(
         "INSERT INTO stops VALUES (?, ?, ?, ?, ?, '')",
         [
-            (stop_id, stop_id, parent_of.get(stop_id), lat, lon)
+            (
+                stop_id,
+                names.get(stop_id, stop_id),
+                parent_of.get(stop_id),
+                lat,
+                lon,
+            )
             for stop_id, lon, lat in stops
         ],
     )

@@ -1,0 +1,125 @@
+"""Tests for the Cambridge city definition."""
+
+import logging
+from datetime import time
+from zoneinfo import ZoneInfo
+
+import pytest
+
+from paperroute_cambridge.city import (
+    CAMBRIDGE,
+    DRUMMER_STREET,
+    classify_cambridge,
+    merge_cambridge,
+)
+from paperroute_device.core.device_settings import Window
+from paperroute_transit.core.city import MergeReport
+from paperroute_transit.core.model import Pin
+from paperroute_transit.core.modes import RouteClass, mode_problems
+from paperroute_transit.core.positions import ParkedAge
+from tests.build.timetable_rows import (
+    MILDENHALL,
+    NORWICH,
+    PARKSIDE,
+    STANSTED,
+    calls_of,
+    loaded,
+    parents,
+    route_ids,
+)
+
+
+def test_city_has_the_spec_values() -> None:
+    """City has the spec values."""
+    assert CAMBRIDGE.zone == ZoneInfo('Europe/London')
+    assert CAMBRIDGE.peak_windows == (
+        Window(start=time(7), end=time(9, 30)),
+        Window(start=time(16), end=time(18, 30)),
+    )
+    assert CAMBRIDGE.parked_age is ParkedAge.TEN
+    assert CAMBRIDGE.route_fallback is True
+    assert [(m.id, m.letter, m.chip) for m in CAMBRIDGE.modes] == [
+        ('bus', 'B', '#d9d8d0'),
+        ('coach', 'C', '#e03c31'),
+    ]
+    assert mode_problems(modes=CAMBRIDGE.modes) == []
+    assert CAMBRIDGE.default_pin == Pin(origin=DRUMMER_STREET, kind='bus')
+
+
+@pytest.mark.parametrize(
+    ('route_type', 'agency', 'short', 'kind', 'source'),
+    [
+        (3, 'OP118', 'A', 'bus', 'bus'),
+        (3, 'OP118', 'PR1', 'bus', 'bus'),
+        (200, 'OP5050', '777', 'coach', 'coach'),
+        (200, 'OP5051', 'UK083', 'coach', 'coach'),
+        (3, 'OP5050', '717', 'coach', 'coach'),
+        (200, 'OP999', 'X1', 'coach', 'coach'),
+        (3, 'OP118', '', None, 'bus'),
+        (2, 'OP1', 'GN', None, 'other'),
+    ],
+)
+def test_classify_cambridge(
+    route_type: int,
+    agency: str,
+    short: str,
+    kind: str | None,
+    source: str,
+) -> None:
+    """A route's kind and source follow its type and agency."""
+    assert classify_cambridge(
+        route_type=route_type,
+        agency_id=agency,
+        short_name=short,
+    ) == RouteClass(kind=kind, source=source)
+
+
+def test_merge_cambridge_trims_then_groups(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Merge cambridge trims then groups."""
+    conn = loaded(
+        stops=(
+            ('0500CCITY227', 0.1240, 52.2050),
+            ('0500CCITY486', 0.1244, 52.2054),
+            NORWICH,
+            STANSTED,
+            PARKSIDE,
+            MILDENHALL,
+        ),
+        routes=(
+            ('bods:1', 3, 'OP118', '1'),
+            ('bods:2', 3, 'OP1', '2'),
+            ('bods:c', 200, 'OP5050', '777'),
+        ),
+        trips=(('t1', 'bods:1'), ('t2', 'bods:2'), ('c1', 'bods:c')),
+        calls=(
+            ('t1', '0500CCITY227'),
+            ('t1', '0500CCITY486'),
+            ('t2', 'norwich'),
+            ('t2', 'norwich'),
+            ('c1', 'stansted'),
+            ('c1', 'parkside'),
+            ('c1', 'mildenhall'),
+        ),
+        names={
+            '0500CCITY227': 'Drummer St Bus Station',
+            '0500CCITY486': 'Drummer Street',
+        },
+    )
+    with caplog.at_level(logging.INFO):
+        assert merge_cambridge(conn=conn) == MergeReport(
+            dropped=1,
+            partial=0,
+            overnight=0,
+        )
+    assert 'kept 2 routes, removed 1 trips, shortened 1 coach trips' in (
+        caplog.text
+    )
+    assert route_ids(conn) == {'bods:1', 'bods:c'}
+    assert calls_of(conn=conn, trip='c1') == ['parkside', 'mildenhall']
+    assert (
+        parents(conn)['0500CCITY227']
+        == parents(conn)['0500CCITY486']
+        == 'cambridge-drummer-street'
+    )

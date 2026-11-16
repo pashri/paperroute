@@ -17,6 +17,7 @@ A uv workspace of five packages and one app per city:
 - `packages/paperroute-device-testkit`: fakes for the device's tests.
 - `apps/paperroute-sydney`: the Sydney app, with the TfNSW feeds and Trip
   Planner and the `paperroute-board` and `paperroute-build` commands.
+- `apps/paperroute-cambridge`: the Cambridge app: buses and coaches.
 
 Hardware, device and transit each import only from the ones above them,
 the apps import from all three, and only the tests use the two test kits.
@@ -25,11 +26,11 @@ the apps import from all three, and only the tests use the two test kits.
 
     uv python install 3.14
     uv sync
-    uv run paperroute-build gtfs --bundle data/raw/complete.zip \
+    uv run python -m paperroute_sydney.build gtfs --bundle data/raw/complete.zip \
       --sydneytrains data/raw/st/sydneytrains.zip --metro data/raw/st/metro_v2.zip \
       --out data/timetable.db
     PAPERROUTE_KEY_FILE_TFNSW=~/tfnsw_api_key \
-      uv run paperroute-board run --timetable data/timetable.db \
+      uv run python -m paperroute_sydney run --timetable data/timetable.db \
       --tiles data/tiles.db --state data/state.json
 
 `--from` and `--to` (stop ids, for example `--from 215020 --to 200060`)
@@ -59,7 +60,7 @@ Run the linters, type checks, layer check and tests with `scripts/check`.
 Download Geofabrik's New South Wales `.osm.pbf` into `data/raw/nsw.osm.pbf`,
 then build the tiles on the Mac:
 
-    uv run paperroute-build tiles --osm data/raw/nsw.osm.pbf \
+    uv run python -m paperroute_sydney.build tiles --osm data/raw/nsw.osm.pbf \
       --timetable data/timetable.db --out data/tiles.db
 
 This builds all of NSW. It takes about 17 minutes on an Apple-silicon Mac,
@@ -82,6 +83,47 @@ on the next deploy.
 
 Press the bottom knob to switch views; on the Map, turn it to zoom. Hollow badges are timetable positions. A small "4m" tab means
 the bus was last heard 4 minutes ago.
+
+## Cambridge
+
+The Cambridge app shows buses and coaches from the Bus Open Data Service
+(BODS). Its data lives in `data/cambridge/`.
+
+Build the timetable. `refresh` downloads the public BODS timetable (no key)
+and rebuilds `data/cambridge/timetable.db`:
+
+    uv run python -m paperroute_cambridge.build refresh --data-dir data/cambridge
+
+On the Mac, the build of the 2026-11-16 feed (version 20261116_042604) took
+21.8 s with a peak of 85 MB and made an 83 MB file with 56 routes and 5,735
+trips, 370 of them coach trips.
+
+Download Geofabrik's `cambridgeshire`, `bedfordshire`, `hertfordshire`,
+`essex` and `suffolk` extracts
+(`https://download.geofabrik.de/europe/united-kingdom/england/<name>-latest.osm.pbf`)
+into `data/cambridge/raw/`, merge them and build the tiles:
+
+    osmium merge data/cambridge/raw/{cambridgeshire,bedfordshire,hertfordshire,essex,suffolk}-latest.osm.pbf \
+      -o data/cambridge/raw/cambridge-area.osm.pbf
+    uv run python -m paperroute_cambridge.build tiles \
+      --osm data/cambridge/raw/cambridge-area.osm.pbf \
+      --timetable data/cambridge/timetable.db --out data/cambridge/tiles.db
+    uv run python -m paperroute_cambridge.build check-tiles data/cambridge/tiles.db
+
+The merge makes a 172 MB file in 3.4 s. The tiles take 122 s with a peak of
+684 MB and make a 14 MB file with 4,011 tiles and 8,765 labels.
+
+Run the board live:
+
+    PAPERROUTE_KEY_FILE_BODS=~/bods_api_key \
+      uv run python -m paperroute_cambridge run --timetable data/cambridge/timetable.db \
+      --tiles data/cambridge/tiles.db --state data/cambridge/state.json
+
+Replay the recorded feeds:
+
+    uv run python -m paperroute_cambridge run --timetable data/cambridge/timetable.db \
+      --tiles data/cambridge/tiles.db --state data/cambridge/state.json \
+      --feeds apps/paperroute-cambridge/tests/fixtures/real --at 2026-11-16T21:25
 
 ## Install on the device
 
@@ -220,6 +262,11 @@ Timetable and real-time data come from Transport for NSW Open Data under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The recorded
 feeds and timetable slices in `tests/fixtures/real` are cut down from that
 data, and some of their stops are edited.
+
+Bus and coach data: contains public sector information licensed under the
+[Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
+The recorded feeds and timetable in `apps/paperroute-cambridge/tests/fixtures/real`
+are cut down from it by `scripts/record_bods_fixtures.py`.
 
 Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright)
 contributors, available under the

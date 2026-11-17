@@ -11,6 +11,7 @@ import osmium
 from osmium.osm.types import OSMEntity
 
 from paperroute_transit.build.geometry import Line, Ring, wkb_lines, wkb_rings
+from paperroute_transit.core.map_places import PLACE_KINDS
 
 logger = logging.getLogger(__name__)
 
@@ -34,9 +35,6 @@ RAIL_KINDS: Final[frozenset[str]] = frozenset({'rail', 'light_rail', 'subway'})
 RIVER_KINDS: Final[frozenset[str]] = frozenset({'river', 'canal'})
 PARK_KINDS: Final[frozenset[str]] = frozenset(
     {'park', 'nature_reserve', 'golf_course'},
-)
-PLACE_KINDS: Final[frozenset[str]] = frozenset(
-    {'suburb', 'town', 'locality', 'village'},
 )
 MINOR_STATIONS: Final[frozenset[str]] = frozenset({'halt', 'tram_stop'})
 FILTER_KEYS: Final[tuple[str, ...]] = (

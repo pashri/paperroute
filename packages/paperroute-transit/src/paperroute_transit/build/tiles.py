@@ -12,7 +12,7 @@ from typing import Final
 from paperroute_device.rss import BYTES_PER_MB, max_rss_mb
 from paperroute_transit.build.features import FeatureStore, load_features
 from paperroute_transit.build.labels import LabelIndex, place_labels
-from paperroute_transit.build.osm_source import header_timestamp
+from paperroute_transit.build.osm_source import OsmPlace, header_timestamp
 from paperroute_transit.build.tile_draw import render_tile
 from paperroute_transit.build.tile_set import (
     BLOCK,
@@ -28,6 +28,7 @@ from paperroute_transit.core.geo import (
     Projection,
     to_metres,
 )
+from paperroute_transit.core.map_places import MapPlaces
 from paperroute_transit.core.tiles import TILE_STYLE, ZOOMS
 
 STORE_NAME: Final[str] = 'features.db'
@@ -77,6 +78,8 @@ class TileBuildConfig:
         Worker processes; 1 draws in this process.
     index : str
         Osmium node location store, such as ``flex_mem``.
+    places : MapPlaces
+        The place names the map labels.
     """
 
     osm: Path
@@ -89,6 +92,7 @@ class TileBuildConfig:
     zooms: tuple[int, ...] = ZOOMS
     jobs: int = 1
     index: str = 'flex_mem'
+    places: MapPlaces = MapPlaces()
 
 
 @dataclass(frozen=True)
@@ -343,6 +347,43 @@ def read_features(
         index=config.index,
         projection=config.projection,
     )
+    add_extra_places(
+        store=store,
+        places=config.places,
+        projection=config.projection,
+    )
+
+
+def add_extra_places(
+    *,
+    store: FeatureStore,
+    places: MapPlaces,
+    projection: Projection,
+) -> None:
+    """
+    Add the places the city names that OSM lacks to the store.
+
+    Parameters
+    ----------
+    store : FeatureStore
+        A writable store.
+    places : MapPlaces
+        The city's map place rules.
+    projection : Projection
+        The projection to store the places in.
+    """
+    for name, lat, lon in places.extras:
+        store.add(
+            feature=OsmPlace(
+                kind='suburb',
+                name=name,
+                rank=0,
+                lon=lon,
+                lat=lat,
+            ),
+            projection=projection,
+        )
+    store.conn.commit()
 
 
 def add_labels(
@@ -350,6 +391,7 @@ def add_labels(
     store: FeatureStore,
     tiles: Tiles,
     projection: Projection,
+    places: MapPlaces = MapPlaces(),
 ) -> int:
     """
     Place the labels at each zoom and commit them to the store.
@@ -362,6 +404,8 @@ def add_labels(
         Tiles at each zoom.
     projection : Projection
         The projection whose pixel grid the tiles sit on.
+    places : MapPlaces
+        The city's map place rules.
 
     Returns
     -------
@@ -378,6 +422,7 @@ def add_labels(
                 tiles={mpp: wanted},
                 index=index,
                 projection=projection,
+                places=places,
             ),
         )
         store.add_labels(labels=labels)
@@ -593,6 +638,7 @@ def build_in(
         store=store,
         tiles=tiles,
         projection=config.projection,
+        places=config.places,
     )
     with TileWriter(out=config.out) as writer:
         count = write_tiles(

@@ -4,6 +4,7 @@ import math
 import sqlite3
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from functools import partial
 from typing import Final
 
 import numpy as np
@@ -14,7 +15,6 @@ from paperroute_transit.build.features import FeatureStore
 from paperroute_transit.build.geometry import Line, merge_lines
 from paperroute_transit.build.map_style import (
     CITY_PLACES,
-    PLACE_KINDS,
     ROAD_LAYERS,
     STATION_FACE,
     STREET_FACE,
@@ -26,6 +26,7 @@ from paperroute_transit.build.map_style import (
 from paperroute_transit.build.tile_set import BLOCK, blocks
 from paperroute_transit.build.tile_store import PlacedLabel
 from paperroute_transit.core.geo import MetreBox, Point, Projection
+from paperroute_transit.core.map_places import MapPlaces
 from paperroute_transit.core.tiles import (
     CITY,
     POINT_HALF_HEIGHT,
@@ -550,6 +551,7 @@ def place_names(
     store: FeatureStore,
     index: LabelIndex,
     block: Block,
+    rules: MapPlaces = MapPlaces(),
 ) -> Iterator[PlacedLabel]:
     """
     Name the block's suburbs and towns in spaced capitals, by rank.
@@ -562,6 +564,8 @@ def place_names(
         Taken boxes.
     block : Block
         The block being placed.
+    rules : MapPlaces
+        The kinds of place that are named.
 
     Yields
     ------
@@ -570,7 +574,9 @@ def place_names(
     """
     if block.mpp not in SUBURB_ZOOMS:
         return
-    kinds = CITY_PLACES if block.mpp == CITY else PLACE_KINDS
+    kinds = rules.kinds
+    if block.mpp == CITY:
+        kinds = CITY_PLACES & kinds
     places = [
         place
         for place in store.places_in(box=block.metres(grow=POINT_REACH))
@@ -826,6 +832,7 @@ def place_labels(
     tiles: Mapping[int, set[tuple[int, int]]],
     index: LabelIndex,
     projection: Projection,
+    places: MapPlaces = MapPlaces(),
 ) -> Iterator[PlacedLabel]:
     """
     Place every label once per zoom, block by block.
@@ -845,18 +852,21 @@ def place_labels(
         Scratch index, emptied for each zoom.
     projection : Projection
         The projection whose pixel grid the tiles sit on.
+    places : MapPlaces
+        The kinds of place that are named.
 
     Yields
     ------
     PlacedLabel
         Each label placed.
     """
+    named = partial(place_names, rules=places)
     for mpp, wanted in tiles.items():
         index.reset()
         zoom_blocks = [
             Block(mpp=mpp, col=col, row=row, projection=projection)
             for col, row in blocks(tiles=wanted)
         ]
-        for placer in (station_labels, place_names, street_labels):
+        for placer in (station_labels, named, street_labels):
             for block in zoom_blocks:
                 yield from placer(store=store, index=index, block=block)

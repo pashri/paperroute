@@ -45,9 +45,6 @@ RIVER_STYLE: Final[tuple[int, int]] = (2, DARK)
 
 STREET_ZOOMS: Final[frozenset[int]] = frozenset({3, 5, 8, 14})
 CITY_PLACES: Final[frozenset[str]] = frozenset({'suburb', 'town'})
-PLACE_KINDS: Final[frozenset[str]] = frozenset(
-    {'suburb', 'town', 'locality', 'village'}
-)
 STREET_REPEAT_PX: Final[int] = 384
 
 STREET_FACE: Final[Face] = Face(weight=700, px=12)

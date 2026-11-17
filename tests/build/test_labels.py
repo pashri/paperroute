@@ -20,7 +20,9 @@ from paperroute_transit.build.labels import (
 from paperroute_transit.build.map_style import STATION_FACE, STREET_FACE
 from paperroute_transit.build.osm_source import OsmPlace
 from paperroute_transit.build.tile_store import PlacedLabel
+from paperroute_transit.build.tiles import add_extra_places
 from paperroute_transit.core.geo import Point, to_lonlat
+from paperroute_transit.core.map_places import MapPlaces
 from paperroute_transit.core.tiles import (
     ZOOMS,
     LabelKind,
@@ -148,6 +150,7 @@ def place(
     *,
     store: FeatureStore,
     zooms: Sequence[int],
+    places: MapPlaces = MapPlaces(),
 ) -> list[PlacedLabel]:
     """
     Place labels around the anchor.
@@ -158,6 +161,8 @@ def place(
         The features.
     zooms : Sequence[int]
         Zooms to place.
+    places : MapPlaces
+        The city's map place rules.
 
     Returns
     -------
@@ -175,6 +180,7 @@ def place(
             tiles=tiles,
             index=index,
             projection=SYDNEY_PROJECTION,
+            places=places,
         ),
     )
 
@@ -353,6 +359,46 @@ def test_city_zoom_names_suburbs_and_towns_only(
     zooms = {label.zoom for label in labels}
     assert 8 in zooms
     assert 45 not in zooms
+
+
+def test_default_rules_draw_today_s_kinds() -> None:
+    """The default rules read and draw the four kinds, no extras."""
+    rules = MapPlaces()
+    assert rules.kinds == {'suburb', 'town', 'locality', 'village'}
+    assert rules.extras == ()
+
+
+def test_a_city_can_drop_a_kind(store: FeatureStore) -> None:
+    """A kind the rules leave out is never named."""
+    add_place(store=store, kind='locality', name='Old Toongabbie')
+    add_place(
+        store=store,
+        kind='village',
+        name='Elsewhere',
+        point=(ANCHOR[0] + 4000.0, ANCHOR[1]),
+    )
+    rules = MapPlaces(kinds=frozenset({'suburb', 'town', 'village'}))
+    labels = place(store=store, zooms=[8], places=rules)
+    assert [label.name for label in labels] == [
+        'E L S E W H E R E',
+    ]
+
+
+def test_an_extra_place_is_named_like_a_suburb(
+    store: FeatureStore,
+) -> None:
+    """An extra place is a rank 0 suburb, named at every suburb zoom."""
+    lon, lat = to_lonlat(point=ANCHOR, projection=SYDNEY_PROJECTION)
+    rules = MapPlaces(extras=(('Arbury', lat, lon),))
+    add_extra_places(
+        store=store,
+        places=rules,
+        projection=SYDNEY_PROJECTION,
+    )
+    labels = place(store=store, zooms=ZOOMS, places=rules)
+    assert sorted(label.zoom for label in labels) == [8, 14, 25, 45]
+    assert {label.name for label in labels} == {'A R B U R Y'}
+    assert {label.kind for label in labels} == {LabelKind.SUBURB}
 
 
 def test_station_wins_over_suburb(store: FeatureStore) -> None:

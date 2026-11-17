@@ -304,6 +304,7 @@ def run_tiles(*, args: argparse.Namespace, city: City) -> int:
         zooms=args.zooms,
         jobs=args.jobs,
         index=args.index,
+        places=city.catalogue.map_places,
     )
     try:
         report = build_tiles(config=config)

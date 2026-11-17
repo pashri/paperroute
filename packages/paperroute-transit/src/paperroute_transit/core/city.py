@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from paperroute_device.core.device_settings import Window
 from paperroute_transit.core.feed_plan import FeedPlan
 from paperroute_transit.core.geo import DegreeBox, Projection
+from paperroute_transit.core.map_places import MapPlaces
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.modes import Classifier, ModeSpec, spec_of
 from paperroute_transit.core.positions import ParkedAge
@@ -80,6 +81,8 @@ class CatalogueRules:
         The group a line is listed in.
     places : PlaceNames
         How route place tags are read and shortened.
+    map_places : MapPlaces
+        The place names its map labels.
     """
 
     line_sort: Mapping[str, int]
@@ -89,6 +92,7 @@ class CatalogueRules:
     rail_types: frozenset[int]
     line_group: LineGroup
     places: PlaceNames
+    map_places: MapPlaces = MapPlaces()
 
 
 @dataclass(frozen=True)

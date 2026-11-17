@@ -9,7 +9,6 @@ from paperroute_transit.build.map_style import (
     DARK,
     LIGHT,
     MAIN_ROAD_PX,
-    PLACE_KINDS,
     RIVER_STYLE,
     ROAD_LAYERS,
     ROAD_WIDTHS,
@@ -22,6 +21,7 @@ from paperroute_transit.build.map_style import (
     road_style,
     transit_style,
 )
+from paperroute_transit.core.map_places import PLACE_KINDS
 from paperroute_transit.core.tiles import STATION_ZOOMS, SUBURB_ZOOMS, ZOOMS
 
 

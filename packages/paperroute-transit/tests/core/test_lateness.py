@@ -130,6 +130,13 @@ def test_placed_leaves_a_bus_at_its_last_stop() -> None:
     assert place_on(EAST, straight(), point=(975.0, 0.0), seconds=900) is None
 
 
+def test_placed_leaves_a_one_point_shape_without_a_place() -> None:
+    """A shape of one point gives no place rather than an error."""
+    shape = make_shape(shape_id='S', points=[(0.0, 0.0)])
+    stub = Line(shape=shape, stops=(0.0, 1000.0))
+    assert place_on(EAST, stub, point=(500.0, 0.0), seconds=300) is None
+
+
 def test_placed_follows_the_shape_not_the_straight_hop() -> None:
     """A bus on the corner is on its shape, and far from the straight hop."""
     trip = measure(pattern=pattern(shape_id='L', stops=DIAGONAL), shape=CORNER)

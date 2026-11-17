@@ -185,6 +185,27 @@ def test_the_next_trips_own_position_replaces_the_carry_over() -> None:
     assert not found.trips['t2'].uncertain
 
 
+def test_a_finished_bus_carries_its_lateness_through_the_layover() -> None:
+    """At the last stop at 8:15, 5 min late, the next trip starts 2 min late."""
+    found = made(bus(x=990.0, seconds=900), fetched=900)
+    assert 't1' not in found.trips
+    carried = found.trips['t2']
+    assert delay(trip=carried) == 120
+    assert carried.uncertain
+    assert carried.heard_at == START + timedelta(seconds=900)
+
+
+def test_a_finished_bus_on_time_carries_nothing() -> None:
+    """Arriving on time at 8:10 into a 5 min layover carries nothing."""
+    assert not made(bus(x=990.0, seconds=600), fetched=600).trips
+
+
+def test_a_stale_finished_bus_carries_nothing() -> None:
+    """A finished bus heard 121 s before the feed's time carries nothing."""
+    assert not made(bus(x=990.0, seconds=839), fetched=960).trips
+    assert made(bus(x=990.0, seconds=840), fetched=960).trips
+
+
 def test_only_the_asked_trips_are_kept() -> None:
     """A trip the board does not show is left out; its carry-over is kept."""
     found = made(

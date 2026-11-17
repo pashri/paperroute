@@ -159,7 +159,7 @@ def stretches(*, line: Line, point: Point) -> tuple[Stretch, ...]:
     tuple[Stretch, ...]
         The nearest segment of each stretch of the line close to the
         point, in order along the line. A line that doubles back gives
-        more than one.
+        more than one; a line of fewer than two points gives none.
     """
     shape = line.shape
     found = []
@@ -173,6 +173,8 @@ def stretches(*, line: Line, point: Point) -> tuple[Stretch, ...]:
                 bearing=math.degrees(heading) % FULL_TURN,
             ),
         )
+    if not found:
+        return ()
     best = min(stretch.gap for stretch in found)
     near = [s for s in found if s.gap <= best + CANDIDATE_SLACK]
     return _grouped(near=near)
@@ -268,6 +270,78 @@ def chosen(
     )
 
 
+@dataclass(frozen=True)
+class Arrived:
+    """A position at the last stop of its trip.
+
+    Attributes
+    ----------
+    late : int
+        Seconds past the scheduled arrival there, negative when early.
+    """
+
+    late: int
+
+
+def locate(
+    *,
+    pattern: TripPattern,
+    line: Line,
+    vehicle: VehiclePosition,
+    day: date,
+    zone: tzinfo,
+) -> Placed | Arrived | None:
+    """
+    Place a vehicle on its trip and read how late it is.
+
+    Parameters
+    ----------
+    pattern : TripPattern
+        The trip.
+    line : Line
+        The trip's line.
+    vehicle : VehiclePosition
+        The reported position.
+    day : date
+        The service date.
+    zone : tzinfo
+        Local time zone.
+
+    Returns
+    -------
+    Placed | Arrived | None
+        Arrived within 30 m of the last stop; None when the position is
+        off the line or waiting at the first stop before its departure.
+    """
+    moment = datetime.fromtimestamp(vehicle.timestamp, tz=zone)
+    seconds = service_seconds(day=day, moment=moment, zone=zone)
+    near = stretches(line=line, point=vehicle.point)
+    if not near:
+        return None
+    stretch = chosen(
+        found=near,
+        bearing=vehicle.bearing,
+        seconds=seconds,
+        pattern=pattern,
+        line=line,
+    )
+    first, last = line.stops[0], line.stops[-1]
+    waiting = (
+        stretch.along <= first + AT_STOP
+        and seconds < pattern.stops[0].departs
+    )
+    if stretch.gap > OFF_LINE or waiting:
+        return None
+    if stretch.along >= last - AT_STOP:
+        return Arrived(late=round(seconds - pattern.stops[-1].arrives))
+    due = timetable_at(pattern=pattern, line=line, along=stretch.along)
+    return Placed(
+        along=stretch.along,
+        late=round(seconds - due),
+        ends=min(stretch.along - first, last - stretch.along),
+    )
+
+
 def placed(
     *,
     pattern: TripPattern,
@@ -298,25 +372,7 @@ def placed(
         None when the position is off the line, waiting at the first
         stop before its departure, or at the last stop.
     """
-    moment = datetime.fromtimestamp(vehicle.timestamp, tz=zone)
-    seconds = service_seconds(day=day, moment=moment, zone=zone)
-    stretch = chosen(
-        found=stretches(line=line, point=vehicle.point),
-        bearing=vehicle.bearing,
-        seconds=seconds,
-        pattern=pattern,
-        line=line,
+    found = locate(
+        pattern=pattern, line=line, vehicle=vehicle, day=day, zone=zone,
     )
-    first, last = line.stops[0], line.stops[-1]
-    waiting = (
-        stretch.along <= first + AT_STOP
-        and seconds < pattern.stops[0].departs
-    )
-    if stretch.gap > OFF_LINE or waiting or stretch.along >= last - AT_STOP:
-        return None
-    due = timetable_at(pattern=pattern, line=line, along=stretch.along)
-    return Placed(
-        along=stretch.along,
-        late=round(seconds - due),
-        ends=min(stretch.along - first, last - stretch.along),
-    )
+    return found if isinstance(found, Placed) else None

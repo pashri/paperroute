@@ -23,6 +23,7 @@ from paperroute_transit.build.osm_source import (
     place_kind,
     read_osm,
 )
+from paperroute_transit.core.map_places import STATION_SOURCES, StationSource
 
 LOGGER: Final[str] = 'paperroute_transit.build.osm_source'
 
@@ -123,6 +124,25 @@ def test_place_kind_rules(
 ) -> None:
     """Places and stations get a kind and a rank."""
     assert place_kind(tags=tags) == kind
+
+
+@pytest.mark.parametrize(
+    ('tags', 'left_out'),
+    [
+        ({'railway': 'station'}, StationSource.RAIL),
+        ({'railway': 'halt'}, StationSource.MINOR),
+        ({'railway': 'tram_stop'}, StationSource.MINOR),
+        ({'amenity': 'ferry_terminal'}, StationSource.FERRY),
+    ],
+)
+def test_place_kind_can_leave_a_station_source_out(
+    tags: Mapping[str, str],
+    left_out: StationSource,
+) -> None:
+    """A source the city leaves out is not a station; the rest still are."""
+    kept = STATION_SOURCES - {left_out}
+    assert place_kind(tags=tags, stations=kept) is None
+    assert place_kind(tags=tags, stations=STATION_SOURCES) is not None
 
 
 def test_read_osm_yields_features_in_bbox(

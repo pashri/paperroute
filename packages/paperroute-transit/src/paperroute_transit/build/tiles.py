@@ -346,6 +346,7 @@ def read_features(
         frame=metre_box(bbox=bbox, projection=config.projection),
         index=config.index,
         projection=config.projection,
+        stations=config.places.stations,
     )
     add_extra_places(
         store=store,

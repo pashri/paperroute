@@ -28,7 +28,7 @@ from paperroute_transit.core.city import (
     TimetableRules,
 )
 from paperroute_transit.core.geo import to_metres
-from paperroute_transit.core.map_places import MapPlaces
+from paperroute_transit.core.map_places import MapPlaces, StationSource
 from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.modes import ModeSpec, RouteClass
 from paperroute_transit.core.positions import ParkedAge
@@ -213,6 +213,7 @@ def cambridge_line_group(*, number: str) -> int:
 
 MAP_PLACES: Final[MapPlaces] = MapPlaces(
     kinds=frozenset({'suburb', 'town', 'village'}),
+    stations=frozenset({StationSource.RAIL, StationSource.MINOR}),
     # The first nine are council wards, placed at the middle of their
     # buildings; the last two are OSM localities worth keeping.
     extras=(

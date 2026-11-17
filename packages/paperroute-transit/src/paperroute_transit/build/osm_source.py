@@ -11,7 +11,11 @@ import osmium
 from osmium.osm.types import OSMEntity
 
 from paperroute_transit.build.geometry import Line, Ring, wkb_lines, wkb_rings
-from paperroute_transit.core.map_places import PLACE_KINDS
+from paperroute_transit.core.map_places import (
+    PLACE_KINDS,
+    STATION_SOURCES,
+    StationSource,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +188,11 @@ def area_layer(*, tags: Mapping[str, str]) -> str | None:
     return None
 
 
-def place_kind(*, tags: Mapping[str, str]) -> tuple[str, int] | None:
+def place_kind(
+    *,
+    tags: Mapping[str, str],
+    stations: frozenset[StationSource] = STATION_SOURCES,
+) -> tuple[str, int] | None:
     """
     Pick the kind and rank of a named node.
 
@@ -192,6 +200,8 @@ def place_kind(*, tags: Mapping[str, str]) -> tuple[str, int] | None:
     ----------
     tags : Mapping[str, str]
         The node's tags.
+    stations : frozenset[StationSource]
+        The kinds of station that are named.
 
     Returns
     -------
@@ -201,16 +211,20 @@ def place_kind(*, tags: Mapping[str, str]) -> tuple[str, int] | None:
     place = tags.get('place', '')
     if place in PLACE_KINDS:
         return (place, 0)
-    if tags.get('railway') == 'station':
+    if tags.get('railway') == 'station' and StationSource.RAIL in stations:
         return ('station', 0)
     if tags.get('railway') in MINOR_STATIONS:
-        return ('station', 1)
+        return ('station', 1) if StationSource.MINOR in stations else None
     if tags.get('amenity') == 'ferry_terminal':
-        return ('station', 1)
+        return ('station', 1) if StationSource.FERRY in stations else None
     return None
 
 
-def node_place(*, node: osmium.osm.Node) -> OsmPlace | None:
+def node_place(
+    *,
+    node: osmium.osm.Node,
+    stations: frozenset[StationSource] = STATION_SOURCES,
+) -> OsmPlace | None:
     """
     Read a node as a place.
 
@@ -218,6 +232,8 @@ def node_place(*, node: osmium.osm.Node) -> OsmPlace | None:
     ----------
     node : osmium.osm.Node
         The node.
+    stations : frozenset[StationSource]
+        The kinds of station that are named.
 
     Returns
     -------
@@ -225,7 +241,7 @@ def node_place(*, node: osmium.osm.Node) -> OsmPlace | None:
         The place, or None when it is unnamed or not a place.
     """
     tags = dict(node.tags)
-    kind = place_kind(tags=tags)
+    kind = place_kind(tags=tags, stations=stations)
     if kind is None or not tags.get('name'):
         return None
     return OsmPlace(
@@ -314,6 +330,7 @@ def to_feature(
     entity: OSMEntity,
     factory: osmium.geom.WKBFactory,
     skips: Skips,
+    stations: frozenset[StationSource] = STATION_SOURCES,
 ) -> OsmLine | OsmArea | OsmPlace | None:
     """
     Read one OSM object as a feature.
@@ -326,6 +343,8 @@ def to_feature(
         Geometry factory.
     skips : Skips
         Counts of objects osmium could not build.
+    stations : frozenset[StationSource]
+        The kinds of station that are named.
 
     Returns
     -------
@@ -333,7 +352,7 @@ def to_feature(
         The feature, or None when the object is not drawn.
     """
     if isinstance(entity, osmium.osm.Node):
-        return node_place(node=entity)
+        return node_place(node=entity, stations=stations)
     if isinstance(entity, osmium.osm.Way):
         return way_line(way=entity, factory=factory, skips=skips)
     if isinstance(entity, osmium.osm.Area):
@@ -382,6 +401,7 @@ def read_osm(
     path: Path,
     bbox: tuple[float, float, float, float],
     index: str,
+    stations: frozenset[StationSource] = STATION_SOURCES,
 ) -> Iterator[OsmLine | OsmArea | OsmPlace]:
     """
     Read the drawable features of an OSM file that meet a bounding box.
@@ -395,6 +415,8 @@ def read_osm(
         West, south, east and north in degrees.
     index : str
         Osmium node location store, such as ``flex_mem``.
+    stations : frozenset[StationSource]
+        The kinds of station that are named.
 
     Yields
     ------
@@ -411,7 +433,12 @@ def read_osm(
     factory = osmium.geom.WKBFactory()
     skips = Skips()
     for entity in processor:
-        feature = to_feature(entity=entity, factory=factory, skips=skips)
+        feature = to_feature(
+            entity=entity,
+            factory=factory,
+            skips=skips,
+            stations=stations,
+        )
         if feature is not None and overlaps(feature=feature, bbox=bbox):
             yield feature
     logger.info('skipped %d ways without a usable line', skips.ways)

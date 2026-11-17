@@ -15,6 +15,7 @@ from paperroute_cambridge.city import (
 )
 from paperroute_device.core.device_settings import Window
 from paperroute_transit.core.city import MergeReport
+from paperroute_transit.core.map_places import StationSource
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.modes import RouteClass, mode_problems
 from paperroute_transit.core.positions import ParkedAge
@@ -142,6 +143,7 @@ def test_map_places_drop_localities_and_add_the_named_places() -> None:
     """Cambridge draws no locality and names eleven places of its own."""
     rules = CAMBRIDGE.catalogue.map_places
     assert rules.kinds == {'suburb', 'town', 'village'}
+    assert rules.stations == {StationSource.RAIL, StationSource.MINOR}
     assert rules.extras == (
         ('Abbey', 52.2127, 0.1586),
         ('Arbury', 52.2228, 0.1167),

@@ -6,7 +6,9 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Final
 
+import osmium
 import pytest
+from osmium.osm.mutable import Node
 
 from paperroute_sydney.city import SYDNEY, SYDNEY_PROJECTION
 from paperroute_testkit.build.osm_factory import (
@@ -24,7 +26,11 @@ from paperroute_transit.build.tiles import (
     build_tiles,
 )
 from paperroute_transit.core.geo import to_metres
-from paperroute_transit.core.map_places import MapPlaces
+from paperroute_transit.core.map_places import (
+    STATION_SOURCES,
+    MapPlaces,
+    StationSource,
+)
 from paperroute_transit.core.tiles import (
     TILE_STYLE,
     ZOOMS,
@@ -322,3 +328,86 @@ def test_build_drops_the_kinds_a_city_leaves_out(
         places=MapPlaces(kinds=frozenset({'town'})),
     )
     assert label_names(config=config) == set()
+
+
+def station_names(*, tmp_path: Path, places: MapPlaces) -> set[str]:
+    """
+    Build tiles around a ferry terminal and a rail station.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Directory for the inputs and the output.
+    places : MapPlaces
+        The city's map place rules.
+
+    Returns
+    -------
+    set[str]
+        Names of the station labels at 8 m/px.
+    """
+    osm = tmp_path / 'ferry.osm.pbf'
+    with osmium.SimpleWriter(osm, overwrite=True) as writer:
+        writer.add_node(
+            Node(
+                id=1,
+                location=(151.000, -33.798),
+                tags={'amenity': 'ferry_terminal', 'name': 'Quay Wharf'},
+            ),
+        )
+        writer.add_node(
+            Node(
+                id=3,
+                location=(151.001, -33.802),
+                tags={'railway': 'tram_stop', 'name': 'Tram Stop'},
+            ),
+        )
+        writer.add_node(
+            Node(
+                id=2,
+                location=(151.003, -33.804),
+                tags={'railway': 'station', 'name': 'Parramatta'},
+            ),
+        )
+    write_timetable(path=tmp_path / 'timetable.db')
+    config = replace(
+        config_for(tmp_path=tmp_path, jobs=1),
+        osm=osm,
+        zooms=(8,),
+        places=places,
+    )
+    build_tiles(config=config)
+    rows = read_rows(
+        path=config.out,
+        sql="SELECT name FROM labels WHERE zoom = 8 AND kind = 'station'",
+    )
+    return {str(name) for name, in rows}
+
+
+def test_build_labels_every_station_source_by_default(
+    tmp_path: Path,
+) -> None:
+    """With the default rules rail, minor and ferry stations are named."""
+    names = station_names(tmp_path=tmp_path, places=MapPlaces())
+    assert names == {'Quay Wharf', 'Parramatta', 'Tram Stop'}
+
+
+@pytest.mark.parametrize(
+    ('left_out', 'gone'),
+    [
+        (StationSource.RAIL, 'Parramatta'),
+        (StationSource.MINOR, 'Tram Stop'),
+        (StationSource.FERRY, 'Quay Wharf'),
+    ],
+)
+def test_build_leaves_out_a_station_source_when_told(
+    tmp_path: Path,
+    left_out: StationSource,
+    gone: str,
+) -> None:
+    """A source the city leaves out has no label; the others keep theirs."""
+    names = station_names(
+        tmp_path=tmp_path,
+        places=MapPlaces(stations=STATION_SOURCES - {left_out}),
+    )
+    assert names == {'Quay Wharf', 'Parramatta', 'Tram Stop'} - {gone}

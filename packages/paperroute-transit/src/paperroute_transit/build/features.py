@@ -22,6 +22,7 @@ from paperroute_transit.build.tile_store import (
     PlacedLabel,
 )
 from paperroute_transit.core.geo import MetreBox, Point, Projection, to_metres
+from paperroute_transit.core.map_places import STATION_SOURCES, StationSource
 from paperroute_transit.core.tiles import LabelKind
 
 FEATURES_SCHEMA: Final[str] = LABELS_TABLE + """
@@ -495,6 +496,7 @@ def load_features(
     frame: MetreBox,
     index: str,
     projection: Projection,
+    stations: frozenset[StationSource] = STATION_SOURCES,
 ) -> int:
     """
     Read an OSM file's features into a store, then add the sea.
@@ -514,6 +516,8 @@ def load_features(
         Osmium node location store, such as ``flex_mem``.
     projection : Projection
         The projection to store the features in.
+    stations : frozenset[StationSource]
+        The kinds of station that are read.
 
     Returns
     -------
@@ -521,7 +525,12 @@ def load_features(
         The number of features read, before the sea is added.
     """
     count = 0
-    for feature in read_osm(path=osm, bbox=bbox, index=index):
+    for feature in read_osm(
+        path=osm,
+        bbox=bbox,
+        index=index,
+        stations=stations,
+    ):
         store.add(feature=feature, projection=projection)
         count += 1
     store.finish(frame=frame)

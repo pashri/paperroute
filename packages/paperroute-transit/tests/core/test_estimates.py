@@ -107,6 +107,15 @@ def test_more_than_ten_minutes_late_is_uncertain() -> None:
     assert over.trips['t1'].uncertain
 
 
+def test_more_than_ten_minutes_early_is_uncertain() -> None:
+    """600 s early is certain; 601 s is not."""
+    exactly = made(bus(x=500.0, seconds=-300), fetched=-300)
+    over = made(bus(x=500.0, seconds=-301), fetched=-301)
+    assert delay(trip=exactly.trips['t1']) == -600
+    assert not exactly.trips['t1'].uncertain
+    assert over.trips['t1'].uncertain
+
+
 def test_within_150_m_of_either_end_is_uncertain() -> None:
     """149 m from the first or last stop is uncertain; 150 m is not."""
     near_start = made(bus(x=149.0, seconds=89), fetched=89)

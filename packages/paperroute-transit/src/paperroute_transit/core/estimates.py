@@ -27,6 +27,7 @@ from paperroute_transit.core.realtime import (
 )
 
 UNCERTAIN_LATE: Final[timedelta] = timedelta(minutes=10)
+UNCERTAIN_EARLY: Final[timedelta] = timedelta(minutes=10)
 NEAR_END: Final[float] = 150.0  # metres from the trip's first or last stop
 TURNAROUND: Final[timedelta] = timedelta(minutes=2)
 BLANK_OFF: Final[timedelta] = timedelta(hours=3)  # a blank-date day's limit
@@ -129,9 +130,14 @@ def is_uncertain(*, place: Placed) -> bool:
     Returns
     -------
     bool
-        True when far behind the timetable or near either end.
+        True when far behind or far ahead of the timetable, or near
+        either end.
     """
-    return place.late > UNCERTAIN_LATE.total_seconds() or place.ends < NEAR_END
+    far = (
+        place.late > UNCERTAIN_LATE.total_seconds()
+        or -place.late > UNCERTAIN_EARLY.total_seconds()
+    )
+    return far or place.ends < NEAR_END
 
 
 def fitting_days(

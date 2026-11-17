@@ -339,3 +339,20 @@ def test_change_at_stops_no_distance_apart_has_no_walk() -> None:
     )] == [
         'change at  7:33',
     ]
+
+
+def test_a_chain_is_uncertain_when_any_leg_is() -> None:
+    """One uncertain leg makes the row and the hero uncertain."""
+    legs = TWO_CHANGES.legs
+    unsure = replace(
+        TWO_CHANGES,
+        legs=(legs[0], replace(legs[1], uncertain=True), legs[2]),
+    )
+    now = at(7, 0)
+    assert chain_row(chain=unsure, pin=TWO, now=now, zone=SYDNEY_ZONE).uncertain
+    assert chain_hero(
+        chain=unsure, pin=TWO, now=now, zone=SYDNEY_ZONE, city=SYDNEY,
+    ).uncertain
+    assert not chain_row(
+        chain=TWO_CHANGES, pin=TWO, now=now, zone=SYDNEY_ZONE,
+    ).uncertain

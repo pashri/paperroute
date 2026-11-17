@@ -70,6 +70,8 @@ class ChainHero:
         Arrival time at the Destination.
     live : bool
         True when the first ride has live times.
+    uncertain : bool
+        True when any ride's estimate is uncertain.
     """
 
     countdown: str
@@ -77,6 +79,7 @@ class ChainHero:
     lines: tuple[HeroLine, ...]
     arrives_at: str
     live: bool
+    uncertain: bool = False
 
 
 @dataclass(frozen=True)
@@ -100,6 +103,8 @@ class PairRow:
         Minutes to the first ride, or 'now'; empty when not counted.
     live : bool
         True when the first ride has live times.
+    uncertain : bool
+        True when any ride's estimate is uncertain.
     """
 
     leaves_at: str
@@ -109,6 +114,7 @@ class PairRow:
     minutes: int
     countdown: str = ''
     live: bool = False
+    uncertain: bool = False
 
 
 @dataclass(frozen=True)
@@ -267,6 +273,7 @@ def chain_hero(
         lines=hero_lines(chain=chain, pin=pin, zone=zone, city=city),
         arrives_at=clock_text(moment=chain.arrives, zone=zone),
         live=chain.legs[0].live,
+        uncertain=any(leg.uncertain for leg in chain.legs),
     )
 
 
@@ -351,6 +358,7 @@ def chain_row(
         minutes=int(seconds // 60),
         countdown=countdown(departs=chain.departs, now=now),
         live=chain.legs[0].live,
+        uncertain=any(leg.uncertain for leg in chain.legs),
     )
 
 

@@ -25,14 +25,22 @@ from paperroute_transit.core.map_view import (
     MapView,
     screen_point,
 )
-from paperroute_transit.core.stop_view import Pill, Row, arrival_line
+from paperroute_transit.core.stop_view import (
+    UNCERTAIN,
+    Pill,
+    Row,
+    arrival_line,
+)
 from paperroute_transit.render.chrome import (
     BANNER,
     FASTER,
+    NOTE_GAP,
     cancelled,
     leaves,
+    note_room,
     pill,
     route_pair,
+    uncertain_row,
     view_banner,
     view_header,
 )
@@ -81,6 +89,7 @@ COUNTDOWN_FACE: Final[Face] = Face(weight=800, px=34)
 COUNTDOWN_DROP: Final[int] = 12  # baseline below the badge centre
 ARRIVES_FACE: Final[Face] = Face(weight=400, px=14)
 ARRIVES_DROP: Final[int] = 26  # baseline below the badge centre
+SIDEBAR_NOTE_FACE: Final[Face] = Face(weight=700, px=11)
 ROW_RULE_DROP: Final[int] = 40  # below the badge centre
 ROW_RULE_LEFT: Final[int] = 534
 ROW_RULE_RIGHT: Final[int] = 788
@@ -371,6 +380,38 @@ def row_time(canvas: Canvas, *, row: Row, y: int) -> None:
     )
 
 
+def arrival_note(canvas: Canvas, *, row: Row, y: int) -> None:
+    """
+    Draw the arrival line, and 'uncertain' at its right when flagged.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Departure.
+    y : int
+        The badge's vertical centre.
+    """
+    right = SIDEBAR_RIGHT
+    if row.pill is Pill.FASTER:
+        right = FASTER_LEFT - NOTE_GAP
+    text = arrival_line(row=row)
+    if uncertain_row(row=row):
+        room = note_room(face=SIDEBAR_NOTE_FACE)
+        text = canvas.fit(
+            text=text, face=ARRIVES_FACE, width=right - room - SIDEBAR_TEXT,
+        )
+        canvas.text(
+            at=(right, y + ARRIVES_DROP), text=UNCERTAIN,
+            face=SIDEBAR_NOTE_FACE, grey=INK, anchor='rs',
+        )
+    canvas.text(
+        at=(SIDEBAR_TEXT, y + ARRIVES_DROP), text=text, face=ARRIVES_FACE,
+        grey=INK,
+    )
+
+
 def sidebar_row(canvas: Canvas, *, row: Row, y: int) -> None:
     """
     Draw one sidebar departure.
@@ -394,12 +435,7 @@ def sidebar_row(canvas: Canvas, *, row: Row, y: int) -> None:
         room=SIDEBAR_PAIR_ROOM,
     )
     row_time(canvas, row=row, y=y)
-    canvas.text(
-        at=(SIDEBAR_TEXT, y + ARRIVES_DROP),
-        text=arrival_line(row=row),
-        face=ARRIVES_FACE,
-        grey=INK,
-    )
+    arrival_note(canvas, row=row, y=y)
     if row.pill is Pill.FASTER:
         pill(
             canvas,

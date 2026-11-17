@@ -3,8 +3,10 @@
 from collections.abc import Sequence
 from typing import Final
 
+from paperroute_device.core.text import DOT
 from paperroute_device.render.canvas import INK, Canvas, Face
 from paperroute_transit.core.connection_view import PairRow
+from paperroute_transit.core.stop_view import UNCERTAIN
 from paperroute_transit.render.chrome import (
     LINK_GAP,
     badge,
@@ -121,6 +123,8 @@ def draw_pair_row(
     left, right = edges
     routes = left + ROUTES_LEFT
     room = right - ARRIVE_ROOM - routes
+    if row.uncertain:
+        detail = f'{UNCERTAIN}{DOT}{detail}'
     canvas.rect(box=(left, y, right, y + 1), grey=INK)
     leave_time(canvas, row=row, x=left + INSET, y=y)
     route_chips(canvas, x=routes, y=y + 20, chips=row.chips, room=room)

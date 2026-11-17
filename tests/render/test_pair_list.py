@@ -121,3 +121,18 @@ def test_three_label_sidebar_row_clears_the_arrival() -> None:
     arrive_left = ink[ink > chips_right + 1].min()
     assert chips_right <= routes + SIDEBAR_ROOM
     assert arrive_left - chips_right >= 8
+
+
+def test_uncertain_pair_row_starts_its_detail_line_with_it() -> None:
+    """'uncertain' begins the detail line, under the routes."""
+    frames = []
+    for row in (LIVE, replace(LIVE, uncertain=True)):
+        canvas = Canvas()
+        draw_pair_row(
+            canvas, row=row, y=TOP, edges=(LEFT, RIGHT), detail=row.detail,
+        )
+        frames.append(finish(canvas))
+    found = np.argwhere(frames[0] != frames[1])
+    assert found.size
+    assert found[:, 0].min() >= TOP + 38 and found[:, 0].max() <= TOP + 54
+    assert found[:, 1].min() >= LEFT + ROUTES_LEFT

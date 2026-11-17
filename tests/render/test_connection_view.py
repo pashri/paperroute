@@ -3,6 +3,8 @@
 from dataclasses import replace
 from typing import Final
 
+import numpy as np
+
 from paperroute_device.render.canvas import HEIGHT, Canvas
 from paperroute_device.render.frame import HEADER, finish
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
@@ -15,7 +17,10 @@ from paperroute_transit.core.connection_view import (
 )
 from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.render.connection_view import (
+    FIRST_Y,
     FOOTER_RULE,
+    HERO_LEFT,
+    LABEL_Y,
     draw_connection_view,
 )
 from paperroute_transit.render.pair_list import draw_pair_list
@@ -133,3 +138,18 @@ def test_two_change_hero_fits_above_footer() -> None:
     assert frame[rule, 18:418].max() == 0
     assert frame[rule - 6:rule, 18:418].min() == 255
     assert frame[HEADER + 60:rule - 8, 18:60].min() == 0
+
+
+def test_uncertain_hero_says_so_after_its_count() -> None:
+    """'uncertain' sits on the count's line, right of the count."""
+    assert VIEW.hero is not None
+    hero = replace(VIEW.hero, live=True)
+    before = replace(VIEW, hero=hero)
+    after = replace(VIEW, hero=replace(hero, uncertain=True))
+    found = np.argwhere(
+        draw_connection_view(view=before) != draw_connection_view(view=after),
+    )
+    assert found.size
+    assert found[:, 1].min() > HERO_LEFT + 60
+    assert found[:, 0].min() > HEADER + LABEL_Y
+    assert found[:, 0].max() < HEADER + FIRST_Y - 12

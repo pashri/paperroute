@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import timedelta
+from typing import Final
 
 import numpy as np
 from numpy.typing import NDArray
@@ -30,7 +31,7 @@ from paperroute_transit.core.map_view import (
     Marker,
 )
 from paperroute_transit.core.model import CarryOn
-from paperroute_transit.core.stop_view import Pill, PinTag, Row
+from paperroute_transit.core.stop_view import Estimate, Pill, PinTag, Row
 from paperroute_transit.core.strip_badges import HALF_WIDE
 from paperroute_transit.core.strip_model import (
     HINTS,
@@ -50,11 +51,13 @@ from paperroute_transit.core.strip_view import build_strip_view
 from paperroute_transit.render.chrome import (
     ARROW_WIDTH,
     BANNER,
+    NOTE_GAP,
     badge,
+    note_room,
     route_pair,
 )
 from paperroute_transit.render.markers import badge_box
-from paperroute_transit.render.stop_view import WIDEST_COUNT
+from paperroute_transit.render.stop_view import TAG_FACE, WIDEST_COUNT
 from paperroute_transit.render.strip_view import (
     CARRY_GAP,
     HINT_BOX,
@@ -63,6 +66,7 @@ from paperroute_transit.render.strip_view import (
     NAME_X,
     PANE_NAME_X,
     TEXT_RIGHT,
+    TIME_DROP,
     draw_strip_map_view,
     draw_strip_view,
     paint_strip_view,
@@ -729,3 +733,48 @@ def test_hint_separator_is_heavier() -> None:
         inks.append(int((canvas.grey() == INK).sum()))
     bullet, dot = inks
     assert bullet >= 2 * dot > 0
+
+
+UNSURE: Final[Estimate] = Estimate(due='8:05', late=31, uncertain=True)
+
+
+def painted(*, row: Row) -> NDArray[np.uint8]:
+    """
+    Paint one panel row on the destination board and read it back.
+
+    Parameters
+    ----------
+    row : Row
+        The departure.
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        The grey frame.
+    """
+    canvas = Canvas()
+    paint_panel_row(canvas, row=row, top=PANEL_TOP, whole=False)
+    return canvas.grey()
+
+
+def test_uncertain_panel_row_says_so_under_its_countdown() -> None:
+    """'uncertain' sits right-aligned under the countdown."""
+    row = replace(panel_row(), destination='Emu Plains')
+    found = np.argwhere(
+        painted(row=row) != painted(row=replace(row, estimate=UNSURE)),
+    )
+    assert found.size
+    assert found[:, 0].min() > PANEL_TOP + TIME_DROP
+    assert found[:, 1].min() >= TEXT_RIGHT - note_room(face=TAG_FACE)
+    assert found[:, 1].max() <= TEXT_RIGHT
+
+
+def test_uncertain_carry_on_gives_way_to_the_note() -> None:
+    """A long carry-on stops short of 'uncertain' by the gap."""
+    then = CarryOn(route='T2', headsign='Leppington via Granville Junction')
+    row = replace(
+        panel_row(then=then), destination='Emu Plains', estimate=UNSURE,
+    )
+    start = TEXT_RIGHT - int(note_room(face=TAG_FACE))
+    gap = painted(row=row)[SECOND_LINE, start : start + NOTE_GAP - 1]
+    assert (gap == PAPER).all()

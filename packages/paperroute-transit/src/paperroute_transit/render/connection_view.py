@@ -13,8 +13,10 @@ from paperroute_transit.core.connection_view import (
     ConnectionView,
     HeroLine,
 )
+from paperroute_transit.core.stop_view import UNCERTAIN
 from paperroute_transit.render.chrome import (
     BANNER,
+    NOTE_GAP,
     arrow,
     badge,
     view_banner,
@@ -69,9 +71,14 @@ def hero_countdown(canvas: Canvas, *, hero: ChainHero, top: int) -> None:
     y = top + (TIGHT_COUNT_Y if tight else COUNT_Y)
     used = canvas.text(at=(HERO_LEFT, y), text=shown, face=big, grey=INK)
     if hero.live and shown != 'now' and ':' not in shown:
+        unit = Face(weight=800, px=28 // (1 + tight))
+        used += 8 + canvas.text(
+            at=(HERO_LEFT + 8 + used, y), text='min', face=unit, grey=INK,
+        )
+    if hero.uncertain:
         canvas.text(
-            at=(HERO_LEFT + 8 + used, y), text='min',
-            face=Face(weight=800, px=28 // (1 + tight)), grey=INK,
+            at=(HERO_LEFT + used + NOTE_GAP, y), text=UNCERTAIN,
+            face=SMALL_BOLD, grey=INK,
         )
 
 

@@ -33,7 +33,7 @@ from paperroute_transit.core.map_view import (
     TripMarks,
     screen_point,
 )
-from paperroute_transit.core.stop_view import Pill, Row, empty_text
+from paperroute_transit.core.stop_view import Estimate, Pill, Row, empty_text
 from paperroute_transit.core.tiles import (
     CITY,
     TILE,
@@ -45,9 +45,11 @@ from paperroute_transit.core.tiles import (
 from paperroute_transit.render.chrome import BANNER, badge, header
 from paperroute_transit.render.map_base import draw_map_base
 from paperroute_transit.render.map_view import (
+    ARRIVES_DROP,
     BADGE_PX,
     COUNTDOWN_FACE,
     EMPTY_MARGIN,
+    FASTER_LEFT,
     PAIR_STEP,
     PAIRS_TOP,
     SIDEBAR_LEFT,
@@ -877,3 +879,26 @@ def test_badge_at_a_crowded_from_by_the_edge_still_shows() -> None:
     assert placed.centre != stop
     box = grown_box(marker=waiting, centre=placed.centre)
     assert not any(overlaps(first=box, second=other) for other in reserved)
+
+
+UNSURE: Estimate = Estimate(due='8:09', late=31, uncertain=True)
+
+
+def test_uncertain_sidebar_row_says_so_under_its_time() -> None:
+    """'uncertain' sits on the arrival line, right-aligned to the edge."""
+    top = ROW_TOPS[0]
+    for pill, limit in ((None, SIDEBAR_RIGHT), (Pill.FASTER, FASTER_LEFT)):
+        plain = row(pill=pill)
+        frames = [
+            draw_map_view(
+                view=replace(VIEW, sidebar=(item, *(plain,) * 4)),
+                base=paper(),
+            )
+            for item in (plain, replace(plain, estimate=UNSURE))
+        ]
+        found = np.argwhere(frames[0] != frames[1])
+        assert found.size
+        assert found[:, 0].min() >= top + ARRIVES_DROP - 12
+        assert found[:, 0].max() <= top + ARRIVES_DROP + 3
+        assert found[:, 1].min() >= limit - 60
+        assert found[:, 1].max() < limit

@@ -14,7 +14,12 @@ from paperroute_device.render.canvas import (
     Face,
 )
 from paperroute_device.render.frame import HEADER, finish, wrap
-from paperroute_transit.core.stop_view import Pill, Row, arrival_line
+from paperroute_transit.core.stop_view import (
+    UNCERTAIN,
+    Pill,
+    Row,
+    arrival_line,
+)
 from paperroute_transit.core.strip_badges import HALF_WIDE
 from paperroute_transit.core.strip_model import (
     PANE_TRACK_X,
@@ -29,8 +34,10 @@ from paperroute_transit.render.chrome import (
     arrow,
     badge,
     countdown_slot,
+    note_room,
     pill,
     route_pair,
+    uncertain_row,
     view_banner,
     view_header,
 )
@@ -85,6 +92,43 @@ STRIP_EMPTY_Y: Final[int] = 250
 HINT_BOX: Final[tuple[int, int, int, int]] = (456, 420, 786, 464)
 HINT_FACE: Final[Face] = Face(weight=700, px=14)
 HINT_PAD: Final[int] = 4  # pixels each side of the hint text
+
+
+def note_width(*, row: Row) -> float:
+    """
+    Say how much width a row's 'uncertain' note takes on its second line.
+
+    Parameters
+    ----------
+    row : Row
+        Departure.
+
+    Returns
+    -------
+    float
+        The word's room, or 0 when the row is not uncertain.
+    """
+    return note_room(face=TAG_FACE) if uncertain_row(row=row) else 0.0
+
+
+def row_note(canvas: Canvas, *, row: Row, top: int) -> None:
+    """
+    Draw 'uncertain' right-aligned under the countdown.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Departure; nothing is drawn unless it is uncertain.
+    top : int
+        The row's rule.
+    """
+    if uncertain_row(row=row):
+        canvas.text(
+            at=(TEXT_RIGHT, top + SECOND_DROP), text=UNCERTAIN,
+            face=TAG_FACE, grey=INK, anchor='rs',
+        )
 
 
 def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> int:
@@ -166,7 +210,7 @@ def continuing_middle(canvas: Canvas, *, row: Row, top: int) -> int:
     shown = canvas.fit(
         text=row.destination,
         face=HEADSIGN_FACE,
-        width=TEXT_RIGHT - MIDDLE_X - room,
+        width=TEXT_RIGHT - MIDDLE_X - room - note_width(row=row),
     )
     used = canvas.text(
         at=(MIDDLE_X, top + SECOND_DROP),
@@ -233,7 +277,7 @@ def carry_on(canvas: Canvas, *, row: Row, top: int, left: int) -> None:
         text=canvas.fit(
             text=f'{then.route} {then.headsign}',
             face=TAG_FACE,
-            width=TEXT_RIGHT - x,
+            width=TEXT_RIGHT - x - note_width(row=row),
         ),
         face=TAG_FACE,
         grey=INK,
@@ -266,6 +310,7 @@ def panel_row(
     )
     left = row_middle(canvas, row=row, top=top, whole=whole)
     row_countdown(canvas, row=row, top=top)
+    row_note(canvas, row=row, top=top)
     carry_on(canvas, row=row, top=top, left=left)
     if picked:
         canvas.invert(box=(RULE_LEFT, top, RULE_RIGHT, top + PICKED_DEPTH))

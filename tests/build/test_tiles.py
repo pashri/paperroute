@@ -2,6 +2,7 @@
 
 import sqlite3
 from contextlib import closing
+from dataclasses import replace
 from pathlib import Path
 from typing import Final
 
@@ -23,6 +24,7 @@ from paperroute_transit.build.tiles import (
     build_tiles,
 )
 from paperroute_transit.core.geo import to_metres
+from paperroute_transit.core.map_places import MapPlaces
 from paperroute_transit.core.tiles import (
     TILE_STYLE,
     ZOOMS,
@@ -266,3 +268,57 @@ def test_build_writes_the_25_level(inputs: Path, tmp_path: Path) -> None:
         sql="SELECT value FROM meta WHERE key = 'zooms'",
     )
     assert meta == [('25',)]
+
+
+def label_names(*, config: TileBuildConfig) -> set[str]:
+    """
+    Build the tiles and list the names of the suburb labels.
+
+    Parameters
+    ----------
+    config : TileBuildConfig
+        The build.
+
+    Returns
+    -------
+    set[str]
+        Names of the suburb labels at 8 m/px.
+    """
+    build_tiles(config=config)
+    rows = read_rows(
+        path=config.out,
+        sql="SELECT name FROM labels WHERE zoom = 8 AND kind = 'suburb'",
+    )
+    return {str(name) for name, in rows}
+
+
+def test_build_names_the_places_a_city_adds(
+    inputs: Path,
+    tmp_path: Path,
+) -> None:
+    """A city's extra place is labelled in the built tiles."""
+    base = config_for(tmp_path=inputs, jobs=1)
+    config = replace(
+        base,
+        out=tmp_path / 'tiles.db',
+        work=tmp_path / 'work',
+        zooms=(8,),
+        places=MapPlaces(extras=(('Extra', -33.7985, 151.001),)),
+    )
+    assert 'E X T R A' in label_names(config=config)
+
+
+def test_build_drops_the_kinds_a_city_leaves_out(
+    inputs: Path,
+    tmp_path: Path,
+) -> None:
+    """A suburb is not labelled when the city's kinds leave it out."""
+    base = config_for(tmp_path=inputs, jobs=1)
+    config = replace(
+        base,
+        out=tmp_path / 'tiles.db',
+        work=tmp_path / 'work',
+        zooms=(8,),
+        places=MapPlaces(kinds=frozenset({'town'})),
+    )
+    assert label_names(config=config) == set()

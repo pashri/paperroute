@@ -5,7 +5,10 @@ import fcntl
 import json
 import logging
 import os
+import sqlite3
 from collections.abc import Iterator
+from contextlib import closing
+from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Final
@@ -24,6 +27,7 @@ from paperroute_transit.build.cli import (
 )
 from paperroute_transit.build.sources import BuildParts, SourceSpec
 from paperroute_transit.build.tile_store import TileWriter
+from paperroute_transit.core.map_places import MapPlaces
 from paperroute_transit.core.tiles import TILE_STYLE
 from tests.build.tile_inputs import write_timetable
 
@@ -212,6 +216,31 @@ def test_tiles_prints_a_json_report(
     report = json.loads(capsys.readouterr().out.splitlines()[-1])
     assert report['tiles'] > 0
     assert (tmp_path / 'tiles-work').is_dir()
+
+
+@pytest.mark.usefixtures('restored_logging')
+def test_tiles_use_the_city_s_map_places(tmp_path: Path) -> None:
+    """The city's place rules reach the build: a dropped kind is unnamed."""
+    write_tiny_osm(path=tmp_path / 'tiny.osm.pbf')
+    city = replace(
+        SYDNEY,
+        catalogue=replace(
+            SYDNEY.catalogue,
+            map_places=MapPlaces(kinds=frozenset({'town'})),
+        ),
+    )
+    with pytest.raises(SystemExit) as info:
+        main(
+            city=city,
+            parts=SYDNEY_BUILD,
+            argv=tiles_argv(tmp_path=tmp_path, osm=tmp_path / 'tiny.osm.pbf'),
+        )
+    assert info.value.code == 0
+    with closing(sqlite3.connect(tmp_path / 'tiles.db')) as conn:
+        rows = conn.execute(
+            "SELECT count(*) FROM labels WHERE kind = 'suburb'",
+        ).fetchall()
+    assert rows == [(0,)]
 
 
 @pytest.mark.usefixtures('restored_logging')

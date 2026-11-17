@@ -181,6 +181,19 @@
           Also on pins without a To
         </label>
         <fieldset>
+          <legend>Map framing</legend>
+          <label class="switch">
+            <input type="radio" name="map_framing" value="approach" checked aria-describedby="framing-approach-hint">
+            Approach
+          </label>
+          <p id="framing-approach-hint" class="hint">Your stop and the stops your services call at in the 10 minutes before it and the 3 minutes after.</p>
+          <label class="switch">
+            <input type="radio" name="map_framing" value="centred" aria-describedby="framing-centred-hint">
+            Centred
+          </label>
+          <p id="framing-centred-hint" class="hint">Your stop in the middle, zoomed in on the streets around it.</p>
+        </fieldset>
+        <fieldset>
           <legend>Connection map</legend>
           <label class="switch">
             <input type="radio" name="connection_map" value="changes" aria-describedby="map-changes-hint">

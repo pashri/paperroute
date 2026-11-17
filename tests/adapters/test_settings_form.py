@@ -40,6 +40,7 @@ from paperroute_transit.core.saved import (
     BoardSettings,
     ConnectionMap,
     Lookahead,
+    MapFraming,
     Rate,
     Settings,
     default_settings,
@@ -66,6 +67,7 @@ ODD = Settings(
         peak_windows=(Window(start=time(7), end=time(8, 15)),),
         alert_lookahead=Lookahead.THREE_DAYS,
         connection_map=ConnectionMap.WHOLE,
+        map_framing=MapFraming.CENTRED,
     ),
 )
 PEAK = {
@@ -226,6 +228,7 @@ def test_form_values_spell_out_each_field() -> None:
     assert values['peak_2_start'] == ''
     assert values['quiet_mode'] == 'app'
     assert values['quiet_start'] == '22:45'
+    assert values['map_framing'] == 'centred'
 
 
 def test_lookahead_form_round_trip() -> None:
@@ -297,7 +300,7 @@ def test_bad_time_is_bad(bad: str) -> None:
 
 
 @pytest.mark.parametrize(
-    'field', ['peak_rate', 'connection_map', 'auto_rebuild'],
+    'field', ['peak_rate', 'connection_map', 'map_framing', 'auto_rebuild'],
 )
 def test_unknown_values_are_unknown(field: str) -> None:
     """A value the page never sends is refused."""
@@ -469,3 +472,33 @@ def test_changed_from_reads_parked_age() -> None:
 def test_board_values_write_parked_age() -> None:
     """Board values write parked age."""
     assert board_values(settings=BoardSettings())['parked_age'] == 'off'
+
+
+def test_changed_from_reads_map_framing() -> None:
+    """Changed from reads map framing."""
+    assert changed_from(fields={'map_framing': 'centred'}) == SettingsChanged(
+        map_framing=MapFraming.CENTRED,
+    )
+
+
+def test_board_values_write_map_framing() -> None:
+    """Board values write map framing."""
+    assert board_values(settings=BoardSettings())['map_framing'] == 'approach'
+
+
+def test_map_framing_two_choices() -> None:
+    """Each map framing checks its own radio."""
+    template = '<a{{map_framing:approach}}><b{{map_framing:centred}}>'
+    for tag, framing in zip('ab', MapFraming, strict=True):
+        settings = Settings(board=BoardSettings(map_framing=framing))
+        text = _marked(template=template, settings=settings, error=None)
+        assert text.count(' checked') == 1
+        assert f'<{tag} checked>' in text
+
+
+def test_map_framing_sits_before_the_connection_map() -> None:
+    """The framing radios come just before the connection map choice."""
+    text = _sections()
+    assert 'name="map_framing" value="approach"' in text
+    assert 'name="map_framing" value="centred"' in text
+    assert text.index('Map framing') < text.index('Connection map')

@@ -23,7 +23,6 @@ AT_STOP: Final[float] = 30.0  # metres
 CANDIDATE_SLACK: Final[float] = 30.0  # metres
 SAME_STRETCH: Final[float] = 150.0  # metres
 BEARING_LIMIT: Final[float] = 100.0  # degrees
-HALF_TURN: Final[float] = 180.0  # degrees
 FULL_TURN: Final[float] = 360.0  # degrees
 
 

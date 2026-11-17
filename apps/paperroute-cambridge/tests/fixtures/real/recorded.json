@@ -4,7 +4,6 @@
   "far_route": "X21",
   "by_route": "4",
   "operators": {
-    "NATX": 2,
-    "FLIX": 0
+    "NATX": 2
   }
 }

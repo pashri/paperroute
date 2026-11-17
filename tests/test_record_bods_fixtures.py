@@ -481,7 +481,6 @@ def live() -> dict[str, bytes]:
     return {
         'bods_positions_raw.pb': positions_body(),
         'siri_natx.xml': siri_body(vehicles=('c1',)),
-        'siri_flix.xml': siri_body(vehicles=()),
     }
 
 
@@ -645,13 +644,12 @@ def test_main_records_the_files_and_prints_only_sizes(
         'bods_positions.pb',
         'bods_positions_raw.pb',
         'recorded.json',
-        'siri_flix.xml',
         'siri_natx.xml',
     ]
     summary = json.loads((out / 'recorded.json').read_text())
     assert summary['far_route'] == 'X99'
     assert summary['by_route'] == '4'
-    assert summary['operators'] == {'NATX': 1, 'FLIX': 0}
+    assert summary['operators'] == {'NATX': 1}
     assert '4-2' not in all_trip_ids(out / 'bods.zip')
     printed = capsys.readouterr()
     assert KEY not in printed.out + printed.err

@@ -62,7 +62,7 @@ def parse(body: bytes) -> PositionsSnapshot:
 
 SIGHTINGS = [
     found
-    for name in ('siri_natx.xml', 'siri_flix.xml')
+    for name in ('siri_natx.xml',)
     for found in coach_sightings(data=read(name))
 ]
 

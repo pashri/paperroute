@@ -31,7 +31,8 @@ logger = logging.getLogger(__name__)
 BASE_URL: Final[str] = 'https://data.bus-data.dft.gov.uk/api/v1/'
 RT_PATH: Final[str] = 'gtfsrtdatafeed/'
 SIRI_PATH: Final[str] = 'datafeed/'
-COACH_OPERATORS: Final[tuple[str, ...]] = ('NATX', 'FLIX')
+# FlixBus coaches are in the timetable, but the live feed holds none of them.
+COACH_OPERATORS: Final[tuple[str, ...]] = ('NATX',)
 BODY_LIMIT: Final[int] = 4 * 1024 * 1024  # bytes
 CHUNK: Final[int] = 64 * 1024  # bytes
 BODS_KEY_NAME: Final[str] = 'bods'

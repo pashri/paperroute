@@ -284,9 +284,7 @@ async def failure_of(stub: BodsStub, case: str) -> Exception | None:
     elif case == 'forbidden':
         stub.rt = (HTTPStatus.FORBIDDEN, b'')
     elif case == 'siri-500':
-        stub.siri = dict.fromkeys(
-            ('NATX', 'FLIX'), (HTTPStatus.INTERNAL_SERVER_ERROR, b''),
-        )
+        stub.siri = {'NATX': (HTTPStatus.INTERNAL_SERVER_ERROR, b'')}
     elif case == 'closed-port':
         client = stub.client(key=lambda: KEY, base_url='http://127.0.0.1:1/')
     else:
@@ -310,17 +308,10 @@ async def test_fetch_joins_the_coach_names_into_the_positions(
 ) -> None:
     """Fetch joins the coach names into the positions."""
     stub.rt = (HTTPStatus.OK, ONE_COACH)
-    stub.siri = {
-        'NATX': (HTTPStatus.OK, NATX_217),
-        'FLIX': (HTTPStatus.OK, NO_COACH),
-    }
+    stub.siri = {'NATX': (HTTPStatus.OK, NATX_217)}
     body = await stub.client(key=lambda: KEY).fetch(feed='bods/positions')
     assert labels(body) == ['777', '']
     assert sorted(stub.seen, key=str) == [
-        (
-            '/datafeed/',
-            {'operatorRef': 'FLIX', 'boundingBox': SIRI_BOX, 'api_key': KEY},
-        ),
         (
             '/datafeed/',
             {'operatorRef': 'NATX', 'boundingBox': SIRI_BOX, 'api_key': KEY},
@@ -342,11 +333,11 @@ async def test_fetch_returns_the_positions_when_siri_fails(
 ) -> None:
     """Fetch returns the positions when siri fails."""
     stub.rt = (HTTPStatus.OK, ONE_COACH)
-    stub.siri = {'NATX': answer, 'FLIX': answer}
+    stub.siri = {'NATX': answer}
     body = await stub.client(key=lambda: KEY).fetch(feed='bods/positions')
     assert labels(body) == ['', '']
     warnings = [r for r in caplog.records if r.levelname == 'WARNING']
-    assert len(warnings) == 2
+    assert len(warnings) == 1
 
 
 async def test_fetch_without_a_key_sends_nothing(stub: BodsStub) -> None:
@@ -461,14 +452,11 @@ async def test_fetch_returns_the_positions_for_any_coach_body(
 ) -> None:
     """Fetch returns the positions for any coach body."""
     stub.rt = (HTTPStatus.OK, ONE_COACH)
-    stub.siri = {
-        'NATX': (HTTPStatus.OK, body),
-        'FLIX': (HTTPStatus.OK, body),
-    }
+    stub.siri = {'NATX': (HTTPStatus.OK, body)}
     got = await stub.client(key=lambda: KEY).fetch(feed='bods/positions')
     assert labels(got) == ['', '']
     warnings = [r for r in caplog.records if r.levelname == 'WARNING']
-    assert len(warnings) == 2
+    assert len(warnings) == 1
 
 
 async def test_request_repr_hides_the_key(stub: BodsStub) -> None:
@@ -491,7 +479,7 @@ async def test_fetch_returns_the_positions_for_valid_xml_that_is_not_siri(
 ) -> None:
     """Valid XML that is not SIRI names nothing and does not warn."""
     stub.rt = (HTTPStatus.OK, ONE_COACH)
-    stub.siri = dict.fromkeys(('NATX', 'FLIX'), (HTTPStatus.OK, b'<a><b/></a>'))
+    stub.siri = {'NATX': (HTTPStatus.OK, b'<a><b/></a>')}
     got = await stub.client(key=lambda: KEY).fetch(feed='bods/positions')
     assert labels(got) == ['', '']
     assert not [r for r in caplog.records if r.levelname == 'WARNING']

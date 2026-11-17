@@ -27,10 +27,14 @@ from paperroute_testkit.core.strip_factories import (
 from paperroute_transit.core.cycle import cycle_effects
 from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.geo import Point
-from paperroute_transit.core.map_fit import BANNER_ROOM, CREDIT_ROOM
-from paperroute_transit.core.map_requests import map_feeds, pin_ends
+from paperroute_transit.core.map_fit import BANNER_ROOM, CREDIT_ROOM, FrameKey
+from paperroute_transit.core.map_requests import (
+    map_feeds,
+    map_inputs,
+    pin_ends,
+)
 from paperroute_transit.core.map_state import area_box, area_frame
-from paperroute_transit.core.map_view import DEFAULT_ZOOM
+from paperroute_transit.core.map_view import DEFAULT_ZOOM, MAP_WIDTH
 from paperroute_transit.core.messages import (
     Effect,
     FetchFeed,
@@ -405,15 +409,22 @@ def buses_every_ten() -> tuple[State, tuple[Departure, ...]]:
 
 
 def along_patterns(
-    *, departures: tuple[Departure, ...],
+    *,
+    departures: tuple[Departure, ...],
+    stations: str = 'WVAX',
+    line: dict[str, Point] = ALONG,
 ) -> PatternsLoaded:
     """
-    Load patterns calling at W, V, the From and X, 3 minutes apart.
+    Load patterns calling along a line, 3 minutes apart.
 
     Parameters
     ----------
     departures : tuple[Departure, ...]
         The departures; each reaches the From when it leaves.
+    stations : str
+        The calls, in order; A is the From.
+    line : dict[str, Point]
+        Where each call is.
 
     Returns
     -------
@@ -424,14 +435,14 @@ def along_patterns(
         item.trip_id: pattern(
             trip_id=item.trip_id,
             stops=calls(
-                stations='WVAX',
+                stations=stations,
                 start=(
                     EIGHT
                     + int((item.departs - START).total_seconds())
-                    - 360
+                    - 180 * stations.index('A')
                 ),
                 step=180,
-                points=ALONG,
+                points=line,
             ),
         )
         for item in departures
@@ -491,3 +502,45 @@ def test_plain_map_without_a_location_asks_for_no_patterns() -> None:
     )
     _, effects = on_view(view=LiveView.MAP, pin=pin, departures=bus_pin())
     assert not [item for item in effects if isinstance(item, LoadPatterns)]
+
+
+FURTHER: Final[dict[str, Point]] = {
+    **ALONG,
+    'X': (CENTRE[0] + 1_400.0, CENTRE[1]),
+}
+
+
+def test_plain_map_settles_on_its_first_pattern_then_holds() -> None:
+    """The first pattern refits and keys the frame; a later one keeps it."""
+    state, departures = buses_every_ten()
+    assert state.map.frame_key is None
+    state, _ = step(state, along_patterns(departures=departures[:1]))
+    settled = state.map.frame
+    assert settled == ((CENTRE[0] - 400.0, CENTRE[1] + 24.0), 2)
+    assert state.map.frame_key == FrameKey(
+        ends=(CENTRE, None), step=0, width=MAP_WIDTH, asleep=False,
+    )
+    state, _ = step(
+        state, along_patterns(departures=departures[1:], line=FURTHER),
+    )
+    assert state.map.frame == settled
+    unheld = replace(state, map=replace(state.map, frame_key=None))
+    fit = map_inputs(state=unheld, stop_view=live_stop_view(state=unheld))
+    assert fit.centre is not None and fit.centre[0] == CENTRE[0] - 100.0
+
+
+def test_knob_moves_one_level_from_a_held_coarser_frame() -> None:
+    """Held at 8 m/px where 5 would fit, one detent goes to 5 or 14."""
+    state, departures = buses_every_ten()
+    state, _ = step(state, along_patterns(departures=departures[:1]))
+    state, _ = step(
+        state, along_patterns(departures=departures[1:], stations='VAX'),
+    )
+    state, _ = step(state, Tick(now=START + timedelta(minutes=4)))
+    assert state.map.frame == ((CENTRE[0] - 400.0, CENTRE[1] + 24.0), 2)
+    finer, _ = step(state, turn(steps=1))
+    coarser, _ = step(state, turn(steps=-1))
+    assert [
+        None if moved.map.frame is None else ZOOMS[moved.map.frame[1]]
+        for moved in (finer, coarser)
+    ] == [5, 14]

@@ -11,7 +11,12 @@ from paperroute_transit.core.connection_map import (
     panes_inputs,
 )
 from paperroute_transit.core.geo import Point
-from paperroute_transit.core.map_fit import framed_map, resting_zoom
+from paperroute_transit.core.map_fit import (
+    FrameKey,
+    frame_key,
+    resting_zoom,
+    steady_frame,
+)
 from paperroute_transit.core.map_state import area_box, area_frame
 from paperroute_transit.core.map_view import (
     MAP_WIDTH,
@@ -281,8 +286,9 @@ def map_inputs(
     Returns
     -------
     MapInputs
-        A plain pin's inputs framed by the map framing setting; for a
-        connection pin, framed on the connection, or on both panes of a
+        A plain pin's inputs framed by the map framing setting, a settled
+        Approach frame kept while it fits; for a connection pin, framed on
+        the connection, or on both panes of a
         two-change Changes map, with the hero chain's legs as the
         departures.
     """
@@ -293,8 +299,11 @@ def map_inputs(
     )
     pin = shown(state=state)
     if not is_connection(pin=pin):
-        return framed_map(
-            inputs=inputs, framing=state.settings.board.map_framing,
+        return steady_frame(
+            inputs=inputs,
+            framing=state.settings.board.map_framing,
+            held=state.map.frame,
+            key=state.map.frame_key,
         )
     chains = live_chains(state=state)
     mode = state.settings.board.connection_map
@@ -618,19 +627,46 @@ def framed_state(*, state: State, inputs: MapInputs | None) -> State:
     Returns
     -------
     State
-        State with the map's centre and zoom as its frame, and no area
-        modes loaded or pending when the area's centre moved; no frame
-        with no map or no centre.
+        State with the map's centre and zoom as its frame and
+        `settled_key` as its key, and no area modes loaded or pending
+        when the area's centre moved; no frame with no map or no centre.
     """
     frame = None
+    key = None
     if inputs is not None and inputs.centre is not None:
         frame = (inputs.centre, inputs.zoom)
-    if frame == state.map.frame:
+        key = settled_key(state=state, inputs=inputs)
+    if frame == state.map.frame and key == state.map.frame_key:
         return state
-    framed = replace(state.map, frame=frame)
+    framed = replace(state.map, frame=frame, frame_key=key)
     if area_frame(map_state=framed)[0] != area_frame(map_state=state.map)[0]:
         framed = replace(framed, area_modes={}, pending_modes=frozenset())
     return replace(state, map=framed)
+
+
+def settled_key(*, state: State, inputs: MapInputs) -> FrameKey | None:
+    """
+    Say what a plain pin's drawn map was fitted for.
+
+    Parameters
+    ----------
+    state : State
+        State, its step already rebased.
+    inputs : MapInputs
+        The shown map's inputs.
+
+    Returns
+    -------
+    FrameKey | None
+        `frame_key` at the state's step, so the next draw matches it;
+        None for a connection pin.
+    """
+    if is_connection(pin=shown(state=state)):
+        return None
+    return frame_key(
+        inputs=replace(inputs, step=state.map.step),
+        framing=state.settings.board.map_framing,
+    )
 
 
 def rebased(
@@ -652,12 +688,12 @@ def rebased(
     -------
     State
         State whose step is the drawn zoom less the zoom the map takes
-        with no step, so the next detent always moves the map;
-        unchanged with no map.
+        with no step and no held frame, so the next detent always moves
+        the map one level; unchanged with no map.
     """
     if inputs is None:
         return state
-    still = replace(state, map=replace(state.map, step=0))
+    still = replace(state, map=replace(state.map, step=0, frame_key=None))
     fit = map_inputs(state=still, stop_view=stop_view, width=inputs.width)
     return replace(state, map=replace(state.map, step=inputs.zoom - fit.zoom))
 

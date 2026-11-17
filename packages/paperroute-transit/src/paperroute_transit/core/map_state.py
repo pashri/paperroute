@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Final
 
 from paperroute_transit.core.geo import MetreBox, Point, Shape
-from paperroute_transit.core.map_fit import resting_zoom
+from paperroute_transit.core.map_fit import FrameKey, resting_zoom
 from paperroute_transit.core.map_view import MAP_HEIGHT, MAP_WIDTH
 from paperroute_transit.core.messages import (
     LoadModes,
@@ -56,6 +56,9 @@ class MapState:
         The centre and zoom a map was last drawn at, the knob's step
         already applied; None when no fitted map is drawn, which leaves
         the From at the resting zoom.
+    frame_key : FrameKey | None
+        What `frame` was fitted for when it is a settled Approach frame,
+        else None.
     """
 
     step: int = 0
@@ -72,6 +75,7 @@ class MapState:
     fetched_at: Mapping[str, datetime] = field(default_factory=dict)
     failed_at: Mapping[MapData, datetime] = field(default_factory=dict)
     frame: tuple[Point, int] | None = None
+    frame_key: FrameKey | None = None
 
 
 def area_frame(*, map_state: MapState) -> tuple[Point | None, int]:

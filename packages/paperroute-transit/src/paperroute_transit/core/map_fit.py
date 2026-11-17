@@ -1,7 +1,7 @@
 """Where a map sits: the fitted zoom moved by the knob's step."""
 
 from collections.abc import Callable, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from functools import partial
 from typing import Final
 
@@ -20,6 +20,29 @@ CREDIT_ROOM: Final[int] = 28  # pixels kept clear above the map's bottom
 BANNER_ROOM: Final[int] = 34  # pixels a banner covers at the map's top
 KEEP_IN: Final[int] = 24  # pixels the From is kept inside the map
 SLEEP_ROOM: Final[int] = SLEEP_BAND  # the margin clears a To disc above it
+
+
+@dataclass(frozen=True)
+class FrameKey:
+    """
+    What a settled Approach frame was fitted for.
+
+    Attributes
+    ----------
+    ends : tuple[Point | None, Point | None]
+        The pin's From and To points.
+    step : int
+        Knob detents from the fit.
+    width : int
+        Map width in pixels.
+    asleep : bool
+        True for the sleep screen's map.
+    """
+
+    ends: tuple[Point | None, Point | None]
+    step: int
+    width: int
+    asleep: bool
 
 
 def stepped(*, zoom: int, step: int) -> int:
@@ -456,3 +479,111 @@ def framed_map(*, inputs: MapInputs, framing: MapFraming) -> MapInputs:
     if framing is MapFraming.CENTRED:
         return centred_frame(inputs=inputs)
     return approach_frame(inputs=inputs)
+
+
+def frame_key(*, inputs: MapInputs, framing: MapFraming) -> FrameKey | None:
+    """
+    Say what an Approach frame is fitted for, once it is settled.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs.
+    framing : MapFraming
+        The map framing setting.
+
+    Returns
+    -------
+    FrameKey | None
+        The key; None for Centred, with no From point, or with fewer
+        than two points to fit, as before any pattern loads.
+    """
+    points = approach_points(inputs=inputs)
+    if framing is MapFraming.CENTRED or inputs.ends[0] is None:
+        return None
+    if len(set(points)) < 2:
+        return None
+    return FrameKey(
+        ends=inputs.ends,
+        step=inputs.step,
+        width=inputs.width,
+        asleep=inputs.asleep,
+    )
+
+
+def holds(*, inputs: MapInputs, frame: tuple[Point, int]) -> bool:
+    """
+    Say whether a frame still shows a plain pin's approach.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs.
+    frame : tuple[Point, int]
+        A map centre and zoom.
+
+    Returns
+    -------
+    bool
+        True when the From sits `KEEP_IN` pixels inside the map and
+        every point of `approach_points` is on the map, clear of the
+        banner and the bottom room.
+    """
+    centre, zoom = frame
+    mpp = ZOOMS[zoom]
+    rooms = (banner_room(inputs=inputs), bottom_room(inputs=inputs))
+    origin = inputs.ends[0]
+    if origin is None or centre != kept(
+        centre=centre, keep=origin, mpp=mpp, width=inputs.width, rooms=rooms,
+    ):
+        return False
+    pixels = [
+        (
+            inputs.width / 2 + (x - centre[0]) / mpp,
+            MAP_HEIGHT / 2 - (y - centre[1]) / mpp,
+        )
+        for x, y in approach_points(inputs=inputs)
+    ]
+    return all(
+        0 <= x <= inputs.width and rooms[0] <= y <= MAP_HEIGHT - rooms[1]
+        for x, y in pixels
+    )
+
+
+def steady_frame(
+    *,
+    inputs: MapInputs,
+    framing: MapFraming,
+    held: tuple[Point, int] | None,
+    key: FrameKey | None,
+) -> MapInputs:
+    """
+    Frame a plain pin's map, keeping a settled Approach frame while it fits.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs, centred on the From.
+    framing : MapFraming
+        The map framing setting.
+    held : tuple[Point, int] | None
+        The centre and zoom the map is drawn at now, or None.
+    key : FrameKey | None
+        What the held frame was fitted for; None when it is not a
+        settled Approach frame.
+
+    Returns
+    -------
+    MapInputs
+        The held centre and zoom while `key` matches the inputs' own
+        and the frame `holds`; else as `framed_map`.
+    """
+    fit = framed_map(inputs=inputs, framing=framing)
+    if held is None or key is None:
+        return fit
+    if key != frame_key(inputs=inputs, framing=framing):
+        return fit
+    if not holds(inputs=inputs, frame=held):
+        return fit
+    centre, zoom = held
+    return replace(fit, centre=centre, zoom=zoom)

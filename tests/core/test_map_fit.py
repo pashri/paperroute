@@ -20,11 +20,14 @@ from paperroute_transit.core.map_fit import (
     BANNER_ROOM,
     CREDIT_ROOM,
     KEEP_IN,
+    FrameKey,
     approach_frame,
     centred_frame,
     fitted,
+    frame_key,
     framed_map,
     resting_zoom,
+    steady_frame,
 )
 from paperroute_transit.core.map_view import (
     DEFAULT_ZOOM,
@@ -469,3 +472,177 @@ def test_framed_map_follows_the_setting() -> None:
     assert framed_map(
         inputs=inputs, framing=MapFraming.CENTRED,
     ) == centred_frame(inputs=inputs)
+
+
+FAR: Final[dict[str, Point]] = {**THROUGH, 'X': (1_400.0, 800.0)}
+SOUTHWARD: Final[dict[str, Point]] = {
+    'U': (0.0, -1_300.0),
+    'V': (0.0, -900.0),
+    'W': (0.0, -500.0),
+    'Z': (0.0, 200.0),
+    'A': FROM,
+    'X': (400.0, 800.0),
+    'Y': (800.0, 800.0),
+}
+BANNER: Final[str] = 'Live times unavailable'
+
+
+def held_over(*, before: MapInputs, after: MapInputs) -> tuple[Point, int]:
+    """
+    Settle an Approach frame on some inputs, then draw others.
+
+    Parameters
+    ----------
+    before : MapInputs
+        The inputs the frame is fitted to.
+    after : MapInputs
+        The inputs drawn next.
+
+    Returns
+    -------
+    tuple[Point, int]
+        The centre and zoom `steady_frame` draws the second inputs at.
+    """
+    fit = approach_frame(inputs=before)
+    assert fit.centre is not None
+    found = steady_frame(
+        inputs=after,
+        framing=MapFraming.APPROACH,
+        held=(fit.centre, fit.zoom),
+        key=frame_key(inputs=before, framing=MapFraming.APPROACH),
+    )
+    assert found.centre is not None
+    return found.centre, found.zoom
+
+
+def fresh(*, inputs: MapInputs) -> tuple[Point, int]:
+    """
+    Fit an Approach frame with nothing held.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The inputs.
+
+    Returns
+    -------
+    tuple[Point, int]
+        The centre and zoom.
+    """
+    fit = approach_frame(inputs=inputs)
+    assert fit.centre is not None
+    return fit.centre, fit.zoom
+
+
+def test_frame_key_of_a_settled_approach_frame() -> None:
+    """A fit with a pattern loaded is keyed by ends, step, width and sleep."""
+    inputs = riding(rides=(through(trip_id='t1'),))
+    assert frame_key(inputs=inputs, framing=MapFraming.APPROACH) == FrameKey(
+        ends=(FROM, TO), step=0, width=MAP_WIDTH, asleep=False,
+    )
+
+
+def test_frame_key_is_none_unsettled_centred_or_without_a_from() -> None:
+    """No pattern yet, the Centred setting or no From point: no key."""
+    ride, _ = through(trip_id='t1')
+    inputs = riding(rides=(through(trip_id='t1'),))
+    assert frame_key(
+        inputs=plain(departures=(ride,)), framing=MapFraming.APPROACH,
+    ) is None
+    assert frame_key(inputs=inputs, framing=MapFraming.CENTRED) is None
+    assert frame_key(
+        inputs=replace(inputs, ends=(None, TO)), framing=MapFraming.APPROACH,
+    ) is None
+
+
+def test_steady_frame_holds_when_another_pattern_leaves() -> None:
+    """The westbound leaving keeps the 8 m/px frame; alone east fits 5."""
+    east = through(trip_id='east')
+    west = through(trip_id='west', minutes=4, line=BACK)
+    after = riding(rides=(east,))
+    assert fresh(inputs=after) == ((-400.0, 730.0), ZOOMS.index(5))
+    assert held_over(before=riding(rides=(east, west)), after=after) == (
+        (0.0, 688.0),
+        ZOOMS.index(8),
+    )
+
+
+def test_steady_frame_holds_when_faster_trips_leave() -> None:
+    """A slower trip left alone keeps the 5 m/px frame; alone it fits 3."""
+    fast = through(trip_id='fast')
+    slow = through(trip_id='slow', minutes=2, apart=4)
+    after = riding(rides=(slow,))
+    assert fresh(inputs=after) == ((-400.0, 758.0), ZOOMS.index(3))
+    assert held_over(before=riding(rides=(fast, slow)), after=after) == (
+        (-400.0, 730.0),
+        ZOOMS.index(5),
+    )
+
+
+def test_steady_frame_holds_under_a_banner_clear_of_the_from() -> None:
+    """A banner over the top leaves the frame while the From is clear."""
+    rides = (through(trip_id='t1'),)
+    after = riding(rides=rides, stop_view=stop_view(banner=BANNER))
+    assert fresh(inputs=after) == ((-400.0, 815.0), ZOOMS.index(5))
+    assert held_over(before=riding(rides=rides), after=after) == (
+        (-400.0, 730.0),
+        ZOOMS.index(5),
+    )
+
+
+def test_steady_frame_refits_when_a_banner_covers_the_from() -> None:
+    """A From 36 px down goes under the banner, so the map refits."""
+    rides = (through(trip_id='t1', line=SOUTHWARD),)
+    before = riding(rides=rides)
+    centre, zoom = fresh(inputs=before)
+    assert on_screen(centre=centre, zoom=zoom, point=FROM)[1] == 36.0
+    after = riding(rides=rides, stop_view=stop_view(banner=BANNER))
+    centre, zoom = held_over(before=before, after=after)
+    assert (centre, zoom) == fresh(inputs=after)
+    assert ZOOMS[zoom] == 8
+    _, y = on_screen(centre=centre, zoom=zoom, point=FROM)
+    assert y >= BANNER_ROOM + KEEP_IN
+
+
+def test_steady_frame_refits_for_a_stop_off_the_frame() -> None:
+    """A new trip calling past the held frame's edge refits at 8 m/px."""
+    first = through(trip_id='t1')
+    after = riding(rides=(first, through(trip_id='far', minutes=10, line=FAR)))
+    found = held_over(before=riding(rides=(first,)), after=after)
+    assert found == fresh(inputs=after)
+    assert ZOOMS[found[1]] == 8
+
+
+def test_steady_frame_refits_for_a_new_step_width_sleep_or_pin() -> None:
+    """A knob step, the strip's map, sleep or another From refits."""
+    before = riding(
+        rides=(
+            through(trip_id='east'),
+            through(trip_id='west', minutes=4, line=BACK),
+        ),
+    )
+    east = riding(rides=(through(trip_id='east'),))
+    for changes in (
+        {'step': -1},
+        {'width': STRIP_MAP_WIDTH},
+        {'asleep': True},
+        {'ends': (OTHER, TO), 'centre': OTHER},
+    ):
+        after = replace(east, **changes)
+        found = held_over(before=before, after=after)
+        assert found == fresh(inputs=after)
+        assert found != fresh(inputs=before)
+
+
+def test_steady_frame_centred_takes_no_hold() -> None:
+    """With Centred, a held Approach frame gives way to the From."""
+    before = riding(rides=(through(trip_id='t1'),))
+    fit = approach_frame(inputs=before)
+    assert fit.centre is not None
+    found = steady_frame(
+        inputs=before,
+        framing=MapFraming.CENTRED,
+        held=(fit.centre, fit.zoom),
+        key=frame_key(inputs=before, framing=MapFraming.APPROACH),
+    )
+    assert found == centred_frame(inputs=before)

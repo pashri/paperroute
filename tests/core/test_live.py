@@ -11,6 +11,7 @@ from paperroute_testkit.core.factories import START, departure
 from paperroute_transit.core.live import resolve
 from paperroute_transit.core.model import CarryOn, TripFacts
 from paperroute_transit.core.realtime import (
+    EVERY_STOP,
     RealtimeSnapshot,
     StopUpdate,
     TripRealtime,
@@ -392,3 +393,64 @@ def test_carry_on_arrival_follows_boarded_delay() -> None:
         zone=SYDNEY_ZONE,
     )
     assert cancelled.cancelled
+
+
+def estimate(*, late: int, heard: datetime) -> RealtimeSnapshot:
+    """A snapshot with one uncertain estimate for DEP, fetched at START."""
+    trip = TripRealtime(
+        trip_id='t',
+        cancelled=False,
+        updates=(replace(BLANK, sequence=EVERY_STOP, departure_delay=late),),
+        start_date=None,
+        estimated=True,
+        uncertain=True,
+        heard_at=heard,
+    )
+    return RealtimeSnapshot(fetched_at=START, trips={'t': trip})
+
+
+def test_resolve_marks_an_estimate() -> None:
+    """An estimate moves both ends of the ride and carries its marks."""
+    found = resolve(
+        departure=DEP,
+        snapshot=estimate(late=240, heard=START),
+        now=START + timedelta(minutes=1),
+        limit=LIMIT,
+        zone=SYDNEY_ZONE,
+    )
+    assert (found.live, found.estimated, found.uncertain) == (True, True, True)
+    assert found.departs == DEP.departs + timedelta(minutes=4)
+    assert found.arrives == DEP.arrives + timedelta(minutes=4)
+
+
+@pytest.mark.parametrize(('seconds', 'live'), [(120, True), (121, False)])
+def test_resolve_drops_an_estimate_heard_too_long_ago(
+    seconds: int, live: bool,
+) -> None:
+    """An estimate goes once its position is older than the limit."""
+    snap = replace(
+        estimate(late=240, heard=START),
+        fetched_at=START + timedelta(minutes=1),
+    )
+    found = resolve(
+        departure=DEP,
+        snapshot=snap,
+        now=START + timedelta(seconds=seconds),
+        limit=LIMIT,
+        zone=SYDNEY_ZONE,
+    )
+    assert (found.live, found.estimated) == (live, live)
+
+
+def test_resolve_leaves_a_feed_time_unmarked() -> None:
+    """A trip update from a feed is live but not an estimate."""
+    found = resolve(
+        departure=DEP,
+        snapshot=snapshot(
+            updates=(replace(BLANK, sequence=1, departure_delay=60),),
+        ),
+        now=START,
+        limit=LIMIT,
+        zone=SYDNEY_ZONE,
+    )
+    assert found.live and not found.estimated and not found.uncertain

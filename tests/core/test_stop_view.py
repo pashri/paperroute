@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Final
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -24,6 +25,7 @@ from paperroute_transit.core.stop_view import (
     NOT_PINNED,
     ROWS_UNDER_BANNER,
     VISIBLE_ROWS,
+    Estimate,
     Pill,
     PinTag,
     Row,
@@ -32,9 +34,11 @@ from paperroute_transit.core.stop_view import (
     arrival_line,
     build_stop_view,
     countdown,
+    due_line,
     live_line,
     nouns,
     pin_tag,
+    row_estimate,
     to_row,
 )
 from tests.core.alert_factories import WESTERN, XPLORER
@@ -897,3 +901,52 @@ def test_nouns_by_source_with_trainlink_override() -> None:
     assert nouns(departure=unknown, city=SYDNEY) == Nouns(
         vehicle='service', bay='platform', connection='service',
     )
+
+
+@pytest.mark.parametrize(
+    ('late', 'uncertain', 'text'),
+    [
+        (4, False, 'due 10:07 · 4 min late'),
+        (-2, False, 'due 10:07 · 2 min early'),
+        (0, False, 'due 10:07 · on time'),
+        (31, True, 'due 10:07 · 31 min late, uncertain'),
+        (0, True, 'due 10:07 · on time, uncertain'),
+    ],
+)
+def test_due_line_says_how_late_and_whether_uncertain(
+    late: int, uncertain: bool, text: str,
+) -> None:
+    """The due line gives the timetable time, the lateness and the flag."""
+    found = Estimate(due='10:07', late=late, uncertain=uncertain)
+    assert due_line(estimate=found) == text
+
+
+def test_row_estimate_counts_lateness_in_clock_minutes() -> None:
+    """Leaving 8:07:40 against 8:03 is 4 minutes late, as the count reads."""
+    dep = departure(departs=START + timedelta(minutes=3))
+    item = LiveDeparture(
+        departure=dep,
+        departs=dep.departs + timedelta(minutes=4, seconds=40),
+        arrives=dep.arrives + timedelta(minutes=4, seconds=40),
+        live=True,
+        cancelled=False,
+        estimated=True,
+    )
+    row = to_row(
+        item=item, now=START, pill=None, zone=SYDNEY_ZONE, city=SYDNEY,
+    )
+    assert row.countdown == '7'
+    assert row.estimate == Estimate(due='8:03', late=4, uncertain=False)
+
+
+def test_row_estimate_is_none_for_a_feed_time() -> None:
+    """A feed's own live time has no due line."""
+    dep = departure(departs=START + timedelta(minutes=3))
+    item = LiveDeparture(
+        departure=dep,
+        departs=dep.departs + timedelta(minutes=2),
+        arrives=dep.arrives,
+        live=True,
+        cancelled=False,
+    )
+    assert row_estimate(item=item, zone=SYDNEY_ZONE) is None

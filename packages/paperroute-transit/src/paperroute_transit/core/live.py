@@ -22,6 +22,8 @@ class LiveDeparture:
     arrives: datetime
     live: bool
     cancelled: bool
+    estimated: bool = False
+    uncertain: bool = False
 
 
 def trip_for(
@@ -155,6 +157,33 @@ def stale(
     return age > limit.total_seconds()
 
 
+def heard_in_time(
+    *, trip: TripRealtime, now: datetime, limit: timedelta,
+) -> bool:
+    """
+    Say whether a trip's position was reported recently enough.
+
+    Parameters
+    ----------
+    trip : TripRealtime
+        The trip's live note.
+    now : datetime
+        The frame time.
+    limit : timedelta
+        How old a position may be.
+
+    Returns
+    -------
+    bool
+        True for a feed's own times, else when the position is at most
+        `limit` old.
+    """
+    if trip.heard_at is None:
+        return True
+    age = now.timestamp() - trip.heard_at.timestamp()
+    return age <= limit.total_seconds()
+
+
 def resolve(
     *,
     departure: Departure,
@@ -200,7 +229,11 @@ def resolve(
     ):
         return scheduled
     trip = trip_for(departure=departure, snapshot=snapshot)
-    if trip is None or trip.start_date not in (None, departure.service_day):
+    if (
+        trip is None
+        or trip.start_date not in (None, departure.service_day)
+        or not heard_in_time(trip=trip, now=now, limit=limit)
+    ):
         return scheduled
     return applied(departure=departure, trip=trip, zone=zone)
 
@@ -247,6 +280,7 @@ def applied(
     )
     leave_s = leave or 0
     reach_s = reach if reach is not None else leave_s
+    live = leave is not None or reach is not None
     return LiveDeparture(
         departure=departure,
         departs=shifted(
@@ -255,8 +289,10 @@ def applied(
         arrives=shifted(
             moment=departure.arrives, seconds=reach_s, zone=zone,
         ),
-        live=leave is not None or reach is not None,
+        live=live,
         cancelled=trip.cancelled,
+        estimated=trip.estimated and live,
+        uncertain=trip.uncertain and live,
     )
 
 

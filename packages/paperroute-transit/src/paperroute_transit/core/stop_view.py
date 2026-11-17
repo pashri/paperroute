@@ -20,6 +20,7 @@ LARGE_ROWS_UNDER_BANNER: Final[int] = 5
 SIDEBAR_ROWS: Final[int] = 5
 HORIZON: Final[timedelta] = timedelta(hours=3)
 HORIZON_TEXT: Final[str] = f'the next {HORIZON // timedelta(hours=1)} hours'
+UNCERTAIN: Final[str] = 'uncertain'
 FALLBACK_NOUNS: Final[Nouns] = Nouns(
     vehicle='service', bay='platform', connection='service',
 )
@@ -30,6 +31,26 @@ class Pill(StrEnum):
 
     CANCELLED = 'CANCELLED'
     FASTER = 'FASTER'
+
+
+@dataclass(frozen=True)
+class Estimate:
+    """
+    A live time that was estimated from a position.
+
+    Attributes
+    ----------
+    due : str
+        The timetable clock time.
+    late : int
+        Clock minutes late, negative when early.
+    uncertain : bool
+        Whether the estimate is uncertain.
+    """
+
+    due: str
+    late: int
+    uncertain: bool
 
 
 @dataclass(frozen=True)
@@ -55,6 +76,58 @@ class Row:
     then: CarryOn | None = None
     onto: str | None = None
     stops: int | None = None
+    estimate: Estimate | None = None
+
+
+def row_estimate(*, item: LiveDeparture, zone: tzinfo) -> Estimate | None:
+    """
+    Describe a departure's estimate.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        Departure.
+    zone : tzinfo
+        Local time zone the times show in.
+
+    Returns
+    -------
+    Estimate | None
+        None unless the live time is an estimate.
+    """
+    if not item.estimated:
+        return None
+    live_min = int(item.departs.timestamp() // 60)
+    due_min = int(item.departure.departs.timestamp() // 60)
+    return Estimate(
+        due=clock_text(moment=item.departure.departs, zone=zone),
+        late=live_min - due_min,
+        uncertain=item.uncertain,
+    )
+
+
+def due_line(*, estimate: Estimate) -> str:
+    """
+    Make a row's due line.
+
+    Parameters
+    ----------
+    estimate : Estimate
+        The row's estimate.
+
+    Returns
+    -------
+    str
+        Such as 'due 10:07 - 4 min late', with ', uncertain' when flagged.
+    """
+    if estimate.late == 0:
+        how = 'on time'
+    elif estimate.late > 0:
+        how = f'{estimate.late} min late'
+    else:
+        how = f'{-estimate.late} min early'
+    flag = f', {UNCERTAIN}' if estimate.uncertain else ''
+    return f'due {estimate.due}{DOT}{how}{flag}'
 
 
 def stops_text(*, stops: int) -> str:
@@ -359,6 +432,7 @@ def to_row(
         then=dep.facts.then,
         onto=onto.route if onto and onto.route != dep.route else None,
         stops=dep.stops,
+        estimate=row_estimate(item=item, zone=zone),
     )
 
 

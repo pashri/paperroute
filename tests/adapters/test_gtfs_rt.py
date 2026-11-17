@@ -68,6 +68,17 @@ def test_parse_real_bus_slice() -> None:
     assert parse_trip_updates(data=data, fetched_at=NOW).trips
 
 
+def test_feed_trips_are_never_estimates() -> None:
+    """Trips read from a trip-updates feed carry no estimate marks."""
+    data = (REAL / 'v1_gtfs_realtime_buses.pb').read_bytes()
+    trips = parse_trip_updates(data=data, fetched_at=NOW).trips
+    assert trips
+    assert all(
+        not trip.estimated and not trip.uncertain and trip.heard_at is None
+        for trip in trips.values()
+    )
+
+
 def test_lookup_converts_only_the_requested_trip() -> None:
     """Trips stay raw until looked up; membership checks don't convert."""
     data = feed(

@@ -2,20 +2,26 @@
 
 from dataclasses import replace
 from datetime import datetime, timedelta
+from typing import Any, Final
 
 from paperroute_sydney.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute_testkit.core.factories import (
+    EIGHT,
     STALE_LIMIT,
     START,
     calls,
     departure,
     pattern,
+    snapshot,
+    vehicle,
 )
 from paperroute_transit.core.geo import Point
 from paperroute_transit.core.map_fit import (
     BANNER_ROOM,
     CREDIT_ROOM,
     KEEP_IN,
+    approach_frame,
+    centred_frame,
     fitted,
     plain_frame,
     resting_zoom,
@@ -549,3 +555,213 @@ def test_steady_frame_without_a_held_frame_fits() -> None:
     assert steady_frame(inputs=inputs, held=None) == plain_frame(
         inputs=inputs,
     )
+
+
+CALLS: Final[str] = 'UVWZAXY'
+THROUGH: Final[dict[str, Point]] = {
+    'U': (-1_600.0, 800.0),
+    'V': (-1_200.0, 800.0),
+    'W': (-800.0, 800.0),
+    'Z': (-400.0, 800.0),
+    'A': FROM,
+    'X': (400.0, 800.0),
+    'Y': (800.0, 800.0),
+}
+BACK: Final[dict[str, Point]] = {
+    name: (-x, y) for name, (x, y) in THROUGH.items()
+}
+
+
+def through(
+    *,
+    trip_id: str,
+    minutes: int = 0,
+    first: str = 'U',
+    line: dict[str, Point] = THROUGH,
+    apart: int = 3,
+) -> tuple[Departure, TripPattern]:
+    """
+    A departure through the From, calling at even gaps along a line.
+
+    Parameters
+    ----------
+    trip_id : str
+        Trip ID.
+    minutes : int
+        Minutes after 8:00 it leaves the From.
+    first : str
+        The first call; U is four gaps before the From.
+    line : dict[str, Point]
+        Where each call is.
+    apart : int
+        Minutes between calls.
+
+    Returns
+    -------
+    tuple[Departure, TripPattern]
+        The departure and its pattern.
+    """
+    ride = departure(
+        departs=START + timedelta(minutes=minutes), ride=30, trip_id=trip_id,
+    )
+    skipped = CALLS.index(first)
+    stops = calls(
+        stations=CALLS[skipped:],
+        start=EIGHT + (minutes - apart * (4 - skipped)) * 60,
+        step=apart * 60,
+        points=line,
+    )
+    return ride, pattern(trip_id=trip_id, stops=stops)
+
+
+def riding(
+    *, rides: tuple[tuple[Departure, TripPattern], ...], **changes: Any,
+) -> MapInputs:
+    """
+    Map inputs for some departures and their patterns.
+
+    Parameters
+    ----------
+    rides : tuple[tuple[Departure, TripPattern], ...]
+        Departures and their patterns.
+    **changes : Any
+        Fields to replace on the inputs.
+
+    Returns
+    -------
+    MapInputs
+        The inputs.
+    """
+    return replace(
+        plain(
+            departures=tuple(ride for ride, _ in rides),
+            patterns={ride.trip_id: found for ride, found in rides},
+        ),
+        **changes,
+    )
+
+
+def test_approach_frame_fits_ten_minutes_before_and_three_after() -> None:
+    """V to X, 1.6 km, fit at 5 m/px round their middle, moved for credit."""
+    found = approach_frame(inputs=riding(rides=(through(trip_id='t1'),)))
+    assert (found.centre, found.zoom) == ((-400.0, 730.0), ZOOMS.index(5))
+
+
+def test_approach_frame_ignores_the_to() -> None:
+    """A To far off the stretch does not move the frame."""
+    rides = (through(trip_id='t1'),)
+    far = approach_frame(inputs=riding(rides=rides, ends=(FROM, (0.0, -5e3))))
+    none = approach_frame(inputs=riding(rides=rides, ends=(FROM, None)))
+    assert (far.centre, far.zoom) == (none.centre, none.zoom)
+    assert far.centre == (-400.0, 730.0)
+
+
+def test_approach_frame_holds_still_as_buses_come_and_go() -> None:
+    """The next bus leaving and a new one listed keep the frame."""
+    first, second, third = (
+        through(trip_id=f't{minutes}', minutes=minutes)
+        for minutes in (0, 10, 20)
+    )
+    before = approach_frame(inputs=riding(rides=(first, second)))
+    after = approach_frame(
+        inputs=riding(
+            rides=(second, third), now=START + timedelta(minutes=1),
+        ),
+    )
+    assert (after.centre, after.zoom) == (before.centre, before.zoom)
+
+
+def test_approach_frame_takes_both_directions() -> None:
+    """Trips arriving from each side fit together, 2.4 km at 8 m/px."""
+    found = approach_frame(
+        inputs=riding(
+            rides=(
+                through(trip_id='east'),
+                through(trip_id='west', minutes=4, line=BACK),
+            ),
+        ),
+    )
+    assert (found.centre, found.zoom) == ((0.0, 688.0), ZOOMS.index(8))
+
+
+def test_approach_frame_of_a_trip_that_starts_close_by() -> None:
+    """A trip starting 6 minutes before the From fits W to X at 3 m/px."""
+    found = approach_frame(
+        inputs=riding(rides=(through(trip_id='t1', first='W'),)),
+    )
+    assert (found.centre, found.zoom) == ((-200.0, 758.0), ZOOMS.index(3))
+
+
+def test_approach_frame_leaves_vehicles_out() -> None:
+    """A vehicle 30 km away does not widen the frame."""
+    rides = (through(trip_id='t1'),)
+    bus = vehicle(timestamp=int(START.timestamp()), point=(30_000.0, 800.0))
+    positions = {'buses': snapshot(fetched_at=START, vehicles=(bus,))}
+    seen = approach_frame(inputs=riding(rides=rides, positions=positions))
+    assert (seen.centre, seen.zoom) == ((-400.0, 730.0), ZOOMS.index(5))
+
+
+def test_approach_frame_keeps_the_band_clear_asleep() -> None:
+    """Asleep, the frame moves up by half the band's room."""
+    found = approach_frame(
+        inputs=riding(rides=(through(trip_id='t1'),), asleep=True),
+    )
+    assert found.centre == (-400.0, 660.0)
+
+
+def test_approach_frame_rests_with_nothing_to_fit() -> None:
+    """No departures, or no pattern yet: the From at the stepped rest."""
+    ride, _ = through(trip_id='t1')
+    for inputs in (plain(), plain(departures=(ride,))):
+        found = approach_frame(inputs=replace(inputs, step=-1))
+        assert (found.centre, found.zoom) == (FROM, resting_zoom(step=-1))
+
+
+def test_approach_frame_keeps_the_from_clear_of_the_banner_on_a_long_line(
+) -> None:
+    """A stretch too tall for 45 m/px keeps the From in, under the banner."""
+    long = {
+        name: (0.0, 800.0 + 12_000.0 * (4 - index))
+        for index, name in enumerate(CALLS)
+    }
+    found = approach_frame(
+        inputs=riding(
+            rides=(through(trip_id='t1', line=long),),
+            stop_view=stop_view(banner='Live times unavailable'),
+        ),
+    )
+    assert found.centre is not None
+    assert ZOOMS[found.zoom] == 45
+    x, y = on_screen(centre=found.centre, zoom=found.zoom, point=FROM)
+    assert KEEP_IN <= x <= MAP_WIDTH - KEEP_IN
+    assert BANNER_ROOM + KEEP_IN <= y <= MAP_HEIGHT - CREDIT_ROOM - KEEP_IN
+
+
+def test_approach_frame_without_from_location() -> None:
+    """With no From point, the inputs are unchanged."""
+    inputs = riding(rides=(through(trip_id='t1'),), ends=(None, TO))
+    assert approach_frame(inputs=inputs) == inputs
+
+
+def test_centred_frame_puts_the_from_in_the_middle_at_8_m() -> None:
+    """The From is the centre at 8 m/px, banner or asleep alike."""
+    inputs = riding(
+        rides=(through(trip_id='t1'),),
+        stop_view=stop_view(banner='Live times unavailable'),
+    )
+    for each in (inputs, replace(inputs, asleep=True)):
+        found = centred_frame(inputs=each)
+        assert (found.centre, ZOOMS[found.zoom]) == (FROM, 8)
+
+
+def test_centred_frame_follows_the_step() -> None:
+    """The knob steps the zoom from 8 m/px and clamps."""
+    inputs = plain()
+    assert ZOOMS[centred_frame(inputs=replace(inputs, step=-1)).zoom] == 5
+    assert ZOOMS[centred_frame(inputs=replace(inputs, step=9)).zoom] == 45
+
+
+def test_centred_frame_without_from_location() -> None:
+    """With no From point, the inputs are unchanged."""
+    inputs = plain(ends=(None, TO))
+    assert centred_frame(inputs=inputs) == inputs

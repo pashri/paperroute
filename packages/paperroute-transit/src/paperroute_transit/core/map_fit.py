@@ -12,7 +12,11 @@ from paperroute_transit.core.map_view import (
     MAP_HEIGHT,
     MapInputs,
 )
-from paperroute_transit.core.ridden import ridden_stops, stops_window
+from paperroute_transit.core.ridden import (
+    ridden_stops,
+    stops_window,
+    stretch_stops,
+)
 from paperroute_transit.core.tiles import ZOOMS
 
 CREDIT_ROOM: Final[int] = 28  # pixels kept clear above the map's bottom
@@ -512,4 +516,89 @@ def holds(*, inputs: MapInputs, frame: tuple[Point, int]) -> bool:
     return all(
         0 <= x <= inputs.width and rooms[0] <= y <= MAP_HEIGHT - rooms[1]
         for x, y in pixels
+    )
+
+
+def approach_points(*, inputs: MapInputs) -> tuple[Point, ...]:
+    """
+    List the points an approach map holds.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs.
+
+    Returns
+    -------
+    tuple[Point, ...]
+        The approach stops of every listed departure, then the From
+        where it has a point; the To is not among them.
+    """
+    origin = inputs.ends[0]
+    return (
+        *stretch_stops(
+            departures=inputs.departures,
+            patterns=inputs.patterns,
+            zone=inputs.zone,
+        ),
+        *known(points=(origin,)),
+    )
+
+
+def approach_frame(*, inputs: MapInputs) -> MapInputs:
+    """
+    Frame a plain pin's map on the approach to its stop.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs, centred on the From.
+
+    Returns
+    -------
+    MapInputs
+        Fitted to the approach stops and the From, with the From kept
+        inside; the From at the resting zoom with fewer than two
+        points; unchanged with no From point.
+    """
+    origin = inputs.ends[0]
+    if origin is None:
+        return inputs
+    points = approach_points(inputs=inputs)
+    if len(set(points)) < 2:
+        return replace(
+            inputs, centre=origin, zoom=resting_zoom(step=inputs.step),
+        )
+    centre, zoom = fitted(
+        points=points,
+        width=inputs.width,
+        top=banner_room(inputs=inputs),
+        step=inputs.step,
+        keep=origin,
+        bottom=bottom_room(inputs=inputs),
+        ends=(origin,),
+    ) or (origin, inputs.zoom)
+    return replace(inputs, centre=centre, zoom=zoom)
+
+
+def centred_frame(*, inputs: MapInputs) -> MapInputs:
+    """
+    Centre a plain pin's map on its stop.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs.
+
+    Returns
+    -------
+    MapInputs
+        Centred on the From at the resting zoom moved by the knob;
+        unchanged with no From point.
+    """
+    origin = inputs.ends[0]
+    if origin is None:
+        return inputs
+    return replace(
+        inputs, centre=origin, zoom=resting_zoom(step=inputs.step),
     )

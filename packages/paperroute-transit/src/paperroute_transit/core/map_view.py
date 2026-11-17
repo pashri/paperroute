@@ -2,7 +2,7 @@
 
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, tzinfo
 from typing import Final
 
@@ -14,7 +14,11 @@ from paperroute_transit.core.positions import (
     PositionsSnapshot,
     VehiclePosition,
 )
-from paperroute_transit.core.ridden import route_stops, stops_window
+from paperroute_transit.core.ridden import (
+    route_stops,
+    stops_window,
+    stretch_stops,
+)
 from paperroute_transit.core.stop_view import NOT_PINNED, PinTag, Row, StopView
 from paperroute_transit.core.tiles import ZOOMS, to_pixels
 
@@ -932,6 +936,29 @@ def build_map_view(*, inputs: MapInputs) -> MapView:
         more=stop.more,
         planned=stop.planned,
     )
+
+
+def plain_map_view(*, inputs: MapInputs) -> MapView:
+    """
+    Build a plain pin's Map view with the approach stops as its dots.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs.
+
+    Returns
+    -------
+    MapView
+        The view.
+    """
+    built = build_map_view(inputs=inputs)
+    stops = stretch_stops(
+        departures=inputs.departures,
+        patterns=inputs.patterns,
+        zone=inputs.zone,
+    )
+    return replace(built, base=replace(built.base, stops=stops))
 
 
 def plain_marks(*, inputs: MapInputs) -> TripMarks | None:

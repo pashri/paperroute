@@ -10,6 +10,8 @@ from paperroute_transit.core.patterns import TripPattern
 
 NO_DESTINATION_WINDOW: Final[timedelta] = timedelta(minutes=20)
 SECOND_RIDE_WINDOW: Final[timedelta] = timedelta(minutes=10)
+APPROACH_BEFORE: Final[timedelta] = timedelta(minutes=10)
+APPROACH_AFTER: Final[timedelta] = timedelta(minutes=3)
 
 
 def ridden_stops(
@@ -18,6 +20,7 @@ def ridden_stops(
     pattern: TripPattern | None,
     window: timedelta | None,
     zone: tzinfo,
+    before: timedelta = timedelta(),
 ) -> tuple[Point, ...]:
     """
     List the points of the stops a departure is ridden between.
@@ -32,12 +35,14 @@ def ridden_stops(
         When set, only stops reached within this long of leaving.
     zone : tzinfo
         Local time zone.
+    before : timedelta
+        How long before boarding the stops start; none by default.
 
     Returns
     -------
     tuple[Point, ...]
-        Stop points from boarding to alighting, in running order; stops
-        with no point are left out.
+        Stop points from `before` ahead of boarding to alighting, in
+        running order; stops with no point are left out.
     """
     if pattern is None:
         return ()
@@ -50,7 +55,7 @@ def ridden_stops(
         stop.point
         for stop in pattern.stops
         if stop.point is not None
-        and start <= stop.departs
+        and start - before.total_seconds() <= stop.departs
         and stop.arrives <= end
     )
 
@@ -78,6 +83,7 @@ def route_stops(
     patterns: Mapping[str, TripPattern | None],
     window: timedelta | None,
     zone: tzinfo,
+    before: timedelta = timedelta(),
 ) -> tuple[Point, ...]:
     """
     Collect the distinct ridden stops of some departures.
@@ -92,6 +98,8 @@ def route_stops(
         As for `ridden_stops`.
     zone : tzinfo
         Local time zone.
+    before : timedelta
+        As for `ridden_stops`.
 
     Returns
     -------
@@ -106,6 +114,41 @@ def route_stops(
             pattern=patterns.get(departure.trip_id),
             window=window,
             zone=zone,
+            before=before,
         )
     )
     return tuple(found)
+
+
+def stretch_stops(
+    *,
+    departures: Sequence[Departure],
+    patterns: Mapping[str, TripPattern | None],
+    zone: tzinfo,
+) -> tuple[Point, ...]:
+    """
+    Collect the distinct approach stops of some departures.
+
+    Parameters
+    ----------
+    departures : Sequence[Departure]
+        The departures.
+    patterns : Mapping[str, TripPattern | None]
+        Loaded patterns by trip ID.
+    zone : tzinfo
+        Local time zone.
+
+    Returns
+    -------
+    tuple[Point, ...]
+        The stops each calls at from `APPROACH_BEFORE` before leaving
+        to `APPROACH_AFTER` after, and before it arrives; each once, in
+        the order first met.
+    """
+    return route_stops(
+        departures=departures,
+        patterns=patterns,
+        window=APPROACH_AFTER,
+        zone=zone,
+        before=APPROACH_BEFORE,
+    )

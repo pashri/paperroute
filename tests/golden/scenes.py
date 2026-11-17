@@ -1,7 +1,7 @@
 """Fixed states, one for each kind of screen, and how they are drawn."""
 
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
@@ -62,6 +62,7 @@ from paperroute_transit.core.connection_model import way_legs
 from paperroute_transit.core.geo import make_shape
 from paperroute_transit.core.messages import (
     DeparturesLoaded,
+    FeedFetched,
     FetchFeed,
     PatternsLoaded,
     PositionsFetched,
@@ -72,6 +73,12 @@ from paperroute_transit.core.messages import (
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.panel_screens import TilesFacts
 from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.realtime import (
+    EVERY_STOP,
+    RealtimeSnapshot,
+    StopUpdate,
+    TripRealtime,
+)
 from paperroute_transit.core.saved import LiveView, MapFraming
 from paperroute_transit.core.sleep import sleep_view
 from paperroute_transit.core.state_model import State
@@ -312,6 +319,49 @@ def stop_no_key() -> State:
     """
     state = stop()
     return replace(state, panel=replace(state.panel, missing_keys=('TfNSW',)))
+
+
+def estimated(
+    *, state: State, lates: Mapping[int, tuple[int, bool]],
+) -> State:
+    """
+    Give some board departures estimates, by index.
+
+    Parameters
+    ----------
+    state : State
+        A state with departures loaded.
+    lates : Mapping[int, tuple[int, bool]]
+        Minutes late and whether uncertain, by departure index.
+
+    Returns
+    -------
+    State
+        The state after its feeds deliver the estimates, heard at START.
+    """
+    trips = {
+        state.board.departures[index].trip_id: TripRealtime(
+            trip_id=state.board.departures[index].trip_id,
+            cancelled=False,
+            updates=(StopUpdate(
+                sequence=EVERY_STOP,
+                stop_id=None,
+                arrival_delay=None,
+                departure_delay=60 * late,
+                arrival_time=None,
+                departure_time=None,
+            ),),
+            start_date=None,
+            estimated=True,
+            uncertain=uncertain,
+            heard_at=START,
+        )
+        for index, (late, uncertain) in lates.items()
+    }
+    snap = RealtimeSnapshot(fetched_at=START, trips=trips)
+    for feed in state.feeds:
+        state, _ = step(state, FeedFetched(feed=feed, snapshot=snap))
+    return state
 
 
 def stop_trainlink() -> State:
@@ -602,6 +652,12 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     'stop_larger_inverted': stop_larger_inverted,
     'stop_no_key': stop_no_key,
     'stop_trainlink': stop_trainlink,
+    'stop_estimates': lambda: estimated(
+        state=stop(), lates={0: (-2, False), 1: (2, False)},
+    ),
+    'stop_uncertain': lambda: estimated(
+        state=stop(), lates={0: (11, True), 1: (12, True), 2: (10, False)},
+    ),
     'map': map_scene,
     'map_panes': map_panes,
     'map_approach': lambda: map_framed(framing=MapFraming.APPROACH),

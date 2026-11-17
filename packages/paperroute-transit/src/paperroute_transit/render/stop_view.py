@@ -16,7 +16,14 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER, finish
-from paperroute_transit.core.stop_view import Pill, Row, StopView, stops_text
+from paperroute_transit.core.stop_view import (
+    UNCERTAIN,
+    Pill,
+    Row,
+    StopView,
+    due_line,
+    stops_text,
+)
 from paperroute_transit.render.chrome import (
     ARROW_GAP,
     ARROW_WIDTH,
@@ -26,8 +33,10 @@ from paperroute_transit.render.chrome import (
     cancelled,
     countdown_slot,
     leaves,
+    note_room,
     pill,
     route_pair,
+    uncertain_row,
     view_banner,
     view_header,
 )
@@ -52,6 +61,10 @@ FASTER_GAP: Final[int] = 10
 TAG_FACE: Final[Face] = Face(weight=700, px=12)
 TAG_GAP: Final[int] = 8
 TAG_FLOOR: Final[int] = 40
+DUE_FACE: Final[Face] = Face(weight=700, px=15)
+DUE_DROP: Final[int] = 264  # due line baseline below the content top
+NOTE_DROP: Final[int] = 44  # 'uncertain' baseline below a row's top
+NOTE_PX: Final[int] = 11
 
 
 def hero_headline(canvas: Canvas, *, row: Row, top: int) -> None:
@@ -132,6 +145,81 @@ def hero_footer(canvas: Canvas, *, row: Row, top: int) -> None:
         face=ride, grey=INK)
 
 
+def hero_due(canvas: Canvas, *, row: Row, top: int) -> None:
+    """
+    Draw the due line under the ride line, for an estimated row.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Next service.
+    top : int
+        Top of the panel.
+    """
+    if row.estimate is None:
+        return
+    text = due_line(estimate=row.estimate)
+    canvas.text(
+        at=(18, top + DUE_DROP),
+        text=canvas.fit(text=text, face=DUE_FACE, width=400),
+        face=DUE_FACE,
+        grey=INK,
+    )
+
+
+def row_note(
+    canvas: Canvas, *, row: Row, right: float, y: int, k: Scale
+) -> None:
+    """
+    Draw 'uncertain' under the time of an uncertain row.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Departure.
+    right : float
+        Right end of the word.
+    y : int
+        Row top.
+    k : Scale
+        The row's scale.
+    """
+    if not uncertain_row(row=row):
+        return
+    canvas.text(
+        at=(right, y + k.y(NOTE_DROP)), text=UNCERTAIN,
+        face=k.face(weight=700, px=NOTE_PX), grey=INK, anchor='rs')
+
+
+def headline_width(*, row: Row, k: Scale) -> float:
+    """
+    Say how wide a list row's headsign and tag may be together.
+
+    Parameters
+    ----------
+    row : Row
+        Departure.
+    k : Scale
+        The row's scale.
+
+    Returns
+    -------
+    float
+        ``LIST_WIDTH`` without a run-on tag; with one, ``TAGGED_WIDTH``,
+        or less for an uncertain row so the tag clears its note.
+    """
+    if row.then is None:
+        return LIST_WIDTH
+    if not uncertain_row(row=row):
+        return TAGGED_WIDTH
+    room = note_room(face=k.face(weight=700, px=NOTE_PX))
+    return min(TAGGED_WIDTH, LIST_LEAVE_RIGHT - LIST_LEFT - room)
+
+
 def hero(canvas: Canvas, *, row: Row, top: int) -> None:
     """
     Draw the next service large on the left.
@@ -148,6 +236,7 @@ def hero(canvas: Canvas, *, row: Row, top: int) -> None:
     hero_headline(canvas, row=row, top=top)
     hero_countdown(canvas, row=row, top=top)
     hero_footer(canvas, row=row, top=top)
+    hero_due(canvas, row=row, top=top)
 
 
 def headline(
@@ -395,7 +484,7 @@ def list_row(
         at=(LIST_LEFT, y + k.y(42)),
         text=row.destination,
         face=k.face(weight=400, px=13),
-        width=LIST_WIDTH if row.then is None else TAGGED_WIDTH,
+        width=headline_width(row=row, k=k),
     )
     list_times(canvas, row=row, y=y, k=k)
     canvas.rect(box=(452, y + k.y(49), 786, y + k.y(50)), grey=INK)
@@ -448,6 +537,7 @@ def list_times(canvas: Canvas, *, row: Row, y: int, k: Scale) -> None:
         canvas.text(
             at=(786, y + k.y(24)), text=row.arrives_at,
             face=k.face(weight=800, px=20), grey=INK, anchor='rs')
+        row_note(canvas, row=row, right=LIST_LEAVE_RIGHT, y=y, k=k)
     if row.pill is Pill.FASTER:
         pill(
             canvas,
@@ -520,6 +610,7 @@ def board_times(canvas: Canvas, *, row: Row, y: int, k: Scale) -> None:
         canvas.text(
             at=(786, y + k.y(33)), text=countdown_slot(row=row),
             face=k.face(weight=800, px=28), grey=INK, anchor='rs')
+        row_note(canvas, row=row, right=786, y=y, k=k)
     if row.pill is Pill.FASTER:
         left = faster_left(k=k)
         pill(

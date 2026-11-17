@@ -1,6 +1,7 @@
 """Facts about the drawn Stop view (no golden images)."""
 
 from dataclasses import replace
+from typing import Final
 
 import numpy as np
 import pytest
@@ -16,11 +17,12 @@ from paperroute_device.render.frame import HEADER, finish
 from paperroute_testkit.render.factories import STOP_VIEW as BASE
 from paperroute_testkit.render.factories import stop_row as row
 from paperroute_transit.core.model import CarryOn
-from paperroute_transit.core.stop_view import Pill
+from paperroute_transit.core.stop_view import Estimate, Pill, StopView
 from paperroute_transit.render.chrome import (
     BANNER,
     badge,
     badge_width,
+    note_room,
     route_pair,
 )
 from paperroute_transit.render.stop_view import (
@@ -29,9 +31,12 @@ from paperroute_transit.render.stop_view import (
     LIST_LEAVE_RIGHT,
     LIST_LEFT,
     LIST_PAIR_ROOM,
+    LIST_WIDTH,
+    NOTE_PX,
     PILL_LEFT,
     ROW_H,
     SPLIT,
+    TAGGED_WIDTH,
     WIDEST_COUNT,
     Scale,
     board_right,
@@ -39,6 +44,7 @@ from paperroute_transit.render.stop_view import (
     draw_stop_view,
     faster_left,
     faster_width,
+    headline_width,
     list_row,
 )
 
@@ -551,3 +557,74 @@ def test_later_head_moves_under_a_banner() -> None:
     assert frame[top + 1 : top + 10, LIST_LEFT : LIST_LEFT + 40].min() == (
         PAPER
     )
+
+
+LATE: Final[Estimate] = Estimate(due='8:05', late=4, uncertain=False)
+UNSURE: Final[Estimate] = Estimate(due='8:05', late=31, uncertain=True)
+
+
+def changed(*, before: StopView, after: StopView) -> np.ndarray:
+    """The rows and columns where two Stop views' frames differ."""
+    return np.argwhere(
+        draw_stop_view(view=before) != draw_stop_view(view=after),
+    )
+
+
+def test_estimated_hero_draws_its_due_line_under_the_ride() -> None:
+    """The due line sits under the ride line, left of the split."""
+    found = changed(
+        before=BASE, after=replace(BASE, hero=replace(row(), estimate=LATE)),
+    )
+    assert found.size
+    assert found[:, 0].min() >= 40 + 248 and found[:, 0].max() <= 40 + 270
+    assert found[:, 1].min() >= 18 and found[:, 1].max() < SPLIT
+
+
+def test_uncertain_later_row_says_so_under_its_time() -> None:
+    """'uncertain' sits under the leave time, right-aligned to it."""
+    found = changed(
+        before=replace(BASE, rows=(row(),)),
+        after=replace(BASE, rows=(replace(row(), estimate=UNSURE),)),
+    )
+    assert found.size
+    assert found[:, 0].min() >= 70 + 33 and found[:, 0].max() <= 70 + 47
+    assert found[:, 1].min() >= LIST_LEAVE_RIGHT - 60
+    assert found[:, 1].max() <= LIST_LEAVE_RIGHT
+
+
+def test_certain_later_row_has_no_note() -> None:
+    """A certain estimate draws just its count."""
+    before = replace(BASE, rows=(row(),))
+    after = replace(BASE, rows=(replace(row(), estimate=LATE),))
+    assert not changed(before=before, after=after).size
+
+
+def test_uncertain_board_row_says_so_under_its_countdown() -> None:
+    """With no destination, 'uncertain' sits under the countdown."""
+    board = replace(BASE, destination=None, hero=None, rows=(row(),))
+    found = changed(
+        before=board,
+        after=replace(board, rows=(replace(row(), estimate=UNSURE),)),
+    )
+    assert found.size
+    assert found[:, 0].min() >= 40 + 33 and found[:, 0].max() <= 40 + 47
+    assert found[:, 1].min() >= 786 - 60
+
+
+def test_tagged_uncertain_headline_stops_short_of_the_note() -> None:
+    """A run-on tag gives way to the note; untagged rows keep their width."""
+    k = Scale(large=False)
+    tagged = replace(
+        row(then=CarryOn(route='T2', headsign='Leppington')),
+        estimate=UNSURE,
+    )
+    room = note_room(face=k.face(weight=700, px=NOTE_PX))
+    assert headline_width(row=tagged, k=k) == (
+        LIST_LEAVE_RIGHT - LIST_LEFT - room
+    )
+    assert headline_width(
+        row=replace(tagged, estimate=LATE), k=k,
+    ) == TAGGED_WIDTH
+    assert headline_width(
+        row=replace(row(), estimate=UNSURE), k=k,
+    ) == LIST_WIDTH

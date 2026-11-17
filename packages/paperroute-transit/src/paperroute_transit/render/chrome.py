@@ -14,7 +14,7 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER
-from paperroute_transit.core.stop_view import PinTag, Row
+from paperroute_transit.core.stop_view import UNCERTAIN, PinTag, Row
 from paperroute_transit.core.strip_model import PICK_FROM
 
 ARROW_WIDTH: Final[float] = 22.0
@@ -34,6 +34,7 @@ ALERT_TABS: Final[tuple[str, ...]] = (*TABS, 'Alerts')
 ONE_TITLE_PICKS: Final[frozenset[str]] = frozenset({PICK_FROM})
 FROM_FLOOR: Final[int] = 80  # pixels the From keeps beside a long To
 TITLE_END: Final[int] = 18  # pixels the To stops short of its limit
+NOTE_GAP: Final[int] = 10  # pixels between 'uncertain' and text to its left
 
 
 def arrow(canvas: Canvas, *, x: float, y: float, grey: int) -> float:
@@ -895,3 +896,37 @@ def cancelled(*, row: Row) -> str:
         The timetabled time, then CANCELLED.
     """
     return f'{row.leaves_at}  CANCELLED'
+
+
+def uncertain_row(*, row: Row) -> bool:
+    """
+    Say whether a row's estimate is uncertain.
+
+    Parameters
+    ----------
+    row : Row
+        Departure.
+
+    Returns
+    -------
+    bool
+        True when the row has an estimate flagged uncertain.
+    """
+    return row.estimate is not None and row.estimate.uncertain
+
+
+def note_room(*, face: Face) -> float:
+    """
+    Say how much width the word 'uncertain' needs, with its gap.
+
+    Parameters
+    ----------
+    face : Face
+        The face the word is drawn in.
+
+    Returns
+    -------
+    float
+        The word's width plus ``NOTE_GAP``.
+    """
+    return text_width(text=UNCERTAIN, face=face) + NOTE_GAP

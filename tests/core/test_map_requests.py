@@ -30,7 +30,7 @@ from paperroute_transit.core.geo import Point
 from paperroute_transit.core.map_fit import BANNER_ROOM, CREDIT_ROOM
 from paperroute_transit.core.map_requests import map_feeds, pin_ends
 from paperroute_transit.core.map_state import area_box, area_frame
-from paperroute_transit.core.map_view import MapView
+from paperroute_transit.core.map_view import DEFAULT_ZOOM
 from paperroute_transit.core.messages import (
     Effect,
     FetchFeed,
@@ -40,11 +40,13 @@ from paperroute_transit.core.messages import (
     MapDataFailed,
     ModesLoaded,
     PatternsLoaded,
+    SettingsChanged,
 )
 from paperroute_transit.core.model import Departure, Pin
-from paperroute_transit.core.saved import LiveView
+from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.saved import LiveView, MapFraming
 from paperroute_transit.core.state_model import Cycle, State
-from paperroute_transit.core.state_views import current_view, live_stop_view
+from paperroute_transit.core.state_views import live_stop_view
 from paperroute_transit.core.tiles import ZOOMS
 from tests.core.test_connection_screens import legs_loaded, started
 
@@ -278,7 +280,8 @@ def fitted_on(
     *, view: LiveView = LiveView.MAP, to: Point = SOUTH_TO,
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Show a bus pin with a To and load its next trip's pattern.
+    Show a bus pin with a To and load its next trip's pattern, which
+    calls where the To is 3 minutes before the From.
 
     Parameters
     ----------
@@ -299,10 +302,10 @@ def fitted_on(
     )
     state, first = on_view(view=view, pin=pin, departures=bus_pin())
     stops = calls(
-        stations='AB',
-        start=EIGHT + 180,
-        step=1800,
-        points={'A': CENTRE, 'B': to},
+        stations='BA',
+        start=EIGHT,
+        step=180,
+        points={'B': to, 'A': CENTRE},
     )
     state, then = step(
         state,
@@ -355,18 +358,6 @@ def test_new_frame_drops_area_modes() -> None:
 
 
 
-def test_plain_map_holds_the_frame_on_screen() -> None:
-    """A frame on screen that still holds the trip is drawn again."""
-    state, _ = fitted_on()
-    assert state.map.frame is not None
-    (x, y), zoom = state.map.frame
-    held = ((x + 40.0, y), zoom)
-    state = replace(state, map=replace(state.map, frame=held))
-    view = current_view(state=state, stop_view=live_stop_view(state=state))
-    assert isinstance(view, MapView)
-    assert view.base.centre == held[0]
-
-
 def test_coarser_detent_moves_after_the_fit_gets_finer() -> None:
     """Hidden finer detents are dropped when a finer fit clamps them."""
     state, _ = fitted_on(view=LiveView.STRIP_MAP, to=EAST_TO)
@@ -379,3 +370,124 @@ def test_coarser_detent_moves_after_the_fit_gets_finer() -> None:
     state, _ = step(state, turn(steps=-1))
     assert state.map.frame is not None
     assert state.map.frame[1] == 1
+
+
+ALONG: Final[dict[str, Point]] = {
+    'W': (CENTRE[0] - 1_600.0, CENTRE[1]),
+    'V': (CENTRE[0] - 800.0, CENTRE[1]),
+    'A': CENTRE,
+    'X': (CENTRE[0] + 800.0, CENTRE[1]),
+}
+
+
+def buses_every_ten() -> tuple[State, tuple[Departure, ...]]:
+    """
+    Show a no-To bus pin on the Map with five 606s ten minutes apart.
+
+    Returns
+    -------
+    tuple[State, tuple[Departure, ...]]
+        State on the Map before any pattern loads, and the departures.
+    """
+    departures = tuple(
+        departure(
+            departs=START + timedelta(minutes=minutes), mode=SydneyFeed.BUS,
+        )
+        for minutes in (3, 13, 23, 33, 43)
+    )
+    pin = Pin(
+        origin=place('C', name='Central', point=CENTRE),
+        destination=None,
+        kind=SydneyMode.BUS,
+    )
+    state, _ = on_view(view=LiveView.MAP, pin=pin, departures=departures)
+    return state, departures
+
+
+def along_patterns(
+    *, departures: tuple[Departure, ...],
+) -> PatternsLoaded:
+    """
+    Load patterns calling at W, V, the From and X, 3 minutes apart.
+
+    Parameters
+    ----------
+    departures : tuple[Departure, ...]
+        The departures; each reaches the From when it leaves.
+
+    Returns
+    -------
+    PatternsLoaded
+        Their patterns.
+    """
+    patterns: dict[str, TripPattern | None] = {
+        item.trip_id: pattern(
+            trip_id=item.trip_id,
+            stops=calls(
+                stations='WVAX',
+                start=(
+                    EIGHT
+                    + int((item.departs - START).total_seconds())
+                    - 360
+                ),
+                step=180,
+                points=ALONG,
+            ),
+        )
+        for item in departures
+    }
+    return PatternsLoaded(
+        trip_ids=frozenset(patterns), patterns=patterns, shapes={},
+    )
+
+
+def test_plain_map_refits_once_patterns_load() -> None:
+    """The From-only frame gives way to the stretch when patterns arrive."""
+    state, departures = buses_every_ten()
+    assert state.map.frame == (CENTRE, DEFAULT_ZOOM)
+    state, _ = step(state, along_patterns(departures=departures))
+    assert state.map.frame is not None
+    (x, _), zoom = state.map.frame
+    assert (x, zoom) == (CENTRE[0] - 400.0, ZOOMS.index(8))
+
+
+def test_plain_map_frame_holds_still_as_the_next_bus_leaves() -> None:
+    """The 8:03 leaving the sidebar moves nothing."""
+    state, departures = buses_every_ten()
+    state, _ = step(state, along_patterns(departures=departures))
+    before = state.map.frame
+    first = live_stop_view(state=state).head_departures[0]
+    state, _ = step(state, Tick(now=START + timedelta(minutes=4)))
+    assert live_stop_view(state=state).head_departures[0] != first
+    assert state.map.frame == before
+
+
+def test_centred_setting_centres_the_map() -> None:
+    """With Centred, the From is the frame's centre at 8 m/px."""
+    state, departures = buses_every_ten()
+    state, _ = step(state, SettingsChanged(map_framing=MapFraming.CENTRED))
+    state, _ = step(state, along_patterns(departures=departures))
+    assert state.map.frame == (CENTRE, DEFAULT_ZOOM)
+
+
+def test_framing_change_refits_at_once() -> None:
+    """Switching the setting on the Map redraws in the new rule, both ways."""
+    state, departures = buses_every_ten()
+    state, _ = step(state, along_patterns(departures=departures))
+    approach = state.map.frame
+    assert approach is not None and approach[0] != CENTRE
+    state, _ = step(state, SettingsChanged(map_framing=MapFraming.CENTRED))
+    assert state.map.frame == (CENTRE, DEFAULT_ZOOM)
+    state, _ = step(state, SettingsChanged(map_framing=MapFraming.APPROACH))
+    assert state.map.frame == approach
+
+
+def test_plain_map_without_a_location_asks_for_no_patterns() -> None:
+    """A From with no point draws no map, so no pattern is asked for."""
+    pin = Pin(
+        origin=place('C', name='Central'),
+        destination=None,
+        kind=SydneyMode.BUS,
+    )
+    _, effects = on_view(view=LiveView.MAP, pin=pin, departures=bus_pin())
+    assert not [item for item in effects if isinstance(item, LoadPatterns)]

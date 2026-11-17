@@ -22,7 +22,7 @@ from paperroute_transit.core.map_requests import (
     pattern_effects,
     polled_positions,
 )
-from paperroute_transit.core.map_view import STRIP_MAP_WIDTH, build_map_view
+from paperroute_transit.core.map_view import STRIP_MAP_WIDTH, plain_map_view
 from paperroute_transit.core.messages import Effect, ScreenView
 from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.places import shown, shown_index
@@ -353,7 +353,7 @@ def live_view(*, state: State, stop_view: StopView) -> ScreenView:
     match state.view:
         case LiveView.MAP:
             inputs = map_inputs(state=state, stop_view=stop_view)
-            return build_map_view(inputs=inputs)
+            return plain_map_view(inputs=inputs)
         case LiveView.STRIP:
             strip = shown_strip(state=state, stop_view=stop_view)
             return build_strip_view(inputs=strip)
@@ -363,7 +363,7 @@ def live_view(*, state: State, stop_view: StopView) -> ScreenView:
             )
             strip = shown_strip(state=state, stop_view=stop_view)
             return StripMapView(
-                map=build_map_view(inputs=inputs),
+                map=plain_map_view(inputs=inputs),
                 pane=build_strip_pane(inputs=strip),
             )
         case LiveView.ALERTS if listed := shown_alerts(state=state):

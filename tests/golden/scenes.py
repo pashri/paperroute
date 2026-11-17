@@ -37,9 +37,12 @@ from paperroute_testkit.core.connection_factories import (
 )
 from paperroute_testkit.core.factories import (
     EAST,
+    EIGHT,
     START,
+    calls,
     example_reach,
     line_pattern,
+    pattern,
     snapshot,
     train,
     vehicle,
@@ -69,7 +72,7 @@ from paperroute_transit.core.messages import (
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.panel_screens import TilesFacts
 from paperroute_transit.core.patterns import TripPattern
-from paperroute_transit.core.saved import LiveView
+from paperroute_transit.core.saved import LiveView, MapFraming
 from paperroute_transit.core.sleep import sleep_view
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import banner_live_view, current_view
@@ -98,6 +101,14 @@ ROUTE: Final[list[tuple[float, float]]] = [
     (-15_600.0, 300.0),
     (-15_000.0, -400.0),
 ]
+APPROACH: Final[dict[str, tuple[float, float]]] = {
+    'W2': (-18_200.0, 1_600.0),
+    'W1': (-17_800.0, 1_400.0),
+    'W0': (-17_400.0, 1_200.0),
+    'C': CENTRE,
+    'E1': ROUTE[1],
+    'E2': ROUTE[2],
+}
 LABEL: Final[str] = 'Golden St'
 STRIP_TRIPS: Final[dict[str, tuple[tuple[str, ...], int]]] = {
     'e0': (EAST, -2),
@@ -354,6 +365,44 @@ def map_scene() -> State:
     return state
 
 
+def map_framed(*, framing: MapFraming) -> State:
+    """
+    Show the Map scene's pin with every trip's pattern, framed one way.
+
+    Parameters
+    ----------
+    framing : MapFraming
+        The map framing setting.
+
+    Returns
+    -------
+    State
+        State at `START`; each 606 calls every 150 seconds from 7.5
+        minutes before the From to 5 minutes after, so its timetable
+        marker sits between stops.
+    """
+    state = map_scene()
+    board = replace(state.settings.board, map_framing=framing)
+    state = replace(state, settings=replace(state.settings, board=board))
+    patterns: dict[str, TripPattern | None] = {
+        item.trip_id: pattern(
+            trip_id=item.trip_id,
+            stops=calls(
+                stations=tuple(APPROACH),
+                start=(
+                    EIGHT
+                    + int((item.departs - START).total_seconds())
+                    - 450
+                ),
+                step=150,
+                points=APPROACH,
+            ),
+        )
+        for item in state.board.departures
+    }
+    return patterns_loaded(state=state, patterns=patterns)
+
+
 def map_panes() -> State:
     """
     Show a two-change connection pin's Map, one pane per change.
@@ -555,6 +604,8 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     'stop_trainlink': stop_trainlink,
     'map': map_scene,
     'map_panes': map_panes,
+    'map_approach': lambda: map_framed(framing=MapFraming.APPROACH),
+    'map_centred': lambda: map_framed(framing=MapFraming.CENTRED),
     'strip': lambda: strip_scene(view=LiveView.STRIP),
     'strip_map': lambda: strip_scene(view=LiveView.STRIP_MAP),
     'alerts': on_alerts,

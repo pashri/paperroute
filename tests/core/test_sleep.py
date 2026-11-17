@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import timedelta
+from typing import Final
 
 from paperroute_device.core.device_events import ApiKeyChanged, ConfirmAsked
 from paperroute_device.core.device_model import ConfirmAction, MenuRow
@@ -19,7 +20,14 @@ from paperroute_hardware.core.knob_events import (
     KnobTurned,
 )
 from paperroute_sydney.city import SYDNEY, SYDNEY_PROJECTION
-from paperroute_testkit.core.factories import START, departure, pattern, place
+from paperroute_testkit.core.factories import (
+    EIGHT,
+    START,
+    calls,
+    departure,
+    pattern,
+    place,
+)
 from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.steps import slept
 from paperroute_transit.core.geo import make_shape
@@ -37,7 +45,7 @@ from paperroute_transit.core.messages import (
 )
 from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.reducers import initial_state
-from paperroute_transit.core.saved import seeded
+from paperroute_transit.core.saved import MapFraming, seeded
 from paperroute_transit.core.sleep import sleep_view
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import live_stop_view
@@ -232,35 +240,78 @@ def test_connection_sleep_screen_draws_the_next_connection() -> None:
     assert gone.map.empty.startswith('No connections')
 
 
-def test_sleep_map_keeps_both_ends_above_the_band() -> None:
-    """A trip running down the map ends with its To disc clear of the band."""
+def test_sleep_map_keeps_the_from_above_the_band() -> None:
+    """Asleep, a From at the foot of its stretch clears the band."""
     pin = replace(
         PIN,
         origin=replace(PIN.origin, point=(0.0, 900.0)),
         destination=place('215020', point=(0.0, -900.0)),
     )
-    state = slept(
-        state=initial_state(
-            saved=seeded(pin=pin, city=SYDNEY),
-            now=START,
-            city=SYDNEY,
+    trip = departure(departs=START + timedelta(minutes=3))
+    north = calls(
+        stations='NMA',
+        start=EIGHT - 180,
+        step=180,
+        points={'N': (0.0, 2_550.0), 'M': (0.0, 1_725.0), 'A': (0.0, 900.0)},
+    )
+    state, _ = step(
+        initial_state(
+            saved=seeded(pin=pin, city=SYDNEY), now=START, city=SYDNEY,
+        ),
+        DeparturesLoaded(
+            pin=pin, departures=(trip,), until=START + timedelta(hours=2),
         ),
     )
+    state, _ = step(
+        state,
+        PatternsLoaded(
+            trip_ids=frozenset({trip.trip_id}),
+            patterns={
+                trip.trip_id: pattern(trip_id=trip.trip_id, stops=north),
+            },
+            shapes={},
+        ),
+    )
+    state = slept(state=state)
     view = sleep_view(state=state, stop_view=live_stop_view(state=state))
     base = view.map.base
     assert base.centre is not None and base.trip is not None
-    for point in (base.trip.origin, base.trip.end):
-        assert point is not None
-        _, y = screen_point(
-            centre=base.centre, mpp=base.mpp, point=point, width=base.width,
-            projection=SYDNEY_PROJECTION,
-        )
-        assert y + END_DISC + END_EDGE <= MAP_HEIGHT - BAND_H
+    assert base.mpp == 5
+    assert base.trip.origin is not None
+    _, y = screen_point(
+        centre=base.centre,
+        mpp=base.mpp,
+        point=base.trip.origin,
+        width=base.width,
+        projection=SYDNEY_PROJECTION,
+    )
+    assert y + END_DISC + END_EDGE <= MAP_HEIGHT - BAND_H
 
 
-def test_sleep_screen_waits_for_its_route_line_and_stops() -> None:
-    """Asleep, the map asks for its trip and is drawn again once it loads."""
+LINE: Final = make_shape(
+    shape_id='b:0', points=[CENTRE, (-16_900.0, 1_000.0)],
+)
+
+
+def asleep_with_trip(
+    *, framing: MapFraming,
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Sleep a state with one trip whose line and pattern have loaded.
+
+    Parameters
+    ----------
+    framing : MapFraming
+        The map framing setting.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        The state, and the effects of the last step, the pattern loading.
+    """
     state, _ = step(fresh(centre=CENTRE), Tick(now=START))
+    board = replace(state.settings.board, map_framing=framing)
+    state = replace(state, settings=replace(state.settings, board=board))
     index = tuple(MenuRow).index(MenuRow.SLEEP)
     state, _ = run(state=state, events=(BOTH, turn(steps=index)))
     state, _ = step(state, DOWN)
@@ -277,9 +328,8 @@ def test_sleep_screen_waits_for_its_route_line_and_stops() -> None:
     )
     assert LoadShapes(shape_ids=frozenset({'b:0'})) in effects
     assert [e for e in effects if isinstance(e, LoadPatterns)]
-    line = make_shape(shape_id='b:0', points=[CENTRE, (-16_900.0, 1_000.0)])
-    state, _ = step(state, ShapesLoaded(shapes={'b:0': line}))
-    state, effects = step(
+    state, _ = step(state, ShapesLoaded(shapes={'b:0': LINE}))
+    return step(
         state,
         PatternsLoaded(
             trip_ids=frozenset({trip.trip_id}),
@@ -287,14 +337,28 @@ def test_sleep_screen_waits_for_its_route_line_and_stops() -> None:
             shapes={},
         ),
     )
+
+
+def test_sleep_screen_waits_for_its_route_line_and_stops() -> None:
+    """Asleep, the map asks for its trip and is drawn again once it loads."""
+    state, effects = asleep_with_trip(framing=MapFraming.APPROACH)
     (view,) = renders(effects=effects)
     assert isinstance(view, SleepView)
     assert not view.loading
-    assert view.map.base.route == (line.points,)
-    assert view.map.base.stops == ((1000.0, 0.0),)
+    assert view.map.base.route == (LINE.points,)
+    assert view.map.base.stops == ((0.0, 0.0),)
     assert view.map.markers == ()
     _, effects = step(state, Tick(now=START + timedelta(seconds=40)))
     assert not renders(effects=effects)
+
+
+def test_sleep_map_follows_the_map_framing() -> None:
+    """Asleep with Centred, the From is the map's centre at 8 m/px."""
+    _, effects = asleep_with_trip(framing=MapFraming.CENTRED)
+    (view,) = renders(effects=effects)
+    assert isinstance(view, SleepView)
+    assert (view.map.base.centre, view.map.base.mpp) == (CENTRE, 8)
+    assert view.map.base.stops == ((0.0, 0.0),)
 
 
 def test_wake_draws_at_once() -> None:

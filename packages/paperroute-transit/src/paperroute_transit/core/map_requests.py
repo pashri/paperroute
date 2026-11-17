@@ -11,7 +11,7 @@ from paperroute_transit.core.connection_map import (
     panes_inputs,
 )
 from paperroute_transit.core.geo import Point
-from paperroute_transit.core.map_fit import resting_zoom, steady_frame
+from paperroute_transit.core.map_fit import framed_map, resting_zoom
 from paperroute_transit.core.map_state import area_box, area_frame
 from paperroute_transit.core.map_view import (
     MAP_WIDTH,
@@ -281,10 +281,10 @@ def map_inputs(
     Returns
     -------
     MapInputs
-        A plain pin's inputs fitted to its next trip, keeping the frame
-        on screen while it still holds the trip; for a connection
-        pin, framed on the connection, or on both panes of a two-change
-        Changes map, with the hero chain's legs as the departures.
+        A plain pin's inputs framed by the map framing setting; for a
+        connection pin, framed on the connection, or on both panes of a
+        two-change Changes map, with the hero chain's legs as the
+        departures.
     """
     inputs = replace(
         pin_map_inputs(state=state, stop_view=stop_view),
@@ -293,10 +293,8 @@ def map_inputs(
     )
     pin = shown(state=state)
     if not is_connection(pin=pin):
-        return steady_frame(
-            inputs=inputs,
-            held=state.map.frame,
-            held_ends=state.map.frame_ends,
+        return framed_map(
+            inputs=inputs, framing=state.settings.board.map_framing,
         )
     chains = live_chains(state=state)
     mode = state.settings.board.connection_map
@@ -525,12 +523,36 @@ def map_patterns(
     Returns
     -------
     frozenset[str]
-        The strips' trips, with the map's needs when a map is shown.
+        The strips' trips, with the map's needs and, for a plain pin,
+        every drawn trip when a map is shown.
     """
     wanted = strip_patterns(state=state)
     if inputs is not None:
         wanted |= needed_patterns(inputs=inputs)
+        wanted |= fitted_trips(state=state, inputs=inputs)
     return wanted
+
+
+def fitted_trips(*, state: State, inputs: MapInputs) -> frozenset[str]:
+    """
+    List the trips a plain pin's frame is fitted to.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    inputs : MapInputs
+        The shown map's inputs.
+
+    Returns
+    -------
+    frozenset[str]
+        The drawn departures' trip IDs; empty for a connection pin or a
+        From with no location.
+    """
+    if inputs.centre is None or is_connection(pin=shown(state=state)):
+        return frozenset()
+    return frozenset(item.trip_id for item in inputs.departures)
 
 
 def area_effects(
@@ -601,13 +623,11 @@ def framed_state(*, state: State, inputs: MapInputs | None) -> State:
         with no map or no centre.
     """
     frame = None
-    ends = None
     if inputs is not None and inputs.centre is not None:
         frame = (inputs.centre, inputs.zoom)
-        ends = inputs.ends
-    if frame == state.map.frame and ends == state.map.frame_ends:
+    if frame == state.map.frame:
         return state
-    framed = replace(state.map, frame=frame, frame_ends=ends)
+    framed = replace(state.map, frame=frame)
     if area_frame(map_state=framed)[0] != area_frame(map_state=state.map)[0]:
         framed = replace(framed, area_modes={}, pending_modes=frozenset())
     return replace(state, map=framed)

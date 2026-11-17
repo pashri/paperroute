@@ -12,11 +12,8 @@ from paperroute_transit.core.map_view import (
     MAP_HEIGHT,
     MapInputs,
 )
-from paperroute_transit.core.ridden import (
-    ridden_stops,
-    stops_window,
-    stretch_stops,
-)
+from paperroute_transit.core.ridden import stretch_stops
+from paperroute_transit.core.saved import MapFraming
 from paperroute_transit.core.tiles import ZOOMS
 
 CREDIT_ROOM: Final[int] = 28  # pixels kept clear above the map's bottom
@@ -355,170 +352,6 @@ def known(*, points: Sequence[Point | None]) -> tuple[Point, ...]:
     return tuple(point for point in points if point is not None)
 
 
-def plain_frame(*, inputs: MapInputs) -> MapInputs:
-    """
-    Frame a plain pin's map on its next trip.
-
-    Parameters
-    ----------
-    inputs : MapInputs
-        The map's inputs, centred on the From.
-
-    Returns
-    -------
-    MapInputs
-        Fitted to the next departure's ridden stops and the From and To,
-        or to the From and To alone when the stops do not fit, with the
-        From kept inside; the From at the resting zoom with
-        fewer than two points; unchanged with no From point.
-    """
-    origin = inputs.ends[0]
-    if origin is None:
-        return inputs
-    points = plain_points(inputs=inputs)
-    if len(set(points)) < 2:
-        return replace(
-            inputs, centre=origin, zoom=resting_zoom(step=inputs.step),
-        )
-    centre, zoom = fitted(
-        points=points,
-        width=inputs.width,
-        top=banner_room(inputs=inputs),
-        step=inputs.step,
-        keep=origin,
-        bottom=bottom_room(inputs=inputs),
-        ends=known(points=inputs.ends),
-    ) or (origin, inputs.zoom)
-    return replace(inputs, centre=centre, zoom=zoom)
-
-
-def trip_stops(*, inputs: MapInputs) -> tuple[Point, ...]:
-    """
-    List the ridden stops of a pin's next departure.
-
-    Parameters
-    ----------
-    inputs : MapInputs
-        The map's inputs.
-
-    Returns
-    -------
-    tuple[Point, ...]
-        The stops of the first departure leaving now or later, else of
-        the first; none without departures or before its pattern loads.
-    """
-    if not inputs.departures:
-        return ()
-    upcoming = next(
-        (
-            departure
-            for departure in inputs.departures
-            if departure.departs >= inputs.now
-        ),
-        inputs.departures[0],
-    )
-    return ridden_stops(
-        departure=upcoming,
-        pattern=inputs.patterns.get(upcoming.trip_id),
-        window=stops_window(destination=inputs.stop_view.destination),
-        zone=inputs.zone,
-    )
-
-
-
-def plain_points(*, inputs: MapInputs) -> tuple[Point, ...]:
-    """
-    List the points a plain pin's map holds.
-
-    Parameters
-    ----------
-    inputs : MapInputs
-        The map's inputs.
-
-    Returns
-    -------
-    tuple[Point, ...]
-        The next departure's ridden stops, then the From and the To
-        where they have points.
-    """
-    return (
-        *trip_stops(inputs=inputs),
-        *known(points=inputs.ends),
-    )
-
-
-def steady_frame(
-    *,
-    inputs: MapInputs,
-    held: tuple[Point, int] | None,
-    held_ends: tuple[Point | None, Point | None] | None = None,
-) -> MapInputs:
-    """
-    Frame a plain pin's map, keeping the frame on screen while it fits.
-
-    Parameters
-    ----------
-    inputs : MapInputs
-        The map's inputs, centred on the From.
-    held : tuple[Point, int] | None
-        The centre and zoom the map is drawn at now, or None.
-    held_ends : tuple[Point | None, Point | None] | None
-        The From and To points of the pin the held frame was drawn for.
-
-    Returns
-    -------
-    MapInputs
-        The held frame while it is for the same pin, has the fitted zoom
-        and still holds the next trip with the From well inside; else as
-        `plain_frame`.
-    """
-    fit = plain_frame(inputs=inputs)
-    if held is None or held[1] != fit.zoom or held_ends != inputs.ends:
-        return fit
-    if not holds(inputs=inputs, frame=held):
-        return fit
-    return replace(fit, centre=held[0])
-
-
-def holds(*, inputs: MapInputs, frame: tuple[Point, int]) -> bool:
-    """
-    Say whether a frame still shows a plain pin's trip.
-
-    Parameters
-    ----------
-    inputs : MapInputs
-        The map's inputs.
-    frame : tuple[Point, int]
-        A map centre and zoom.
-
-    Returns
-    -------
-    bool
-        True when the From sits `KEEP_IN` pixels inside the map and
-        every point of `plain_points` is clear of the banner and the
-        bottom room.
-    """
-    centre, zoom = frame
-    mpp = ZOOMS[zoom]
-    rooms = (banner_room(inputs=inputs), bottom_room(inputs=inputs))
-    origin = inputs.ends[0]
-    if origin is None or centre != kept(
-        centre=centre, keep=origin, mpp=mpp, width=inputs.width, rooms=rooms,
-    ):
-        return False
-    pixels = [
-        (
-            inputs.width / 2 + (x - centre[0]) / mpp,
-            MAP_HEIGHT / 2 - (y - centre[1]) / mpp,
-        )
-        for x, y in plain_points(inputs=inputs)
-    ]
-    return all(
-        0 <= x <= inputs.width and rooms[0] <= y <= MAP_HEIGHT - rooms[1]
-        for x, y in pixels
-    )
-
-
 def approach_points(*, inputs: MapInputs) -> tuple[Point, ...]:
     """
     List the points an approach map holds.
@@ -602,3 +435,24 @@ def centred_frame(*, inputs: MapInputs) -> MapInputs:
     return replace(
         inputs, centre=origin, zoom=resting_zoom(step=inputs.step),
     )
+
+
+def framed_map(*, inputs: MapInputs, framing: MapFraming) -> MapInputs:
+    """
+    Frame a plain pin's map by the map framing setting.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs, centred on the From.
+    framing : MapFraming
+        The map framing setting.
+
+    Returns
+    -------
+    MapInputs
+        `centred_frame` for Centred, else `approach_frame`.
+    """
+    if framing is MapFraming.CENTRED:
+        return centred_frame(inputs=inputs)
+    return approach_frame(inputs=inputs)

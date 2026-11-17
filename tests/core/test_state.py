@@ -2476,13 +2476,8 @@ def test_stale_patterns_wait_for_the_fetch_in_flight() -> None:
     assert 't1' in load.trip_ids
 
 
-def test_pin_patterns_do_not_wait_for_the_fetch_in_flight() -> None:
-    """
-    A pin trip whose vehicle went stale is asked for at once.
-
-    The state jumps from the Map to the Stop view, since pressing round
-    passes the Strip, which loads every strip trip's pattern.
-    """
+def test_drawn_trip_keeps_its_pattern_while_its_vehicle_is_fresh() -> None:
+    """A fresh vehicle on the next trip leaves its pattern for the frame."""
     state = city_map()
     [pin] = state.board.departures
     state, _ = step(
@@ -2494,9 +2489,7 @@ def test_pin_patterns_do_not_wait_for_the_fetch_in_flight() -> None:
         ),
     )
     bus = vehicle(
-        timestamp=int(START.timestamp()),
-        trip_id=pin.trip_id,
-        point=CENTRE,
+        timestamp=int(START.timestamp()), trip_id=pin.trip_id, point=CENTRE,
     )
     state, _ = step(
         state,
@@ -2505,10 +2498,36 @@ def test_pin_patterns_do_not_wait_for_the_fetch_in_flight() -> None:
             snapshot=snapshot(fetched_at=START, vehicles=(bus,)),
         ),
     )
-    assert pin.trip_id not in state.map.patterns
+    assert pin.trip_id in state.map.patterns
+
+
+def test_stale_pin_trip_is_asked_for_at_once() -> None:
+    """
+    A pin trip with no pattern is asked for while a fetch is in flight.
+
+    The state jumps from the Map to the Stop view, since pressing round
+    passes the Strip, which loads every strip trip's pattern.
+    """
+    state = city_map()
+    [pin] = state.board.departures
+    bus = vehicle(
+        timestamp=int(START.timestamp()), trip_id=pin.trip_id, point=CENTRE,
+    )
+    state, _ = step(
+        state,
+        PositionsFetched(
+            feed=BUS_POSITIONS,
+            snapshot=snapshot(fetched_at=START, vehicles=(bus,)),
+        ),
+    )
     state = replace(state, view=LiveView.STOP)
     state, _ = step(state, Tick(now=START + timedelta(minutes=5)))
+    state = replace(
+        state,
+        map=replace(state.map, patterns={}, pending_patterns=frozenset()),
+    )
     _, effects = step(state, PRESS)
+    assert FetchFeed(feed=BUS_POSITIONS, kind=FeedKind.POSITIONS) in effects
     [load] = effects_of(effects=effects, kind=LoadPatterns)
     assert pin.trip_id in load.trip_ids
 

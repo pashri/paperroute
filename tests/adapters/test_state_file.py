@@ -39,6 +39,7 @@ from paperroute_transit.core.saved import (
     ConnectionMap,
     LiveView,
     Lookahead,
+    MapFraming,
     Quota,
     Rate,
     Saved,
@@ -387,7 +388,7 @@ FILE_KEYS: Final[frozenset[str]] = frozenset({
     'inverted_lists', 'clean_after', 'swap_knobs',
     'auto_rebuild', 'peak_rate', 'offpeak_rate', 'peak_windows',
     'alert_lookahead', 'connection_map', 'skip_school_buses',
-    'skip_school_on_route_pins', 'parked_age', 'start', 'end',
+    'skip_school_on_route_pins', 'parked_age', 'map_framing', 'start', 'end',
     'pins', 'current', 'unpinned', 'view', 'quota', 'auto',
     'origin', 'destination', 'kind', 'routes', 'nickname', 'only',
     'windows', 'ways', 'never', 'stop_id', 'name', 'x', 'y', 'days',
@@ -1404,3 +1405,22 @@ def test_too_new_section_moved_aside(path: Path) -> None:
     loaded = repository.load()
     assert (loaded.saved, loaded.stored) == (default_saved(city=SYDNEY), False)
     assert len(list(path.parent.glob('state.json.bad-*'))) == 1
+
+
+def test_file_without_map_framing_loads_as_approach(path: Path) -> None:
+    """A state file saved before the map framing loads as Approach."""
+    states = BoardStates(path=path, city=SYDNEY)
+    board = replace(
+        sample().settings.board, map_framing=MapFraming.CENTRED,
+    )
+    states.save(
+        saved=replace(
+            sample(), settings=replace(sample().settings, board=board),
+        ),
+    )
+    data = json.loads(path.read_text())
+    del data['board']['settings']['map_framing']
+    path.write_text(json.dumps(data))
+    loaded = states.load()
+    assert loaded.stored
+    assert loaded.saved.settings.board.map_framing is MapFraming.APPROACH

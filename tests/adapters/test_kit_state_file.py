@@ -206,4 +206,5 @@ def test_v12_file_reaches_13_as_the_board_migrates_it(tmp_path: Path) -> None:
     board.save(saved=board.load().saved)
     written = json.loads(board_path.read_text())
     del written['board']['settings']['parked_age']
+    del written['board']['settings']['map_framing']
     assert json.loads(kit_path.read_text()) == written

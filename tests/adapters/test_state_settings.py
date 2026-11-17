@@ -27,12 +27,13 @@ from paperroute_transit.core.saved import (
     DEVICE_FIELDS,
     BoardSettings,
     ConnectionMap,
+    MapFraming,
     Settings,
 )
 
 
 def test_settings_model_keys_unchanged() -> None:
-    """The settings older files kept stay today's sixteen flat keys."""
+    """The settings older files kept stay today's seventeen flat keys."""
     assert set(default_settings(city=SYDNEY)) == {
         'auto_rebuild',
         'peak_rate',
@@ -45,6 +46,7 @@ def test_settings_model_keys_unchanged() -> None:
         'inverted_lists',
         'alert_lookahead',
         'parked_age',
+        'map_framing',
         'connection_map',
         'skip_school_buses',
         'skip_school_on_route_pins',
@@ -164,5 +166,22 @@ def test_settings_without_parked_age_load_as_off() -> None:
 def test_settings_round_trip_parked_age() -> None:
     """Settings round trip parked age."""
     settings = BoardSettings(parked_age=ParkedAge.THIRTY)
+    model = board_settings_to_model(settings=settings)
+    assert board_settings_from_model(model=model) == settings
+
+
+def test_settings_without_map_framing_load_as_approach() -> None:
+    """Settings stored before the map framing load as Approach."""
+    centred = BoardSettings(map_framing=MapFraming.CENTRED)
+    stored = board_settings_to_model(settings=centred).model_dump()
+    del stored['map_framing']
+    model = BoardSettingsModel.model_validate(stored)
+    found = board_settings_from_model(model=model)
+    assert found.map_framing is MapFraming.APPROACH
+
+
+def test_settings_round_trip_map_framing() -> None:
+    """Settings round trip map framing."""
+    settings = BoardSettings(map_framing=MapFraming.CENTRED)
     model = board_settings_to_model(settings=settings)
     assert board_settings_from_model(model=model) == settings

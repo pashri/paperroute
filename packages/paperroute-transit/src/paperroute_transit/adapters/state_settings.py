@@ -17,6 +17,7 @@ from paperroute_transit.core.saved import (
     BoardSettings,
     ConnectionMap,
     Lookahead,
+    MapFraming,
     Rate,
 )
 
@@ -27,7 +28,8 @@ class BoardSettingsModel(BaseModel):
     """
     The transit board's Settings page choices as stored.
 
-    The school switches have defaults, so files stored before them load.
+    The school switches, the parked age and the map framing have defaults, so
+    files stored before them load.
     """
 
     model_config = ConfigDict(extra='forbid', frozen=True)
@@ -43,6 +45,7 @@ class BoardSettingsModel(BaseModel):
     skip_school_buses: bool = True
     skip_school_on_route_pins: bool = False
     parked_age: ParkedAge = ParkedAge.OFF
+    map_framing: MapFraming = MapFraming.APPROACH
 
     @field_validator('peak_windows')
     @classmethod
@@ -105,6 +108,7 @@ def board_settings_to_model(*, settings: BoardSettings) -> BoardSettingsModel:
         skip_school_buses=settings.skip_school_buses,
         skip_school_on_route_pins=settings.skip_school_on_route_pins,
         parked_age=settings.parked_age,
+        map_framing=settings.map_framing,
     )
 
 
@@ -134,6 +138,7 @@ def board_settings_from_model(*, model: BoardSettingsModel) -> BoardSettings:
         skip_school_buses=model.skip_school_buses,
         skip_school_on_route_pins=model.skip_school_on_route_pins,
         parked_age=model.parked_age,
+        map_framing=model.map_framing,
     )
 
 

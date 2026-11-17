@@ -10,6 +10,7 @@ from paperroute_transit.core.saved import (
     BoardSettings,
     ConnectionMap,
     Lookahead,
+    MapFraming,
     Rate,
     Settings,
     default_saved,
@@ -30,6 +31,13 @@ def test_board_settings_defaults() -> None:
     assert settings.skip_school_on_route_pins is False
     assert settings.school_off_route_pins is False
     assert settings.parked_age is ParkedAge.OFF
+
+
+def test_board_settings_default_to_approach() -> None:
+    """The map framing starts as Approach."""
+    assert BoardSettings().map_framing is MapFraming.APPROACH
+    settings = default_settings(city=SYDNEY)
+    assert settings.board.map_framing is MapFraming.APPROACH
 
 
 def test_settings_defaults_to_both_parts() -> None:

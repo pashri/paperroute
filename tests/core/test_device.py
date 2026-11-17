@@ -67,6 +67,7 @@ from paperroute_transit.core.saved import (
     BoardSettings,
     ConnectionMap,
     Lookahead,
+    MapFraming,
     Rate,
     Settings,
     default_settings,
@@ -116,6 +117,7 @@ def test_on_settings_routes_every_field() -> None:
         connection_map=ConnectionMap.WHOLE,
         skip_school_buses=False,
         skip_school_on_route_pins=True,
+        map_framing=MapFraming.CENTRED,
     )
     state, _ = on_settings(state=fresh(), event=event)
     assert state.settings == Settings(
@@ -129,6 +131,7 @@ def test_on_settings_routes_every_field() -> None:
             connection_map=ConnectionMap.WHOLE,
             skip_school_buses=False,
             skip_school_on_route_pins=True,
+            map_framing=MapFraming.CENTRED,
         ),
     )
     same, _ = on_settings(state=fresh(), event=SettingsChanged())

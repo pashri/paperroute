@@ -19,6 +19,7 @@ from paperroute_transit.core.map_places import StationSource
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.modes import RouteClass, mode_problems
 from paperroute_transit.core.positions import ParkedAge
+from paperroute_transit.core.saved import MapFraming, default_settings
 from tests.build.timetable_rows import (
     MILDENHALL,
     NORWICH,
@@ -29,6 +30,12 @@ from tests.build.timetable_rows import (
     parents,
     route_ids,
 )
+
+
+def test_cambridge_maps_start_framed_on_the_approach() -> None:
+    """Cambridge's map framing starts as Approach."""
+    settings = default_settings(city=CAMBRIDGE)
+    assert settings.board.map_framing is MapFraming.APPROACH
 
 
 def test_city_has_the_spec_values() -> None:

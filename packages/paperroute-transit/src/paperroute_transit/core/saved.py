@@ -57,6 +57,13 @@ class ConnectionMap(StrEnum):
     START = 'start'
 
 
+class MapFraming(StrEnum):
+    """How a plain pin's map is framed."""
+
+    APPROACH = 'approach'
+    CENTRED = 'centred'
+
+
 LOOKAHEAD: Final[dict[Lookahead, timedelta | None]] = {
     Lookahead.DAY: timedelta(days=1),
     Lookahead.THREE_DAYS: timedelta(days=3),
@@ -97,6 +104,8 @@ class BoardSettings:
         it has no effect while `skip_school_buses` is off.
     parked_age : ParkedAge
         How long since a vehicle was heard before the Map hides it.
+    map_framing : MapFraming
+        How a plain pin's map is framed.
     """
 
     auto_rebuild: bool = True
@@ -108,6 +117,7 @@ class BoardSettings:
     skip_school_buses: bool = True
     skip_school_on_route_pins: bool = False
     parked_age: ParkedAge = ParkedAge.OFF
+    map_framing: MapFraming = MapFraming.APPROACH
 
     @property
     def school_off_route_pins(self) -> bool:

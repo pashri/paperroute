@@ -148,7 +148,8 @@
       "connection_map": "whole",
       "skip_school_buses": false,
       "skip_school_on_route_pins": true,
-      "parked_age": "off"
+      "parked_age": "off",
+      "map_framing": "approach"
     },
     "quota": {
       "day": "2026-10-16",

@@ -462,8 +462,8 @@ def test_plain_map_refits_once_patterns_load() -> None:
     assert (x, zoom) == (CENTRE[0] - 400.0, ZOOMS.index(8))
 
 
-def test_plain_map_frame_holds_still_as_the_next_bus_leaves() -> None:
-    """The 8:03 leaving the sidebar moves nothing."""
+def test_plain_map_frame_is_the_union_as_the_next_bus_leaves() -> None:
+    """The 8:03 leaving the sidebar leaves the union of stretches alone."""
     state, departures = buses_every_ten()
     state, _ = step(state, along_patterns(departures=departures))
     before = state.map.frame

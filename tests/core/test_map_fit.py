@@ -646,3 +646,22 @@ def test_steady_frame_centred_takes_no_hold() -> None:
         key=frame_key(inputs=before, framing=MapFraming.APPROACH),
     )
     assert found == centred_frame(inputs=before)
+
+
+def test_steady_frame_holds_zoomed_in_as_a_bus_leaves() -> None:
+    """One detent finer, the fast bus leaving moves nothing."""
+    fast = through(trip_id='fast')
+    slow = through(trip_id='slow', minutes=2, apart=4)
+    before = riding(rides=(fast, slow), step=-1)
+    after = riding(rides=(slow,), step=-1)
+    found = held_over(before=before, after=after)
+    assert found == fresh(inputs=before)
+
+
+def test_approach_frame_asleep_ignores_the_banner_it_hides() -> None:
+    """Asleep, no banner is drawn, so none of its room is kept."""
+    asleep = riding(rides=(through(trip_id='t1'),), asleep=True)
+    bannered = replace(asleep, stop_view=stop_view(banner=BANNER))
+    assert approach_frame(inputs=bannered) == replace(
+        approach_frame(inputs=asleep), stop_view=bannered.stop_view,
+    )

@@ -16,6 +16,7 @@ from paperroute_transit.core.map_fit import (
     frame_key,
     resting_zoom,
     steady_frame,
+    stepped,
 )
 from paperroute_transit.core.map_state import area_box, area_frame
 from paperroute_transit.core.map_view import (
@@ -287,10 +288,9 @@ def map_inputs(
     -------
     MapInputs
         A plain pin's inputs framed by the map framing setting, a settled
-        Approach frame kept while it fits; for a connection pin, framed on
-        the connection, or on both panes of a
-        two-change Changes map, with the hero chain's legs as the
-        departures.
+        Approach frame kept while it fits; for a connection pin, framed
+        on the connection, or on both panes of a two-change Changes map,
+        with the hero chain's legs as the departures.
     """
     inputs = replace(
         pin_map_inputs(state=state, stop_view=stop_view),
@@ -610,7 +610,9 @@ def shows_vehicles(*, state: State) -> bool:
     return state.view not in {LiveView.STOP, LiveView.ALERTS}
 
 
-def framed_state(*, state: State, inputs: MapInputs | None) -> State:
+def framed_state(
+    *, state: State, inputs: MapInputs | None, fit_zoom: int | None,
+) -> State:
     """
     Record where the map is drawn.
 
@@ -623,22 +625,28 @@ def framed_state(*, state: State, inputs: MapInputs | None) -> State:
         State.
     inputs : MapInputs | None
         The shown map's inputs, or None with no map on screen.
+    fit_zoom : int | None
+        The zoom of the unheld fit with no step, as `unheld_zoom`.
 
     Returns
     -------
     State
-        State with the map's centre and zoom as its frame and
-        `settled_key` as its key, and no area modes loaded or pending
-        when the area's centre moved; no frame with no map or no centre.
+        State with the map's centre and zoom as its frame, `settled_key`
+        as its key and `fit_zoom` as its fit zoom, and no area modes
+        loaded or pending when the area's centre moved; no frame with no
+        map or no centre.
     """
     frame = None
     key = None
     if inputs is not None and inputs.centre is not None:
         frame = (inputs.centre, inputs.zoom)
         key = settled_key(state=state, inputs=inputs)
-    if frame == state.map.frame and key == state.map.frame_key:
+    else:
+        fit_zoom = None
+    old = state.map
+    if (frame, key, fit_zoom) == (old.frame, old.frame_key, old.fit_zoom):
         return state
-    framed = replace(state.map, frame=frame, frame_key=key)
+    framed = replace(old, frame=frame, frame_key=key, fit_zoom=fit_zoom)
     if area_frame(map_state=framed)[0] != area_frame(map_state=state.map)[0]:
         framed = replace(framed, area_modes={}, pending_modes=frozenset())
     return replace(state, map=framed)
@@ -669,11 +677,54 @@ def settled_key(*, state: State, inputs: MapInputs) -> FrameKey | None:
     )
 
 
-def rebased(
+def unheld_zoom(*, state: State, stop_view: StopView, width: int) -> int:
+    """
+    Find the zoom the map takes with no knob step and no held frame.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    stop_view : StopView
+        The state's Stop view.
+    width : int
+        Map width in pixels.
+
+    Returns
+    -------
+    int
+        The zoom, an index into `ZOOMS`.
+    """
+    still = replace(state, map=replace(state.map, step=0, frame_key=None))
+    return map_inputs(state=still, stop_view=stop_view, width=width).zoom
+
+
+def rebased(*, state: State, fit_zoom: int) -> State:
+    """
+    Drop knob detents that the zoom's clamp hides.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    fit_zoom : int
+        The zoom of the unheld fit with no step, as `unheld_zoom`.
+
+    Returns
+    -------
+    State
+        State whose step is the unheld fit's zoom at the state's step
+        less `fit_zoom`; a held frame never enters it.
+    """
+    zoom = stepped(zoom=fit_zoom, step=state.map.step)
+    return replace(state, map=replace(state.map, step=zoom - fit_zoom))
+
+
+def drawn_state(
     *, state: State, inputs: MapInputs | None, stop_view: StopView,
 ) -> State:
     """
-    Drop knob detents that the drawn zoom's clamp hides.
+    Record the shown map's frame and drop detents the clamp hides.
 
     Parameters
     ----------
@@ -687,15 +738,19 @@ def rebased(
     Returns
     -------
     State
-        State whose step is the drawn zoom less the zoom the map takes
-        with no step and no held frame, so the next detent always moves
-        the map one level; unchanged with no map.
+        State as `rebased` and `framed_state` leave it; no frame with no
+        map.
     """
     if inputs is None:
-        return state
-    still = replace(state, map=replace(state.map, step=0, frame_key=None))
-    fit = map_inputs(state=still, stop_view=stop_view, width=inputs.width)
-    return replace(state, map=replace(state.map, step=inputs.zoom - fit.zoom))
+        return framed_state(state=state, inputs=None, fit_zoom=None)
+    fit_zoom = unheld_zoom(
+        state=state, stop_view=stop_view, width=inputs.width,
+    )
+    return framed_state(
+        state=rebased(state=state, fit_zoom=fit_zoom),
+        inputs=inputs,
+        fit_zoom=fit_zoom,
+    )
 
 
 def sleep_effects(
@@ -769,10 +824,7 @@ def map_effects(
         else None
     )
     drawn = () if inputs is None else tuple(inputs.departures)
-    state = framed_state(
-        state=rebased(state=state, inputs=inputs, stop_view=stop_view),
-        inputs=inputs,
-    )
+    state = drawn_state(state=state, inputs=inputs, stop_view=stop_view)
     wanted = map_patterns(state=state, inputs=inputs)
     state = pruned(state=state, wanted=wanted, departures=drawn)
     state, area = area_effects(state=state, departures=drawn)

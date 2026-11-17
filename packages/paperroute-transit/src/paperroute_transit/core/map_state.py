@@ -59,6 +59,9 @@ class MapState:
     frame_key : FrameKey | None
         What `frame` was fitted for when it is a settled Approach frame,
         else None.
+    fit_zoom : int | None
+        The zoom, an index into `ZOOMS`, the map takes with no step and
+        no held frame; None when no map is drawn.
     """
 
     step: int = 0
@@ -76,6 +79,7 @@ class MapState:
     failed_at: Mapping[MapData, datetime] = field(default_factory=dict)
     frame: tuple[Point, int] | None = None
     frame_key: FrameKey | None = None
+    fit_zoom: int | None = None
 
 
 def area_frame(*, map_state: MapState) -> tuple[Point | None, int]:
@@ -133,14 +137,19 @@ def zoomed(*, map_state: MapState, steps: int) -> MapState:
     Returns
     -------
     MapState
-        The state with the step moved by as many levels as the shown
-        zoom moved, clamped so it never passes the number of levels.
+        The state whose step puts the zoom the shown zoom moved by as
+        many levels, counted from `fit_zoom` where it is known,
+        clamped so it never passes the number of levels; no held frame
+        when the shown zoom moved.
     """
     _, zoom = area_frame(map_state=map_state)
     moved = min(max(zoom - steps, 0), len(ZOOMS) - 1) - zoom
     reach = len(ZOOMS) - 1
-    step = min(max(map_state.step + moved, -reach), reach)
-    return replace(map_state, step=step)
+    fit = map_state.fit_zoom
+    step = map_state.step + moved if fit is None else zoom + moved - fit
+    step = min(max(step, -reach), reach)
+    key = map_state.frame_key if moved == 0 else None
+    return replace(map_state, step=step, frame_key=key)
 
 
 def awaiting(*, map_state: MapState) -> bool:

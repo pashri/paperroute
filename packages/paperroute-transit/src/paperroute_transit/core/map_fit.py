@@ -19,7 +19,7 @@ from paperroute_transit.core.tiles import ZOOMS
 CREDIT_ROOM: Final[int] = 28  # pixels kept clear above the map's bottom
 BANNER_ROOM: Final[int] = 34  # pixels a banner covers at the map's top
 KEEP_IN: Final[int] = 24  # pixels the From is kept inside the map
-SLEEP_ROOM: Final[int] = SLEEP_BAND  # the margin clears a To disc above it
+SLEEP_ROOM: Final[int] = SLEEP_BAND  # pixels the sleep band covers
 
 
 @dataclass(frozen=True)
@@ -401,7 +401,9 @@ def approach_points(*, inputs: MapInputs) -> tuple[Point, ...]:
     )
 
 
-def approach_frame(*, inputs: MapInputs) -> MapInputs:
+def approach_frame(
+    *, inputs: MapInputs, points: Sequence[Point] | None = None,
+) -> MapInputs:
     """
     Frame a plain pin's map on the approach to its stop.
 
@@ -409,6 +411,8 @@ def approach_frame(*, inputs: MapInputs) -> MapInputs:
     ----------
     inputs : MapInputs
         The map's inputs, centred on the From.
+    points : Sequence[Point] | None
+        `approach_points` of the inputs, when already found.
 
     Returns
     -------
@@ -420,7 +424,8 @@ def approach_frame(*, inputs: MapInputs) -> MapInputs:
     origin = inputs.ends[0]
     if origin is None:
         return inputs
-    points = approach_points(inputs=inputs)
+    if points is None:
+        points = approach_points(inputs=inputs)
     if len(set(points)) < 2:
         return replace(
             inputs, centre=origin, zoom=resting_zoom(step=inputs.step),
@@ -460,7 +465,12 @@ def centred_frame(*, inputs: MapInputs) -> MapInputs:
     )
 
 
-def framed_map(*, inputs: MapInputs, framing: MapFraming) -> MapInputs:
+def framed_map(
+    *,
+    inputs: MapInputs,
+    framing: MapFraming,
+    points: Sequence[Point] | None = None,
+) -> MapInputs:
     """
     Frame a plain pin's map by the map framing setting.
 
@@ -470,6 +480,8 @@ def framed_map(*, inputs: MapInputs, framing: MapFraming) -> MapInputs:
         The map's inputs, centred on the From.
     framing : MapFraming
         The map framing setting.
+    points : Sequence[Point] | None
+        `approach_points` of the inputs, when already found.
 
     Returns
     -------
@@ -478,10 +490,15 @@ def framed_map(*, inputs: MapInputs, framing: MapFraming) -> MapInputs:
     """
     if framing is MapFraming.CENTRED:
         return centred_frame(inputs=inputs)
-    return approach_frame(inputs=inputs)
+    return approach_frame(inputs=inputs, points=points)
 
 
-def frame_key(*, inputs: MapInputs, framing: MapFraming) -> FrameKey | None:
+def frame_key(
+    *,
+    inputs: MapInputs,
+    framing: MapFraming,
+    points: Sequence[Point] | None = None,
+) -> FrameKey | None:
     """
     Say what an Approach frame is fitted for, once it is settled.
 
@@ -491,6 +508,8 @@ def frame_key(*, inputs: MapInputs, framing: MapFraming) -> FrameKey | None:
         The map's inputs.
     framing : MapFraming
         The map framing setting.
+    points : Sequence[Point] | None
+        `approach_points` of the inputs, when already found.
 
     Returns
     -------
@@ -498,9 +517,10 @@ def frame_key(*, inputs: MapInputs, framing: MapFraming) -> FrameKey | None:
         The key; None for Centred, with no From point, or with fewer
         than two points to fit, as before any pattern loads.
     """
-    points = approach_points(inputs=inputs)
     if framing is MapFraming.CENTRED or inputs.ends[0] is None:
         return None
+    if points is None:
+        points = approach_points(inputs=inputs)
     if len(set(points)) < 2:
         return None
     return FrameKey(
@@ -511,7 +531,45 @@ def frame_key(*, inputs: MapInputs, framing: MapFraming) -> FrameKey | None:
     )
 
 
-def holds(*, inputs: MapInputs, frame: tuple[Point, int]) -> bool:
+def on_map(
+    *, points: Sequence[Point], frame: tuple[Point, int], inputs: MapInputs,
+) -> set[Point]:
+    """
+    Pick the points a frame shows, clear of the banner and bottom room.
+
+    Parameters
+    ----------
+    points : Sequence[Point]
+        Points in metres.
+    frame : tuple[Point, int]
+        A map centre and zoom.
+    inputs : MapInputs
+        The map's inputs.
+
+    Returns
+    -------
+    set[Point]
+        The points on the map.
+    """
+    (cx, cy), zoom = frame
+    mpp = ZOOMS[zoom]
+    top = banner_room(inputs=inputs)
+    bottom = bottom_room(inputs=inputs)
+    return {
+        (x, y)
+        for x, y in points
+        if 0 <= inputs.width / 2 + (x - cx) / mpp <= inputs.width
+        and top <= MAP_HEIGHT / 2 - (y - cy) / mpp <= MAP_HEIGHT - bottom
+    }
+
+
+def holds(
+    *,
+    inputs: MapInputs,
+    frame: tuple[Point, int],
+    points: Sequence[Point],
+    fresh: MapInputs,
+) -> bool:
     """
     Say whether a frame still shows a plain pin's approach.
 
@@ -521,33 +579,36 @@ def holds(*, inputs: MapInputs, frame: tuple[Point, int]) -> bool:
         The map's inputs.
     frame : tuple[Point, int]
         A map centre and zoom.
+    points : Sequence[Point]
+        `approach_points` of the inputs.
+    fresh : MapInputs
+        The inputs framed afresh at the same step.
 
     Returns
     -------
     bool
-        True when the From sits `KEEP_IN` pixels inside the map and
-        every point of `approach_points` is on the map, clear of the
-        banner and the bottom room.
+        True when the From sits `KEEP_IN` pixels inside the map as
+        `kept` leaves it, and, at a step of 0 or more, every point the
+        fresh frame shows is also on the map. A finer step crops the
+        stretch, so only the From is checked.
     """
     centre, zoom = frame
-    mpp = ZOOMS[zoom]
     rooms = (banner_room(inputs=inputs), bottom_room(inputs=inputs))
     origin = inputs.ends[0]
-    if origin is None or centre != kept(
-        centre=centre, keep=origin, mpp=mpp, width=inputs.width, rooms=rooms,
+    if origin is None or fresh.centre is None or centre != kept(
+        centre=centre,
+        keep=origin,
+        mpp=ZOOMS[zoom],
+        width=inputs.width,
+        rooms=rooms,
     ):
         return False
-    pixels = [
-        (
-            inputs.width / 2 + (x - centre[0]) / mpp,
-            MAP_HEIGHT / 2 - (y - centre[1]) / mpp,
-        )
-        for x, y in approach_points(inputs=inputs)
-    ]
-    return all(
-        0 <= x <= inputs.width and rooms[0] <= y <= MAP_HEIGHT - rooms[1]
-        for x, y in pixels
+    if inputs.step < 0:
+        return True
+    wanted = on_map(
+        points=points, frame=(fresh.centre, fresh.zoom), inputs=inputs,
     )
+    return wanted <= on_map(points=points, frame=frame, inputs=inputs)
 
 
 def steady_frame(
@@ -578,12 +639,15 @@ def steady_frame(
         The held centre and zoom while `key` matches the inputs' own
         and the frame `holds`; else as `framed_map`.
     """
-    fit = framed_map(inputs=inputs, framing=framing)
+    if framing is MapFraming.CENTRED:
+        return centred_frame(inputs=inputs)
+    points = approach_points(inputs=inputs)
+    fit = approach_frame(inputs=inputs, points=points)
     if held is None or key is None:
         return fit
-    if key != frame_key(inputs=inputs, framing=framing):
+    own = frame_key(inputs=inputs, framing=framing, points=points)
+    if key != own or not holds(
+        inputs=inputs, frame=held, points=points, fresh=fit,
+    ):
         return fit
-    if not holds(inputs=inputs, frame=held):
-        return fit
-    centre, zoom = held
-    return replace(fit, centre=centre, zoom=zoom)
+    return replace(fit, centre=held[0], zoom=held[1])

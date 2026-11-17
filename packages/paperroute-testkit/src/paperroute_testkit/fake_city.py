@@ -153,9 +153,12 @@ class NorthbyFeeds:
     ----------
     projection : Projection
         The projection vehicle positions are placed in.
+    estimated : frozenset[str]
+        Sources whose trips are worked out from their positions.
     """
 
     projection: Projection
+    estimated: frozenset[str] = frozenset()
 
     @property
     def daily_limit(self) -> int:
@@ -181,9 +184,33 @@ class NorthbyFeeds:
         Returns
         -------
         str | None
-            'trips/<source>', or None for an unknown source.
+            'estimates/<source>' for an estimated source, else
+            'trips/<source>'; None for an unknown source.
         """
-        return f'trips/{source}' if source in NorthbyMode else None
+        if source not in NorthbyMode:
+            return None
+        if source in self.estimated:
+            return f'estimates/{source}'
+        return f'trips/{source}'
+
+    def estimated_from(self, *, feed: str) -> str | None:
+        """
+        Find the positions feed a trips feed is worked out from.
+
+        Parameters
+        ----------
+        feed : str
+            Feed path.
+
+        Returns
+        -------
+        str | None
+            'positions/<source>' for an estimated source's feed.
+        """
+        kind, _, source = feed.partition('/')
+        if kind == 'estimates' and source in self.estimated:
+            return f'positions/{source}'
+        return None
 
     def position_sources(self) -> frozenset[str]:
         """

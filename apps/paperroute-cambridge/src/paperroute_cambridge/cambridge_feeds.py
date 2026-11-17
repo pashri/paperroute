@@ -8,6 +8,8 @@ from paperroute_transit.core.feed_plan import FeedKind, FeedParsers
 from paperroute_transit.core.geo import MetreBox, Projection
 
 POSITIONS_FEED: Final[str] = 'bods/positions'
+ESTIMATES_FEED: Final[str] = 'bods/estimates'
+ESTIMATED_FROM: Final[dict[str, str]] = {ESTIMATES_FEED: POSITIONS_FEED}
 DAILY_LIMIT: Final[int] = 4_000  # counted fetches a day
 SOURCES: Final[frozenset[str]] = frozenset({'bus', 'coach'})
 TRIP_FEEDS: Final[dict[str, str]] = {}
@@ -85,6 +87,22 @@ class CambridgeFeeds:
             None: no source has one.
         """
         return TRIP_FEEDS.get(source)
+
+    def estimated_from(self, *, feed: str) -> str | None:
+        """
+        Find the positions feed a trips feed is worked out from.
+
+        Parameters
+        ----------
+        feed : str
+            Feed path.
+
+        Returns
+        -------
+        str | None
+            Its `ESTIMATED_FROM` entry, or None for a fetched feed.
+        """
+        return ESTIMATED_FROM.get(feed)
 
     def position_sources(self) -> frozenset[str]:
         """
@@ -168,9 +186,10 @@ class CambridgeFeeds:
         Returns
         -------
         FeedKind
-            POSITIONS.
+            ESTIMATES for the estimates feed; POSITIONS otherwise.
         """
-        del feed
+        if feed == ESTIMATES_FEED:
+            return FeedKind.ESTIMATES
         return FeedKind.POSITIONS
 
     def label(self, *, feed: str) -> str:
@@ -185,10 +204,13 @@ class CambridgeFeeds:
         Returns
         -------
         str
-            The name of the positions feed; any other path as it is.
+            The name of the positions or estimates feed; any other path
+            as it is.
         """
         if feed == POSITIONS_FEED:
             return 'Bus and coach positions'
+        if feed == ESTIMATES_FEED:
+            return 'Bus times from positions'
         return feed
 
     def parsers(self, *, feed: str) -> FeedParsers:

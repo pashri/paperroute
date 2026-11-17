@@ -8,6 +8,7 @@ from paperroute_transit.core.feed_plan import FeedKind, FeedParsers
 from paperroute_transit.core.geo import MetreBox, Projection, to_metres
 
 DAILY_LIMIT: Final[int] = 60_000  # API calls a day
+ESTIMATED_FROM: Final[dict[str, str]] = {}
 FEEDS: Final[dict[str, str]] = {
     'bus': 'v1/gtfs/realtime/buses',
     'train': 'v2/gtfs/realtime/sydneytrains',
@@ -233,6 +234,22 @@ class SydneyFeeds:
             Feed path, or None when the source has no live feed.
         """
         return FEEDS.get(source)
+
+    def estimated_from(self, *, feed: str) -> str | None:
+        """
+        Find the positions feed a trips feed is worked out from.
+
+        Parameters
+        ----------
+        feed : str
+            Feed path.
+
+        Returns
+        -------
+        str | None
+            Its `ESTIMATED_FROM` entry; none is worked out.
+        """
+        return ESTIMATED_FROM.get(feed)
 
     def position_sources(self) -> frozenset[str]:
         """

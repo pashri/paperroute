@@ -11,6 +11,7 @@ from paperroute_transit.adapters.feed_guard import FeedBackingOff, JoinedBody
 from paperroute_transit.app_connections import departures_read
 from paperroute_transit.app_effects import (
     WorkerEffect,
+    estimates_of,
     map_data,
     parse_feed,
     timed_async,
@@ -21,8 +22,10 @@ from paperroute_transit.app_ports import Ports
 from paperroute_transit.core.messages import (
     DeparturesFailed,
     Effect,
+    Estimating,
     Event,
     FeedFailed,
+    FeedFetched,
     FeedJoined,
     FetchFeed,
     LoadDepartures,
@@ -31,9 +34,11 @@ from paperroute_transit.core.messages import (
     LoadShapes,
     MapDataFailed,
     MapRequest,
+    PositionsFetched,
     RebuildTimetable,
     TimetableRebuilt,
 )
+from paperroute_transit.core.positions import PositionsSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +88,46 @@ def refusal_extra(*, error: Exception) -> dict[str, str]:
     """
     detail = error.detail if isinstance(error, FeedError) else ''
     return {'refusal': detail} if detail else {}
+
+
+async def estimate(
+    *,
+    ports: Ports,
+    ask: Estimating,
+    positions: PositionsSnapshot,
+    post: Callable[[Event], None],
+) -> None:
+    """
+    Work out trip times from positions and post them as a trips feed.
+
+    A failed timetable read is logged and posts nothing.
+
+    Parameters
+    ----------
+    ports : Ports
+        Adapters.
+    ask : Estimating
+        The trips to answer for.
+    positions : PositionsSnapshot
+        The download.
+    post : Callable[[Event], None]
+        Posts an event to the kit's queue.
+    """
+    try:
+        snapshot, ms = await timed_async(
+            call=asyncio.to_thread(
+                estimates_of,
+                timetable=ports.timetable,
+                measures=ports.measures,
+                positions=positions,
+                ask=ask,
+            )
+        )
+    except sqlite3.Error:
+        logger.exception('estimating trip times failed')
+        return
+    ports.observer.work_done(name=ask.feed, ms=ms)
+    post(FeedFetched(feed=ask.feed, snapshot=snapshot))
 
 
 async def fetch(
@@ -144,6 +189,13 @@ async def fetch(
         feed=effect.feed, fetch_ms=fetch_ms, parse_ms=parse_ms, trips=count
     )
     ports.observer.work_done(name=effect.feed, ms=parse_ms)
+    if isinstance(event, PositionsFetched) and effect.estimating:
+        await estimate(
+            ports=ports,
+            ask=effect.estimating,
+            positions=event.snapshot,
+            post=post,
+        )
     post(event)
     if isinstance(data, JoinedBody):
         post(FeedJoined(feed=effect.feed))

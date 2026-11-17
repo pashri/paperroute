@@ -9,6 +9,7 @@ from contextlib import closing
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from typing import Final
 
 import numpy as np
 import pytest
@@ -114,6 +115,7 @@ from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.geo import Point, Shape, make_shape
 from paperroute_transit.core.map_view import STRIP_MAP_WIDTH, MapBase, Marker
 from paperroute_transit.core.messages import (
+    Estimating,
     Event,
     FeedFailed,
     FeedFetched,
@@ -2773,3 +2775,70 @@ async def test_saver_writes_the_board_section(tmp_path: Path) -> None:
     turned = replace(kept.device, rotate=not kept.device.rotate)
     await saver.save(effect=SaveState(saved=replace(kept, device=turned)))
     assert states.load().device == turned
+
+
+ESTIMATING: Final[Estimating] = Estimating(
+    feed='estimates/bus',
+    trip_ids=frozenset({'none-of-these'}),
+    stale_after=timedelta(minutes=3),
+)
+POSITIONS_FETCH: Final[FetchFeed] = FetchFeed(
+    feed='v1/gtfs/vehiclepos/buses',
+    kind=FeedKind.POSITIONS,
+    estimating=ESTIMATING,
+)
+
+
+async def test_fetch_posts_estimates_before_positions() -> None:
+    """The estimates land before the positions that release the frame."""
+    ports = replace(
+        ports_of(timetable=BrokenTimetable()),
+        feeds=FileFeedsClient(directory=REAL),
+    )
+    posted: list[Event] = []
+    await fetch(ports=ports, effect=POSITIONS_FETCH, post=posted.append)
+    assert [type(event) for event in posted] == [FeedFetched, PositionsFetched]
+    first = posted[0]
+    assert isinstance(first, FeedFetched)
+    assert first.feed == 'estimates/bus' and not first.snapshot.trips
+
+
+class JoinFailingTimetable(BrokenTimetable):
+    """A timetable whose joins read fails."""
+
+    def joined_trips(self, *, trip_ids: Collection[str]) -> dict[str, str]:
+        """
+        Fail like a damaged database file.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Ignored.
+
+        Returns
+        -------
+        dict[str, str]
+            Never returns.
+
+        Raises
+        ------
+        sqlite3.OperationalError
+            Always.
+        """
+        del trip_ids
+        raise sqlite3.OperationalError('disk I/O error')
+
+
+async def test_fetch_posts_positions_when_estimating_fails(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failed estimate is logged; the positions still arrive."""
+    ports = replace(
+        ports_of(timetable=JoinFailingTimetable()),
+        feeds=FileFeedsClient(directory=REAL),
+    )
+    posted: list[Event] = []
+    with caplog.at_level(logging.ERROR):
+        await fetch(ports=ports, effect=POSITIONS_FETCH, post=posted.append)
+    assert [type(event) for event in posted] == [PositionsFetched]
+    assert 'estimating trip times failed' in caplog.text

@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from enum import StrEnum
 
 from paperroute_device.core.device_events import (
@@ -93,11 +93,32 @@ class LoadDepartures:
 
 
 @dataclass(frozen=True)
+class Estimating:
+    """
+    What a positions fetch also works out times for.
+
+    Attributes
+    ----------
+    feed : str
+        The derived trips feed.
+    trip_ids : frozenset[str]
+        The trips and aliases the board shows.
+    stale_after : timedelta
+        The oldest a position may be on the feed's clock.
+    """
+
+    feed: str
+    trip_ids: frozenset[str]
+    stale_after: timedelta
+
+
+@dataclass(frozen=True)
 class FetchFeed:
     """Download a realtime feed."""
 
     feed: str
     kind: FeedKind = FeedKind.TRIPS
+    estimating: Estimating | None = None
 
 
 @dataclass(frozen=True)

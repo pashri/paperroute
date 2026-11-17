@@ -3,6 +3,7 @@
 from paperroute_cambridge.area import CAMBRIDGE_PROJECTION
 from paperroute_cambridge.cambridge_feeds import (
     DAILY_LIMIT,
+    ESTIMATES_FEED,
     POSITIONS_FEED,
     CambridgeFeeds,
 )
@@ -60,3 +61,11 @@ def test_parsers_read_positions_in_the_projection() -> None:
     body = positions_body(vehicles=(('3300', 'VJ1', '57428', 'L7', 990),))
     snapshot = readers.positions(data=body, fetched_at=NOW)
     assert [vehicle.label for vehicle in snapshot.vehicles] == ['L7']
+
+
+def test_estimates_are_worked_out_from_the_positions_feed() -> None:
+    """The estimates feed comes from the positions feed and is never fetched."""
+    assert PLAN.estimated_from(feed=ESTIMATES_FEED) == POSITIONS_FEED
+    assert PLAN.estimated_from(feed=POSITIONS_FEED) is None
+    assert PLAN.kind(feed=ESTIMATES_FEED) is FeedKind.ESTIMATES
+    assert PLAN.label(feed=ESTIMATES_FEED) == 'Bus times from positions'

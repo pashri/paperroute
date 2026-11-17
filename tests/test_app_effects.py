@@ -29,7 +29,15 @@ from paperroute_sydney.city import (
 )
 from paperroute_sydney.sydney_feeds import SydneyFeeds
 from paperroute_testkit.adapters.rt_factory import feed as rt_feed
-from paperroute_testkit.core.factories import pin_of, place
+from paperroute_testkit.core.factories import (
+    EIGHT,
+    START,
+    pattern,
+    pin_of,
+    place,
+    snapshot,
+    vehicle,
+)
 from paperroute_testkit.core.kit_steps import QUIET_PARTS
 from paperroute_testkit.fakes import (
     STOP_POINT,
@@ -47,6 +55,7 @@ from paperroute_testkit.render.factories import (
 from paperroute_transit.adapters.tiles_db import NullTiles
 from paperroute_transit.app_effects import (
     VersionWatch,
+    estimates_of,
     labelled_positions,
     parse_feed,
 )
@@ -66,6 +75,7 @@ from paperroute_transit.core.messages import (
     ChooserDeparturesLoaded,
     ColumnFailed,
     ColumnLoaded,
+    Estimating,
     FetchFeed,
     HolidaysLoaded,
     LineFailed,
@@ -87,6 +97,7 @@ from paperroute_transit.core.messages import (
     TimetableSeen,
 )
 from paperroute_transit.core.model import Pin, ServiceSpan, StopPlace
+from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.positions import (
     PositionsSnapshot,
     VehiclePosition,
@@ -99,6 +110,7 @@ from paperroute_transit.core.reach import (
 )
 from paperroute_transit.core.realtime import RealtimeSnapshot
 from paperroute_transit.core.saved import seeded
+from paperroute_transit.measures import StopMeasures
 from paperroute_transit.render.chooser import draw_chooser_view
 from paperroute_transit.render.stop_view import draw_stop_view
 from paperroute_transit.render.strip_view import draw_strip_view
@@ -1244,3 +1256,89 @@ def test_labelled_positions_falls_back_to_the_route() -> None:
     timetable = StubTimetable(city=replace(SYDNEY, route_fallback=True))
     assert labels(timetable) == ['A', 'PR1', '777']
     assert timetable.asked == 1
+
+
+LATER_STOPS: Final = (  # 8:15 from (1000, 0) to (0, 0) at 8:25
+    PatternStop(arrives=EIGHT + 900, departs=EIGHT + 900, point=(1000.0, 0.0)),
+    PatternStop(arrives=EIGHT + 1500, departs=EIGHT + 1500, point=(0.0, 0.0)),
+)
+
+
+@dataclass
+class PatternTimetable(EmptyPlacedTimetable):
+    """A timetable that knows some patterns and joins, and notes each ask."""
+
+    found: dict[str, TripPattern] = field(default_factory=dict)
+    joins: dict[str, str] = field(default_factory=dict)
+    asked: list[frozenset[str]] = field(default_factory=list)
+
+    def patterns(
+        self, *, trip_ids: Collection[str], around: date
+    ) -> dict[str, TripPattern]:
+        """
+        Give the known patterns among the trips, noting the ask.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Trips asked for.
+        around : date
+            Ignored.
+
+        Returns
+        -------
+        dict[str, TripPattern]
+            The known ones.
+        """
+        del around
+        self.asked.append(frozenset(trip_ids))
+        return {k: v for k, v in self.found.items() if k in trip_ids}
+
+    def joined_trips(self, *, trip_ids: Collection[str]) -> dict[str, str]:
+        """
+        Give the known joins of the trips.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Trips asked for.
+
+        Returns
+        -------
+        dict[str, str]
+            Joined trip by trip.
+        """
+        return {k: v for k, v in self.joins.items() if k in trip_ids}
+
+
+def test_estimates_of_answers_only_the_asked_trips() -> None:
+    """Only the board's trips are answered; trips that join them are read."""
+    timetable = PatternTimetable(
+        found={
+            't1': replace(pattern(trip_id='t1'), next_trip='t2'),
+            't2': pattern(trip_id='t2', stops=LATER_STOPS),
+            't3': pattern(trip_id='t3'),
+        },
+        joins={'t1': 't2'},
+    )
+    when = int((START + timedelta(minutes=12)).timestamp())
+    positions = snapshot(
+        fetched_at=START + timedelta(minutes=12),
+        vehicles=(
+            vehicle(timestamp=when, trip_id='t1', point=(500.0, 0.0)),
+            vehicle(timestamp=when, trip_id='t3', point=(500.0, 0.0)),
+        ),
+    )
+    found = estimates_of(
+        timetable=timetable,
+        measures=StopMeasures(),
+        positions=positions,
+        ask=Estimating(
+            feed='estimates/bus',
+            trip_ids=frozenset({'t2'}),
+            stale_after=timedelta(minutes=2),
+        ),
+    )
+    assert set(found.trips) == {'t2'}
+    assert found.trips['t2'].updates[0].departure_delay == 240
+    assert timetable.asked == [frozenset({'t1', 't2'})]

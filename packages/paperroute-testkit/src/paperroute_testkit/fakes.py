@@ -334,6 +334,23 @@ class BrokenTimetable:
         """
         return {}
 
+    def joined_trips(self, *, trip_ids: Collection[str]) -> dict[str, str]:
+        """
+        Know no joins.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Ignored.
+
+        Returns
+        -------
+        dict[str, str]
+            Nothing.
+        """
+        del trip_ids
+        return {}
+
     def route_labels(self, *, trip_ids: Collection[str]) -> dict[str, str]:
         """
         Know no routes.

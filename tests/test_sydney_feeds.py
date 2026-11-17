@@ -4,6 +4,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Final
 
+import pytest
+
 from paperroute_sydney.city import (
     SYDNEY,
     SYDNEY_PROJECTION,
@@ -205,3 +207,11 @@ def test_parsers_place_positions_in_the_projection() -> None:
     )
     assert read == direct
     assert read.vehicles
+
+
+@pytest.mark.parametrize(
+    'feed', ['v1/gtfs/realtime/buses', 'v1/gtfs/vehiclepos/buses'],
+)
+def test_sydney_works_out_no_feed(feed: str) -> None:
+    """Every Sydney feed is fetched."""
+    assert PLAN.estimated_from(feed=feed) is None

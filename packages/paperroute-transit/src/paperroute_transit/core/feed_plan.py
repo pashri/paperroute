@@ -18,6 +18,7 @@ class FeedKind(StrEnum):
     TRIPS = 'trips'
     POSITIONS = 'positions'
     ALERTS = 'alerts'
+    ESTIMATES = 'estimates'
 
 
 class TripsParser(Protocol):
@@ -138,6 +139,21 @@ class FeedPlan(Protocol):
         -------
         str | None
             Feed path, or None when the source has no live feed.
+        """
+
+    def estimated_from(self, *, feed: str) -> str | None:
+        """
+        Find the positions feed a trips feed is worked out from.
+
+        Parameters
+        ----------
+        feed : str
+            Feed path.
+
+        Returns
+        -------
+        str | None
+            The positions feed, or None for a feed that is fetched.
         """
 
     def position_sources(self) -> frozenset[str]:

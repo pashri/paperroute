@@ -19,12 +19,14 @@ from paperroute_transit.core.alert_model import (
     Informed,
     LoadBetween,
 )
+from paperroute_transit.core.estimates import estimated_snapshot
 from paperroute_transit.core.feed_plan import FeedKind, FeedParsers, FeedPlan
 from paperroute_transit.core.messages import (
     ChooserDeparturesFailed,
     ChooserDeparturesLoaded,
     ColumnFailed,
     ColumnLoaded,
+    Estimating,
     Event,
     FeedFetched,
     FetchFeed,
@@ -60,6 +62,7 @@ from paperroute_transit.core.positions import (
     with_route_labels,
 )
 from paperroute_transit.core.reach import build_reach
+from paperroute_transit.core.realtime import RealtimeSnapshot
 from paperroute_transit.measures import StopMeasures
 from paperroute_transit.ports import NetworkRepository, TimetableRepository
 
@@ -799,6 +802,61 @@ def loaded_patterns(
     }
     return PatternsLoaded(
         trip_ids=effect.trip_ids, patterns=patterns, shapes=shapes
+    )
+
+
+def estimates_of(
+    *,
+    timetable: TimetableRepository,
+    measures: StopMeasures,
+    positions: PositionsSnapshot,
+    ask: Estimating,
+) -> RealtimeSnapshot:
+    """
+    Work out trip times from a positions download.
+
+    Parameters
+    ----------
+    timetable : TimetableRepository
+        Timetable.
+    measures : StopMeasures
+        Stop places already worked out, reused per shape and stops.
+    positions : PositionsSnapshot
+        The download.
+    ask : Estimating
+        The trips to answer for.
+
+    Returns
+    -------
+    RealtimeSnapshot
+        Estimated times of the asked trips; empty when no vehicle runs
+        one of them or a trip that joins into one.
+    """
+    seen = {v.trip_id for v in positions.vehicles if v.trip_id}
+    joins = timetable.joined_trips(trip_ids=seen)
+    matter = {
+        trip
+        for trip in seen
+        if trip in ask.trip_ids or joins.get(trip) in ask.trip_ids
+    }
+    if not matter:
+        return RealtimeSnapshot(fetched_at=positions.fetched_at, trips={})
+    wanted = matter | {joins[trip] for trip in matter if trip in joins}
+    loaded = loaded_patterns(
+        timetable=timetable,
+        effect=LoadPatterns(
+            trip_ids=frozenset(wanted),
+            day=positions.fetched_at.astimezone(timetable.city.zone).date(),
+        ),
+        measures=measures,
+    )
+    return estimated_snapshot(
+        positions=positions,
+        patterns=loaded.patterns,
+        shapes=loaded.shapes,
+        trip_ids=ask.trip_ids,
+        limit=ask.stale_after,
+        zone=timetable.city.zone,
     )
 
 

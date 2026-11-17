@@ -180,6 +180,21 @@ class TimetableRepository(Protocol):
             Patterns by requested ID; unknown trips are absent.
         """
 
+    def joined_trips(self, *, trip_ids: Collection[str]) -> dict[str, str]:
+        """
+        Find the trip each trip's vehicle runs on through as.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Trip IDs.
+
+        Returns
+        -------
+        dict[str, str]
+            Joined trip by trip ID; empty for a file without joins.
+        """
+
     def route_labels(self, *, trip_ids: Collection[str]) -> dict[str, str]:
         """
         Route short names by trip or alias.

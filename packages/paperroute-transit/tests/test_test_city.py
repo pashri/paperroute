@@ -16,7 +16,11 @@ from paperroute_testkit.city_setting import (
     street_mode,
 )
 from paperroute_testkit.core.factories import START, TRAIN
-from paperroute_testkit.fake_city import TEST_CITY
+from paperroute_testkit.fake_city import (
+    TEST_CITY,
+    TEST_PROJECTION,
+    NorthbyFeeds,
+)
 from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.modes import mode_problems
 
@@ -101,3 +105,18 @@ def test_test_city_feeds() -> None:
     assert feeds.position_sources() == frozenset({'bus', 'rail', 'tram'})
     assert feeds.daily_limit > 0
     assert feeds.parsers(feed='trips/bus').trips is not None
+
+
+def test_northby_can_estimate_a_sources_trips() -> None:
+    """An estimated source's trips feed comes from its positions."""
+    feeds = NorthbyFeeds(
+        projection=TEST_PROJECTION, estimated=frozenset({'bus'}),
+    )
+    assert feeds.trip_feed(source='bus') == 'estimates/bus'
+    assert feeds.trip_feed(source='rail') == 'trips/rail'
+    assert feeds.estimated_from(feed='estimates/bus') == 'positions/bus'
+    assert feeds.estimated_from(feed='estimates/rail') is None
+    assert feeds.kind(feed='estimates/bus') is FeedKind.ESTIMATES
+    assert NorthbyFeeds(projection=TEST_PROJECTION).trip_feed(
+        source='bus',
+    ) == 'trips/bus'

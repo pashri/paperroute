@@ -1,23 +1,28 @@
 """Tests for the poll cycle timing."""
 
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
+from typing import Final
 from zoneinfo import ZoneInfo
 
 import pytest
 
 from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction, WifiStatus
+from paperroute_device.core.device_settings import Window
 from paperroute_device.core.kit_effects import Render
 from paperroute_device.core.kit_events import DeviceProbed, Tick
 from paperroute_device.core.panel_views import NoticeView
 from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
-from paperroute_testkit.core.factories import START, departure, snapshot
+from paperroute_sydney.city import SYDNEY as SYDNEY_CITY
+from paperroute_testkit.core.factories import START, begun, departure, snapshot
 from paperroute_testkit.core.kit_steps import settings_posted, step
 from paperroute_testkit.core.steps import slept
+from paperroute_testkit.fake_city import TEST_PROJECTION, NorthbyFeeds
 from paperroute_transit.core.alert_model import AlertsFetched, AlertsSnapshot
 from paperroute_transit.core.alert_state import ALERT_EVERY
+from paperroute_transit.core.city import City
 from paperroute_transit.core.cycle import (
     alerts_due,
     answered,
@@ -28,6 +33,7 @@ from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.messages import (
     DeparturesLoaded,
     Effect,
+    Estimating,
     Event,
     FeedFailed,
     FeedFetched,
@@ -43,14 +49,31 @@ from paperroute_transit.core.realtime import (
     StopUpdate,
     TripRealtime,
 )
+from paperroute_transit.core.rhythm import stale_after
+from paperroute_transit.core.saved import seeded
 from paperroute_transit.core.state_model import RELOAD_BEFORE, Cycle, State
 from paperroute_transit.core.state_views import current_view, live_stop_view
 from paperroute_transit.core.stop_view import HORIZON
 from tests.core.test_quiet import at as quiet_at
 from tests.core.test_quiet import evening
-from tests.core.test_state import ALERTS, BUSES, CENTRE, PRESS, fresh, loaded
+from tests.core.test_state import (
+    ALERTS,
+    BUSES,
+    CENTRE,
+    PIN,
+    PRESS,
+    fresh,
+    loaded,
+)
 
 SYDNEY = ZoneInfo('Australia/Sydney')
+MIDNIGHT: Final[datetime] = START.replace(hour=0, minute=0)
+ESTIMATING_CITY: Final[City] = replace(
+    SYDNEY_CITY,
+    feeds=NorthbyFeeds(
+        projection=TEST_PROJECTION, estimated=frozenset({'bus'}),
+    ),
+)
 
 
 def _at(hour: int, minute: int, second: int = 0) -> datetime:
@@ -516,3 +539,146 @@ def test_notice_not_held() -> None:
     _, effects = step(state, PowerRequested(action=PowerAction.OFF))
     [render] = _renders(effects=effects)
     assert isinstance(render.view, NoticeView)
+
+
+def estimating_board() -> State:
+    """Three buses on the Stop view of a city that estimates bus times."""
+    pin = replace(PIN, origin=replace(PIN.origin, point=CENTRE))
+    state = begun(saved=seeded(pin=pin, city=ESTIMATING_CITY))
+    return loaded(state=replace(state, city=ESTIMATING_CITY))
+
+
+def asked_of(*, state: State) -> Estimating:
+    """The estimating request a state's board should send."""
+    return Estimating(
+        feed='estimates/bus',
+        trip_ids=frozenset(dep.trip_id for dep in state.board.departures),
+        stale_after=stale_after(state=state),
+    )
+
+
+def test_estimates_feed_is_never_fetched() -> None:
+    """The derived feed is asked through its positions feed."""
+    state = estimating_board()
+    _, effects = _ticked(state=state, seconds=5 * 60)
+    fetches = _fetches(effects=effects)
+    assert 'estimates/bus' not in {fetch.feed for fetch in fetches}
+    assert FetchFeed(
+        feed='positions/bus',
+        kind=FeedKind.POSITIONS,
+        estimating=asked_of(state=state),
+    ) in fetches
+
+
+def test_estimates_are_asked_not_waited_on() -> None:
+    """The cycle waits for the positions, never for the derived feed."""
+    state, _ = _ticked(state=estimating_board(), seconds=5 * 60)
+    assert 'estimates/bus' in state.cycle.asked
+    assert 'estimates/bus' not in state.cycle.waiting
+    assert 'positions/bus' in state.cycle.waiting
+
+
+def test_map_positions_also_estimate() -> None:
+    """On the Map, the one positions fetch carries the estimates."""
+    state, _ = step(estimating_board(), PRESS)
+    _, effects = _ticked(state=state, seconds=5 * 60)
+    positions = [
+        fetch for fetch in _fetches(effects=effects)
+        if fetch.feed == 'positions/bus'
+    ]
+    assert [fetch.estimating for fetch in positions] == [
+        asked_of(state=state),
+    ]
+
+
+def test_departures_loading_on_the_map_ask_for_estimates_at_once() -> None:
+    """Departures arriving mid-cycle on the Map ask the positions again."""
+    pin = replace(PIN, origin=replace(PIN.origin, point=CENTRE))
+    state = begun(saved=seeded(pin=pin, city=ESTIMATING_CITY))
+    state, _ = step(replace(state, city=ESTIMATING_CITY), PRESS)
+    started = state.cycle.started
+    assert started is not None
+    state = replace(state, now=START + timedelta(seconds=10))
+    state, effects = step(
+        state,
+        DeparturesLoaded(
+            pin=shown(state=state),
+            departures=(departure(departs=START + timedelta(minutes=3)),),
+            until=START + HORIZON + RELOAD_BEFORE,
+        ),
+    )
+    assert state.cycle.started == started
+    assert 'estimates/bus' in state.cycle.asked
+    assert FetchFeed(
+        feed='positions/bus',
+        kind=FeedKind.POSITIONS,
+        estimating=asked_of(state=state),
+    ) in _fetches(effects=effects)
+
+
+def test_estimates_poll_once_a_cycle() -> None:
+    """Over an hour the Stop view asks positions as often as Sydney's trips."""
+    counts = []
+    for state, feed in (
+        (estimating_board(), 'positions/bus'),
+        (loaded(state=fresh(centre=CENTRE)), BUSES),
+    ):
+        sent = 0
+        for seconds in range(0, 3600, 15):
+            state, effects = _ticked(state=state, seconds=seconds)
+            sent += sum(
+                fetch.feed == feed for fetch in _fetches(effects=effects)
+            )
+        counts.append(sent)
+    assert counts[0] == counts[1] > 0
+
+
+def test_sydney_fetches_estimate_nothing() -> None:
+    """No Sydney fetch carries an estimating request."""
+    state, _ = step(loaded(state=fresh()), PRESS)
+    _, effects = _ticked(state=state, seconds=5 * 60)
+    assert all(
+        fetch.estimating is None for fetch in _fetches(effects=effects)
+    )
+
+
+def test_an_estimating_board_shows_the_usual_banners() -> None:
+    """No data yet, then nothing, then no live data since the fetch."""
+    state = estimating_board()
+    assert live_stop_view(state=state).banner == (
+        'Timetable times · no live data yet'
+    )
+    state, _ = step(
+        state,
+        FeedFetched(
+            feed='estimates/bus',
+            snapshot=RealtimeSnapshot(fetched_at=START, trips={}),
+        ),
+    )
+    assert live_stop_view(state=state).banner is None
+    late = START + stale_after(state=state) + timedelta(minutes=1)
+    state, _ = step(state, Tick(now=late))
+    assert live_stop_view(state=state).banner == 'No live data since 8:00'
+
+
+def test_estimates_day_of_polling_stays_inside_the_first_guard() -> None:
+    """A weekday polls positions at most 1,170 times, never the derived feed."""
+    city = replace(
+        ESTIMATING_CITY,
+        peak_windows=(
+            Window(start=time(7), end=time(9, 30)),
+            Window(start=time(16), end=time(18, 30)),
+        ),
+    )
+    pin = replace(PIN, origin=replace(PIN.origin, point=CENTRE))
+    state = begun(saved=seeded(pin=pin, city=city), now=MIDNIGHT)
+    state = loaded(state=replace(state, city=city, now=MIDNIGHT))
+    feeds: list[str] = []
+    for seconds in range(0, 24 * 3600, 15):
+        state, effects = step(
+            state, Tick(now=MIDNIGHT + timedelta(seconds=seconds)),
+        )
+        feeds += [fetch.feed for fetch in _fetches(effects=effects)]
+    positions = [feed for feed in feeds if feed == 'positions/bus']
+    assert 'estimates/bus' not in feeds
+    assert 600 <= len(positions) <= 1_170

@@ -12,7 +12,7 @@ ESTIMATES_FEED: Final[str] = 'bods/estimates'
 ESTIMATED_FROM: Final[dict[str, str]] = {ESTIMATES_FEED: POSITIONS_FEED}
 DAILY_LIMIT: Final[int] = 4_000  # counted fetches a day
 SOURCES: Final[frozenset[str]] = frozenset({'bus', 'coach'})
-TRIP_FEEDS: Final[dict[str, str]] = {}
+TRIP_FEEDS: Final[dict[str, str]] = {'bus': ESTIMATES_FEED}
 SINGLE_LINE_TYPES: Final[dict[str, int]] = {}
 
 
@@ -84,7 +84,7 @@ class CambridgeFeeds:
         Returns
         -------
         str | None
-            None: no source has one.
+            The estimates feed for buses; None for coaches.
         """
         return TRIP_FEEDS.get(source)
 

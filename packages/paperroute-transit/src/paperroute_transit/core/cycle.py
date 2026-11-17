@@ -1,16 +1,22 @@
 """Clock-aligned timing of the poll cycles."""
 
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
 from paperroute_transit.core.alert_state import ALERT_EVERY, alert_feeds
 from paperroute_transit.core.banners import feeds_held
-from paperroute_transit.core.chooser_steps import trip_feeds
+from paperroute_transit.core.chains import all_departures
+from paperroute_transit.core.chooser_steps import (
+    departures_chooser,
+    trip_feeds,
+)
 from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.map_requests import map_feeds, shows_vehicles
-from paperroute_transit.core.messages import Effect, FetchFeed
-from paperroute_transit.core.rhythm import poll_every
+from paperroute_transit.core.map_view import pin_trips
+from paperroute_transit.core.messages import Effect, Estimating, FetchFeed
+from paperroute_transit.core.rhythm import poll_every, stale_after
 from paperroute_transit.core.state_model import (
     Cycle,
     State,
@@ -144,6 +150,110 @@ def vehicle_feeds(*, state: State) -> tuple[str, ...]:
     return map_feeds(state=state)
 
 
+def estimate_trips(*, state: State) -> frozenset[str]:
+    """
+    Collect the trips the board and the open chooser hold.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    frozenset[str]
+        The trip IDs and aliases of every departure the board holds, and
+        of the chooser's departures while it holds some.
+    """
+    board = state.board
+    held = all_departures(departures=board.departures, legs=board.legs)
+    chooser = departures_chooser(state=state)
+    extra = () if chooser is None else chooser.departures
+    return pin_trips(departures=(*held, *extra))
+
+
+def fetched_trip_feeds(*, state: State) -> tuple[str, ...]:
+    """
+    List the trip-updates feeds that are downloaded.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The trip-updates feeds less those worked out from positions.
+    """
+    return tuple(
+        feed
+        for feed in trip_feeds(state=state)
+        if state.city.feeds.estimated_from(feed=feed) is None
+    )
+
+
+def estimating(*, state: State) -> dict[str, Estimating]:
+    """
+    Make the estimating request for each derived feed in use.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    dict[str, Estimating]
+        By positions feed, what its fetch also works out.
+    """
+    plan, asks = state.city.feeds, {}
+    for feed in trip_feeds(state=state):
+        source = plan.estimated_from(feed=feed)
+        if source is not None:
+            asks[source] = Estimating(
+                feed=feed,
+                trip_ids=estimate_trips(state=state),
+                stale_after=stale_after(state=state),
+            )
+    return asks
+
+
+def positions_due(
+    *,
+    state: State,
+    asked: frozenset[str],
+    asks: Mapping[str, Estimating],
+) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """
+    Choose the positions feeds to fetch now.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    asked : frozenset[str]
+        Feeds already asked for this cycle.
+    asks : Mapping[str, Estimating]
+        The estimating requests, by positions feed.
+
+    Returns
+    -------
+    tuple[tuple[str, ...], tuple[str, ...]]
+        The positions feeds: the screen's unasked ones, then the source of
+        each derived feed not yet asked, each once; and those derived
+        feeds.
+    """
+    positions = unasked(feeds=vehicle_feeds(state=state), asked=asked)
+    derived = tuple(
+        ask.feed for ask in asks.values() if ask.feed not in asked
+    )
+    sources = tuple(
+        feed for feed, ask in asks.items() if ask.feed not in asked
+    )
+    return tuple(dict.fromkeys((*positions, *sources))), derived
+
+
 def needed_feeds(*, state: State) -> tuple[str, ...]:
     """
     List every trip-updates and positions feed the screen polls.
@@ -156,10 +266,19 @@ def needed_feeds(*, state: State) -> tuple[str, ...]:
     Returns
     -------
     tuple[str, ...]
-        The trip-updates feeds, then the positions feeds of a screen that
-        draws vehicles.
+        The fetched trip-updates feeds, then the positions feeds of a
+        screen that draws vehicles, then the positions feeds that
+        estimates are worked out from, each once.
     """
-    return (*trip_feeds(state=state), *vehicle_feeds(state=state))
+    return tuple(
+        dict.fromkeys(
+            (
+                *fetched_trip_feeds(state=state),
+                *vehicle_feeds(state=state),
+                *estimating(state=state),
+            ),
+        ),
+    )
 
 
 def alert_asked(*, state: State, feed: str) -> bool:
@@ -255,7 +374,12 @@ def recorded(
 
 
 def joined(
-    *, state: State, due: bool, full: bool, sent: tuple[str, ...]
+    *,
+    state: State,
+    due: bool,
+    full: bool,
+    sent: tuple[str, ...],
+    derived: tuple[str, ...] = (),
 ) -> Cycle:
     """
     Add the feeds fetched now to the cycle, or start a new one with them.
@@ -270,24 +394,28 @@ def joined(
         Whether every alert feed is asked for again.
     sent : tuple[str, ...]
         The feeds fetched now.
+    derived : tuple[str, ...]
+        The derived feeds asked for through a positions fetch.
 
     Returns
     -------
     Cycle
-        A new cycle started now asking for and waiting on `sent`, or the
-        cycle under way with `sent` added to both. The alerts' time moves
-        to now when they all went out, or when none had before.
+        A new cycle started now asking for `sent` and `derived` and
+        waiting on `sent`, or the cycle under way with them added. The alerts'
+        time moves to now when they all went out, or when none had
+        before.
     """
     cycle, now, names = state.cycle, state.now, frozenset(sent)
+    every = names | frozenset(derived)
     if full or cycle.alerts_at is None:
         alerts = names & frozenset(alert_feeds(state=state))
         cycle = replace(
             cycle, alerts_at=now if alerts else cycle.alerts_at,
         )
     if due:
-        return replace(cycle, started=now, asked=names, waiting=names)
+        return replace(cycle, started=now, asked=every, waiting=names)
     return replace(
-        cycle, asked=cycle.asked | names, waiting=cycle.waiting | names,
+        cycle, asked=cycle.asked | every, waiting=cycle.waiting | names,
     )
 
 
@@ -337,18 +465,25 @@ def cycle_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     due = cycle_due(cycle=cycle, now=now, every=poll_every(state=state))
     asked = frozenset() if due else cycle.asked
     full = due and alerts_due(cycle=cycle, now=now)
-    trips = unasked(feeds=trip_feeds(state=state), asked=asked)
-    positions = unasked(feeds=vehicle_feeds(state=state), asked=asked)
+    asks = estimating(state=state)
+    trips = unasked(feeds=fetched_trip_feeds(state=state), asked=asked)
+    positions, derived = positions_due(state=state, asked=asked, asks=asks)
     alerts = alerts_sent(state=state, full=full)
     if not (trips or positions or alerts):
         return state, ()
     cycle = joined(
-        state=state, due=due, full=full, sent=(*trips, *positions, *alerts),
+        state=state,
+        due=due,
+        full=full,
+        sent=(*trips, *positions, *alerts),
+        derived=derived,
     )
     state = recorded(
         state=state, trips=trips, positions=positions, alerts=alerts,
     )
-    fetches = fetches_of(trips=trips, positions=positions, alerts=alerts)
+    fetches = fetches_of(
+        trips=trips, positions=positions, alerts=alerts, asks=asks,
+    )
     return replace(state, cycle=cycle), fetches
 
 
@@ -357,6 +492,7 @@ def fetches_of(
     trips: tuple[str, ...],
     positions: tuple[str, ...],
     alerts: tuple[str, ...],
+    asks: Mapping[str, Estimating] | None = None,
 ) -> tuple[Effect, ...]:
     """
     Make a FetchFeed for each feed.
@@ -369,15 +505,26 @@ def fetches_of(
         The positions feeds.
     alerts : tuple[str, ...]
         The alert feeds.
+    asks : Mapping[str, Estimating] | None
+        The estimating requests, by positions feed.
 
     Returns
     -------
     tuple[Effect, ...]
-        The fetches, in that order.
+        The fetches, in that order; a positions fetch carries its
+        estimating request, if any.
     """
+    asks = asks or {}
     return (
         *(FetchFeed(feed=feed) for feed in trips),
-        *(FetchFeed(feed=feed, kind=FeedKind.POSITIONS) for feed in positions),
+        *(
+            FetchFeed(
+                feed=feed,
+                kind=FeedKind.POSITIONS,
+                estimating=asks.get(feed),
+            )
+            for feed in positions
+        ),
         *(FetchFeed(feed=feed, kind=FeedKind.ALERTS) for feed in alerts),
     )
 

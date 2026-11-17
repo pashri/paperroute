@@ -28,6 +28,7 @@ from paperroute_transit.core.city import (
     TimetableRules,
 )
 from paperroute_transit.core.geo import to_metres
+from paperroute_transit.core.map_places import MapPlaces
 from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.modes import ModeSpec, RouteClass
 from paperroute_transit.core.positions import ParkedAge
@@ -210,6 +211,24 @@ def cambridge_line_group(*, number: str) -> int:
     return 0
 
 
+MAP_PLACES: Final[MapPlaces] = MapPlaces(
+    kinds=frozenset({'suburb', 'town', 'village'}),
+    # The first nine are council wards, placed at the middle of their
+    # buildings; the last two are OSM localities worth keeping.
+    extras=(
+        ('Abbey', 52.2127, 0.1586),
+        ('Arbury', 52.2228, 0.1167),
+        ('Castle', 52.2189, 0.1044),
+        ('Coleridge', 52.1904, 0.1505),
+        ('East Chesterton', 52.2215, 0.1459),
+        ("King's Hedges", 52.2294, 0.1340),
+        ('Market', 52.2055, 0.1239),
+        ("Queen Edith's", 52.1804, 0.1491),
+        ('West Chesterton', 52.2175, 0.1290),
+        ('Darwin Green', 52.2251, 0.1006),
+        ('Franklin Gardens', 52.2293, 0.1082),
+    ),
+)
 CAMBRIDGE_CATALOGUE: Final[CatalogueRules] = CatalogueRules(
     line_sort={},
     replacement=NEVER,
@@ -218,6 +237,7 @@ CAMBRIDGE_CATALOGUE: Final[CatalogueRules] = CatalogueRules(
     rail_types=frozenset(),
     line_group=cambridge_line_group,
     places=PlaceNames(centres=CENTRES, suffix=PLACE_SUFFIX, short={}),
+    map_places=MAP_PLACES,
 )
 CAMBRIDGE_ALERTS: Final[AlertRules] = AlertRules(
     name_suffixes=(),

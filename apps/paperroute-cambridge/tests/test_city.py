@@ -136,3 +136,22 @@ def test_the_source_name_is_the_holiday_source_and_the_route_prefix() -> None:
 def test_the_cambridge_timetable_is_compacted() -> None:
     """Cambridge asks for a vacuumed timetable file."""
     assert CAMBRIDGE.timetable.compact
+
+
+def test_map_places_drop_localities_and_add_the_named_places() -> None:
+    """Cambridge draws no locality and names eleven places of its own."""
+    rules = CAMBRIDGE.catalogue.map_places
+    assert rules.kinds == {'suburb', 'town', 'village'}
+    assert rules.extras == (
+        ('Abbey', 52.2127, 0.1586),
+        ('Arbury', 52.2228, 0.1167),
+        ('Castle', 52.2189, 0.1044),
+        ('Coleridge', 52.1904, 0.1505),
+        ('East Chesterton', 52.2215, 0.1459),
+        ("King's Hedges", 52.2294, 0.1340),
+        ('Market', 52.2055, 0.1239),
+        ("Queen Edith's", 52.1804, 0.1491),
+        ('West Chesterton', 52.2175, 0.1290),
+        ('Darwin Green', 52.2251, 0.1006),
+        ('Franklin Gardens', 52.2293, 0.1082),
+    )

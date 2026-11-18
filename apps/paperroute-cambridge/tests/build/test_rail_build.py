@@ -858,3 +858,31 @@ def test_each_source_declares_a_size_limit() -> None:
     assert [spec.size_limit for spec in CAMBRIDGE_SOURCES] == [
         250_000_000, 150_000_000,
     ]
+
+
+def no_coordinates(tables: dict[str, list[dict[str, str]]]) -> None:
+    """
+    Give every stop 'nan' for its latitude and longitude.
+
+    Parameters
+    ----------
+    tables : dict[str, list[dict[str, str]]]
+        Rows by member, changed in place.
+    """
+    for row in tables['stops.txt']:
+        row['stop_lat'] = row['stop_lon'] = 'nan'
+
+
+def test_a_rail_file_without_coordinates_keeps_the_earlier_trains(
+    data_dir: Path, tmp_path: Path,
+) -> None:
+    """Trains whose stations have no place are refused, not lost."""
+    shelf = Shelf(files={'bods': BODS, 'rail': RAIL})
+    night(data_dir=data_dir, shelf=shelf)
+    shelf.files['rail'] = changed(
+        out=tmp_path / 'bad.zip', change=no_coordinates,
+    )
+    report = night(data_dir=data_dir, shelf=shelf)
+    assert (report.failed, report.all_failed) == (('rail',), False)
+    assert trip_counts(data_dir=data_dir) == {'bods': 67, 'rail': 5}
+    assert rail_date(data_dir=data_dir) == date(2026, 11, 16)

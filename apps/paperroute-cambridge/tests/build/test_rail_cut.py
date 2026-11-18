@@ -4,6 +4,7 @@ import logging
 import zipfile
 from collections import Counter
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import Final
 
@@ -472,3 +473,48 @@ def test_kept_trips_with_no_service_days_are_refused(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match='no service days for the trips'):
         cut_rail(archive=archive, out=tmp_path / 'cut.zip')
     assert not (tmp_path / 'cut.zip').exists()
+
+
+def misplaced(
+    tables: dict[str, list[dict[str, str]]], *, stop_id: str, value: str,
+) -> None:
+    """
+    Give one stop the same value for its latitude and longitude.
+
+    Parameters
+    ----------
+    tables : dict[str, list[dict[str, str]]]
+        Rows by member, changed in place.
+    stop_id : str
+        The stop.
+    value : str
+        Written to both columns.
+    """
+    for row in tables['stops.txt']:
+        if row['stop_id'] == stop_id:
+            row['stop_lat'] = row['stop_lon'] = value
+
+
+@pytest.mark.parametrize('value', ['nan', '', 'inf', '200'])
+@pytest.mark.parametrize('stop_id', ['9100BHAMNWS', '910GCAMBDGE'])
+def test_a_kept_stop_without_usable_coordinates_is_refused(
+    tmp_path: Path, stop_id: str, value: str,
+) -> None:
+    """A kept stop or station must have a place on the map."""
+    bad = changed(
+        out=tmp_path / 'bad.zip',
+        change=partial(misplaced, stop_id=stop_id, value=value),
+    )
+    out = tmp_path / 'cut.zip'
+    with pytest.raises(ValueError, match=f'{stop_id} has no usable'):
+        cut_rail(archive=bad, out=out)
+    assert not out.exists()
+
+
+def test_a_dropped_stop_may_lack_coordinates(tmp_path: Path) -> None:
+    """Cambridge Heath's trip is dropped, so its stop is not checked."""
+    bad = changed(
+        out=tmp_path / 'bad.zip',
+        change=partial(misplaced, stop_id='9100CAMHTH', value='nan'),
+    )
+    assert cut_rail(archive=bad, out=tmp_path / 'cut.zip').trips == 6

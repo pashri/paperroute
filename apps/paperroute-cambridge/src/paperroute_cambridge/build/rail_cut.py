@@ -3,6 +3,7 @@
 import csv
 import io
 import logging
+import math
 import re
 import zipfile
 from collections.abc import Callable, Iterable, Iterator
@@ -427,6 +428,32 @@ def _agencies(*, rows: Iterable[Row], kept: Kept) -> Iterator[Row]:
             yield {**row, 'agency_id': code}
 
 
+def _placed(*, row: Row) -> bool:
+    """
+    Say whether a stop has coordinates that can be put on a map.
+
+    Parameters
+    ----------
+    row : dict[str, str]
+        A row of stops.txt.
+
+    Returns
+    -------
+    bool
+        True when the latitude and longitude are finite numbers within
+        [-90, 90] and [-180, 180].
+    """
+    try:
+        lat = float(row.get('stop_lat') or '')
+        lon = float(row.get('stop_lon') or '')
+    except ValueError:
+        return False
+    return (
+        math.isfinite(lat) and math.isfinite(lon)
+        and abs(lat) <= 90 and abs(lon) <= 180
+    )
+
+
 def _stop_rows(
     *, stops: dict[str, Row], kept: Kept,
 ) -> Iterator[Row]:
@@ -444,11 +471,18 @@ def _stop_rows(
     ------
     dict[str, str]
         One stop, its id and parent renamed.
+
+    Raises
+    ------
+    ValueError
+        When a stop to be written has no usable coordinates.
     """
     new_ids = {stop_id: _new_id(row=row) for stop_id, row in stops.items()}
     parents = {stops[i].get('parent_station', '') for i in kept.stops}
     for stop_id, row in stops.items():
         if stop_id in kept.stops or stop_id in parents:
+            if not _placed(row=row):
+                raise ValueError(f'stop {stop_id} has no usable coordinates')
             parent = row.get('parent_station', '')
             kept.stops_written += 1
             yield {
@@ -634,8 +668,9 @@ def cut_rail(
     ------
     ValueError
         When stop_times.txt is out of trip order, a needed table is
-        missing, no trip calls at the stations, or the trips kept have no
-        routes or no service days.
+        missing, no trip calls at the stations, the trips kept have no
+        routes or no service days, or a kept stop has no usable
+        coordinates.
     """
     kept = Kept()
     try:
@@ -702,8 +737,9 @@ def _cut(
     Raises
     ------
     ValueError
-        When a needed table is missing, no trip calls at the stations, or
-        the trips kept have no routes or no service days.
+        When a needed table is missing, no trip calls at the stations, the
+        trips kept have no routes or no service days, or a kept stop has
+        no usable coordinates.
     """
     _check_members(feed=feed)
     fields, stops = _load_stops(feed=feed, kept=kept)

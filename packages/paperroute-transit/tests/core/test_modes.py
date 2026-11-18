@@ -1,9 +1,15 @@
 """Tests for a city's declared modes."""
 
+from dataclasses import replace
+
 from paperroute_transit.core.modes import (
     ModeSpec,
+    line_badge,
+    line_key,
     line_modes,
+    line_value,
     mode_problems,
+    named_line_modes,
     spec_of,
     tagged_modes,
 )
@@ -70,3 +76,28 @@ def test_css_unsafe_values_are_problems() -> None:
     loose = ModeSpec(id='bus', label='Bus', letter='B', chip='#00B5EF;')
     assert len(mode_problems(modes=[upper])) == 1
     assert len(mode_problems(modes=[loose])) == 1
+
+
+def test_named_line_modes() -> None:
+    """Only a spec with named_lines set is listed."""
+    modes = [BUS, replace(TRAIN, named_lines=True)]
+    assert named_line_modes(modes=modes) == frozenset({TRAIN.id})
+
+
+def test_a_named_line_key_carries_its_long_name() -> None:
+    """A named kind keys by number and long name; others by number."""
+    named = frozenset({'train'})
+    assert line_key(
+        kind='train', number='GA', long_name='Norwich', named=named,
+    ) == 'train:GA:Norwich'
+    assert line_key(
+        kind='metro', number='M1', long_name='North West', named=named,
+    ) == 'metro:M1'
+
+
+def test_line_value_and_badge() -> None:
+    """The value drops the kind; the badge is the value's number."""
+    value = line_value(key='train:GN:Kings Lynn & Kings Cross', kind='train')
+    assert value == 'GN:Kings Lynn & Kings Cross'
+    assert line_badge(value=value) == 'GN'
+    assert line_badge(value='T1') == 'T1'

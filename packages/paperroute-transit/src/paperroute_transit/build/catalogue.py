@@ -26,7 +26,10 @@ from paperroute_transit.core.geo import Point, Projection, to_metres
 from paperroute_transit.core.modes import (
     Classifier,
     ModeSpec,
+    line_key,
     line_modes,
+    line_value,
+    named_line_modes,
     replaced_modes,
     replacing_modes,
     tagged_modes,
@@ -477,7 +480,10 @@ class Entry:
 
 
 def line_entries(
-    *, routes: Sequence[CatalogueRoute], names: Mapping[tuple[str, str], str],
+    *,
+    routes: Sequence[CatalogueRoute],
+    names: Mapping[tuple[str, str], str],
+    named: Collection[str],
 ) -> Iterator[Entry]:
     """
     Make one entry per train, metro and light rail line.
@@ -488,17 +494,25 @@ def line_entries(
         Merged routes of the line kinds.
     names : Mapping[tuple[str, str], str]
         Bundle long names by kind and number.
+    named : Collection[str]
+        Ids of the modes keyed by long name.
 
     Yields
     ------
     Entry
-        One per kind and number.
+        One per kind and number, or per long name for a named kind.
     """
     firsts: dict[str, CatalogueRoute] = {}
     for route in routes:
-        firsts.setdefault(f'{route.kind}:{route.number}', route)
+        key = line_key(
+            kind=str(route.kind), number=route.number,
+            long_name=route.long_name, named=named,
+        )
+        firsts.setdefault(key, route)
     for key, route in firsts.items():
-        long_name = names.get((str(route.kind), route.number), route.long_name)
+        long_name = route.long_name
+        if route.kind not in named:
+            long_name = names.get((str(route.kind), route.number), long_name)
         yield Entry(
             key=key, kind=route.kind, number=route.number,
             name=line_name(long_name=long_name, code=route.number),
@@ -666,6 +680,7 @@ def kind_rows(
     tagged = tagged_modes(modes=modes)
     sorted_lines = replaced_modes(modes=modes)
     wharves = wharf_modes(modes=modes)
+    named = named_line_modes(modes=modes)
     numbered = rules.numbered_lines
     ranked = sorted(
         entries,
@@ -683,7 +698,12 @@ def kind_rows(
         grp = bucket_of(number=entry.number)
         if entry.kind not in tagged:
             grp = ''
-        if entry.kind in sorted_lines:
+        if entry.kind in named:
+            rank = rules.line_sort.get(
+                line_value(key=entry.key, kind=str(entry.kind)),
+                OTHER_LINES + rank,
+            )
+        elif entry.kind in sorted_lines:
             rank = rules.line_sort.get(entry.number, OTHER_LINES + rank)
         elif entry.kind in wharves:
             rank = ferry_rank(
@@ -791,6 +811,7 @@ def towards_rows(*, conn: sqlite3.Connection) -> Iterator[tuple[object, ...]]:
 def write_towards(
     *, conn: sqlite3.Connection, routes: Sequence[CatalogueRoute],
     sources: Sequence[RouteSource], line_kinds: Collection[str],
+    named_kinds: Collection[str],
 ) -> None:
     """
     Write the chooser_towards rows and the line tables.
@@ -808,10 +829,15 @@ def write_towards(
         The route IDs they were merged from.
     line_kinds : Collection[str]
         Mode ids chosen by line.
+    named_kinds : Collection[str]
+        Mode ids whose lines are keyed by long name.
     """
     rows = {
         route.route_key: (
-            f'{route.kind}:{route.number}'
+            line_key(
+                kind=str(route.kind), number=route.number,
+                long_name=route.long_name, named=named_kinds,
+            )
             if route.kind in line_kinds
             else route.route_key
         )
@@ -906,6 +932,7 @@ def load_catalogue(
         Number of chooser_routes rows written.
     """
     lines = line_modes(modes=modes)
+    named = named_line_modes(modes=modes)
     by_number = replacing_modes(modes=modes)
     sources = route_sources(conn=conn, classify=classify, by_number=by_number)
     routes = merged_routes(
@@ -927,6 +954,7 @@ def load_catalogue(
         *line_entries(
             routes=[r for r in routes if r.kind in lines],
             names=bundle_names(conn=conn, classify=classify, line_kinds=lines),
+            named=named,
         ),
         *route_entries(
             routes=[r for r in routes if r.kind not in lines],
@@ -944,5 +972,6 @@ def load_catalogue(
     ))
     write_towards(
         conn=conn, routes=routes, sources=sources, line_kinds=lines,
+        named_kinds=named,
     )
     return len(rows)

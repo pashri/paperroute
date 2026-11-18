@@ -2,7 +2,7 @@
 
 import re
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from typing import Final, Protocol
 
@@ -45,6 +45,9 @@ class ModeSpec:
         True when a setting may hide it.
     chip_text : str
         Chip text colour, as a lower-case six-digit CSS hex colour.
+    named_lines : bool
+        True when one number heads several lines, told apart by their long
+        names.
     """
 
     id: str
@@ -61,6 +64,7 @@ class ModeSpec:
     tagged: bool = False
     skippable: bool = False
     chip_text: str = '#ffffff'
+    named_lines: bool = False
 
 
 @dataclass(frozen=True)
@@ -141,6 +145,86 @@ def line_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:
         Ids of the specs with `by_line` set.
     """
     return frozenset(spec.id for spec in modes if spec.by_line)
+
+
+def named_line_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:
+    """
+    List the modes whose lines are keyed by long name.
+
+    Parameters
+    ----------
+    modes : Sequence[ModeSpec]
+        Declared modes.
+
+    Returns
+    -------
+    frozenset[str]
+        Ids of the specs with `named_lines` set.
+    """
+    return frozenset(spec.id for spec in modes if spec.named_lines)
+
+
+def line_key(
+    *, kind: str, number: str, long_name: str, named: Collection[str],
+) -> str:
+    """
+    Give a line's chooser key.
+
+    Parameters
+    ----------
+    kind : str
+        Mode id.
+    number : str
+        The line's number.
+    long_name : str
+        The line's long name.
+    named : Collection[str]
+        Ids of the modes keyed by long name.
+
+    Returns
+    -------
+    str
+        `kind:number:long_name` for a named mode, else `kind:number`.
+    """
+    if kind in named:
+        return f'{kind}:{number}:{long_name}'
+    return f'{kind}:{number}'
+
+
+def line_value(*, key: str, kind: str) -> str:
+    """
+    Drop the mode from a line key.
+
+    Parameters
+    ----------
+    key : str
+        A line key.
+    kind : str
+        Its mode id.
+
+    Returns
+    -------
+    str
+        The key without its `kind:` prefix.
+    """
+    return key.removeprefix(f'{kind}:')
+
+
+def line_badge(*, value: str) -> str:
+    """
+    Give the number of a line value.
+
+    Parameters
+    ----------
+    value : str
+        A line value, `number` or `number:long_name`.
+
+    Returns
+    -------
+    str
+        The text before the first colon, or all of it.
+    """
+    return value.split(':', 1)[0]
 
 
 def tagged_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:

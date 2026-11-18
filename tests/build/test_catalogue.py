@@ -6,7 +6,7 @@ import sqlite3
 from collections import Counter
 from collections.abc import Iterator, Sequence
 from contextlib import closing, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 from typing import Final
@@ -49,7 +49,11 @@ from paperroute_transit.build.timetable import (
 )
 from paperroute_transit.core.city import PlaceNames
 from paperroute_transit.core.geo import Point, to_metres
-from paperroute_transit.core.modes import replacing_modes
+from paperroute_transit.core.modes import (
+    ModeSpec,
+    named_line_modes,
+    replacing_modes,
+)
 from tests.build.network_feed import EAST_WEST, network_feed
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
@@ -680,6 +684,66 @@ def test_replacement_bus_is_one_row_per_route(tmp_path: Path) -> None:
         ).fetchall()
     assert [row[:2] for row in rows] == [('8T6', 'Bankstown – Lidcombe')]
     assert towards == [('B', 7), ('L', 9)]
+
+
+def named_trains(*, modes: Sequence[ModeSpec]) -> tuple[ModeSpec, ...]:
+    """
+    Set named_lines on the train spec.
+
+    Parameters
+    ----------
+    modes : Sequence[ModeSpec]
+        Declared modes.
+
+    Returns
+    -------
+    tuple[ModeSpec, ...]
+        The modes, the train one keyed by long name.
+    """
+    return tuple(
+        replace(spec, named_lines=True) if spec.id == SydneyMode.TRAIN
+        else spec
+        for spec in modes
+    )
+
+
+def test_sydney_has_no_named_lines() -> None:
+    """No Sydney mode keys its lines by long name."""
+    assert named_line_modes(modes=SYDNEY.modes) == frozenset()
+
+
+def test_named_train_lines_get_a_row_per_long_name(tmp_path: Path) -> None:
+    """One number with two long names makes two rows, ranked by value."""
+    with closing(tiny_db(path=tmp_path / 't.db', routes=[
+        RouteRow(route_id='a', number='T1', long_name='City to Emu',
+                 route_type=2, source='sydneytrains'),
+        RouteRow(route_id='b', number='T1', long_name='City to Hornsby',
+                 route_type=2, source='sydneytrains'),
+        RouteRow(route_id='c', number='T2', long_name='City to Leppington',
+                 route_type=2, source='sydneytrains'),
+    ])) as conn:
+        load_catalogue(
+            conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+            modes=named_trains(modes=SYDNEY.modes),
+            rules=replace(SYDNEY.catalogue, line_sort={
+                'T2:City to Leppington': 1, 'T1:City to Hornsby': 2,
+            }),
+        )
+        keys = [key for key, in conn.execute(
+            "SELECT route_key FROM chooser_routes WHERE kind = 'train'"
+            ' ORDER BY sort',
+        )]
+        rows = chooser_rows(conn=conn, kind='train')
+    assert keys == [
+        'train:T2:City to Leppington',
+        'train:T1:City to Hornsby',
+        'train:T1:City to Emu',
+    ]
+    assert [row[:2] for row in rows] == [
+        ('T2', 'City to Leppington'),
+        ('T1', 'City to Hornsby'),
+        ('T1', 'City to Emu'),
+    ]
 
 
 def test_train_lines_in_decision_order(tmp_path: Path) -> None:

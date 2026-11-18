@@ -65,7 +65,8 @@ class CatalogueRules:
     ----------
     line_sort : Mapping[str, int]
         Fixed rank of each known line number of the mode replacement
-        routes stand in for; other lines rank after them.
+        routes stand in for; other lines rank after them. A named mode's
+        lines are keyed by value (`'GA:Norwich'`).
     replacement : re.Pattern[str]
         Matches a replacement route number; its first group names the
         line it stands in for.

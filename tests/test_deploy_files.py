@@ -26,6 +26,12 @@ SYDNEY_DEPLOY: Final[Path] = SYDNEY_APP / 'deploy'
 SYDNEY_SYSTEMD: Final[Path] = SYDNEY_DEPLOY / 'systemd'
 SYDNEY_BIN: Final[Path] = SYDNEY_DEPLOY / 'bin'
 SYDNEY_SUDOERS: Final[Path] = SYDNEY_DEPLOY / 'sudoers'
+CAMBRIDGE_SUDOERS: Final[Path] = (
+    ROOT / 'apps' / 'paperroute-cambridge' / 'deploy' / 'sudoers'
+)
+RELEASES: Final[re.Pattern[str]] = re.compile(
+    pattern=r'/opt/paperroute/apps/[^/\s]+/releases',
+)
 BEFORE_RELEASE: Final[Path] = SYDNEY_APP / 'scripts' / 'before-release'
 APP_CONF: Final[Path] = SYDNEY_SYSTEMD / 'paperroute.service.d' / 'app.conf'
 FIXTURES: Final[Path] = Path(__file__).parent / 'fixtures'
@@ -3657,8 +3663,10 @@ def test_no_sudoers_rule_points_into_releases(
     shipped = [
         *sudoers_rules(path=DEPLOY / 'sudoers' / 'paperroute-deploy'),
         *sudoers_rules(path=SYDNEY_SUDOERS / 'paperroute-sydney'),
+        *sudoers_rules(path=CAMBRIDGE_SUDOERS / 'paperroute-cambridge'),
     ]
-    assert not any('/opt/paperroute/releases' in line for line in shipped)
+    assert RELEASES.search('/opt/paperroute/apps/demo/releases/x/bin/y')
+    assert not any(RELEASES.search(line) for line in shipped)
 
 
 def assert_line_refused(*, root: Path, line: str, tools: str) -> None:

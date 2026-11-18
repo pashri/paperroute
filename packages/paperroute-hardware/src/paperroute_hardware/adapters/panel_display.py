@@ -301,7 +301,7 @@ class PanelDisplay:
 
     def settle(self, *, timeout: float) -> bool:
         """
-        Wait until every frame shown so far is on the panel.
+        Wait until every frame shown and any splash is on the panel.
 
         The last refresh may have failed. Refreshes are not passed on.
 
@@ -320,7 +320,7 @@ class PanelDisplay:
 
     def stop(self) -> None:
         """
-        Stop the worker, dropping any frame still waiting.
+        Stop the worker, dropping any frame or splash still waiting.
 
         The controller is closed only if it was opened and the worker
         ends within `STOP_WAIT` seconds; a worker stuck in a refresh is
@@ -329,6 +329,7 @@ class PanelDisplay:
         with self._ready:
             self._stopping = True
             self._waiting = None
+            self._splash = None
             self._ready.notify_all()
         self._thread.join(timeout=STOP_WAIT)
         if self._thread.is_alive():
@@ -366,7 +367,7 @@ class PanelDisplay:
         )
 
     def _run(self) -> None:
-        """Draw frames and cleaning refreshes until stopped."""
+        """Draw splashes, frames and cleaning refreshes until stopped."""
         while (work := self._next()) is not None:
             if isinstance(work, Splash):
                 self._draw_splash(splash=work)
@@ -393,7 +394,7 @@ class PanelDisplay:
 
     def _next(self) -> Job | Clean | Splash | None:
         """
-        Wait for a frame, a due retry or a due cleaning refresh.
+        Wait for a frame, a splash, a due retry or a due clean.
 
         Returns
         -------
@@ -408,6 +409,7 @@ class PanelDisplay:
                 self._busy = False
                 self._ready.notify_all()
                 self._ready.wait(timeout=self._wait())
+            self._busy = False
             return None
 
     def _take(self) -> Job | Clean | Splash | None:

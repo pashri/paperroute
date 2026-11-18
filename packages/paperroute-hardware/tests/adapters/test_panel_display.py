@@ -1193,3 +1193,35 @@ def test_failed_splash_is_not_retried(
         rig.show(frame=white())
     assert rig.controller.calls[1:] == [('full', grey_planes(frame=white()))]
     assert [record.levelno for record in caplog.records] == [logging.INFO]
+
+
+def test_frame_drops_a_splash_not_yet_started(
+    rig: Rig, tmp_path: Path,
+) -> None:
+    """A frame shown before the worker starts a splash replaces it."""
+    image, picture = picture_file(path=tmp_path / 'on.raw')
+    rig.controller.gate.clear()
+    rig.display.splash(image=image, turned=False)
+    assert rig.controller.entered.wait(timeout=WAIT)
+    rig.display.splash(image=image, turned=True)
+    rig.display.show(frame=white())
+    rig.controller.gate.set()
+    assert rig.display.settle(timeout=WAIT)
+    assert rig.controller.calls == [
+        ('full', grey_planes(frame=picture)),
+        ('full', grey_planes(frame=white())),
+    ]
+
+
+def test_settle_after_stop_with_a_splash_waiting(
+    rig: Rig, tmp_path: Path,
+) -> None:
+    """Stopping drops a splash the worker has not started."""
+    image, _ = picture_file(path=tmp_path / 'on.raw')
+    rig.controller.gate.clear()
+    rig.display.splash(image=image, turned=False)
+    assert rig.controller.entered.wait(timeout=WAIT)
+    rig.display.splash(image=image, turned=True)
+    rig.controller.gate.set()
+    rig.display.stop()
+    assert rig.display.settle(timeout=0.05)

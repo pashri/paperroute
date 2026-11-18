@@ -765,3 +765,44 @@ def test_web_main_asks_for_the_splash_first(
         SPLASH_MARKER,
         tmp_path / 'state.json',
     )
+
+
+def test_web_main_stops_the_panel_when_the_splash_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """A failure while asking for the splash still stops the panel."""
+    stopped: list[PanelDisplay] = []
+    made: list[PanelDisplay] = []
+    real_stop = PanelDisplay.stop
+
+    def noting_stop(self: PanelDisplay) -> None:
+        """Note the display, then stop it."""
+        stopped.append(self)
+        real_stop(self)
+
+    def failing_splash(
+        *, panel: PanelDisplay | None, **rest: object,
+    ) -> bool:
+        """Fail as a broken marker directory might."""
+        assert panel is not None
+        made.append(panel)
+        raise RuntimeError('splash failed')
+
+    monkeypatch.setattr(PanelDisplay, 'stop', noting_stop)
+    monkeypatch.setattr(cli, 'splash_once', failing_splash)
+    app = ZonedApp()
+    args = cli.parse_args(
+        app=app,
+        argv=[
+            'run', '--display', 'web', '--panel',
+            '--state', str(tmp_path / 'state.json'),
+        ],
+    )
+    try:
+        with pytest.raises(RuntimeError, match='splash failed'):
+            cli.web_main(args=args, app=app, last_error=LastError(zone=UTC))
+        assert len(made) == 1
+        assert stopped == made
+    finally:
+        for panel in made:
+            real_stop(panel)

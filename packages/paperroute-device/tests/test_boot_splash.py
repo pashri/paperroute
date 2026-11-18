@@ -40,6 +40,7 @@ class Opener:
     entered: threading.Event = field(default_factory=threading.Event)
 
     def __post_init__(self) -> None:
+        """Open the gate."""
         self.gate.set()
 
     def __call__(self) -> Uc8179:
@@ -167,18 +168,20 @@ def test_splash_once_follows_the_rotate_setting(
 
 
 def test_splash_once_skips_a_restart_in_the_same_boot(
-    rig: Rig, tmp_path: Path,
+    rig: Rig, tmp_path: Path, caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """With the marker there, nothing is asked for and nothing opens."""
+    """With the marker there, nothing is asked for, opened or logged."""
     picture_file(path=tmp_path / 'on.raw')
     marker = tmp_path / 'marker'
     marker.touch()
-    assert not splash_once(
-        panel=rig.panel,
-        image=tmp_path / 'on.raw',
-        marker=marker,
-        state=tmp_path / 'state.json',
-    )
+    with caplog.at_level(logging.DEBUG):
+        assert not splash_once(
+            panel=rig.panel,
+            image=tmp_path / 'on.raw',
+            marker=marker,
+            state=tmp_path / 'state.json',
+        )
+    assert not caplog.records
     assert rig.panel.settle(timeout=WAIT)
     assert not rig.opener.entered.is_set()
 

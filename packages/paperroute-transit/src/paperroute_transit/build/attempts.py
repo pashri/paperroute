@@ -104,7 +104,6 @@ def without_new_copies(*, layout: Layout, fetched: Fetched) -> Fetched | None:
     )
 
 
-
 def without_optional(*, fetched: Fetched) -> Fetched | None:
     """
     Leave out every optional source that has a state.

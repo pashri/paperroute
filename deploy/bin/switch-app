@@ -119,8 +119,8 @@ activate() {
 # again, and exits 1.
 go_back() {
     local clean=yes
-    systemctl stop paperroute || true
     quiet "$APP"
+    systemctl stop paperroute || true
     activate "$1" || clean=no
     systemctl start paperroute || clean=no
     printf 'switch-app: %s did not start; back on %s\n' "$APP" "$1" >&2

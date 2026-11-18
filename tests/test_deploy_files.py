@@ -6733,9 +6733,9 @@ def test_switch_apply_goes_back_when_the_app_does_not_start(
     assert result.returncode == 1
     assert record(box=switch_box) == 'first\n'
     assert log[-5:] == [
-        'systemctl stop paperroute',
         'systemctl stop paperroute-job.timer',
         'systemctl stop paperroute-job.service',
+        'systemctl stop paperroute',
         'paperroute-install-files (active: first)',
         'systemctl start paperroute',
     ]

@@ -458,6 +458,31 @@ def _stop_rows(
             }
 
 
+WEEKDAYS: Final[tuple[str, ...]] = (
+    'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
+    'sunday',
+)  # weekday columns of calendar.txt
+
+
+def _runs(*, row: Row) -> bool:
+    """
+    Say whether a calendar row gives its service a day to run.
+
+    Parameters
+    ----------
+    row : dict[str, str]
+        A row of calendar.txt or calendar_dates.txt.
+
+    Returns
+    -------
+    bool
+        True for a weekday set to 1 or an added date.
+    """
+    return row.get('exception_type') == '1' or any(
+        row.get(day) == '1' for day in WEEKDAYS
+    )
+
+
 def _services(*, rows: Iterable[Row], kept: Kept) -> Iterator[Row]:
     """
     Yield the rows of the kept services.
@@ -477,7 +502,8 @@ def _services(*, rows: Iterable[Row], kept: Kept) -> Iterator[Row]:
     for row in _matching(
         rows=rows, column='service_id', wanted=kept.services,
     ):
-        kept.services_found.add(row['service_id'])
+        if _runs(row=row):
+            kept.services_found.add(row['service_id'])
         yield row
 
 

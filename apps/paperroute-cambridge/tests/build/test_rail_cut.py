@@ -362,11 +362,74 @@ def test_a_file_missing_a_needed_table_is_refused(
     assert not (tmp_path / 'cut.zip').exists()
 
 
-@pytest.mark.parametrize('member', ['calendar.txt', 'calendar_dates.txt'])
-def test_one_calendar_table_is_enough(tmp_path: Path, member: str) -> None:
-    """A release with either calendar table is cut."""
-    archive = changed(out=tmp_path / 'one.zip', change=without(member=member))
+def test_calendar_dates_alone_with_only_removals_is_refused(
+    tmp_path: Path,
+) -> None:
+    """Without calendar.txt, removal rows alone give no service day."""
+    archive = changed(
+        out=tmp_path / 'removals.zip',
+        change=without(member='calendar.txt'),
+    )
+    with pytest.raises(ValueError, match='no service days for the trips'):
+        cut_rail(archive=archive, out=tmp_path / 'cut.zip')
+    assert not (tmp_path / 'cut.zip').exists()
+
+
+def test_calendar_alone_with_a_weekday_is_enough(tmp_path: Path) -> None:
+    """A release with calendar.txt and no calendar_dates.txt is cut."""
+    archive = changed(
+        out=tmp_path / 'one.zip', change=without(member='calendar_dates.txt'),
+    )
     assert cut_rail(archive=archive, out=tmp_path / 'cut.zip').trips == 6
+
+
+def test_calendar_dates_alone_with_an_addition_is_enough(
+    tmp_path: Path,
+) -> None:
+    """A release with only added dates for the kept services is cut."""
+
+    def additions(tables: dict[str, list[dict[str, str]]]) -> None:
+        """
+        Keep only calendar_dates.txt, adding a day for each service.
+
+        Parameters
+        ----------
+        tables : dict[str, list[dict[str, str]]]
+            Rows by member, changed in place.
+        """
+        without(member='calendar.txt')(tables)
+        tables['calendar_dates.txt'] = [
+            {'service_id': service, 'date': '20261130', 'exception_type': '1'}
+            for service in ('101', '102', '103')
+        ]
+
+    archive = changed(out=tmp_path / 'added.zip', change=additions)
+    assert cut_rail(archive=archive, out=tmp_path / 'cut.zip').trips == 6
+
+
+def test_a_calendar_with_no_weekday_set_is_refused(tmp_path: Path) -> None:
+    """Services with every weekday 0 and no added dates never run."""
+
+    def idle(tables: dict[str, list[dict[str, str]]]) -> None:
+        """
+        Clear every weekday of every service.
+
+        Parameters
+        ----------
+        tables : dict[str, list[dict[str, str]]]
+            Rows by member, changed in place.
+        """
+        for row in tables['calendar.txt']:
+            for day in (
+                'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
+                'saturday', 'sunday',
+            ):
+                row[day] = '0'
+
+    archive = changed(out=tmp_path / 'idle.zip', change=idle)
+    with pytest.raises(ValueError, match='no service days for the trips'):
+        cut_rail(archive=archive, out=tmp_path / 'cut.zip')
+    assert not (tmp_path / 'cut.zip').exists()
 
 
 def test_kept_trips_with_no_route_rows_are_refused(tmp_path: Path) -> None:

@@ -200,6 +200,42 @@ def parse_args(
     return args
 
 
+def given_sources(
+    *,
+    args: argparse.Namespace,
+    parts: BuildParts,
+) -> list[Source]:
+    """
+    Name the zips to build from, cutting those whose source has a cut.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed gtfs arguments.
+    parts : BuildParts
+        The city's reference and its sources.
+
+    Returns
+    -------
+    list[Source]
+        One source per zip given, in the sources' order; a cut zip is
+        cut beside the output file.
+    """
+    sources = []
+    for spec in parts.sources:
+        given = getattr(args, spec.name)
+        if not given:
+            continue
+        if spec.cut is not None:
+            kept = args.out.with_name(f'{args.out.stem}.{spec.name}.zip')
+            spec.cut(archive=given, out=kept)
+            given = kept
+        sources.append(
+            Source(name=spec.name, archive=given, optional=spec.optional),
+        )
+    return sources
+
+
 def run_gtfs(*, args: argparse.Namespace, parts: BuildParts) -> None:
     """
     Build the timetable from the given feeds.
@@ -213,11 +249,7 @@ def run_gtfs(*, args: argparse.Namespace, parts: BuildParts) -> None:
     """
     configure_logging()
     build_timetable(
-        sources=[
-            Source(name=spec.name, archive=getattr(args, spec.name))
-            for spec in parts.sources
-            if getattr(args, spec.name)
-        ],
+        sources=given_sources(args=args, parts=parts),
         window=Window(start=args.start, days=args.days), out=args.out,
         city_ref=parts.city_ref,
         handoff=Handoff(

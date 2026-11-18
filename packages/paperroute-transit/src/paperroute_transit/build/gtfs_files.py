@@ -19,10 +19,22 @@ DAY_NAMES: Final[tuple[str, ...]] = (
 
 @dataclass(frozen=True)
 class Source:
-    """One GTFS zip and the name its IDs are namespaced under."""
+    """
+    One GTFS zip and the name its IDs are namespaced under.
+
+    Attributes
+    ----------
+    name : str
+        Source name.
+    archive : Path
+        The zip.
+    optional : bool
+        Left out of the last day: its calendar end is not recorded.
+    """
 
     name: str
     archive: Path
+    optional: bool = False
 
 
 def read_rows(*, archive: Path, member: str) -> Iterator[dict[str, str]]:

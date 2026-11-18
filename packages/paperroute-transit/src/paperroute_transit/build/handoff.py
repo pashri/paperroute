@@ -33,14 +33,15 @@ class Fetched:
     @property
     def all_failed(self) -> bool:
         """
-        Tell whether every source failed, so nothing was refreshed.
+        Tell whether every source with a state failed.
 
         Returns
         -------
         bool
-            True when there are sources and all of them failed.
+            True when some source failed and every source with a state
+            failed.
         """
-        return bool(self.states) and len(self.failed) == len(self.states)
+        return bool(self.failed) and set(self.states) <= set(self.failed)
 
 
 @dataclass(frozen=True)

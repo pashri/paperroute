@@ -8,6 +8,7 @@ import sqlite3
 import zipfile
 from collections.abc import Iterator
 from contextlib import closing
+from dataclasses import replace
 from datetime import date, timedelta
 from http import HTTPStatus
 from pathlib import Path
@@ -27,14 +28,31 @@ from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.build import handoff as handoff_module
 from paperroute_transit.build import refresh as refresh_module
 from paperroute_transit.build import swap
-from paperroute_transit.build.refresh import RefreshBusy, refresh
-from paperroute_transit.build.source_state import SourceError, SourceState
-from paperroute_transit.build.sources import BuildParts, SourceSpec
+from paperroute_transit.build.handoff import Fetched
+from paperroute_transit.build.refresh import RefreshBusy, cut_into, refresh
+from paperroute_transit.build.source_state import (
+    SourceError,
+    SourceState,
+    load_states,
+)
+from paperroute_transit.build.sources import (
+    BuildParts,
+    SourceCut,
+    SourceSpec,
+    file_sha256,
+)
 from paperroute_transit.build.swap import RefreshReport, TimetableCheckError
 from paperroute_transit.core.banners import timetable_banner
 from paperroute_transit.core.messages import TimetableSeen
 from tests.build.feed_server import FeedServer, Served, feed_server
-from tests.build.feeds import bus_feed, bus_files
+from tests.build.feeds import (
+    CUT_COMMENT,
+    bus_feed,
+    bus_files,
+    commented,
+    damaged,
+    refused,
+)
 from tests.core.test_state import fresh
 
 REAL: Final[Path] = Path(__file__).parent.parent / 'fixtures' / 'real'
@@ -900,3 +918,193 @@ def test_refresh_hands_over_after_the_load(
     assert record.tail.fetched.changed == ('sydneytrains', 'metro', 'bundle')
     assert record.out == work / 'timetable.db'
     assert not (data_dir / 'timetable.db').exists()
+
+
+EXTRA: Final[str] = '/v2/gtfs/schedule/extra'
+
+
+def extra_parts(*, server: FeedServer, cut: SourceCut) -> BuildParts:
+    """
+    Sydney's build parts and one optional source, cut after download.
+
+    Parameters
+    ----------
+    server : FeedServer
+        Feed server.
+    cut : SourceCut
+        The extra source's cut.
+
+    Returns
+    -------
+    BuildParts
+        The parts.
+    """
+    parts = parts_for(server=server)
+    extra = SourceSpec(
+        name='extra', path=EXTRA.removeprefix('/'), cut=cut, optional=True,
+    )
+    return replace(parts, sources=(*parts.sources, extra))
+
+
+def serve_extra(
+    *, server: FeedServer, tmp_path: Path, comment: bytes, etag: str = '"1"',
+) -> None:
+    """
+    Serve a small feed as the extra source.
+
+    Parameters
+    ----------
+    server : FeedServer
+        Feed server.
+    tmp_path : Path
+        Directory for the zip.
+    comment : bytes
+        Zip comment, to change the bytes but not the contents.
+    etag : str
+        The ETag served.
+    """
+    server.state.files[EXTRA] = Served(
+        body=metro_zip(tmp_path=tmp_path, comment=comment), etag=etag,
+    )
+
+
+def run_extra(
+    *, server: FeedServer, data_dir: Path, cut: SourceCut = commented,
+) -> RefreshReport:
+    """
+    Refresh Sydney's sources and the extra one.
+
+    Parameters
+    ----------
+    server : FeedServer
+        Feed server.
+    data_dir : Path
+        Data directory.
+    cut : SourceCut
+        The extra source's cut.
+
+    Returns
+    -------
+    RefreshReport
+        The refresh's report.
+    """
+    return refresh(
+        data_dir=data_dir,
+        city=SYDNEY,
+        parts=extra_parts(server=server, cut=cut),
+        days=DAYS,
+    )
+
+
+def test_a_cut_source_stores_its_cut(
+    server: FeedServer, data_dir: Path, tmp_path: Path,
+) -> None:
+    """The cut, not the download, is stored, under its own digest."""
+    serve_extra(server=server, tmp_path=tmp_path, comment=b'one')
+    report = run_extra(server=server, data_dir=data_dir)
+    stored = data_dir / 'sources' / 'extra.zip'
+    with zipfile.ZipFile(stored) as archive:
+        assert archive.comment == CUT_COMMENT
+    states = load_states(path=data_dir / 'sources' / 'sources.json')
+    assert states['extra'].sha256 == file_sha256(path=stored)
+    assert 'extra' in report.changed and report.rebuilt
+
+
+def test_unchanged_cut_bytes_do_not_rebuild(
+    server: FeedServer, data_dir: Path, tmp_path: Path,
+) -> None:
+    """A new download whose cut is the same bytes changes nothing."""
+    serve_extra(server=server, tmp_path=tmp_path, comment=b'one')
+    run_extra(server=server, data_dir=data_dir)
+    first = server.state.files[EXTRA].body
+    server.state.files[EXTRA] = Served(
+        body=first.removesuffix(b'one') + b'two', etag='"2"',
+    )
+    report = run_extra(server=server, data_dir=data_dir)
+    assert ('extra' in report.downloaded, report.changed, report.rebuilt) == (
+        True, (), False,
+    )
+
+
+def test_a_refused_cut_keeps_the_stored_cut(
+    server: FeedServer, data_dir: Path, tmp_path: Path,
+) -> None:
+    """A download the cut refuses leaves the last good cut in place."""
+    serve_extra(server=server, tmp_path=tmp_path, comment=b'one')
+    run_extra(server=server, data_dir=data_dir)
+    stored = (data_dir / 'sources' / 'extra.zip').read_bytes()
+    serve_extra(server=server, tmp_path=tmp_path, comment=b'two', etag='"2"')
+    report = run_extra(server=server, data_dir=data_dir, cut=refused)
+    assert (report.failed, report.all_failed) == (('extra',), False)
+    assert (data_dir / 'sources' / 'extra.zip').read_bytes() == stored
+
+
+def test_an_optional_source_with_no_copy_is_left_out(
+    server: FeedServer, data_dir: Path,
+) -> None:
+    """With no download and nothing stored, the rest build without it."""
+    server.state.gone.add(EXTRA)
+    report = run_extra(server=server, data_dir=data_dir)
+    assert (report.failed, report.all_failed, report.rebuilt) == (
+        ('extra',), False, True,
+    )
+    assert not (data_dir / 'sources' / 'extra.zip').exists()
+    states = load_states(path=data_dir / 'sources' / 'sources.json')
+    assert 'extra' not in states
+
+
+def test_a_refused_cut_with_no_copy_is_left_out(
+    server: FeedServer, data_dir: Path, tmp_path: Path,
+) -> None:
+    """A first download the cut refuses leaves the source out."""
+    serve_extra(server=server, tmp_path=tmp_path, comment=b'one')
+    report = run_extra(server=server, data_dir=data_dir, cut=refused)
+    assert (report.failed, report.rebuilt) == (('extra',), True)
+    assert not (data_dir / 'sources' / 'extra.zip').exists()
+
+
+def test_cut_into_leaves_only_the_cut(tmp_path: Path) -> None:
+    """The download is deleted and the cut's digest returned."""
+    download = tmp_path / 'extra.download.zip'
+    download.write_bytes(metro_zip(tmp_path=tmp_path, comment=b'one'))
+    out = tmp_path / 'extra.zip'
+    digest = cut_into(name='extra', cut=commented, download=download, out=out)
+    assert digest == file_sha256(path=out)
+    assert not download.exists()
+
+
+def test_cut_into_turns_a_refusal_into_a_source_error(tmp_path: Path) -> None:
+    """A cut's error is a SourceError naming the source and its class."""
+    download = tmp_path / 'extra.download.zip'
+    download.write_bytes(metro_zip(tmp_path=tmp_path, comment=b'one'))
+    with pytest.raises(SourceError, match='extra: cut failed, ValueError'):
+        cut_into(
+            name='extra', cut=refused, download=download,
+            out=tmp_path / 'extra.zip',
+        )
+    assert not download.exists()
+
+
+def test_all_failed_counts_only_the_sources_built_from() -> None:
+    """Every source failing means every source there is a state for."""
+    states = {'bods': SourceState(etag=None, last_modified=None, sha256='a')}
+    assert not Fetched(
+        states=states, downloaded=(), changed=(), failed=('rail',),
+    ).all_failed
+    assert Fetched(
+        states=states, downloaded=(), changed=(), failed=('bods', 'rail'),
+    ).all_failed
+    assert not Fetched(states={}, downloaded=(), changed=()).all_failed
+
+
+def test_a_damaged_download_keeps_the_stored_cut(
+    server: FeedServer, data_dir: Path, tmp_path: Path,
+) -> None:
+    """A cut that meets a damaged member fails the source, not the refresh."""
+    serve_extra(server=server, tmp_path=tmp_path, comment=b'one')
+    run_extra(server=server, data_dir=data_dir)
+    stored = (data_dir / 'sources' / 'extra.zip').read_bytes()
+    serve_extra(server=server, tmp_path=tmp_path, comment=b'two', etag='"2"')
+    report = run_extra(server=server, data_dir=data_dir, cut=damaged)
+    assert (report.failed, report.all_failed) == (('extra',), False)
+    assert (data_dir / 'sources' / 'extra.zip').read_bytes() == stored

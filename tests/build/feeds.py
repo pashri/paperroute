@@ -1,6 +1,9 @@
 """Small real GTFS feeds for build and repository tests."""
 
+import shutil
 import sqlite3
+import zipfile
+import zlib
 from contextlib import closing
 from datetime import date
 from pathlib import Path
@@ -347,3 +350,78 @@ def shaped_bus_feed(*, path: Path,
                       for row in files['trips.txt']],
         'shapes.txt': [*shape_rows(shape_id='S1', points=points),
                        *shape_rows(shape_id='S9', points=points)]})
+
+
+CUT_COMMENT: Final[bytes] = b'cut'
+
+
+def commented(*, archive: Path, out: Path) -> int:
+    """
+    Cut a zip by copying it with a fixed comment, as a city's cut writes one.
+
+    Parameters
+    ----------
+    archive : Path
+        The downloaded zip.
+    out : Path
+        Where the cut goes.
+
+    Returns
+    -------
+    int
+        Always 0.
+    """
+    shutil.copyfile(archive, out)
+    with zipfile.ZipFile(out, 'a') as copy:
+        copy.comment = CUT_COMMENT
+    return 0
+
+
+def refused(*, archive: Path, out: Path) -> int:
+    """
+    Refuse every zip, as a cut refuses a malformed one.
+
+    Parameters
+    ----------
+    archive : Path
+        The downloaded zip.
+    out : Path
+        Where the cut would go.
+
+    Returns
+    -------
+    int
+        Never returns.
+
+    Raises
+    ------
+    ValueError
+        Always.
+    """
+    del archive, out
+    raise ValueError('stop_times.txt is not in trip order')
+
+
+def damaged(*, archive: Path, out: Path) -> int:
+    """
+    Fail as a cut does over a damaged deflate stream.
+
+    Parameters
+    ----------
+    archive : Path
+        The downloaded zip.
+    out : Path
+        Where the cut would go.
+
+    Returns
+    -------
+    int
+        Never returns.
+
+    Raises
+    ------
+    zlib.error
+        Always.
+    """
+    del archive, out
+    raise zlib.error('Error -3 while decompressing data')

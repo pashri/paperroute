@@ -17,12 +17,50 @@ from paperroute_transit.build.source_state import SourceError, SourceState
 CHUNK_BYTES: Final[int] = 1 << 20
 
 
+class SourceCut(Protocol):
+    """Writes the part of a downloaded zip that a city keeps."""
+
+    def __call__(self, *, archive: Path, out: Path) -> object:
+        """
+        Cut a downloaded zip.
+
+        Parameters
+        ----------
+        archive : Path
+            The downloaded zip.
+        out : Path
+            Where the cut goes.
+
+        Returns
+        -------
+        object
+            Whatever the city reports about the cut; unused.
+        """
+
+
 @dataclass(frozen=True)
 class SourceSpec:
-    """One timetable zip and where the downloader finds it."""
+    """
+    One timetable zip and where the downloader finds it.
+
+    Attributes
+    ----------
+    name : str
+        Source name.
+    path : str
+        Where the downloader finds the zip.
+    cut : SourceCut | None
+        Applied to the download, whose result is what is stored; none
+        stores the download as it is.
+    optional : bool
+        When True, the build goes on without this source if it has no
+        copy to build from.
+    """
 
     name: str
     path: str
+    cut: SourceCut | None = None
+    optional: bool = False
 
 
 class Downloader(Protocol):

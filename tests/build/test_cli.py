@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import sqlite3
+import zipfile
 from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import replace
@@ -21,14 +22,17 @@ from paperroute_sydney.city import SYDNEY, SYDNEY_REF, SYDNEY_ZONE
 from paperroute_testkit.build.osm_factory import TINY_BBOX, write_tiny_osm
 from paperroute_transit.build.cli import (
     OneLine,
+    given_sources,
     main,
     parse_args,
     run_check_tiles,
 )
+from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.sources import BuildParts, SourceSpec
 from paperroute_transit.build.tile_store import TileWriter
 from paperroute_transit.core.map_places import MapPlaces
 from paperroute_transit.core.tiles import TILE_STYLE
+from tests.build.feeds import CUT_COMMENT, bus_feed, commented
 from tests.build.tile_inputs import write_timetable
 
 ZOOMS_TEXT: Final[str] = '3,5,8,14,25,45'
@@ -395,3 +399,32 @@ def test_check_tiles_from_the_command_line(tmp_path: Path) -> None:
     with pytest.raises(SystemExit) as info:
         main(city=SYDNEY, parts=SYDNEY_BUILD, argv=['check-tiles', str(out)])
     assert info.value.code == 0
+
+
+def test_given_sources_build_from_each_zip_named(tmp_path: Path) -> None:
+    """A source with no cut is built from its zip as given."""
+    args = parsed(
+        argv=['gtfs', '--bundle', 'b.zip', '--out', str(tmp_path / 'o.db')],
+    )
+    assert given_sources(args=args, parts=SYDNEY_BUILD) == [
+        Source(name='bundle', archive=Path('b.zip')),
+    ]
+
+
+def test_given_sources_cut_a_zip_whose_source_has_a_cut(
+    tmp_path: Path,
+) -> None:
+    """A cut source's zip is cut beside the output and built from there."""
+    parts = replace(TWO_SOURCES, sources=(
+        SourceSpec(name='a', path='x'),
+        SourceSpec(name='b_c', path='y', cut=commented, optional=True),
+    ))
+    given = bus_feed(path=tmp_path / 'given.zip')
+    args = parse_args(city=SYDNEY, parts=parts, argv=[
+        'gtfs', '--b-c', str(given), '--out', str(tmp_path / 'o.db'),
+    ])
+    assert given_sources(args=args, parts=parts) == [
+        Source(name='b_c', archive=tmp_path / 'o.b_c.zip', optional=True),
+    ]
+    with zipfile.ZipFile(tmp_path / 'o.b_c.zip') as cut:
+        assert cut.comment == CUT_COMMENT

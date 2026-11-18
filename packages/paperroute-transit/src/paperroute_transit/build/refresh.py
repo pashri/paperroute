@@ -1,9 +1,12 @@
 """Refresh the timetable from the city's sources and swap it in."""
 
+import csv
 import fcntl
 import logging
 import sqlite3
 import time
+import zipfile
+import zlib
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, replace
@@ -30,6 +33,7 @@ from paperroute_transit.build.source_state import (
 from paperroute_transit.build.sources import (
     BuildParts,
     Downloader,
+    SourceCut,
     SourceSpec,
     file_sha256,
     needs_download,
@@ -53,6 +57,17 @@ logger = logging.getLogger(__name__)
 
 TIMEOUT_S: Final[float] = 60
 MIN_DAYS_LEFT: Final[int] = 7
+DOWNLOAD_SUFFIX: Final[str] = '.download.zip'
+CUT_ERRORS: Final[tuple[type[Exception], ...]] = (
+    ValueError,
+    KeyError,
+    TypeError,
+    OSError,
+    EOFError,
+    zipfile.BadZipFile,
+    zlib.error,
+    csv.Error,
+)
 BUILD_STARTS_PER_S: Final[float] = 1.0  # leaves the panel's share of 5/s
 LIMITER: Final[SyncStartLimiter] = SyncStartLimiter(
     per_second=BUILD_STARTS_PER_S,
@@ -209,6 +224,89 @@ def intact_sha(*, layout: Layout, name: str,
     return expected if file_sha256(path=path) == expected else None
 
 
+def cut_into(
+    *,
+    name: str,
+    cut: SourceCut,
+    download: Path,
+    out: Path,
+) -> str:
+    """
+    Cut a downloaded zip into the scratch directory and delete it.
+
+    Parameters
+    ----------
+    name : str
+        Source name.
+    cut : SourceCut
+        The city's cut.
+    download : Path
+        The downloaded zip, deleted afterwards.
+    out : Path
+        Where the cut goes.
+
+    Returns
+    -------
+    str
+        The cut's SHA-256.
+
+    Raises
+    ------
+    SourceError
+        If the cut fails.
+    """
+    try:
+        cut(archive=download, out=out)
+    except CUT_ERRORS as error:
+        raise SourceError(
+            f'{name}: cut failed, {type(error).__name__}',
+        ) from error
+    finally:
+        download.unlink(missing_ok=True)
+    return file_sha256(path=out)
+
+
+def fetched_zip(
+    *,
+    layout: Layout,
+    spec: SourceSpec,
+    downloader: Downloader,
+) -> str:
+    """
+    Download one source, cutting it if its city does, into the scratch dir.
+
+    Parameters
+    ----------
+    layout : Layout
+        Data paths.
+    spec : SourceSpec
+        Source.
+    downloader : Downloader
+        Fetches the zip.
+
+    Returns
+    -------
+    str
+        The SHA-256 of the zip left in the scratch directory.
+    """
+    kept = layout.work / f'{spec.name}.zip'
+    if spec.cut is None:
+        return downloader.download(
+            spec=spec,
+            out=kept,
+            timeout_s=TIMEOUT_S,
+            limiter=LIMITER,
+        )
+    download = layout.work / f'{spec.name}{DOWNLOAD_SUFFIX}'
+    downloader.download(
+        spec=spec,
+        out=download,
+        timeout_s=TIMEOUT_S,
+        limiter=LIMITER,
+    )
+    return cut_into(name=spec.name, cut=spec.cut, download=download, out=kept)
+
+
 def fetch_source(
     *,
     layout: Layout,
@@ -257,12 +355,7 @@ def fetch_source(
         )
     progress(phase=f'download {spec.name}')
     try:
-        digest = downloader.download(
-            spec=spec,
-            out=layout.work / f'{spec.name}.zip',
-            timeout_s=TIMEOUT_S,
-            limiter=LIMITER,
-        )
+        digest = fetched_zip(layout=layout, spec=spec, downloader=downloader)
     except SourceError:
         logger.exception(
             '%s: download failed, using the stored zip',
@@ -270,6 +363,62 @@ def fetch_source(
         )
         return stored_copy(name=spec.name, stored=stored, intact=intact)
     return SourceOutcome(state=replace(fresh, sha256=digest), downloaded=True)
+
+
+def outcome_of(
+    *,
+    layout: Layout,
+    spec: SourceSpec,
+    downloader: Downloader,
+    fresh: SourceState | None,
+    stored: SourceState | None,
+    intact: str | None,
+) -> SourceOutcome | None:
+    """
+    Fetch one source, leaving an optional one out if it has no copy.
+
+    Parameters
+    ----------
+    layout : Layout
+        Data paths.
+    spec : SourceSpec
+        Source.
+    downloader : Downloader
+        Fetches the zip.
+    fresh : SourceState | None
+        Validators from a new HEAD; None when it failed.
+    stored : SourceState | None
+        State saved after the last download.
+    intact : str | None
+        Digest of the stored zip if it is intact, else None.
+
+    Returns
+    -------
+    SourceOutcome | None
+        The outcome, or None for an optional source with no copy.
+
+    Raises
+    ------
+    SourceError
+        When a required source has no copy to build from.
+    """
+    try:
+        return fetch_source(
+            layout=layout,
+            spec=spec,
+            downloader=downloader,
+            fresh=fresh,
+            stored=stored,
+            intact=intact,
+        )
+    except SourceError:
+        if not spec.optional:
+            raise
+        logger.warning(
+            '%s: no copy to build from, building without it',
+            spec.name,
+        )
+        return None
 
 
 def download_changed(
@@ -304,8 +453,8 @@ def download_changed(
         spec.name: intact_sha(layout=layout, name=spec.name, stored=stored)
         for spec in parts.sources
     }
-    results = {
-        spec.name: fetch_source(
+    outcomes = {
+        spec.name: outcome_of(
             layout=layout,
             spec=spec,
             downloader=parts.downloader,
@@ -314,6 +463,11 @@ def download_changed(
             intact=intact[spec.name],
         )
         for spec in parts.sources
+    }
+    results = {
+        name: outcome
+        for name, outcome in outcomes.items()
+        if outcome is not None
     }
     downloaded = tuple(
         name
@@ -330,8 +484,32 @@ def download_changed(
         ),
         failed=tuple(
             name
-            for name, outcome in results.items()
-            if outcome.failed
+            for name, outcome in outcomes.items()
+            if outcome is None or outcome.failed
+        ),
+    )
+
+
+def present_parts(*, parts: BuildParts, fetched: Fetched) -> BuildParts:
+    """
+    Keep the sources there is a copy of to build from.
+
+    Parameters
+    ----------
+    parts : BuildParts
+        The city's reference and its sources.
+    fetched : Fetched
+        Outcome of download_changed.
+
+    Returns
+    -------
+    BuildParts
+        The parts without any optional source that has no copy.
+    """
+    return replace(
+        parts,
+        sources=tuple(
+            spec for spec in parts.sources if spec.name in fetched.states
         ),
     )
 
@@ -379,6 +557,7 @@ def build_and_check(
                 archive=(
                     layout.work if spec.name in changed else layout.sources
                 ) / f'{spec.name}.zip',
+                optional=spec.optional,
             )
             for spec in parts.sources
         ],
@@ -492,7 +671,7 @@ def update(
         days=days,
         handoff=handoff,
         city=city,
-        parts=parts,
+        parts=present_parts(parts=parts, fetched=fetched),
     )
     swap_in(layout=layout, built=built, fetched=fetched)
     return True
@@ -524,10 +703,11 @@ def refresh(
     """
     Fetch changed sources and rebuild the timetable if their bytes changed.
 
-    A source whose HEAD or download fails is logged and built from its
-    stored zip. Any other failure before the swap, or a failed source
-    with no stored zip, leaves timetable.db, sources/ and the stored
-    states as they were.
+    A source whose HEAD, download or cut fails is logged and built from
+    its stored zip. A failed required source with no stored zip fails the
+    refresh and an optional one is left out. Any other failure before the
+    swap leaves timetable.db, sources/ and the stored states as they
+    were.
 
     Parameters
     ----------

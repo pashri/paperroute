@@ -73,7 +73,7 @@ CAMBRIDGE_PARTS: Final[CityParts] = CityParts(
     suggest=cambridge_suggest,
     status_line=cambridge_status_line,
     sheets=('palette.css',),
-    about='Buses and coaches',
+    about='Buses, coaches and trains',
     rebuild_minutes=10,
     credits=CAMBRIDGE_CREDITS,
 )

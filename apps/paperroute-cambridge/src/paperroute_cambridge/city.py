@@ -41,6 +41,7 @@ class CambridgeFeed(StrEnum):
 
     BUS = 'bus'
     COACH = 'coach'
+    TRAIN = 'train'
     OTHER = 'other'
 
 
@@ -49,11 +50,15 @@ class CambridgeMode(StrEnum):
 
     BUS = 'bus'
     COACH = 'coach'
+    TRAIN = 'train'
 
 
 COACH_AGENCIES: Final[frozenset[str]] = frozenset({'OP5050', 'OP5051'})
 COACH_TYPE: Final[int] = 200
 BUS_TYPE: Final[int] = 3
+# GTFS route types: rail, rail replacement bus
+RAIL_TYPES: Final[frozenset[int]] = frozenset({2, 714})
+RAIL_BLUE: Final[str] = '#01426a'
 DARK_TEXT: Final[str] = '#111111'
 CAMBRIDGE_MODES: Final[tuple[ModeSpec, ...]] = (
     ModeSpec(
@@ -70,6 +75,13 @@ CAMBRIDGE_MODES: Final[tuple[ModeSpec, ...]] = (
         letter='C',
         chip='#e03c31',
         chip_text=DARK_TEXT,
+    ),
+    ModeSpec(
+        id=CambridgeMode.TRAIN,
+        label='Train',
+        letter='T',
+        chip=RAIL_BLUE,
+        by_line=True,
     ),
 )
 
@@ -99,6 +111,8 @@ def classify_cambridge(
     """
     Sort a Cambridge route into its mode and feed source.
 
+    A rail or rail replacement route is a train.
+
     Parameters
     ----------
     route_type : int
@@ -111,11 +125,14 @@ def classify_cambridge(
     Returns
     -------
     RouteClass
-        Coach for a coach route and bus for any other bus type, busway and
-        park-and-ride included. The mode is None for a route with no short
-        name; any other type is not a bus or a coach.
+        Train for a rail or rail replacement route, coach for a coach route
+        and bus for any other bus type, busway and park-and-ride included.
+        The mode is None for a route with no short name; any other type is
+        not a train, a bus or a coach.
     """
-    if is_coach(route_type=route_type, agency_id=agency_id):
+    if route_type in RAIL_TYPES:
+        source = CambridgeFeed.TRAIN
+    elif is_coach(route_type=route_type, agency_id=agency_id):
         source = CambridgeFeed.COACH
     elif route_type == BUS_TYPE:
         source = CambridgeFeed.BUS
@@ -257,6 +274,9 @@ SOURCE_NOUNS: Final[dict[str, Nouns]] = {
     CambridgeFeed.BUS: Nouns(vehicle='bus', bay='stop', connection='bus'),
     CambridgeFeed.COACH: Nouns(
         vehicle='coach', bay='stop', connection='coach',
+    ),
+    CambridgeFeed.TRAIN: Nouns(
+        vehicle='train', bay='platform', connection='train',
     ),
     CambridgeFeed.OTHER: Nouns(
         vehicle='service', bay='stop', connection='service',

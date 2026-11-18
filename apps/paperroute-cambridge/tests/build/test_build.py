@@ -124,17 +124,17 @@ def test_fixture_agencies_are_the_coach_agencies() -> None:
     assert found == COACH_AGENCIES
 
 
-def test_chooser_offers_bus_and_coach_with_no_line_mode(
+def test_chooser_offers_bus_and_coach_from_the_bus_zip_alone(
     built_path: Path,
 ) -> None:
-    """Chooser offers bus and coach with no line mode."""
+    """Bus zip alone offers Bus and Coach; Train is the one line kind."""
     with closing(
         SqliteNetworkRepository(city=CAMBRIDGE, path=built_path),
     ) as network:
         kinds = network.kind_column()
         coach = network.next_column(path=path_to(kind='coach'))
     assert [choice.label for choice in kinds.items] == ['Bus', 'Coach']
-    assert not any(spec.by_line for spec in CAMBRIDGE.modes)
+    assert [spec.id for spec in CAMBRIDGE.modes if spec.by_line] == ['train']
     assert coach is not None
     assert {choice.badge for choice in coach.items} >= {'777', 'UK083'}
 

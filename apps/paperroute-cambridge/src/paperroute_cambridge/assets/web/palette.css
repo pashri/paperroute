@@ -25,6 +25,8 @@
   --ticket: #e8d9a8;
   --ticket-text: #111111;
   --coach: #e03c31;
+  --train: #01426a;
+  --train-text: #ffffff;
   --mode-other: #4a4a44;
   --font: 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --bar: 0rem;
@@ -59,6 +61,8 @@
     --ticket: #c9b97f;
     --ticket-text: #0b0c0c;
     --coach: #e8554a;
+    --train: #4d9ccc;
+    --train-text: #0b0c0c;
     --mode-other: #a9b1b5;
   }
 }
@@ -179,6 +183,11 @@ body > nav {
 
 .chip.mode-coach {
   --chip-fill: var(--coach);
+}
+
+.chip.mode-train {
+  --chip-fill: var(--train);
+  --chip-text: var(--train-text);
 }
 
 label,

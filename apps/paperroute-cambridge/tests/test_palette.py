@@ -292,7 +292,7 @@ def test_dark_block_redefines_tokens_only_and_all_that_the_kit_does() -> None:
 def test_palette_uses_only_classes_the_shared_pages_have() -> None:
     """Palette uses only classes the shared pages have."""
     assert class_names(PALETTE_CSS) <= (
-        class_names(LIVE_CSS) | class_names(BOARD_CSS) | {'mode-coach'}
+        class_names(LIVE_CSS) | class_names(BOARD_CSS) | {'mode-coach', 'mode-train'}
     )
 
 
@@ -337,6 +337,25 @@ def test_coach_chip_follows_the_scheme() -> None:
     light = resolved(scheme='light')['--coach']
     assert light == '#e03c31' == CAMBRIDGE.modes[1].chip
     assert resolved(scheme='dark')['--coach'] == '#e8554a'
+
+
+def test_train_chip_follows_the_scheme() -> None:
+    """Train chip is rail blue by day and the lighter blue by night."""
+    (rule,) = [
+        rule
+        for rule in css_rules(css=PALETTE_CSS)
+        if rule.selector == '.chip.mode-train'
+    ]
+    assert rule.body == (
+        '--chip-fill: var(--train)',
+        '--chip-text: var(--train-text)',
+    )
+    light, dark = resolved(scheme='light'), resolved(scheme='dark')
+    assert (light['--train'], light['--train-text']) == ('#01426a', '#ffffff')
+    assert (dark['--train'], dark['--train-text']) == ('#4d9ccc', '#0b0c0c')
+    assert light['--train'] == CAMBRIDGE.modes[2].chip
+    assert contrast(light['--train-text'], light['--train']) >= READABLE
+    assert contrast(dark['--train-text'], dark['--train']) >= READABLE
 
 
 def test_wide_nav_hugs_its_rows_and_lists_have_no_gap() -> None:

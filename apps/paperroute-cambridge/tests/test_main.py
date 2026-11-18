@@ -20,7 +20,7 @@ def test_card_describes_cambridge(tmp_path: Path) -> None:
         now=datetime(2026, 11, 16, 9, 0, tzinfo=CAMBRIDGE.zone),
     )
     assert card.name == 'Cambridge'
-    assert card.status == f'Buses and coaches{DOT}no timetable yet'
+    assert card.status == f'Buses, coaches and trains{DOT}no timetable yet'
     assert 'for up to 10 minutes' in card.wait
 
 

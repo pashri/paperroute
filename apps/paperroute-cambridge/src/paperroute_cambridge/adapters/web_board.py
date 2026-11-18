@@ -15,6 +15,10 @@ CAMBRIDGE_CREDITS: Final[tuple[str, ...]] = (
     'under the <a href="https://www.nationalarchives.gov.uk/doc/'
     'open-government-licence/version/3/">Open Government Licence '
     'v3.0</a>.',
+    'Train timetables: Rail Delivery Group and National Rail '
+    'Enquiries, through <a href="https://github.com/planarnetwork/'
+    'gb-transit">gb-transit</a>. Station data: Department for '
+    'Transport.',
     'Map data © <a href="https://www.openstreetmap.org/copyright">'
     'OpenStreetMap</a> contributors.',
 )

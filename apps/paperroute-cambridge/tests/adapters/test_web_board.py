@@ -7,12 +7,16 @@ from paperroute_cambridge.adapters.web_board import (
 
 
 def test_credits_name_the_licence_and_the_map() -> None:
-    """Credits name the licence and the map."""
+    """Credits name the licence, the train data and the map."""
     assert CAMBRIDGE_CREDITS == (
         'Bus and coach data: contains public sector information licensed '
         'under the <a href="https://www.nationalarchives.gov.uk/doc/'
         'open-government-licence/version/3/">Open Government Licence '
         'v3.0</a>.',
+        'Train timetables: Rail Delivery Group and National Rail '
+        'Enquiries, through <a href="https://github.com/planarnetwork/'
+        'gb-transit">gb-transit</a>. Station data: Department for '
+        'Transport.',
         'Map data © <a href="https://www.openstreetmap.org/copyright">'
         'OpenStreetMap</a> contributors.',
     )

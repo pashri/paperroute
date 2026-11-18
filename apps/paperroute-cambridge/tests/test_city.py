@@ -14,7 +14,7 @@ from paperroute_cambridge.city import (
     merge_cambridge,
 )
 from paperroute_device.core.device_settings import Window
-from paperroute_transit.core.city import MergeReport
+from paperroute_transit.core.city import MergeReport, Nouns
 from paperroute_transit.core.map_places import StationSource
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.modes import RouteClass, mode_problems
@@ -47,10 +47,17 @@ def test_city_has_the_spec_values() -> None:
     )
     assert CAMBRIDGE.parked_age is ParkedAge.TEN
     assert CAMBRIDGE.route_fallback is True
-    assert [(m.id, m.letter, m.chip) for m in CAMBRIDGE.modes] == [
-        ('bus', 'B', '#d9d8d0'),
-        ('coach', 'C', '#e03c31'),
+    assert [(m.id, m.letter, m.chip, m.by_line) for m in CAMBRIDGE.modes] == [
+        ('bus', 'B', '#d9d8d0', False),
+        ('coach', 'C', '#e03c31', False),
+        ('train', 'T', '#01426a', True),
     ]
+    assert CAMBRIDGE.modes[2].label == 'Train'
+    assert CAMBRIDGE.source_nouns['train'] == Nouns(
+        vehicle='train',
+        bay='platform',
+        connection='train',
+    )
     assert mode_problems(modes=CAMBRIDGE.modes) == []
     assert CAMBRIDGE.default_pin == Pin(origin=DRUMMER_STREET, kind='bus')
 
@@ -65,7 +72,11 @@ def test_city_has_the_spec_values() -> None:
         (3, 'OP5050', '717', 'coach', 'coach'),
         (200, 'OP999', 'X1', 'coach', 'coach'),
         (3, 'OP118', '', None, 'bus'),
-        (2, 'OP1', 'GN', None, 'other'),
+        (2, 'GN', 'GN', 'train', 'train'),
+        (714, 'GN', 'GN', 'train', 'train'),
+        (2, 'LE', 'GA', 'train', 'train'),
+        (2, 'LE', '', None, 'train'),
+        (4, 'OP1', 'F1', None, 'other'),
     ],
 )
 def test_classify_cambridge(

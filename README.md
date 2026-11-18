@@ -17,7 +17,7 @@ A uv workspace of five packages and one app per city:
 - `packages/paperroute-device-testkit`: fakes for the device's tests.
 - `apps/paperroute-sydney`: the Sydney app, with the TfNSW feeds and Trip
   Planner and the `paperroute-board` and `paperroute-build` commands.
-- `apps/paperroute-cambridge`: the Cambridge app: buses and coaches.
+- `apps/paperroute-cambridge`: the Cambridge app: buses, coaches and trains.
 
 Hardware, device and transit each import only from the ones above them,
 the apps import from all three, and only the tests use the two test kits.
@@ -87,16 +87,29 @@ the bus was last heard 4 minutes ago.
 ## Cambridge
 
 The Cambridge app shows buses and coaches from the Bus Open Data Service
-(BODS). Its data lives in `data/cambridge/`.
+(BODS), and trains at timetable times from the national rail timetable that
+the gb-transit project publishes on GitHub. Its data lives in
+`data/cambridge/`.
 
 Build the timetable. `refresh` downloads the public BODS timetable (no key)
-and rebuilds `data/cambridge/timetable.db`:
+and the latest gb-transit release's `gtfs-national-rail-only.zip`, keeps every
+train that calls at Cambridge, Cambridge North or Cambridge South, and
+rebuilds `data/cambridge/timetable.db`. Without a rail zip it keeps the trains
+it last built from, or builds the buses alone; the Device page's Sources row
+gives each source's date.
 
     uv run python -m paperroute_cambridge.build refresh --data-dir data/cambridge
 
-On the Mac, the build of the 2026-11-16 feed (version 20261116_042604) took
-21.8 s with a peak of 86 MB and made a 26 MB file with 56 routes and 5,735
-trips, 370 of them coach trips.
+To build from local zips:
+
+    uv run python -m paperroute_cambridge.build gtfs \
+      --bods data/cambridge/raw/bods.zip \
+      --rail data/cambridge/raw/rail/gtfs-national-rail-only.zip \
+      --out /tmp/timetable.db --start 2026-11-16 --days 14
+
+On the Mac, the build of the 2026-11-16 feeds took about 24 s with a peak of
+about 80 MB and made a 29 MB file with 61 routes and 7,133 trips: 5,735 bus
+and coach trips and 1,398 train trips.
 
 Download Geofabrik's `cambridgeshire`, `bedfordshire`, `hertfordshire`,
 `essex` and `suffolk` extracts

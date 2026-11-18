@@ -604,6 +604,14 @@ def test_feed_date_of_a_short_first_row_is_none(tmp_path: Path) -> None:
     assert feed_date(archive=archive) is None
 
 
+def test_feed_date_of_a_long_first_row_is_none(tmp_path: Path) -> None:
+    """A first row with more fields than the header gives no date."""
+    archive = tmp_path / 'f.zip'
+    with zipfile.ZipFile(archive, 'w') as feed:
+        feed.writestr('feed_info.txt', 'feed_start_date\n20261014,extra\n')
+    assert feed_date(archive=archive) is None
+
+
 def test_feed_date_of_an_undecodable_member_is_none(tmp_path: Path) -> None:
     """A feed_info member that is not UTF-8 gives no date."""
     archive = tmp_path / 'f.zip'

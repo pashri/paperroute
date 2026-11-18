@@ -85,8 +85,8 @@ def feed_date(*, archive: Path) -> date | None:
             return datetime.strptime(
                 row['feed_start_date'], '%Y%m%d',
             ).date()
-    except (KeyError, TypeError, ValueError, csv.Error,
-            zipfile.BadZipFile, zlib.error):
+    except (AttributeError, KeyError, TypeError, ValueError,
+            csv.Error, zipfile.BadZipFile, zlib.error):
         return None
     return None
 

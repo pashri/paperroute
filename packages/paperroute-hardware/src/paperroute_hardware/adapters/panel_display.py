@@ -5,6 +5,7 @@ import threading
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Final, Protocol
 
 import numpy as np
@@ -22,6 +23,7 @@ from paperroute_hardware.render.panel_bits import (
     oriented,
     quick_planes,
 )
+from paperroute_hardware.screen import load_frame
 
 CLEAN_QUIET: Final[float] = 30  # seconds
 RETRY_AFTER: Final[float] = 60  # seconds
@@ -133,6 +135,23 @@ class Retry:
     due: float
 
 
+@dataclass(frozen=True)
+class Splash:
+    """
+    A picture to draw before the first frame.
+
+    Attributes
+    ----------
+    image : Path
+        A raw 8-bit grey picture of the whole screen.
+    turned : bool
+        Whether to draw it upside down.
+    """
+
+    image: Path
+    turned: bool
+
+
 # pylint: disable-next=too-many-instance-attributes
 class PanelDisplay:
     """
@@ -148,7 +167,9 @@ class PanelDisplay:
     `CLEAN_QUIET` seconds, unless the device is in Sleep mode. A frame
     shown in Sleep mode puts the panel into deep sleep once drawn. A
     failed refresh is tried again as a full refresh every `RETRY_AFTER`
-    seconds until it works or a newer frame comes.
+    seconds until it works or a newer frame comes. A splash asked for
+    before the first frame is drawn once with a full refresh, and
+    skipped on any failure.
 
     Parameters
     ----------
@@ -187,6 +208,8 @@ class PanelDisplay:
         self._clean_after = CLEAN_AFTER
         self._asleep = False
         self._retry: Retry | None = None
+        self._splash: Splash | None = None
+        self._shown = False
         self._thread = threading.Thread(
             target=self._run,
             name='panel',
@@ -241,6 +264,8 @@ class PanelDisplay:
             else frame.copy()
         )
         with self._ready:
+            self._shown = True
+            self._splash = None
             waiting = self._waiting
             self._waiting = Job(
                 frame=kept,
@@ -253,6 +278,25 @@ class PanelDisplay:
             self._clean_after = clean_after
             if quick:
                 self._last_quick = self._clock()
+            self._ready.notify_all()
+
+    def splash(self, *, image: Path, turned: bool) -> None:
+        """
+        Leave a picture for the worker to draw before the first frame.
+
+        Never waits for the panel. Ignored once `show` has been called.
+
+        Parameters
+        ----------
+        image : Path
+            A raw 8-bit grey picture of the whole screen.
+        turned : bool
+            Whether to draw it upside down.
+        """
+        with self._ready:
+            if self._shown:
+                return
+            self._splash = Splash(image=image, turned=turned)
             self._ready.notify_all()
 
     def settle(self, *, timeout: float) -> bool:
@@ -315,20 +359,45 @@ class PanelDisplay:
         bool
             True when nothing waits and the worker is idle.
         """
-        return self._waiting is None and not self._busy
+        return (
+            self._waiting is None
+            and self._splash is None
+            and not self._busy
+        )
 
     def _run(self) -> None:
         """Draw frames and cleaning refreshes until stopped."""
         while (work := self._next()) is not None:
-            self._handle(work=work)
+            if isinstance(work, Splash):
+                self._draw_splash(splash=work)
+            else:
+                self._handle(work=work)
 
-    def _next(self) -> Job | Clean | None:
+    def _draw_splash(self, *, splash: Splash) -> None:
+        """
+        Draw a splash with a full refresh, or log why it was skipped.
+
+        Parameters
+        ----------
+        splash : Splash
+            The picture.
+        """
+        try:
+            frame = load_frame(path=splash.image)
+            planes = grey_planes(
+                frame=oriented(frame=frame, turned=splash.turned),
+            )
+            self._open().draw_full(planes=planes)
+        except Exception as error:  # pylint: disable=broad-exception-caught
+            logger.info('splash skipped: %s', error)
+
+    def _next(self) -> Job | Clean | Splash | None:
         """
         Wait for a frame, a due retry or a due cleaning refresh.
 
         Returns
         -------
-        Job | Clean | None
+        Job | Clean | Splash | None
             The work to do, or None once stopped.
         """
         with self._ready:
@@ -341,20 +410,23 @@ class PanelDisplay:
                 self._ready.wait(timeout=self._wait())
             return None
 
-    def _take(self) -> Job | Clean | None:
+    def _take(self) -> Job | Clean | Splash | None:
         """
         Take the work due now, newest frame first.
 
         Returns
         -------
-        Job | Clean | None
-            The waiting frame, the failed frame once `RETRY_AFTER` has
-            passed, a due cleaning refresh, or None. The failed frame
-            stays until a full refresh works.
+        Job | Clean | Splash | None
+            The waiting frame, a waiting splash, the failed frame once
+            `RETRY_AFTER` has passed, a due cleaning refresh, or None.
+            The failed frame stays until a full refresh works.
         """
         if self._waiting is not None:
             job, self._waiting = self._waiting, None
             return job
+        if self._splash is not None:
+            splash, self._splash = self._splash, None
+            return splash
         if self._retry is not None and self._clock() >= self._retry.due:
             return self._retry.job
         if self._clean_due():

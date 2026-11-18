@@ -628,3 +628,50 @@ def test_tagged_uncertain_headline_stops_short_of_the_note() -> None:
     assert headline_width(
         row=replace(row(), estimate=UNSURE), k=k,
     ) == LIST_WIDTH
+
+
+def test_a_later_row_notes_its_platform_under_its_time() -> None:
+    """A row's note sits under the leave time, right-aligned to it."""
+    found = changed(
+        before=replace(BASE, rows=(row(),)),
+        after=replace(BASE, rows=(replace(row(), note='platform 2B'),)),
+    )
+    assert found.size
+    assert found[:, 0].min() >= 70 + 33 and found[:, 0].max() <= 70 + 47
+    assert found[:, 1].min() >= LIST_LEAVE_RIGHT - 62
+    assert found[:, 1].max() <= LIST_LEAVE_RIGHT
+
+
+def test_uncertain_wins_over_the_platform_note() -> None:
+    """An uncertain row draws 'uncertain', whatever its note."""
+    unsure = replace(row(), estimate=UNSURE)
+    assert not changed(
+        before=replace(BASE, rows=(unsure,)),
+        after=replace(BASE, rows=(replace(unsure, note='platform 2B'),)),
+    ).size
+
+
+def test_a_board_row_notes_its_platform_under_its_countdown() -> None:
+    """With no destination, the note sits under the countdown."""
+    board = replace(BASE, destination=None, hero=None, rows=(row(),))
+    found = changed(
+        before=board,
+        after=replace(board, rows=(replace(row(), note='platform 2B'),)),
+    )
+    assert found.size
+    assert found[:, 0].min() >= 40 + 33 and found[:, 0].max() <= 40 + 47
+    assert found[:, 1].min() >= 786 - 62
+
+
+def test_a_tagged_noted_headline_stops_short_of_the_note() -> None:
+    """A run-on tag gives way to a platform note too."""
+    k = Scale(large=False)
+    tagged = replace(
+        row(then=CarryOn(route='T2', headsign='Leppington')),
+        note='platform 2B',
+    )
+    room = note_room(face=k.face(weight=700, px=NOTE_PX), text='platform 2B')
+    assert headline_width(row=tagged, k=k) == (
+        LIST_LEAVE_RIGHT - LIST_LEFT - room
+    )
+    assert headline_width(row=replace(tagged, note=''), k=k) == TAGGED_WIDTH

@@ -77,6 +77,7 @@ class Row:
     onto: str | None = None
     stops: int | None = None
     estimate: Estimate | None = None
+    note: str = ''
 
 
 def row_estimate(*, item: LiveDeparture, zone: tzinfo) -> Estimate | None:
@@ -382,6 +383,31 @@ def nouns(*, city: City, departure: Departure) -> Nouns:
     return city.source_nouns.get(source, FALLBACK_NOUNS)
 
 
+def platform_note(*, city: City, departure: Departure, bay: str) -> str:
+    """
+    Name the platform a departure leaves from.
+
+    Parameters
+    ----------
+    city : City
+        The city, which says which modes note their platform.
+    departure : Departure
+        The departure.
+    bay : str
+        The word for where it is boarded.
+
+    Returns
+    -------
+    str
+        The bay word and platform; empty for a mode that does not note its
+        platform or a departure without one.
+    """
+    spec = city.mode(mode_id=departure.facts.kind)
+    if spec is None or not spec.platform_notes or not departure.platform:
+        return ''
+    return f'{bay} {departure.platform}'
+
+
 def to_row(
     *,
     item: LiveDeparture,
@@ -433,6 +459,7 @@ def to_row(
         onto=onto.route if onto and onto.route != dep.route else None,
         stops=dep.stops,
         estimate=row_estimate(item=item, zone=zone),
+        note=platform_note(city=city, departure=dep, bay=words.bay),
     )
 
 

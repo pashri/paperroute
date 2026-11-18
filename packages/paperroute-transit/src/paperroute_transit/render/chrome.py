@@ -915,18 +915,20 @@ def uncertain_row(*, row: Row) -> bool:
     return row.estimate is not None and row.estimate.uncertain
 
 
-def note_room(*, face: Face) -> float:
+def note_room(*, face: Face, text: str = UNCERTAIN) -> float:
     """
-    Say how much width the word 'uncertain' needs, with its gap.
+    Say how much width a note needs, with its gap.
 
     Parameters
     ----------
     face : Face
-        The face the word is drawn in.
+        The face the note is drawn in.
+    text : str
+        The note; 'uncertain' by default.
 
     Returns
     -------
     float
-        The word's width plus ``NOTE_GAP``.
+        The text's width plus ``NOTE_GAP``.
     """
-    return text_width(text=UNCERTAIN, face=face) + NOTE_GAP
+    return text_width(text=text, face=face) + NOTE_GAP

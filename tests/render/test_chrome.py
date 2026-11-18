@@ -38,6 +38,7 @@ from paperroute_transit.render.chrome import (
     header_tabs,
     leaves,
     link_arrow,
+    note_room,
     pin_tag,
     route_pair,
     row_px,
@@ -46,7 +47,7 @@ from paperroute_transit.render.chrome import (
     view_header,
 )
 from paperroute_transit.render.pair_list import CHIP_PX
-from paperroute_transit.render.stop_view import LIST_PAIR_ROOM
+from paperroute_transit.render.stop_view import LIST_PAIR_ROOM, NOTE_PX
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 LONG_LABELS: Final[tuple[str, ...]] = ('SH100', '283S2', '772V8')
@@ -592,3 +593,9 @@ def test_list_pair_keeps_full_labels(px: int, pair: tuple[str, str]) -> None:
     )
     assert width == pytest.approx(2 * badge_width(px=11) + LINK_WIDTH)
     assert width <= LIST_PAIR_ROOM
+
+
+def test_note_room_fits_its_text() -> None:
+    """A longer text needs more room than 'uncertain'."""
+    face = Face(weight=700, px=NOTE_PX)
+    assert note_room(face=face, text='platform 2B') > note_room(face=face)

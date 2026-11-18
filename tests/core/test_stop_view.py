@@ -15,7 +15,7 @@ from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyFeed, SydneyMode
 from paperroute_testkit.core.factories import START, departure
 from paperroute_transit.core.alert_model import AlertBanner
 from paperroute_transit.core.banners import OFFLINE_PHRASE
-from paperroute_transit.core.city import Nouns
+from paperroute_transit.core.city import City, Nouns
 from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.model import CarryOn, TripFacts
 from paperroute_transit.core.stop_view import (
@@ -950,3 +950,96 @@ def test_row_estimate_is_none_for_a_feed_time() -> None:
         cancelled=False,
     )
     assert row_estimate(item=item, zone=SYDNEY_ZONE) is None
+
+
+NOTED: Final = replace(
+    SYDNEY,
+    modes=tuple(
+        replace(spec, platform_notes=True)
+        if spec.id == SydneyMode.TRAIN
+        else spec
+        for spec in SYDNEY.modes
+    ),
+)
+
+
+def at_platform(
+    *, platform: str, feed: SydneyFeed, kind: SydneyMode
+) -> LiveDeparture:
+    """
+    A departure with a platform and a mode.
+
+    Parameters
+    ----------
+    platform : str
+        Platform or stand.
+    feed : SydneyFeed
+        Feed source.
+    kind : SydneyMode
+        Mode id.
+
+    Returns
+    -------
+    LiveDeparture
+        Departure.
+    """
+    item = live(minutes=5, mode=feed, facts=TripFacts(kind=kind))
+    return replace(
+        item, departure=replace(item.departure, platform=platform),
+    )
+
+
+def row_of(*, item: LiveDeparture, city: City) -> Row:
+    """
+    Turn a departure into a row.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        Departure.
+    city : City
+        The city.
+
+    Returns
+    -------
+    Row
+        Row.
+    """
+    return to_row(
+        item=item, now=START, pill=None, zone=SYDNEY_ZONE, city=city,
+    )
+
+
+def test_a_platform_noted_row_says_its_platform() -> None:
+    """A noted mode's row names its platform; an empty one has no note."""
+    train = SydneyFeed.TRAIN
+    kind = SydneyMode.TRAIN
+    noted = at_platform(platform='4', feed=train, kind=kind)
+    bare = at_platform(platform='', feed=train, kind=kind)
+    assert row_of(item=noted, city=NOTED).note == 'platform 4'
+    assert row_of(item=bare, city=NOTED).note == ''
+
+
+def test_a_noted_row_uses_its_modes_bay_word() -> None:
+    """The note opens with the departure's own bay word."""
+    words = Nouns(vehicle='train', bay='track', connection='train')
+    city = replace(
+        NOTED,
+        noun_overrides={(SydneyFeed.TRAIN, SydneyMode.TRAIN): words},
+    )
+    item = at_platform(
+        platform='4', feed=SydneyFeed.TRAIN, kind=SydneyMode.TRAIN,
+    )
+    assert row_of(item=item, city=city).note == 'track 4'
+
+
+def test_a_mode_without_platform_notes_has_no_note() -> None:
+    """Under Sydney, neither a platformed train nor a bus stand notes."""
+    train = at_platform(
+        platform='4', feed=SydneyFeed.TRAIN, kind=SydneyMode.TRAIN,
+    )
+    bus = at_platform(
+        platform='B', feed=SydneyFeed.BUS, kind=SydneyMode.BUS,
+    )
+    assert row_of(item=train, city=SYDNEY).note == ''
+    assert row_of(item=bus, city=SYDNEY).note == ''

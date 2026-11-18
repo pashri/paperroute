@@ -14,6 +14,7 @@ HEX_COLOUR: Final[re.Pattern[str]] = re.compile(r'^#[0-9a-f]{6}$')
 
 
 @dataclass(frozen=True)
+# pylint: disable-next=too-many-instance-attributes
 class ModeSpec:
     """
     One mode of a city's routes.
@@ -54,6 +55,8 @@ class ModeSpec:
     destination_first : bool
         True when the phone editor asks for the Destination before the
         line.
+    platform_notes : bool
+        True when later rows note their platform.
     """
 
     id: str
@@ -72,6 +75,7 @@ class ModeSpec:
     chip_text: str = '#ffffff'
     named_lines: bool = False
     destination_first: bool = False
+    platform_notes: bool = False
 
 
 @dataclass(frozen=True)

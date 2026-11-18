@@ -169,11 +169,28 @@ def hero_due(canvas: Canvas, *, row: Row, top: int) -> None:
     )
 
 
+def note_text(*, row: Row) -> str:
+    """
+    Say what a row's note reads.
+
+    Parameters
+    ----------
+    row : Row
+        Departure.
+
+    Returns
+    -------
+    str
+        'uncertain' for an uncertain row, else the row's own note.
+    """
+    return UNCERTAIN if uncertain_row(row=row) else row.note
+
+
 def row_note(
     canvas: Canvas, *, row: Row, right: float, y: int, k: Scale
 ) -> None:
     """
-    Draw 'uncertain' under the time of an uncertain row.
+    Draw a row's note under its time.
 
     Parameters
     ----------
@@ -182,16 +199,17 @@ def row_note(
     row : Row
         Departure.
     right : float
-        Right end of the word.
+        Right end of the note.
     y : int
         Row top.
     k : Scale
         The row's scale.
     """
-    if not uncertain_row(row=row):
+    text = note_text(row=row)
+    if not text:
         return
     canvas.text(
-        at=(right, y + k.y(NOTE_DROP)), text=UNCERTAIN,
+        at=(right, y + k.y(NOTE_DROP)), text=text,
         face=k.face(weight=700, px=NOTE_PX), grey=INK, anchor='rs')
 
 
@@ -210,13 +228,14 @@ def headline_width(*, row: Row, k: Scale) -> float:
     -------
     float
         ``LIST_WIDTH`` without a run-on tag; with one, ``TAGGED_WIDTH``,
-        or less for an uncertain row so the tag clears its note.
+        or less for a row with a note so the tag clears it.
     """
     if row.then is None:
         return LIST_WIDTH
-    if not uncertain_row(row=row):
+    text = note_text(row=row)
+    if not text:
         return TAGGED_WIDTH
-    room = note_room(face=k.face(weight=700, px=NOTE_PX))
+    room = note_room(face=k.face(weight=700, px=NOTE_PX), text=text)
     return min(TAGGED_WIDTH, LIST_LEAVE_RIGHT - LIST_LEFT - room)
 
 

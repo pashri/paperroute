@@ -219,3 +219,6 @@ def test_cambridge_trains_show_timetable_platforms() -> None:
         ('GA', '5'),
         ('GN', '1'),
     ]
+    assert [row.note for row in view.rows] == [
+        'platform 4', 'platform 5', 'platform 1',
+    ]

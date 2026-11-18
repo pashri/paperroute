@@ -174,9 +174,17 @@ def survived(*, draft: PinDraft, editor: PinEditor) -> bool:
     -------
     bool
         True when there is a pin and no choice was dropped or changed.
+        A line equal to the posted suggestion may differ from the
+        checked one when the editor has a suggestion of its own.
     """
     checked = editor.draft
-    fields = (draft.stop, draft.kind, draft.route, draft.to)
+    follows = bool(
+        checked.suggested
+        and draft.suggested
+        and draft.route == draft.suggested
+    )
+    route = checked.route if follows else draft.route
+    fields = (draft.stop, draft.kind, route, draft.to)
     return (
         editor.pin is not None
         and fields == (checked.stop, checked.kind, checked.route, checked.to)
@@ -790,7 +798,10 @@ class PinsPages:
         if self.options is None:
             return STARTING
         missing = pin if pin is not None and pin.missing else None
-        editor = edited(options=self.options, draft=draft, missing=missing)
+        editor = edited(
+            options=self.options, draft=draft, missing=missing,
+            modes=self.modes,
+        )
         return editor_form(
             editor=editor,
             origin=origin_name(
@@ -879,7 +890,7 @@ class PinsPages:
             raise web.HTTPSeeOther(location='/pins')
         editor = edited(
             options=self.options, draft=draft,
-            missing=self._missing(ref=draft.ref),
+            missing=self._missing(ref=draft.ref), modes=self.modes,
         )
         if not survived(draft=draft, editor=editor) or editor.pin is None:
             return self._refused(draft=draft, editor=editor, rows=rows)

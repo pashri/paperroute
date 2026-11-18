@@ -1,10 +1,14 @@
 """Tests for the pin editor's checking of the choices made."""
 
-from paperroute_sydney.city import SydneyMode
+from dataclasses import dataclass, replace
+from typing import Final
+
+from paperroute_sydney.city import SYDNEY, SydneyMode
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_transit.adapters.pin_editor import edited
 from paperroute_transit.core.chooser import Choice
 from paperroute_transit.core.model import Pin, StopPlace
+from paperroute_transit.core.modes import ModeSpec
 from paperroute_transit.core.pin_choices import PinDraft
 
 HOME = StopPlace(stop_id='H', name='Home', point=None)
@@ -135,3 +139,131 @@ def test_line_step_matches_on_the_value() -> None:
     assert found.draft.route == 'GA:Norwich'
     assert found.pin is not None
     assert found.pin.routes == ('GA:Norwich',)
+
+
+D1 = StopPlace(stop_id='D1', name='Dest one', point=None)
+D2 = StopPlace(stop_id='D2', name='Dest two', point=None)
+BRIGHTON = Choice(
+    key='train:TL:B', label='Brighton', badge='TL', value='TL:B',
+)
+LIVERPOOL = Choice(
+    key='train:GA:L', label='Liverpool Street', badge='GA', value='GA:L',
+)
+KINGS_LYNN = Choice(
+    key='train:GN:K', label='Kings Lynn', badge='GN', value='GN:K',
+)
+ROUTED: Final[tuple[ModeSpec, ...]] = tuple(
+    replace(spec, destination_first=True)
+    if spec.id == SydneyMode.TRAIN
+    else spec
+    for spec in SYDNEY.modes
+)
+
+
+@dataclass
+class KindedOptions(FakePinOptions):
+    """Options that reach a place only for a train."""
+
+    def reached_from(
+        self, *, place: StopPlace, kind: str | None = None,
+    ) -> tuple[StopPlace, ...]:
+        """
+        Give the places reached by a train, and none for any other kind.
+
+        Parameters
+        ----------
+        place : StopPlace
+            Where the ride starts.
+        kind : str | None
+            The kind counted.
+
+        Returns
+        -------
+        tuple[StopPlace, ...]
+            The fixed places for a train; otherwise none.
+        """
+        if kind != SydneyMode.TRAIN:
+            return ()
+        return super().reached_from(place=place, kind=kind)
+
+
+def routed_options() -> KindedOptions:
+    """
+    Make options with three train lines at a station and two places.
+
+    Returns
+    -------
+    KindedOptions
+        The options.
+    """
+    return KindedOptions(
+        places={'S': StopPlace(stop_id='S', name='Sta', point=None)},
+        lines={('S', SydneyMode.TRAIN): (BRIGHTON, LIVERPOOL, KINGS_LYNN)},
+        trips={('S', SydneyMode.TRAIN): {'TL:B': 3, 'GA:L': 2}},
+        reached_by={'S': (D1, D2)},
+        only={('S', SydneyMode.TRAIN): ('X1', 'X2')},
+    )
+
+
+OPTIONS: Final[KindedOptions] = routed_options()
+
+
+def test_a_destination_first_train_suggests_the_busiest_line() -> None:
+    """With a To and no line, the busiest line is chosen and suggested."""
+    editor = edited(
+        options=OPTIONS, draft=PinDraft(stop='S', kind='train', to='D1'),
+        modes=ROUTED,
+    )
+    assert [p.stop_id for p in editor.destinations] == ['D1', 'D2']
+    assert (editor.draft.route, editor.suggested) == ('TL:B', 'TL:B')
+    assert editor.pin is not None
+    assert editor.pin.routes == ('TL:B',)
+
+
+def test_a_picked_line_stays_when_the_destination_changes() -> None:
+    """A line other than the suggestion is kept."""
+    draft = PinDraft(
+        stop='S', kind='train', to='D2', route='GA:L', suggested='TL:B',
+    )
+    editor = edited(options=OPTIONS, draft=draft, modes=ROUTED)
+    assert editor.draft.route == 'GA:L'
+
+
+def test_an_old_train_pin_gets_the_busiest_line() -> None:
+    """A stored badge that is no longer a line is replaced."""
+    draft = PinDraft(stop='S', kind='train', to='D1', route='GN')
+    editor = edited(options=OPTIONS, draft=draft, modes=ROUTED)
+    assert editor.draft.route == 'TL:B'
+
+
+def test_without_modes_the_line_comes_first() -> None:
+    """With no destination-first mode, no line is chosen for the owner."""
+    draft = PinDraft(stop='S', kind='train', to='D1')
+    editor = edited(options=OPTIONS, draft=draft)
+    assert editor.draft.route == ''
+    assert editor.suggested == ''
+    assert editor.pin is None
+    assert editor.destinations == ()
+
+
+def test_a_train_destination_is_not_offered_from_another_kind() -> None:
+    """The places offered are those a train reaches, not any run."""
+    draft = PinDraft(stop='S', kind='train')
+    editor = edited(options=OPTIONS, draft=draft, modes=ROUTED)
+    assert [p.stop_id for p in editor.destinations] == ['D1', 'D2']
+
+
+def test_the_route_filter_survives_a_destination_first_train() -> None:
+    """The routes the owner ticked are kept, and the offered ones listed."""
+    draft = PinDraft(stop='S', kind='train', to='D1', only=('X2', 'Z'))
+    editor = edited(options=OPTIONS, draft=draft, modes=ROUTED)
+    assert editor.filters == ('X1', 'X2')
+    assert editor.draft.only == ('X2',)
+
+
+def test_an_unknown_destination_is_dropped_not_chosen() -> None:
+    """A lone reachable place is not chosen for the owner."""
+    lone = replace(routed_options(), reached_by={'S': (D1,)})
+    draft = PinDraft(stop='S', kind='train', to='nowhere')
+    editor = edited(options=lone, draft=draft, modes=ROUTED)
+    assert editor.draft.to == ''

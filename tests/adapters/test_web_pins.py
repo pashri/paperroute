@@ -26,7 +26,7 @@ from paperroute_testkit.page_markup import inside, parse_page, parse_tree
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages
 from paperroute_transit.adapters.pin_editor import edited
-from paperroute_transit.adapters.web_pin_edit import line_field
+from paperroute_transit.adapters.web_pin_edit import editor_form, line_field
 from paperroute_transit.adapters.web_pins import (
     SEEN_POLL_S,
     SEEN_WAIT_S,
@@ -46,6 +46,7 @@ from paperroute_transit.core.model import AutoWindow, Pin, StopPlace, pin_ref
 from paperroute_transit.core.pin_choices import PinDraft, StopMatch
 from paperroute_transit.core.route_colours import RouteColour
 from paperroute_transit.observers import PinsSeen
+from tests.adapters.test_pin_editor import OPTIONS, ROUTED
 from tests.adapters.test_web_device import sydney_site
 from tests.adapters.transit_web import transit_display
 
@@ -1093,3 +1094,70 @@ def test_line_field_posts_the_value_and_shows_the_badge() -> None:
         '', 'GA:Norwich &amp; Co', 'GA:Liverpool',
     ]
     assert re.findall(r'>([^<]*)</option>', text)[1:] == ['GA', 'GA']
+
+
+def test_sydney_train_editor_keeps_line_then_to() -> None:
+    """A train editor still asks for the line before the To."""
+    found = edited(
+        options=_options(),
+        draft=PinDraft(stop='C', kind='train', route='T1'),
+        modes=SYDNEY.modes,
+    )
+    text = editor_form(
+        editor=found, origin='Central', windows='', modes=SYDNEY.modes,
+    )
+    assert text.index('name="route"') < text.index('name="to"')
+    assert text.index('Pick a line') < text.index('name="to"')
+
+
+def test_the_destination_hint_escapes_the_from() -> None:
+    """A From with markup characters is escaped in the hint."""
+    found = edited(
+        options=OPTIONS,
+        draft=PinDraft(stop='S', kind='train', to='D1'),
+        modes=ROUTED,
+    )
+    text = editor_form(
+        editor=found, origin='A & <B>', windows='', modes=ROUTED,
+    )
+    assert 'from A &amp; &lt;B&gt; reaches.' in text
+    assert '<B>' not in text
+
+
+@pytest.fixture(name='bus_editor')
+async def _bus_editor(pins: Pins) -> AsyncIterator[Client]:
+    """A client whose only stop has one bus line."""
+    stop = StopPlace(stop_id='B1', name='Bus stop', point=None)
+    client = await _client(
+        pins=pins,
+        options=FakePinOptions(
+            places={'B1': stop},
+            lines={('B1', SydneyMode.BUS): (
+                Choice(key='b7', label='Seven', badge='7'),
+            )},
+        ),
+    )
+    yield client
+    await client.close()
+
+
+async def test_save_without_a_route_is_still_refused(
+    pins: Pins, bus_editor: Client,
+) -> None:
+    """An empty route with no suggestion is refused."""
+    response = await bus_editor.post(
+        '/pins/save', data=_form({'stop': 'B1', 'kind': 'bus', 'route': ''}),
+    )
+    assert response.status == HTTPStatus.BAD_REQUEST
+    assert not pins.posted
+
+
+async def test_save_with_a_stale_suggestion_is_still_refused(
+    pins: Pins, bus_editor: Client,
+) -> None:
+    """A train line posted after a switch to Bus is not swapped in."""
+    response = await bus_editor.post('/pins/save', data=_form({
+        'stop': 'B1', 'kind': 'bus', 'route': 'T1', 'suggested': 'T1',
+    }))
+    assert response.status == HTTPStatus.BAD_REQUEST
+    assert not pins.posted

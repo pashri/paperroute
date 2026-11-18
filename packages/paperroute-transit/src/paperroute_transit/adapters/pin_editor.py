@@ -5,10 +5,15 @@ from dataclasses import dataclass, replace
 
 from paperroute_transit.core.chooser import Choice
 from paperroute_transit.core.model import Pin, StopPlace
-from paperroute_transit.core.modes import pin_value
+from paperroute_transit.core.modes import (
+    ModeSpec,
+    destination_first_modes,
+    pin_value,
+)
 from paperroute_transit.core.pin_choices import (
     PinDraft,
     PinEditor,
+    busiest_line,
     clean_nickname,
 )
 from paperroute_transit.ports import PinOptions
@@ -248,7 +253,11 @@ def pin_of(
 
 
 def edited(
-    *, options: PinOptions, draft: PinDraft, missing: Pin | None = None,
+    *,
+    options: PinOptions,
+    draft: PinDraft,
+    missing: Pin | None = None,
+    modes: Sequence[ModeSpec] = (),
 ) -> PinEditor:
     """
     Check a draft and work out what the editor offers next.
@@ -267,6 +276,9 @@ def edited(
     missing : Pin | None
         A pin the timetable no longer knows, whose nearby stops are
         offered; None for none.
+    modes : Sequence[ModeSpec]
+        The city's modes; a destination-first kind asks for the To before
+        the line.
 
     Returns
     -------
@@ -291,13 +303,129 @@ def edited(
             pin=None,
         )
     return replace(
-        with_origin(options=options, draft=draft, origin=origin),
+        with_origin(
+            options=options, draft=draft, origin=origin, modes=modes,
+        ),
         nearby=near,
     )
 
 
+def chosen_line(
+    *, lines: Sequence[Choice], suggestion: Choice | None, draft: PinDraft,
+) -> Choice | None:
+    """
+    Choose between a line the owner picked and the suggested one.
+
+    Parameters
+    ----------
+    lines : Sequence[Choice]
+        The lines offered.
+    suggestion : Choice | None
+        The line suggested now.
+    draft : PinDraft
+        The choices made so far.
+
+    Returns
+    -------
+    Choice | None
+        The draft's line when it is offered and is not the line last
+        suggested; otherwise the suggestion.
+    """
+    picked = next(
+        (
+            line
+            for line in lines
+            if pin_value(choice=line) == draft.route != draft.suggested
+        ),
+        None,
+    )
+    return suggestion if picked is None else picked
+
+
+def reach_first(
+    *,
+    options: PinOptions,
+    draft: PinDraft,
+    origin: StopPlace,
+    kind: str,
+    kinds: tuple[str, ...],
+) -> PinEditor:
+    """
+    Check the choices of a kind that asks for the To before the line.
+
+    The To is one of the places the kind reaches from the From; it is
+    never chosen for the owner. Every line through the From is offered,
+    with the busiest to the To suggested. A line other than the last
+    suggestion is kept; an untouched suggestion follows the To.
+
+    Parameters
+    ----------
+    options : PinOptions
+        What the timetable offers.
+    draft : PinDraft
+        The choices made so far.
+    origin : StopPlace
+        The From.
+    kind : str
+        The kind chosen.
+    kinds : tuple[str, ...]
+        The kinds the From offers.
+
+    Returns
+    -------
+    PinEditor
+        The checked draft and what is offered after it, with no nearby
+        stops.
+    """
+    given = draft if draft.kind in (None, kind) else replace(
+        draft, route='', suggested='', to='', only=(),
+    )
+    places = options.reached_from(place=origin, kind=kind)
+    destination = next(
+        (place for place in places if place.stop_id == given.to), None,
+    )
+    lines = options.lines_at(stop_id=origin.stop_id, kind=kind)
+    suggestion = busiest_line(
+        lines=lines,
+        trips=options.line_trips(
+            origin=origin, destination=destination, kind=kind,
+        ),
+    )
+    line = chosen_line(lines=lines, suggestion=suggestion, draft=given)
+    filters, only = filter_step(
+        options=options, stop=origin.stop_id, kind=kind, given=given.only,
+    )
+    suggested = '' if suggestion is None else pin_value(choice=suggestion)
+    checked = replace(
+        given,
+        stop=origin.stop_id,
+        kind=kind,
+        route='' if line is None else pin_value(choice=line),
+        suggested=suggested,
+        to='' if destination is None else destination.stop_id,
+        only=only,
+    )
+    return PinEditor(
+        draft=checked,
+        origin=origin,
+        kinds=kinds,
+        lines=lines,
+        destinations=places,
+        filters=filters,
+        nearby=(),
+        pin=pin_of(
+            draft=checked, origin=origin, destination=destination, line=line,
+        ),
+        suggested=suggested,
+    )
+
+
 def with_origin(
-    *, options: PinOptions, draft: PinDraft, origin: StopPlace,
+    *,
+    options: PinOptions,
+    draft: PinDraft,
+    origin: StopPlace,
+    modes: Sequence[ModeSpec] = (),
 ) -> PinEditor:
     """
     Check the choices that follow a From the timetable knows.
@@ -310,6 +438,8 @@ def with_origin(
         The choices made so far.
     origin : StopPlace
         The From.
+    modes : Sequence[ModeSpec]
+        The city's modes.
 
     Returns
     -------
@@ -317,12 +447,16 @@ def with_origin(
         The checked draft and what is offered after it, with no nearby
         stops.
     """
-    stop = origin.stop_id
     kinds, kind, kind_kept = kind_step(
-        options=options, stop=stop, given=draft.kind,
+        options=options, stop=origin.stop_id, given=draft.kind,
     )
+    if kind is not None and kind in destination_first_modes(modes=modes):
+        return reach_first(
+            options=options, draft=draft, origin=origin, kind=kind,
+            kinds=kinds,
+        )
     lines, line, line_kept = line_step(
-        options=options, stop=stop, kind=kind,
+        options=options, stop=origin.stop_id, kind=kind,
         given=draft.route if kind_kept else '',
     )
     places, destination = to_step(
@@ -330,11 +464,11 @@ def with_origin(
         given=draft.to if kind_kept and line_kept else '',
     )
     filters, only = filter_step(
-        options=options, stop=stop, kind=kind,
+        options=options, stop=origin.stop_id, kind=kind,
         given=draft.only if kind_kept else (),
     )
     checked = PinDraft(
-        stop=stop,
+        stop=origin.stop_id,
         kind=kind,
         route='' if line is None else pin_value(choice=line),
         to='' if destination is None else destination.stop_id,

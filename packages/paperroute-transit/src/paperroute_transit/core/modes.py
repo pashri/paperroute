@@ -51,6 +51,9 @@ class ModeSpec:
     named_lines : bool
         True when one number heads several lines, told apart by their long
         names.
+    destination_first : bool
+        True when the phone editor asks for the Destination before the
+        line.
     """
 
     id: str
@@ -68,6 +71,7 @@ class ModeSpec:
     skippable: bool = False
     chip_text: str = '#ffffff'
     named_lines: bool = False
+    destination_first: bool = False
 
 
 @dataclass(frozen=True)
@@ -165,6 +169,23 @@ def named_line_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:
         Ids of the specs with `named_lines` set.
     """
     return frozenset(spec.id for spec in modes if spec.named_lines)
+
+
+def destination_first_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:
+    """
+    List the modes whose editor asks for the Destination first.
+
+    Parameters
+    ----------
+    modes : Sequence[ModeSpec]
+        Declared modes.
+
+    Returns
+    -------
+    frozenset[str]
+        Ids of the specs with `destination_first` set.
+    """
+    return frozenset(spec.id for spec in modes if spec.destination_first)
 
 
 def line_key(

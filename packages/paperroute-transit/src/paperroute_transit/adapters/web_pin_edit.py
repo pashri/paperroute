@@ -9,7 +9,12 @@ from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_web import board_text
 from paperroute_transit.adapters.pin_windows import DEFAULT_BUTTON
 from paperroute_transit.core.model import StopPlace
-from paperroute_transit.core.modes import ModeSpec, pin_value, spec_of
+from paperroute_transit.core.modes import (
+    ModeSpec,
+    destination_first_modes,
+    pin_value,
+    spec_of,
+)
 from paperroute_transit.core.pin_choices import (
     NICKNAME_MAX,
     PinDraft,
@@ -28,6 +33,10 @@ STRIP_HINT: Final[str] = (
     'With no Destination the stop lists every route; this sets the Strip'
     ' and the Destinations offered.'
 )
+REACH_LINE_HINT: Final[str] = (
+    'Only affects which stations the Strip draws.'
+)
+CHOSEN_FOR_YOU: Final[str] = ' · chosen for you'
 SEARCH_FORM: Final[str] = """<search>
     <form class="search" method="get" action="/pins/new">
       <label for="pin-search">Search a stop or station</label>
@@ -77,7 +86,8 @@ def draft_of(
     Parameters
     ----------
     query : Mapping[str, str]
-        Fields: `ref`, `stop`, `kind`, `route`, `to` and `nickname`.
+        Fields: `ref`, `stop`, `kind`, `route`, `suggested`, `to` and
+        `nickname`.
     only : Sequence[str]
         Every `only` field given.
     modes : Sequence[ModeSpec]
@@ -97,6 +107,7 @@ def draft_of(
         only=tuple(only),
         nickname=query.get('nickname') or None,
         ref=query.get('ref') or None,
+        suggested=query.get('suggested', ''),
     )
 
 
@@ -341,6 +352,58 @@ def to_field(*, editor: PinEditor) -> str:
     return select_field(name='to', label='Destination', options=options)
 
 
+def reach_fields(*, editor: PinEditor, spec: ModeSpec, origin: str) -> str:
+    """
+    Draw the Destination and the Strip line of a destination-first kind.
+
+    Parameters
+    ----------
+    editor : PinEditor
+        The editor.
+    spec : ModeSpec
+        The chosen kind's mode.
+    origin : str
+        The From name; not escaped.
+
+    Returns
+    -------
+    str
+        The Destination select, the Strip line select and the hidden
+        field holding the suggestion.
+    """
+    draft = editor.draft
+    places = option(value='', label=NO_TO, chosen=draft.to) + ''.join(
+        option(value=place.stop_id, label=place.name, chosen=draft.to)
+        for place in editor.destinations
+    )
+    lines = ''.join(
+        option(
+            value=pin_value(choice=line),
+            label=f'{line.badge} {line.label}' + (
+                CHOSEN_FOR_YOU
+                if pin_value(choice=line) == editor.suggested
+                else ''
+            ),
+            chosen=draft.route,
+        )
+        for line in editor.lines
+    )
+    hint = html.escape(
+        f'Any station a {spec.label.lower()} from {origin} reaches.',
+    )
+    return (
+        select_field(
+            name='to', label='Destination', options=places, hint=hint,
+        )
+        + select_field(
+            name='route', label='Strip line', options=lines,
+            hint=REACH_LINE_HINT,
+        )
+        + '\n      <input type="hidden" name="suggested" '
+        f'value="{html.escape(editor.suggested)}">'
+    )
+
+
 def filter_fields(*, editor: PinEditor) -> str:
     """
     Draw the Routes checkboxes.
@@ -448,10 +511,16 @@ def editor_form(
         any.
     """
     draft = editor.draft
+    spec = spec_of(modes=modes, mode=draft.kind)
+    if spec is not None and spec.id in destination_first_modes(modes=modes):
+        routed = reach_fields(editor=editor, spec=spec, origin=origin)
+    else:
+        routed = line_field(editor=editor, modes=modes) + to_field(
+            editor=editor,
+        )
     fields = (
-        kind_fields(editor=editor, modes=modes)
-        + line_field(editor=editor, modes=modes)
-        + to_field(editor=editor) + filter_fields(editor=editor)
+        kind_fields(editor=editor, modes=modes) + routed
+        + filter_fields(editor=editor)
     )
     return EDITOR.format(
         default=DEFAULT_BUTTON,

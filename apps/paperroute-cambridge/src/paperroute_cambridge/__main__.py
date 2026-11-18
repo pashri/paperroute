@@ -75,6 +75,7 @@ CAMBRIDGE_PARTS: Final[CityParts] = CityParts(
     sheets=('palette.css',),
     about='Buses, coaches and trains',
     rebuild_minutes=10,
+    sources=(('bods', 'bus'), ('rail', 'rail')),
     credits=CAMBRIDGE_CREDITS,
 )
 

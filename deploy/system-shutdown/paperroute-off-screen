@@ -5,7 +5,7 @@
 # rather than root; always exits 0.
 case ${1:-} in
 poweroff | halt)
-    "${PAPERROUTE_TIMEOUT:-/usr/bin/timeout}" 20 \
+    "${PAPERROUTE_TIMEOUT:-/usr/bin/timeout}" -k 2 20 \
         /usr/bin/setpriv --reuid=paperroute --regid=paperroute \
         --groups=spi,gpio -- \
         "${PAPERROUTE_PYTHON:-/opt/paperroute/current/.venv/bin/python}" \

@@ -3261,6 +3261,8 @@ def test_off_hook_draws_on_poweroff_only(
     assert record.exists() is drawn
     if drawn:
         assert record.read_text(encoding='utf-8').split() == [
+            '-k',
+            '2',
             '20',
             '/usr/bin/setpriv',
             '--reuid=paperroute',

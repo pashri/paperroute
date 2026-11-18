@@ -228,7 +228,7 @@ KIT_UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
             'NoNewPrivileges': 'yes',
             'TimeoutStartSec': '30',
             'ExecStart': (
-                '-/usr/bin/timeout 20'
+                '-/usr/bin/timeout -k 5 20'
                 ' /opt/paperroute/current/.venv/bin/python'
                 ' -m paperroute_device.screen --image'
                 ' /usr/local/share/paperroute/deploy/screens/on.raw'
@@ -3328,7 +3328,7 @@ def test_screens_run_as_the_app_user_with_its_groups() -> None:
 
 
 def test_on_screen_is_best_effort_and_runs_before_the_board() -> None:
-    """The splash is ordered before the board and can never fail."""
+    """The splash is ordered before the board, with a best-effort start."""
     text = (SYSTEMD / 'paperroute-on-screen.service').read_text(
         encoding='utf-8',
     )
@@ -3343,7 +3343,7 @@ def test_on_screen_is_best_effort_and_runs_before_the_board() -> None:
     service = unit['Service']
     python = '/opt/paperroute/current/.venv/bin/python -m paperroute_device'
     assert service['ExecStart'].startswith(
-        f'-/usr/bin/timeout 20 {python}.screen ',
+        f'-/usr/bin/timeout -k 5 20 {python}.screen ',
     )
     assert service['TimeoutStartSec'] == '30'
     assert service['Type'] == 'oneshot'

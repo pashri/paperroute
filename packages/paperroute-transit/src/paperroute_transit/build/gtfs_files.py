@@ -6,7 +6,7 @@ import sqlite3
 import zipfile
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from itertools import batched
 from pathlib import Path
 from typing import Final
@@ -61,6 +61,31 @@ def read_rows(*, archive: Path, member: str) -> Iterator[dict[str, str]]:
             for row in csv.DictReader(text):
                 yield {key.lstrip('\ufeff'): value
                        for key, value in row.items()}
+
+
+def feed_date(*, archive: Path) -> date | None:
+    """
+    Read the date a feed was published from its feed_info member.
+
+    Parameters
+    ----------
+    archive : Path
+        GTFS zip file.
+
+    Returns
+    -------
+    date | None
+        The first row's feed_start_date; None when the zip has no
+        feed_info.txt, no row, or a value that does not parse.
+    """
+    for row in read_rows(archive=archive, member='feed_info.txt'):
+        try:
+            return datetime.strptime(
+                row['feed_start_date'], '%Y%m%d',
+            ).date()
+        except (KeyError, ValueError):
+            return None
+    return None
 
 
 def parse_time(value: str) -> int:

@@ -20,6 +20,7 @@ from paperroute_transit.build.extras import build_extras, city_named
 from paperroute_transit.build.gtfs_files import (
     Source,
     active_dates,
+    feed_date,
     insert_many,
     last_service_day,
     parse_time,
@@ -32,6 +33,7 @@ from paperroute_transit.core.city import City, MergeReport
 from paperroute_transit.core.geo import DegreeBox
 from paperroute_transit.core.model import (
     HIDDEN_HEADSIGNS,
+    SOURCE_DATE,
     SOURCE_END,
     TIMETABLE_SCHEMA,
 )
@@ -684,13 +686,55 @@ def source_ends(*, sources: list[Source]) -> dict[str, date]:
     Returns
     -------
     dict[str, date]
-        Source name to its last date; a source with no calendar is absent.
+        Source name to its last date; a source with no calendar is absent,
+        and so is every optional source.
     """
     ends = {
         source.name: last_service_day(archive=source.archive)
         for source in sources
+        if not source.optional
     }
     return {name: end for name, end in ends.items() if end is not None}
+
+
+def source_dates(*, sources: list[Source]) -> dict[str, date]:
+    """
+    Name the date each source's feed was published.
+
+    Parameters
+    ----------
+    sources : list[Source]
+        Feeds being built.
+
+    Returns
+    -------
+    dict[str, date]
+        Source name to its feed date; a source with none is absent.
+    """
+    dates = {
+        source.name: feed_date(archive=source.archive)
+        for source in sources
+    }
+    return {name: day for name, day in dates.items() if day is not None}
+
+
+def write_source_dates(
+    *, conn: sqlite3.Connection, dates: dict[str, date],
+) -> None:
+    """
+    Record each source's feed date in the meta table.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable being built.
+    dates : dict[str, date]
+        Source name to its feed date.
+    """
+    conn.executemany('INSERT INTO meta VALUES (?, ?)', [
+        (f'{SOURCE_DATE}{name}', day.isoformat())
+        for name, day in dates.items()
+    ])
 
 
 def load_holidays(*, conn: sqlite3.Connection, archive: Path,
@@ -748,6 +792,7 @@ def load_all(*, sources: list[Source], window: Window,
             if source.name == city.timetable.holiday_source:
                 load_holidays(conn=conn, archive=source.archive,
                               window=window)
+        write_source_dates(conn=conn, dates=source_dates(sources=sources))
         return merged(
             conn=conn,
             window=window,

@@ -117,6 +117,17 @@ class TimetableRepository(Protocol):
             calendar dates, or None when it records no window.
         """
 
+    def source_dates(self) -> dict[str, date]:
+        """
+        Say the date each source's feed was published.
+
+        Returns
+        -------
+        dict[str, date]
+            Source name to its feed date; empty when the file records
+            none.
+        """
+
     def holidays(self) -> frozenset[date]:
         """
         The public holidays the timetable records.

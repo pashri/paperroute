@@ -9,12 +9,13 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
+from typing import Final
 
 import pytest
 
 from paperroute_sydney.city import SYDNEY, SYDNEY_REF
 from paperroute_testkit.build.feed_zip import write_feed
-from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.gtfs_files import Source, feed_date
 from paperroute_transit.build.handoff import Handoff, read_handoff
 from paperroute_transit.build.timetable import (
     SCHEMA_VERSION,
@@ -562,3 +563,67 @@ def test_merge_hook_is_called_once(
         )
     assert merge.calls == [{'sydneytrains', 'bundle'}]
     assert handed == [3]
+
+
+FEED_INFO: Final[dict[str, str]] = {
+    'feed_publisher_name': 'Test',
+    'feed_publisher_url': 'https://example.org/',
+    'feed_lang': 'en',
+    'feed_start_date': '20261014',
+    'feed_end_date': '20261231',
+    'feed_version': '1',
+}
+
+
+@pytest.mark.parametrize(('start', 'day'), [
+    ('20261014', date(2026, 10, 14)),
+    ('', None),
+    ('2026-10-14x', None),
+    (None, None),
+])
+def test_feed_date(
+    tmp_path: Path, start: str | None, day: date | None,
+) -> None:
+    """A feed's date is its feed_info start, when it has a readable one."""
+    files = sydneytrains_files()
+    if start is not None:
+        files = {
+            **files,
+            'feed_info.txt': [{**FEED_INFO, 'feed_start_date': start}],
+        }
+    archive = write_feed(path=tmp_path / 'f.zip', files=files)
+    assert feed_date(archive=archive) == day
+
+
+def test_meta_records_each_source_date(tmp_path: Path) -> None:
+    """The build records the date of each source that gives one."""
+    trains = write_feed(path=tmp_path / 's.zip', files={
+        **sydneytrains_files(), 'feed_info.txt': [FEED_INFO],
+    })
+    db = built(tmp_path=tmp_path, sources=[
+        Source(name='sydneytrains', archive=trains),
+        *bundle_bus(tmp_path=tmp_path),
+    ])
+    rows = query(
+        db=db,
+        sql="SELECT key, value FROM meta WHERE key LIKE 'source_date:%'",
+    )
+    assert rows == [('source_date:sydneytrains', '2026-10-14')]
+
+
+def test_an_optional_source_end_is_not_recorded(tmp_path: Path) -> None:
+    """An optional source's calendar end never limits the last day."""
+    trains = write_feed(path=tmp_path / 's.zip', files={
+        **sydneytrains_files(),
+        'calendar.txt': [{'service_id': 's-daily', **DAILY,
+                          'end_date': '20261020'}],
+    })
+    db = built(tmp_path=tmp_path, sources=[
+        Source(name='sydneytrains', archive=trains, optional=True),
+        *bundle_bus(tmp_path=tmp_path),
+    ])
+    rows = query(
+        db=db,
+        sql="SELECT key, value FROM meta WHERE key LIKE 'source_end:%'",
+    )
+    assert rows == [('source_end:bundle', '2026-10-31')]

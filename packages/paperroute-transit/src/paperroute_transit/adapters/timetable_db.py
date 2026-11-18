@@ -57,6 +57,7 @@ from paperroute_transit.core.geo import (
 )
 from paperroute_transit.core.model import (
     HIDDEN_HEADSIGNS,
+    SOURCE_DATE,
     SOURCE_END,
     Departure,
     Pin,
@@ -429,6 +430,25 @@ class SqliteTimetableRepository:
         if window is None:
             return None
         return min([window, *source_end_days(rows=rows)])
+
+    def source_dates(self) -> dict[str, date]:
+        """
+        Say the date each source's feed was published.
+
+        Returns
+        -------
+        dict[str, date]
+            Source name to its feed date; empty when the file records
+            none, and a malformed date is skipped.
+        """
+        rows = {
+            str(key): str(value)
+            for key, value in self.fetch(
+                sql='SELECT key, value FROM meta WHERE key LIKE ?',
+                params=(f'{SOURCE_DATE}%',),
+            )
+        }
+        return source_date_days(rows=rows)
 
     def holidays(self) -> frozenset[date]:
         """
@@ -1155,6 +1175,31 @@ def source_end_days(*, rows: dict[str, str]) -> list[date]:
             continue
         try:
             days.append(date.fromisoformat(value))
+        except ValueError:
+            continue
+    return days
+
+
+def source_date_days(*, rows: dict[str, str]) -> dict[str, date]:
+    """
+    Read each source's feed date from a timetable's meta.
+
+    Parameters
+    ----------
+    rows : dict[str, str]
+        Meta keys and values.
+
+    Returns
+    -------
+    dict[str, date]
+        Source name to its date; malformed dates are skipped.
+    """
+    days = {}
+    for key, value in rows.items():
+        if not key.startswith(SOURCE_DATE):
+            continue
+        try:
+            days[key.removeprefix(SOURCE_DATE)] = date.fromisoformat(value)
         except ValueError:
             continue
     return days

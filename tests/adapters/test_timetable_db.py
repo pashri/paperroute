@@ -2284,3 +2284,27 @@ def test_leg_lines_repeat_ask_does_not_query_again(
     assert not queries
     network.leg_lines(ends=('C', 'W2'), day=date(2026, 10, 7))
     assert queries
+
+
+def test_source_dates_read_each_source_and_skip_a_bad_one(
+    tmp_path: Path,
+) -> None:
+    """Each source's date is read; one that does not parse is skipped."""
+    db = meta_db(tmp_path=tmp_path, rows={
+        **WINDOW,
+        'source_date:bods': '2026-11-16',
+        'source_date:rail': '2026-11-15',
+        'source_date:bad': 'x',
+        'source_end:bods': '2027-10-03',
+    })
+    with closing(SqliteTimetableRepository(path=db, city=SYDNEY)) as repo:
+        assert repo.source_dates() == {
+            'bods': date(2026, 11, 16), 'rail': date(2026, 11, 15),
+        }
+
+
+def test_a_timetable_without_source_dates_has_none(tmp_path: Path) -> None:
+    """A file built before source dates were recorded reads as none."""
+    db = meta_db(tmp_path=tmp_path, rows=WINDOW)
+    with closing(SqliteTimetableRepository(path=db, city=SYDNEY)) as repo:
+        assert repo.source_dates() == {}

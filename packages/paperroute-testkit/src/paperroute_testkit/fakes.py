@@ -258,6 +258,17 @@ class BrokenTimetable:
         """
         return None
 
+    def source_dates(self) -> dict[str, date]:
+        """
+        Name no source dates.
+
+        Returns
+        -------
+        dict[str, date]
+            Always empty.
+        """
+        return {}
+
     def last_day(self) -> date | None:
         """
         Name no window.

@@ -23,6 +23,11 @@ from paperroute_device.adapters.web_device import DevicePages
 from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_device.adapters.web_server import BindError, serving
 from paperroute_device.adapters.wifi import NmcliWifi, NullWifi
+from paperroute_device.boot_splash import (
+    SPLASH_IMAGE,
+    SPLASH_MARKER,
+    splash_once,
+)
 from paperroute_device.core.app import App
 from paperroute_device.core.kit_events import QuitRequested
 from paperroute_device.logs import LastError, configure_logging
@@ -71,6 +76,7 @@ def add_display_arguments(parser: argparse.ArgumentParser) -> None:
     """
     parser.add_argument('--display', choices=['tk', 'web'], default='tk')
     parser.add_argument('--panel', action='store_true')
+    parser.add_argument('--splash', type=Path, default=SPLASH_IMAGE)
     parser.add_argument('--knobs', action='store_true')
     parser.add_argument('--host', default='0.0.0.0')
     parser.add_argument('--port', type=int, default=80)
@@ -700,6 +706,12 @@ def web_main(
         swapped=timings.knobs_swapped,
     )
     try:
+        splash_once(
+            panel=panel,
+            image=args.splash,
+            marker=SPLASH_MARKER,
+            state=args.state,
+        )
         with app.opened(args=args, last_error=last_error):
             web = app.web(args=args, timings=timings)
             display = board_display(web=web, app=app, timings=timings)

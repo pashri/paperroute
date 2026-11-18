@@ -26,12 +26,14 @@ from paperroute_device.adapters.resets import FileResets, NullResets
 from paperroute_device.adapters.state_file import DEFAULT_PATH, StateFile
 from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_device.adapters.wifi import NullWifi
+from paperroute_device.boot_splash import SPLASH_IMAGE, SPLASH_MARKER
 from paperroute_device.core.device_model import AppCard, DeviceKey
 from paperroute_device.core.kit_events import QuitRequested
 from paperroute_device.logs import LastError
 from paperroute_device.runtime.ports import KitPorts
 from paperroute_device_testkit.device_fakes import FakeKeys, FixedClock
 from paperroute_device_testkit.device_pages import TEST_KEY
+from paperroute_hardware.adapters.panel_display import PanelDisplay
 from tests.core.fake_app import START, FakeApp
 
 HOBART: Final[ZoneInfo] = ZoneInfo('Australia/Hobart')
@@ -704,3 +706,62 @@ def test_tk_main_runs_the_app_in_the_window(
     cli.tk_main(args=args, app=FakeApp(), last_error=LastError(zone=UTC))
     assert monitor.closed
     assert (tmp_path / 'state.json').is_file()
+
+
+def test_run_takes_a_splash_picture() -> None:
+    """The splash defaults to the shared ON picture and can be named."""
+    assert SPLASH_IMAGE == Path(
+        '/usr/local/share/paperroute/deploy/screens/on.raw',
+    )
+    assert cli.parse_args(app=FakeApp(), argv=['run']).splash == SPLASH_IMAGE
+    named = cli.parse_args(app=FakeApp(), argv=['run', '--splash', '/x.raw'])
+    assert named.splash == Path('/x.raw')
+
+
+@pytest.mark.parametrize(
+    ('flags', 'made'),
+    [(['--panel'], True), ([], False)],
+    ids=['panel', 'no-panel'],
+)
+def test_web_main_asks_for_the_splash_first(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    flags: list[str],
+    made: bool,
+) -> None:
+    """The board asks for the splash before it serves anything."""
+
+    class Stopped(Exception):
+        """Raised to end the start-up once the splash is asked for."""
+
+    asked: list[dict[str, object]] = []
+
+    def fake_splash(**kwargs: object) -> bool:
+        """Note the call and stop."""
+        asked.append(kwargs)
+        raise Stopped
+
+    def fake_serve(**kwargs: object) -> None:
+        """Fail: the board must not serve before the splash."""
+        raise AssertionError('served before the splash')
+
+    monkeypatch.setattr(cli, 'splash_once', fake_splash)
+    monkeypatch.setattr(cli, 'serve_or_exit', fake_serve)
+    app = ZonedApp()
+    args = cli.parse_args(
+        app=app,
+        argv=[
+            'run', '--display', 'web', *flags,
+            '--state', str(tmp_path / 'state.json'),
+            '--splash', str(tmp_path / 'on.raw'),
+        ],
+    )
+    with pytest.raises(Stopped):
+        cli.web_main(args=args, app=app, last_error=LastError(zone=UTC))
+    [kwargs] = asked
+    assert isinstance(kwargs['panel'], PanelDisplay) is made
+    assert (kwargs['image'], kwargs['marker'], kwargs['state']) == (
+        tmp_path / 'on.raw',
+        SPLASH_MARKER,
+        tmp_path / 'state.json',
+    )

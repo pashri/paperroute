@@ -1,10 +1,12 @@
 """Tests for Cambridge's board pages."""
 
+import html
 import re
 from collections.abc import AsyncIterator, Iterator
 from contextlib import closing
 from http import HTTPStatus
 from pathlib import Path
+from typing import Final
 
 import pytest
 from aiohttp import web
@@ -27,8 +29,9 @@ from tests.conftest import RECORDED_DAY
 
 Client = TestClient[web.Request, web.Application]
 
-XC = 'XC:Birmingham & Stansted'
-LIVERPOOL = 'GA:Liverpool Street'
+XC: Final[str] = 'XC:Birmingham & Stansted'
+LIVERPOOL: Final[str] = 'GA:Liverpool Street'
+KINGS_LYNN: Final[str] = 'GN:Kings Lynn & Kings Cross'
 
 
 @pytest.fixture(name='network', scope='module')
@@ -241,3 +244,138 @@ async def test_save_without_a_route_or_suggestion_is_refused(
     )
     assert response.status == HTTPStatus.BAD_REQUEST
     assert not posted
+
+
+def shown(*, text: str) -> tuple[str, str]:
+    """
+    Read the line selected and the suggestion posted back from a page.
+
+    Parameters
+    ----------
+    text : str
+        The editor page.
+
+    Returns
+    -------
+    tuple[str, str]
+        The selected route value and the hidden suggestion, unescaped.
+    """
+    route = re.search(r'<option value="([^"]*)" selected>[^<]*</option>'
+                      r'(?:(?!</select>).)*</select>\s*</p>\s*<p id="pin-route',
+                      text, re.DOTALL)
+    suggested = re.search(r'name="suggested" value="([^"]*)"', text)
+    assert route is not None and suggested is not None
+    return html.unescape(route.group(1)), html.unescape(suggested.group(1))
+
+
+async def refresh(
+    client: Client, *, to: str, route: str, suggested: str,
+) -> tuple[str, str]:
+    """
+    Show choices again, as the form does with no script.
+
+    Parameters
+    ----------
+    client : Client
+        The client.
+    to : str
+        The Destination ID.
+    route : str
+        The route posted back.
+    suggested : str
+        The suggestion posted back.
+
+    Returns
+    -------
+    tuple[str, str]
+        The route selected and the suggestion the page holds.
+    """
+    page = await client.get('/pins/edit', params={
+        'stop': 'rail:CBG', 'kind': 'train', 'to': to, 'route': route,
+        'suggested': suggested,
+    })
+    return shown(text=await page.text())
+
+
+async def test_a_hand_picked_line_stays_through_destination_changes(
+    client: Client, posted: list[Event],
+) -> None:
+    """A line picked by hand is saved after it was once also the busiest."""
+    assert await refresh(
+        client, to='rail:ELY', route='', suggested='',
+    ) == (XC, XC)
+    assert await refresh(
+        client, to='rail:ELY', route=KINGS_LYNN, suggested=XC,
+    ) == (KINGS_LYNN, '')
+    assert await refresh(
+        client, to='rail:RYS', route=KINGS_LYNN, suggested='',
+    ) == (KINGS_LYNN, '')
+    assert await refresh(
+        client, to='rail:ELY', route=KINGS_LYNN, suggested='',
+    ) == (KINGS_LYNN, '')
+    response = await client.post(
+        '/pins/save',
+        data={
+            'stop': 'rail:CBG', 'kind': 'train', 'to': 'rail:ELY',
+            'route': KINGS_LYNN, 'suggested': '',
+        },
+        allow_redirects=False,
+    )
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert saved_routes(posted=posted) == (KINGS_LYNN,)
+
+
+async def test_a_saved_line_that_is_also_the_busiest_opens_unmarked(
+    client: Client, posted: list[Event],
+) -> None:
+    """A stored valid line is a hand pick and keeps its place."""
+    page = await client.get('/pins/edit', params={
+        'stop': 'rail:CBG', 'kind': 'train', 'route': LIVERPOOL,
+    })
+    text = await page.text()
+    assert 'chosen for you' not in text
+    assert shown(text=text) == (LIVERPOOL, '')
+    response = await client.post(
+        '/pins/save',
+        data={
+            'stop': 'rail:CBG', 'kind': 'train', 'to': 'rail:ELY',
+            'route': LIVERPOOL, 'suggested': '',
+        },
+        allow_redirects=False,
+    )
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert saved_routes(posted=posted) == (LIVERPOOL,)
+
+
+async def test_the_strip_line_offers_every_line_through_the_from(
+    client: Client, posted: list[Event],
+) -> None:
+    """Lines that do not reach the Destination are offered and saved."""
+    page = await client.get('/pins/edit', params={
+        'stop': 'rail:CBG', 'kind': 'train', 'to': 'rail:ELY',
+    })
+    text = await page.text()
+    select = text.split('name="route"')[1].split('</select>')[0]
+    assert len(re.findall(r'<option ', select)) == 4
+    assert 'GN Kings Lynn' in select
+    response = await client.post(
+        '/pins/save',
+        data={
+            'stop': 'rail:CBG', 'kind': 'train', 'to': 'rail:ELY',
+            'route': KINGS_LYNN, 'suggested': XC,
+        },
+        allow_redirects=False,
+    )
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert saved_routes(posted=posted) == (KINGS_LYNN,)
+
+
+async def test_the_destination_comes_before_the_strip_line(
+    client: Client,
+) -> None:
+    """The form asks for the Destination first."""
+    page = await client.get('/pins/edit', params={
+        'stop': 'rail:CBG', 'kind': 'train',
+    })
+    text = await page.text()
+    assert text.index('name="to"') < text.index('name="route"')

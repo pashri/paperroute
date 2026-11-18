@@ -266,6 +266,8 @@ def edited(
     filter. A choice that is not offered is dropped, with every choice
     after it, except that the filter depends on the stop and kind alone.
     A kind or line is chosen when only one is offered; a To never is.
+    For a destination-first kind the order is stop, kind, To, line, and
+    the line chosen when none is picked is the busiest.
 
     Parameters
     ----------
@@ -312,7 +314,7 @@ def edited(
 
 def chosen_line(
     *, lines: Sequence[Choice], suggestion: Choice | None, draft: PinDraft,
-) -> Choice | None:
+) -> tuple[Choice | None, str]:
     """
     Choose between a line the owner picked and the suggested one.
 
@@ -327,9 +329,10 @@ def chosen_line(
 
     Returns
     -------
-    Choice | None
+    tuple[Choice | None, str]
         The draft's line when it is offered and is not the line last
-        suggested; otherwise the suggestion.
+        suggested, else the suggestion; and the value of the suggestion
+        kept, '' when the line was picked or there is none.
     """
     picked = next(
         (
@@ -339,7 +342,11 @@ def chosen_line(
         ),
         None,
     )
-    return suggestion if picked is None else picked
+    if picked is not None:
+        return picked, ''
+    return suggestion, '' if suggestion is None else pin_value(
+        choice=suggestion,
+    )
 
 
 def reach_first(
@@ -385,17 +392,19 @@ def reach_first(
         (place for place in places if place.stop_id == given.to), None,
     )
     lines = options.lines_at(stop_id=origin.stop_id, kind=kind)
-    suggestion = busiest_line(
+    line, suggested = chosen_line(
         lines=lines,
-        trips=options.line_trips(
-            origin=origin, destination=destination, kind=kind,
+        suggestion=busiest_line(
+            lines=lines,
+            trips=options.line_trips(
+                origin=origin, destination=destination, kind=kind,
+            ),
         ),
+        draft=given,
     )
-    line = chosen_line(lines=lines, suggestion=suggestion, draft=given)
     filters, only = filter_step(
         options=options, stop=origin.stop_id, kind=kind, given=given.only,
     )
-    suggested = '' if suggestion is None else pin_value(choice=suggestion)
     checked = replace(
         given,
         stop=origin.stop_id,

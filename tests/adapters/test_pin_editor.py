@@ -267,3 +267,30 @@ def test_an_unknown_destination_is_dropped_not_chosen() -> None:
     draft = PinDraft(stop='S', kind='train', to='nowhere')
     editor = edited(options=lone, draft=draft, modes=ROUTED)
     assert editor.draft.to == ''
+
+
+def test_a_line_picked_by_hand_is_not_suggested_again() -> None:
+    """A hand pick equal to the busiest line posts no suggestion."""
+    draft = PinDraft(stop='S', kind='train', to='D1', route='TL:B')
+    editor = edited(options=OPTIONS, draft=draft, modes=ROUTED)
+    assert editor.draft.route == 'TL:B'
+    assert (editor.suggested, editor.draft.suggested) == ('', '')
+
+
+def test_an_old_train_pin_is_marked_as_suggested() -> None:
+    """A stored badge that is not a line gets the busiest, suggested."""
+    draft = PinDraft(stop='S', kind='train', to='D1', route='GN')
+    editor = edited(options=OPTIONS, draft=draft, modes=ROUTED)
+    assert editor.suggested == 'TL:B'
+
+
+def test_a_kind_switch_discards_the_old_kinds_choices() -> None:
+    """Choices made under a kind the stop lacks are dropped."""
+    draft = PinDraft(
+        stop='S', kind='ferry', to='D1', route='GA:L', suggested='GA:L',
+        only=('X1',), nickname='Me', ref='r',
+    )
+    editor = edited(options=OPTIONS, draft=draft, modes=ROUTED)
+    assert (editor.draft.to, editor.draft.only) == ('', ())
+    assert (editor.draft.route, editor.suggested) == ('TL:B', 'TL:B')
+    assert (editor.draft.nickname, editor.draft.ref) == ('Me', 'r')

@@ -93,9 +93,9 @@ the gb-transit project publishes on GitHub. Its data lives in
 
 Build the timetable. `refresh` downloads the public BODS timetable (no key)
 and the latest gb-transit release's `gtfs-national-rail-only.zip`, keeps every
-train that calls at Cambridge, Cambridge North or Cambridge South, and
-rebuilds `data/cambridge/timetable.db`. Without a rail zip it keeps the trains
-it last built from, or builds the buses alone; the Device page's Sources row
+train that calls at Cambridge or Ely, and rebuilds
+`data/cambridge/timetable.db`. Without a rail zip it keeps the trains it last
+built from, or builds the buses alone; the Device page's Sources row
 gives each source's date.
 
     uv run python -m paperroute_cambridge.build refresh --data-dir data/cambridge
@@ -108,8 +108,8 @@ To build from local zips:
       --out /tmp/timetable.db --start 2026-11-16 --days 14
 
 On the Mac, the build of the 2026-11-16 feeds took about 24 s with a peak of
-about 80 MB and made a 29 MB file with 61 routes and 7,133 trips: 5,735 bus
-and coach trips and 1,398 train trips.
+about 80 MB and made a 30 MB file with 62 routes and 7,276 trips: 5,735 bus
+and coach trips and 1,541 train trips.
 
 Download Geofabrik's `cambridgeshire`, `bedfordshire`, `hertfordshire`,
 `essex` and `suffolk` extracts

@@ -1,5 +1,6 @@
 """Trim a loaded timetable to the routes and coach calls near Cambridge."""
 
+import json
 import math
 import sqlite3
 from collections.abc import Sequence
@@ -116,6 +117,7 @@ def _drop_far_routes(
     conn: sqlite3.Connection,
     projection: Projection,
     radius: float,
+    kept_sources: frozenset[str],
 ) -> int:
     """
     Delete the trips of routes with no stop near.
@@ -128,6 +130,8 @@ def _drop_far_routes(
         The projection whose origin is the centre.
     radius : float
         Distance in metres.
+    kept_sources : frozenset[str]
+        Sources whose trips are left alone.
 
     Returns
     -------
@@ -154,9 +158,13 @@ def _drop_far_routes(
         conn.execute('DROP TABLE near_routes')
         message = f'no route within {radius:.0f} m of the centre'
         raise ValueError(message)
-    far = 'SELECT trip_id FROM trips WHERE route_id NOT IN near_routes'
-    conn.execute(f'DELETE FROM stop_times WHERE trip_id IN ({far})')
-    count = conn.execute(f'DELETE FROM trips WHERE trip_id IN ({far})')
+    far = (
+        'SELECT trip_id FROM trips WHERE route_id NOT IN near_routes '
+        'AND source NOT IN (SELECT value FROM json_each(?))'
+    )
+    kept = (json.dumps(sorted(kept_sources)),)
+    conn.execute(f'DELETE FROM stop_times WHERE trip_id IN ({far})', kept)
+    count = conn.execute(f'DELETE FROM trips WHERE trip_id IN ({far})', kept)
     conn.execute('DROP TABLE near_stops')
     conn.execute('DROP TABLE near_routes')
     return count.rowcount
@@ -299,6 +307,7 @@ def trim_timetable(
     radius: float,
     box: DegreeBox,
     coach: CoachTest,
+    kept_sources: frozenset[str] = frozenset(),
 ) -> TrimReport:
     """
     Keep the routes near the centre and cut coach trips at the box.
@@ -316,6 +325,8 @@ def trim_timetable(
         The box a coach trip is cut to.
     coach : CoachTest
         Tells which routes are coach services.
+    kept_sources : frozenset[str]
+        Sources whose routes are kept whatever their distance.
 
     Returns
     -------
@@ -327,7 +338,12 @@ def trim_timetable(
     ValueError
         If no route has a stop within the radius. Nothing is deleted.
     """
-    dropped = _drop_far_routes(conn=conn, projection=projection, radius=radius)
+    dropped = _drop_far_routes(
+        conn=conn,
+        projection=projection,
+        radius=radius,
+        kept_sources=kept_sources,
+    )
     deleted, cut = _cut_coaches(conn=conn, box=box, coach=coach)
     routes = _drop_unused(conn=conn)
     conn.commit()

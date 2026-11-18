@@ -35,6 +35,8 @@ from paperroute_transit.core.positions import ParkedAge
 
 logger = logging.getLogger(__name__)
 
+RAIL_SOURCE: Final[str] = 'rail'
+
 
 class CambridgeFeed(StrEnum):
     """Cambridge's feed sources: which realtime feed serves a route."""
@@ -181,6 +183,7 @@ def merge_cambridge(*, conn: sqlite3.Connection) -> MergeReport:
         radius=TRIM_RADIUS,
         box=COACH_BOX,
         coach=is_coach,
+        kept_sources=frozenset({RAIL_SOURCE}),
     )
     group_stations(conn=conn, stations=STATIONS)
     logger.info(

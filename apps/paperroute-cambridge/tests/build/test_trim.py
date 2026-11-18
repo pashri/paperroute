@@ -190,3 +190,20 @@ def test_trim_timetable_refuses_a_feed_with_no_route_near() -> None:
     ):
         trim(conn)
     assert route_ids(conn) == {'bods:2'}
+
+
+def test_trim_timetable_keeps_every_route_of_a_kept_source() -> None:
+    """A kept source's routes stay whatever their distance."""
+    conn = loaded(
+        stops=(NEAR, BEDFORD, NORWICH),
+        routes=(('bods:1', 3, 'OP1', '1'), ('bods:2', 3, 'OP1', '2')),
+        trips=(('t1', 'bods:1'), ('t2', 'bods:2')),
+        calls=(('t1', 'near'), ('t1', 'bedford'), ('t2', 'norwich')),
+    )
+    report = trim_timetable(
+        conn=conn, projection=CAMBRIDGE_PROJECTION, radius=TRIM_RADIUS,
+        box=COACH_BOX, coach=no_route, kept_sources=frozenset({'bods'}),
+    )
+    assert route_ids(conn) == {'bods:1', 'bods:2'}
+    assert report == TrimReport(routes=2, dropped=0, cut=0)
+    conn.close()

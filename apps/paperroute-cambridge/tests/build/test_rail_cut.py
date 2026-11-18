@@ -12,7 +12,7 @@ import pytest
 
 from paperroute_cambridge.build.rail_cut import (
     BADGES,
-    CAMBRIDGE_CRS,
+    KEPT_CRS,
     ZIP_TIME,
     CutReport,
     crs_of,
@@ -151,13 +151,13 @@ def test_the_fixture_is_in_the_national_format() -> None:
     assert RAIL.stat().st_size < 8_192
 
 
-def test_cut_keeps_every_trip_calling_at_a_cambridge_station(
+def test_cut_keeps_every_trip_calling_at_cambridge_or_ely(
     cut: Path,
 ) -> None:
-    """Cut keeps every trip calling at a Cambridge station, and no other."""
+    """Cut keeps every trip calling at Cambridge or Ely, and no other."""
     trips = [row['trip_id'] for row in table(archive=cut, member='trips.txt')]
     assert trips == KEPT
-    assert CAMBRIDGE_CRS == frozenset({'CBG', 'CMB', 'CMS'})
+    assert KEPT_CRS == frozenset({'CBG', 'ELY'})
 
 
 def test_cut_keeps_each_trip_whole(cut: Path) -> None:
@@ -518,3 +518,93 @@ def test_a_dropped_stop_may_lack_coordinates(tmp_path: Path) -> None:
         change=partial(misplaced, stop_id='9100CAMHTH', value='nan'),
     )
     assert cut_rail(archive=bad, out=tmp_path / 'cut.zip').trips == 6
+
+
+NORWICH_TRIP: Final[str] = 'Y95001_20261102_20261211'
+NEITHER_TRIP: Final[str] = 'Y95002_20261102_20261211'
+
+
+def add_east_midlands_stops(tables: dict[str, list[dict[str, str]]]) -> None:
+    """
+    Add East Midlands Railway and Norwich and Peterborough stations.
+
+    Parameters
+    ----------
+    tables : dict[str, list[dict[str, str]]]
+        Rows by member, changed in place.
+    """
+    agency = next(r for r in tables['agency.txt'] if r['agency_id'] == '=XC')
+    tables['agency.txt'].append({
+        **agency, 'agency_id': '=EM', 'agency_name': 'East Midlands Railway',
+        'agency_url': 'https://www.eastmidlandsrailway.co.uk/',
+    })
+    route = next(r for r in tables['routes.txt'] if r['route_id'] == 'XC')
+    tables['routes.txt'].append({
+        **route, 'route_id': 'EM', 'agency_id': '=EM',
+        'route_long_name': 'East Midlands Railway',
+    })
+    stops = {row['stop_id']: row for row in tables['stops.txt']}
+    for stem, crs, name, lat, lon in (
+        ('NRCH', 'NRW', 'Norwich', '52.62700', '1.30600'),
+        ('PBRO', 'PBO', 'Peterborough', '52.57470', '-0.25020'),
+    ):
+        place = {
+            'stop_code': crs, 'stop_name': name, 'stop_lat': lat,
+            'stop_lon': lon,
+        }
+        tables['stops.txt'] += [
+            {**stops['9100ELYY'], **place, 'stop_id': f'9100{stem}',
+             'parent_station': f'910G{stem}'},
+            {**stops['910GELYY'], **place, 'stop_id': f'910G{stem}'},
+        ]
+
+
+def with_east_midlands(tables: dict[str, list[dict[str, str]]]) -> None:
+    """
+    Add two East Midlands trips: one calls at Ely, one at neither city.
+
+    Parameters
+    ----------
+    tables : dict[str, list[dict[str, str]]]
+        Rows by member, changed in place.
+    """
+    add_east_midlands_stops(tables)
+    trip = next(r for r in tables['trips.txt'] if r['trip_id'] == XC_TRIP)
+    call = next(
+        r for r in tables['stop_times.txt'] if r['trip_id'] == XC_TRIP
+    )
+    for trip_id, calls in (
+        (NORWICH_TRIP, (('9100NRCH', '07:00:00'), ('9100ELYY', '07:45:00'),
+                        ('9100PBRO', '08:15:00'))),
+        (NEITHER_TRIP, (('9100NRCH', '09:00:00'),
+                        ('9100PBRO', '10:10:00'))),
+    ):
+        tables['trips.txt'].append({
+            **trip, 'trip_id': trip_id, 'route_id': 'EM',
+            'trip_headsign': 'Peterborough',
+        })
+        tables['stop_times.txt'] += [
+            {**call, 'trip_id': trip_id, 'stop_id': stop_id,
+             'arrival_time': time, 'departure_time': time,
+             'stop_sequence': str(seq)}
+            for seq, (stop_id, time) in enumerate(calls, start=1)
+        ]
+
+
+def test_cut_keeps_a_train_calling_at_ely_with_its_badge(
+    tmp_path: Path,
+) -> None:
+    """An Ely-only East Midlands trip is kept; one calling at neither goes."""
+    given = changed(out=tmp_path / 'em.zip', change=with_east_midlands)
+    cut = tmp_path / 'cut.zip'
+    cut_rail(archive=given, out=cut)
+    trips = {row['trip_id'] for row in table(archive=cut, member='trips.txt')}
+    assert f'rail:{NORWICH_TRIP}' in trips
+    assert f'rail:{NEITHER_TRIP}' not in trips
+    routes = {
+        row['route_id']: (row['agency_id'], row['route_short_name'])
+        for row in table(archive=cut, member='routes.txt')
+    }
+    assert routes['EM'] == ('EM', 'EM')
+    stops = {row['stop_id'] for row in table(archive=cut, member='stops.txt')}
+    assert {'rail:NRW', 'rail:ELY', 'rail:PBO'} <= stops

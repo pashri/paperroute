@@ -1,4 +1,4 @@
-"""Cut the national rail timetable down to trains calling at Cambridge."""
+"""Cut the national rail timetable to trains calling at Cambridge or Ely."""
 
 import csv
 import io
@@ -15,7 +15,7 @@ from typing import Final
 logger = logging.getLogger(__name__)
 
 RAIL_PREFIX: Final[str] = 'rail:'
-CAMBRIDGE_CRS: Final[frozenset[str]] = frozenset({'CBG', 'CMB', 'CMS'})
+KEPT_CRS: Final[frozenset[str]] = frozenset({'CBG', 'ELY'})
 BADGES: Final[dict[str, str]] = {
     'LE': 'GA',
 }  # timetable agency code to the badge shown
@@ -642,7 +642,7 @@ def _write_members(
 
 
 def cut_rail(
-    *, archive: Path, out: Path, crs: frozenset[str] = CAMBRIDGE_CRS,
+    *, archive: Path, out: Path, crs: frozenset[str] = KEPT_CRS,
 ) -> CutReport:
     """
     Write a zip of the trips that call at the stations, from the national one.

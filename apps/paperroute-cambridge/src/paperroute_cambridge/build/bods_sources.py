@@ -3,6 +3,7 @@
 from typing import Final
 
 from paperroute_cambridge.build.rail_cut import cut_rail
+from paperroute_cambridge.city import RAIL_SOURCE
 from paperroute_transit.build.sources import SourceSpec
 
 BODS_TIMETABLES: Final[str] = (
@@ -21,7 +22,7 @@ CAMBRIDGE_SOURCES: Final[tuple[SourceSpec, ...]] = (
         size_limit=BODS_SIZE_LIMIT,
     ),
     SourceSpec(
-        name='rail',
+        name=RAIL_SOURCE,
         path=RAIL_TIMETABLE,
         cut=cut_rail,
         optional=True,

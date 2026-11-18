@@ -47,7 +47,7 @@ from paperroute_transit.core.chooser import Level
 from paperroute_transit.core.city import MergeReport
 from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.modes import Classifier
-from tests.build.test_rail_cut import XC_TRIP, changed
+from tests.build.test_rail_cut import XC_TRIP, changed, with_east_midlands
 from tests.conftest import FIXTURES, RECORDED_DAY
 
 BODS: Final[Path] = FIXTURES / 'bods.zip'
@@ -55,6 +55,7 @@ RAIL: Final[Path] = FIXTURES / 'rail.zip'
 STATION: Final[StopPlace] = StopPlace(
     stop_id='rail:CBG', name='Cambridge', point=None,
 )
+ELY: Final[StopPlace] = StopPlace(stop_id='rail:ELY', name='Ely', point=None)
 SUNDAY: Final[date] = date(2026, 11, 29)
 
 
@@ -139,7 +140,9 @@ class Shelf:
         return file_sha256(path=out)
 
 
-def built(*, out: Path, start: date, days: int) -> Path:
+def built(
+    *, out: Path, start: date, days: int, rail: Path = RAIL,
+) -> Path:
     """
     Build Cambridge's timetable from the bus fixture and the rail cut.
 
@@ -151,6 +154,8 @@ def built(*, out: Path, start: date, days: int) -> Path:
         First day.
     days : int
         Days covered.
+    rail : Path
+        National rail timetable to cut.
 
     Returns
     -------
@@ -158,12 +163,12 @@ def built(*, out: Path, start: date, days: int) -> Path:
         The timetable file.
     """
     cut = out.with_name('rail-cut.zip')
-    cut_rail(archive=RAIL, out=cut)
-    bods, rail = CAMBRIDGE_SOURCES
+    cut_rail(archive=rail, out=cut)
+    bods, trains = CAMBRIDGE_SOURCES
     build_timetable(
         sources=[
             Source(name=bods.name, archive=BODS),
-            Source(name=rail.name, archive=cut, optional=rail.optional),
+            Source(name=trains.name, archive=cut, optional=trains.optional),
         ],
         window=Window(start=start, days=days),
         out=out,
@@ -172,9 +177,11 @@ def built(*, out: Path, start: date, days: int) -> Path:
     return out
 
 
-def departures(*, path: Path, day: date) -> list[tuple[str, ...]]:
+def departures(
+    *, path: Path, day: date, place: StopPlace = STATION,
+) -> list[tuple[str, ...]]:
     """
-    Read a day's departures from Cambridge station.
+    Read a day's departures from a station.
 
     Parameters
     ----------
@@ -182,6 +189,8 @@ def departures(*, path: Path, day: date) -> list[tuple[str, ...]]:
         Timetable file.
     day : date
         Service day.
+    place : StopPlace
+        Station to read.
 
     Returns
     -------
@@ -189,7 +198,7 @@ def departures(*, path: Path, day: date) -> list[tuple[str, ...]]:
         Time, badge, platform, headsign, source and kind of each.
     """
     start = datetime(day.year, day.month, day.day, tzinfo=CAMBRIDGE_ZONE)
-    pin = Pin(origin=STATION, kind='train')
+    pin = Pin(origin=place, kind='train')
     with closing(SqliteTimetableRepository(city=CAMBRIDGE, path=path)) as repo:
         found = repo.departures(
             pin=pin, start=start, end=start + timedelta(days=1),
@@ -886,3 +895,14 @@ def test_a_rail_file_without_coordinates_keeps_the_earlier_trains(
     assert (report.failed, report.all_failed) == (('rail',), False)
     assert trip_counts(data_dir=data_dir) == {'bods': 67, 'rail': 5}
     assert rail_date(data_dir=data_dir) == date(2026, 11, 16)
+
+
+def test_an_east_midlands_train_leaves_ely(tmp_path: Path) -> None:
+    """A train calling at Ely and not Cambridge is built, badged EM."""
+    rail = changed(out=tmp_path / 'em.zip', change=with_east_midlands)
+    path = built(
+        out=tmp_path / 'timetable.db', start=RECORDED_DAY, days=1, rail=rail,
+    )
+    assert ('07:45', 'EM', '', 'Peterborough', 'train', 'train') in (
+        departures(path=path, day=RECORDED_DAY, place=ELY)
+    )

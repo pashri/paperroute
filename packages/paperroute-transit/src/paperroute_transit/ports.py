@@ -544,7 +544,9 @@ class PinOptions(Protocol):
             Stops within 500 m, the place included, nearest first.
         """
 
-    def reached_from(self, *, place: StopPlace) -> tuple[StopPlace, ...]:
+    def reached_from(
+        self, *, place: StopPlace, kind: str | None = None,
+    ) -> tuple[StopPlace, ...]:
         """
         List the stations a run calls at after a place.
 
@@ -552,6 +554,8 @@ class PinOptions(Protocol):
         ----------
         place : StopPlace
             The place leg 2 is joined at.
+        kind : str | None
+            Count only runs of this kind; None counts every run.
 
         Returns
         -------
@@ -576,6 +580,31 @@ class PinOptions(Protocol):
         -------
         tuple[str, ...]
             Route numbers, in chooser order.
+        """
+
+    def line_trips(
+        self,
+        *,
+        origin: StopPlace,
+        destination: StopPlace | None,
+        kind: str,
+    ) -> dict[str, int]:
+        """
+        Count the trip-days of each line of a kind between two places.
+
+        Parameters
+        ----------
+        origin : StopPlace
+            Place boarded at.
+        destination : StopPlace | None
+            Place reached later in the trip; None for any trip.
+        kind : str
+            Mode id of the lines to count.
+
+        Returns
+        -------
+        dict[str, int]
+            Trip-days over the timetable's window, by line value.
         """
 
     def route_colours(

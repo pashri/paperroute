@@ -18,7 +18,8 @@ WHERE stop_id != :station AND stop_id IN (
   SELECT j.value
   FROM run_stops s JOIN runs r ON r.run_id = s.run_id,
     json_each(r.stations) j
-  WHERE s.station_id = :station AND j.key > s.pos)
+  WHERE s.station_id = :station AND j.key > s.pos
+    AND (:kind IS NULL OR r.kind = :kind))
 ORDER BY name, stop_id
 """
 BETWEEN: Final[str] = """

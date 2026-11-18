@@ -66,6 +66,16 @@ STATION: Final[StopPlace] = StopPlace(
     stop_id='rail:CBG', name='Cambridge', point=None,
 )
 ELY: Final[StopPlace] = StopPlace(stop_id='rail:ELY', name='Ely', point=None)
+BIRMINGHAM: Final[StopPlace] = StopPlace(
+    stop_id='rail:BHM', name='Birmingham New Street', point=None,
+)
+HOSPITAL: Final[StopPlace] = StopPlace(
+    stop_id='0500CCITY517', name='Hospital Outpatients', point=None,
+)
+CITY_CENTRE: Final[StopPlace] = StopPlace(
+    stop_id='0500CCITY001', name='City centre', point=None,
+)
+XC_BUILT: Final[str] = f'rail:{XC_TRIP}'
 SUNDAY: Final[date] = date(2026, 11, 29)
 
 
@@ -261,6 +271,59 @@ def rail_built_fixture(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """
     out = tmp_path_factory.mktemp('rail') / 'timetable.db'
     return built(out=out, start=RECORDED_DAY, days=1)
+
+
+@pytest.fixture(name='week_built', scope='module')
+def week_built_fixture(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """
+    Build a week of the recorded day with trains.
+
+    Parameters
+    ----------
+    tmp_path_factory : pytest.TempPathFactory
+        Makes the directory for the file.
+
+    Returns
+    -------
+    Path
+        The timetable file.
+    """
+    out = tmp_path_factory.mktemp('week') / 'timetable.db'
+    return built(out=out, start=RECORDED_DAY, days=7)
+
+
+def line_trips(
+    *,
+    path: Path,
+    origin: StopPlace,
+    destination: StopPlace | None,
+    kind: str = 'train',
+) -> dict[str, int]:
+    """
+    Count a kind's trip-days by line between two places.
+
+    Parameters
+    ----------
+    path : Path
+        Timetable file.
+    origin : StopPlace
+        Place boarded at.
+    destination : StopPlace | None
+        Place reached, or None.
+    kind : str
+        Mode id.
+
+    Returns
+    -------
+    dict[str, int]
+        Trip-days by line value.
+    """
+    with closing(
+        SqliteNetworkRepository(city=CAMBRIDGE, path=path),
+    ) as network:
+        return SqlitePinOptions(network=network).line_trips(
+            origin=origin, destination=destination, kind=kind,
+        )
 
 
 def test_sources_are_the_bus_zip_then_the_optional_rail_cut() -> None:
@@ -1001,3 +1064,91 @@ def test_rail_cut_rule_is_the_sorted_kept_stations() -> None:
     """The rail source's rule is derived from the kept stations."""
     rail = next(s for s in CAMBRIDGE_SOURCES if s.name == RAIL_SOURCE)
     assert rail.cut_rule == ','.join(sorted(KEPT_CRS))
+
+
+def test_line_trips_count_trains_between_two_stations(
+    rail_built: Path,
+) -> None:
+    """Each line's trains from Cambridge, to a Destination or anywhere."""
+    to_ely = line_trips(path=rail_built, origin=STATION, destination=ELY)
+    anywhere = line_trips(path=rail_built, origin=STATION, destination=None)
+    assert to_ely == {'XC:Birmingham & Stansted': 1}
+    assert anywhere == {
+        'GA:Liverpool Street': 2,
+        'GN:Kings Lynn & Kings Cross': 1,
+        'TL:Brighton via St Pancras': 1,
+        'XC:Birmingham & Stansted': 1,
+    }
+
+
+def test_line_trips_sum_the_days_each_trip_runs(week_built: Path) -> None:
+    """A weekday trip counts once for each weekday in the window."""
+    anywhere = line_trips(path=week_built, origin=STATION, destination=None)
+    assert anywhere == {
+        'GA:Liverpool Street': 10,
+        'GN:Kings Lynn & Kings Cross': 5,
+        'TL:Brighton via St Pancras': 5,
+        'XC:Birmingham & Stansted': 5,
+    }
+
+
+def test_line_trips_leave_out_a_trips_skipped_days(
+    week_built: Path, tmp_path: Path,
+) -> None:
+    """Each day a trip is skipped takes one off its line's count."""
+    path = tmp_path / 'timetable.db'
+    shutil.copyfile(week_built, path)
+    with closing(sqlite3.connect(path)) as conn, conn:
+        days = [row[0] for row in conn.execute(
+            "SELECT date FROM services WHERE service_id = 'rail:101'"
+            ' ORDER BY date LIMIT 2',
+        )]
+        conn.executemany(
+            'INSERT INTO trip_skip VALUES (?, ?)',
+            [(XC_BUILT, day) for day in days],
+        )
+    to_ely = line_trips(path=path, origin=STATION, destination=ELY)
+    assert to_ely == {'XC:Birmingham & Stansted': 3}
+
+
+def test_line_trips_ignore_a_call_that_does_not_pick_up(
+    rail_built: Path,
+) -> None:
+    """The last stop of every train sets down only, so nothing leaves it."""
+    assert line_trips(
+        path=rail_built, origin=BIRMINGHAM, destination=None,
+    ) == {}
+
+
+def test_line_trips_count_only_the_kind_asked_for(rail_built: Path) -> None:
+    """Buses between two bus stops are not trains, and are buses."""
+    buses = line_trips(
+        path=rail_built,
+        origin=HOSPITAL,
+        destination=CITY_CENTRE,
+        kind='bus',
+    )
+    assert buses
+    assert line_trips(
+        path=rail_built,
+        origin=HOSPITAL,
+        destination=CITY_CENTRE,
+        kind='train',
+    ) == {}
+
+
+def test_trains_reach_every_later_station(rail_built: Path) -> None:
+    """Only train runs count when the kind is train."""
+    with closing(
+        SqliteNetworkRepository(city=CAMBRIDGE, path=rail_built),
+    ) as network:
+        options = SqlitePinOptions(network=network)
+        trains = options.reached_from(place=STATION, kind='train')
+        buses = options.reached_from(place=STATION, kind='bus')
+    assert [place.name for place in trains] == [
+        'Birmingham New Street', 'Brighton', 'Cambridge North',
+        'Cambridge South', 'Ely', 'London Kings Cross',
+        'London Liverpool Street', 'London St Pancras International',
+        'Royston',
+    ]
+    assert buses == ()

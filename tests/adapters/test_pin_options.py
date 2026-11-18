@@ -203,6 +203,17 @@ def test_place_finds_or_misses(options: SqlitePinOptions) -> None:
     assert options.place(stop_id='nowhere') is None
 
 
+def test_reached_from_without_a_kind_is_unchanged(
+    options: SqlitePinOptions,
+) -> None:
+    """No kind and a None kind give the same, non-empty answer."""
+    place = at(options=options, stop_id='C')
+    assert options.reached_from(place=place)
+    assert options.reached_from(place=place) == options.reached_from(
+        place=place, kind=None,
+    )
+
+
 def test_trip_stop_lifts_to_parent(options: SqlitePinOptions) -> None:
     """A platform maps to its station; a station to itself."""
     station = at(options=options, stop_id='C')

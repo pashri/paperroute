@@ -292,7 +292,9 @@ def test_dark_block_redefines_tokens_only_and_all_that_the_kit_does() -> None:
 def test_palette_uses_only_classes_the_shared_pages_have() -> None:
     """Palette uses only classes the shared pages have."""
     assert class_names(PALETTE_CSS) <= (
-        class_names(LIVE_CSS) | class_names(BOARD_CSS) | {'mode-coach', 'mode-train'}
+        class_names(LIVE_CSS)
+        | class_names(BOARD_CSS)
+        | {'mode-coach', 'mode-train'}
     )
 
 

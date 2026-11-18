@@ -154,6 +154,7 @@ def main(*, argv: Sequence[str]) -> int:
     return land(
         scratch=scratch, path=Path(argv[2]),
         build=lambda path: run_extras(path=path, city=city),
+        city_ref=argv[0],
     )
 
 

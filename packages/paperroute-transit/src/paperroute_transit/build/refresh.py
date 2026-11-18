@@ -625,10 +625,15 @@ def build_or_fall_back(
         layout=layout, parts=parts, fetched=fetched,
         start=yesterday(zone=city.zone), days=days,
     )
-    for attempt, following in zip(attempts, attempts[1:]):
+    for index, (attempt, following) in enumerate(
+        zip(attempts, attempts[1:]),
+    ):
         built = first_try(
             layout=layout, attempt=attempt, following=following,
-            handoff=handed(handoff=handoff, attempt=attempt),
+            handoff=handed(
+                handoff=handoff, attempt=attempt,
+                later=attempts[index + 1:],
+            ),
             city_ref=parts.city_ref,
         )
         if built is not None:
@@ -636,14 +641,17 @@ def build_or_fall_back(
     last = attempts[-1]
     return build_and_check(
         layout=layout, attempt=last,
-        handoff=handed(handoff=handoff, attempt=last),
+        handoff=handed(handoff=handoff, attempt=last, later=()),
         city_ref=parts.city_ref,
     ), last.fetched
 
 
-def handed(*, handoff: Handoff | None, attempt: Attempt) -> Handoff | None:
+def handed(
+    *, handoff: Handoff | None, attempt: Attempt,
+    later: tuple[Attempt, ...],
+) -> Handoff | None:
     """
-    Point a handoff's refresh tail at an attempt's outcome.
+    Point a handoff's refresh tail at an attempt and the ones after it.
 
     Parameters
     ----------
@@ -651,17 +659,20 @@ def handed(*, handoff: Handoff | None, attempt: Attempt) -> Handoff | None:
         The handoff, if any.
     attempt : Attempt
         The attempt whose outcome the tail should carry.
+    later : tuple[Attempt, ...]
+        The attempts to try if the extras program fails.
 
     Returns
     -------
     Handoff | None
-        The handoff with its tail's outcome replaced, or as it was when it
-        has no tail.
+        The handoff with its tail's outcome and fallbacks replaced, or as
+        it was when it has no tail.
     """
     if handoff is None or handoff.tail is None:
         return handoff
     return replace(
-        handoff, tail=replace(handoff.tail, fetched=attempt.fetched),
+        handoff,
+        tail=replace(handoff.tail, fetched=attempt.fetched, fallbacks=later),
     )
 
 

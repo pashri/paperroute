@@ -1,13 +1,17 @@
 """Tests for Cambridge's trains, built beside its buses."""
 
+import json
+import logging
+import os
 import shutil
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Iterator
 from contextlib import closing
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
+from importlib import import_module
 from pathlib import Path
-from typing import Final
+from typing import Final, NoReturn
 
 import pytest
 
@@ -20,12 +24,14 @@ from paperroute_device.adapters.rate_limit import SyncStartLimiter
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.adapters.pin_options import SqlitePinOptions
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
+from paperroute_transit.build import extras
 from paperroute_transit.build import refresh as refresh_module
 from paperroute_transit.build import swap
 from paperroute_transit.build.cli import given_sources, parse_args
 from paperroute_transit.build.gtfs_files import Source, read_rows
-from paperroute_transit.build.handoff import Handoff
+from paperroute_transit.build.handoff import Handoff, read_handoff
 from paperroute_transit.build.refresh import refresh
+from paperroute_transit.build.runs import load_runs
 from paperroute_transit.build.source_state import (
     SourceError,
     SourceState,
@@ -40,6 +46,7 @@ from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.core.chooser import Level
 from paperroute_transit.core.city import MergeReport
 from paperroute_transit.core.model import Pin, StopPlace
+from paperroute_transit.core.modes import Classifier
 from tests.build.test_rail_cut import XC_TRIP, changed
 from tests.conftest import FIXTURES, RECORDED_DAY
 
@@ -493,7 +500,9 @@ def _data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return path
 
 
-def night(*, data_dir: Path, shelf: Shelf) -> swap.RefreshReport:
+def night(
+    *, data_dir: Path, shelf: Shelf, hand_over: bool = False,
+) -> swap.RefreshReport:
     """
     Refresh Cambridge's one-day timetable from the shelf.
 
@@ -503,6 +512,8 @@ def night(*, data_dir: Path, shelf: Shelf) -> swap.RefreshReport:
         Data directory.
     shelf : Shelf
         Where the sources come from.
+    hand_over : bool
+        Exec into the extras program after the load.
 
     Returns
     -------
@@ -515,6 +526,7 @@ def night(*, data_dir: Path, shelf: Shelf) -> swap.RefreshReport:
         parts=replace(CAMBRIDGE_BUILD, downloader=shelf),
         days=1,
         force=True,
+        hand_over=hand_over,
     )
 
 
@@ -691,3 +703,140 @@ def test_a_build_that_fails_without_the_trains_still_fails(
         night(data_dir=data_dir, shelf=shelf)
     assert refusing.calls == 3
     assert trip_counts(data_dir=data_dir) == before
+
+
+@pytest.fixture(name='restored_logging')
+def _restored_logging() -> Iterator[None]:
+    """
+    Put the root logger back after a test that configures it.
+
+    Yields
+    ------
+    None
+        Control to the test.
+    """
+    root = logging.getLogger()
+    handlers, level = list(root.handlers), root.level
+    yield
+    for handler in list(root.handlers):
+        if handler not in handlers:
+            handler.close()
+    root.handlers[:] = handlers
+    root.setLevel(level)
+
+
+NEW_COPY: Final[str] = "SELECT 1 FROM trips WHERE headsign = 'Nowhere'"
+ANY_RAIL: Final[str] = "SELECT 1 FROM trips WHERE source = 'rail'"
+EVERY_BUILD: Final[str] = 'SELECT 1'
+
+
+@dataclass
+class FaultyRuns:
+    """Stand in for load_runs, failing while a query finds a row."""
+
+    sql: str
+    calls: int = 0
+
+    def __call__(
+        self, *, conn: sqlite3.Connection, classify: Classifier,
+        rail_types: Collection[int],
+    ) -> object:
+        """
+        Count the call, then fail or build the run tables.
+
+        Parameters
+        ----------
+        conn : sqlite3.Connection
+            Timetable being finished.
+        classify : Classifier
+            The city's classifier.
+        rail_types : Collection[int]
+            The city's rail route types.
+
+        Returns
+        -------
+        object
+            The real report.
+
+        Raises
+        ------
+        ValueError
+            When the query finds a row.
+        """
+        self.calls += 1
+        if conn.execute(self.sql).fetchone():
+            raise ValueError('the run tables refused a trip')
+        return load_runs(conn=conn, classify=classify, rail_types=rail_types)
+
+
+def run_here(path: str, argv: list[str]) -> NoReturn:
+    """
+    Run the program an exec would start in this process, then exit.
+
+    The lock descriptor is put back as the exec would have kept it.
+
+    Parameters
+    ----------
+    path : str
+        Interpreter, unused.
+    argv : list[str]
+        Interpreter, '-m', module, then its arguments; the last is the
+        handoff file.
+
+    Raises
+    ------
+    SystemExit
+        With the program's exit status.
+    """
+    del path
+    tail = read_handoff(path=Path(argv[-1])).tail
+    assert tail is not None
+    spare = os.dup(tail.lock_fd)
+    try:
+        code = import_module(argv[2]).main(argv=argv[3:])
+    finally:
+        os.dup2(spare, tail.lock_fd)
+        os.close(spare)
+    raise SystemExit(code)
+
+
+@pytest.mark.usefixtures('restored_logging')
+@pytest.mark.parametrize(
+    ('good_first', 'new_copy', 'fault', 'expected'),
+    [
+        (False, True, NEW_COPY, (0, {'bods': 67}, 2, [['rail']])),
+        (True, True, NEW_COPY,
+         (0, {'bods': 67, 'rail': 5}, 2, [['rail']])),
+        (True, False, ANY_RAIL, (0, {'bods': 67}, 2, [['rail']])),
+        (True, True, EVERY_BUILD, (1, {'bods': 67, 'rail': 5}, 3, [])),
+    ],
+    ids=['first-night', 'new-copy', 'stored-copy', 'every-build'],
+)
+def test_a_handed_over_build_falls_back_when_the_run_tables_fail(
+    data_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str], good_first: bool, new_copy: bool,
+    fault: str, expected: tuple[int, dict[str, int], int, list[list[str]]],
+) -> None:
+    """After the exec, a failure tries again without trusting the rail."""
+    shelf = Shelf(files={'bods': BODS, 'rail': RAIL})
+    if good_first:
+        night(data_dir=data_dir, shelf=shelf)
+    if new_copy:
+        shelf.files['rail'] = changed(
+            out=tmp_path / 'new.zip', change=nowhere,
+        )
+    runs = FaultyRuns(sql=fault)
+    monkeypatch.setattr(extras, 'load_runs', runs)
+    monkeypatch.setattr(os, 'execv', run_here)
+    capsys.readouterr()
+    with pytest.raises(SystemExit) as stop:
+        night(data_dir=data_dir, shelf=shelf, hand_over=True)
+    reports = [
+        json.loads(line)['failed']
+        for line in capsys.readouterr().out.splitlines()
+        if line.startswith('{"downloaded"')
+    ]
+    assert (
+        stop.value.code, trip_counts(data_dir=data_dir), runs.calls,
+        reports,
+    ) == expected

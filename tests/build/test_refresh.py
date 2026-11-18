@@ -923,6 +923,7 @@ def test_refresh_hands_over_after_the_load(
     assert isinstance(record, handoff_module.HandoffRecord)
     assert record.tail is not None
     assert record.tail.fetched.changed == ('sydneytrains', 'metro', 'bundle')
+    assert record.tail.fallbacks == ()
     assert record.out == work / 'timetable.db'
     assert not (data_dir / 'timetable.db').exists()
 

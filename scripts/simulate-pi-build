@@ -103,7 +103,7 @@ c = importlib.import_module(f'{module}.city')
 assert e.city_named(ref=f'{module}.city:{city}') is getattr(c, city)
 EOF
 )
-imports="import ${module}.__main__, paperroute_device.screen, paperroute_hardware, paperroute_device, paperroute_transit"
+imports="import ${module}.__main__, paperroute_device.screen, paperroute_hardware, paperroute_device, paperroute_transit, paperroute_transit.build.retry"
 "$py" -c "$imports"
 "$py" -c "$installed"
 "$py" -c "$handoff"

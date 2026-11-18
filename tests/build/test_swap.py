@@ -1,6 +1,5 @@
 """Tests for the handoff from the timetable load to the extras program."""
 
-import fcntl
 import json
 import logging
 import os
@@ -9,7 +8,6 @@ import sqlite3
 import subprocess
 import sys
 import time
-from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import replace
 from datetime import date
@@ -24,6 +22,7 @@ from paperroute_transit.build import handoff as handoff_module
 from paperroute_transit.build import swap, timetable
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.handoff import (
+    Attempt,
     Fetched,
     HandoffError,
     HandoffRecord,
@@ -84,65 +83,6 @@ def fixture_loaded(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return folder / 'timetable.db'
 
 
-@pytest.fixture(name='restored_logging')
-def _restored_logging() -> Iterator[None]:
-    """Put the root logger back after a test that configures it."""
-    root = logging.getLogger()
-    handlers, level = list(root.handlers), root.level
-    yield
-    for handler in list(root.handlers):
-        if handler not in handlers:
-            handler.close()
-    root.handlers[:] = handlers
-    root.setLevel(level)
-
-
-@pytest.fixture(name='data_dir')
-def fixture_data_dir(tmp_path: Path) -> Path:
-    """
-    A data dir holding an old timetable and an empty work dir.
-
-    Parameters
-    ----------
-    tmp_path : Path
-        Temporary directory.
-
-    Returns
-    -------
-    Path
-        The data dir.
-    """
-    data_dir = tmp_path / 'data'
-    (data_dir / 'work').mkdir(parents=True)
-    (data_dir / 'sources').mkdir()
-    (data_dir / 'timetable.db').write_bytes(b'old timetable')
-    return data_dir
-
-
-@pytest.fixture(name='lock_fd')
-def fixture_lock_fd(data_dir: Path) -> Iterator[int]:
-    """
-    Hold the data dir's refresh lock on a raw descriptor.
-
-    Parameters
-    ----------
-    data_dir : Path
-        Data dir.
-
-    Yields
-    ------
-    int
-        The descriptor; the tail closes it.
-    """
-    fd = os.open(data_dir / 'refresh.lock', os.O_WRONLY | os.O_CREAT, 0o644)
-    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    yield fd
-    try:
-        os.close(fd)
-    except OSError:
-        pass
-
-
 def refresh_record(*, data_dir: Path, lock_fd: int) -> HandoffRecord:
     """
     Describe a refresh handed over in a data dir.
@@ -179,9 +119,64 @@ def refresh_record(*, data_dir: Path, lock_fd: int) -> HandoffRecord:
     )
 
 
+def attempt_in(*, data_dir: Path) -> Attempt:
+    """
+    An attempt that builds from the stored metro zip without rail.
+
+    Parameters
+    ----------
+    data_dir : Path
+        Data dir.
+
+    Returns
+    -------
+    Attempt
+        The attempt.
+    """
+    return Attempt(
+        fetched=Fetched(
+            states={'metro': SourceState(
+                etag='"1"', last_modified=None, sha256='cd' * 32,
+            )},
+            downloaded=(), changed=(), failed=('rail',),
+            optional=('rail',),
+        ),
+        sources=(Source(
+            name='metro', archive=data_dir / 'sources' / 'metro.zip',
+        ),),
+        start=date(2026, 10, 16),
+        days=9,
+    )
+
+
+def with_fallback(*, record: HandoffRecord, data_dir: Path) -> HandoffRecord:
+    """
+    The record with one attempt left after it.
+
+    Parameters
+    ----------
+    record : HandoffRecord
+        A refresh record.
+    data_dir : Path
+        Data dir.
+
+    Returns
+    -------
+    HandoffRecord
+        The record, its tail holding the attempt.
+    """
+    assert record.tail is not None
+    return replace(record, tail=replace(
+        record.tail, fallbacks=(attempt_in(data_dir=data_dir),),
+    ))
+
+
 def test_handoff_round_trip(data_dir: Path) -> None:
     """A record reads back equal and holds only paths, states and counts."""
-    record = refresh_record(data_dir=data_dir, lock_fd=7)
+    record = with_fallback(
+        record=refresh_record(data_dir=data_dir, lock_fd=7),
+        data_dir=data_dir,
+    )
     path = data_dir / 'work' / 'handoff.json'
     write_handoff(path=path, record=record)
     assert read_handoff(path=path) == record
@@ -192,7 +187,7 @@ def test_handoff_round_trip(data_dir: Path) -> None:
     }
     assert set(raw['tail']) == {
         'data_dir', 'states', 'downloaded', 'changed', 'failed',
-        'optional', 'started', 'error_log', 'lock_fd',
+        'optional', 'started', 'error_log', 'lock_fd', 'fallbacks',
     }
     plain = replace(record, tail=None)
     write_handoff(path=path, record=plain)
@@ -211,6 +206,66 @@ def test_handoff_without_failed_reads_as_none_failed(
     del tail['failed']
     path.write_text(json.dumps(raw), encoding='utf-8')
     assert read_handoff(path=path) == record
+
+
+def test_handoff_without_fallbacks_reads_as_none_left(
+    data_dir: Path,
+) -> None:
+    """A handoff written before fallbacks existed has no attempt left."""
+    record = refresh_record(data_dir=data_dir, lock_fd=7)
+    path = data_dir / 'work' / 'handoff.json'
+    raw = handoff_module.record_json(record=record)
+    tail = raw['tail']
+    assert isinstance(tail, dict)
+    del tail['fallbacks']
+    path.write_text(json.dumps(raw), encoding='utf-8')
+    assert read_handoff(path=path) == record
+
+
+def test_handoff_refuses_a_fallback_outside_the_data_dir(
+    data_dir: Path, tmp_path: Path,
+) -> None:
+    """Every archive an attempt names must be inside the data dir."""
+    record = with_fallback(
+        record=refresh_record(data_dir=data_dir, lock_fd=7),
+        data_dir=data_dir,
+    )
+    assert record.tail is not None
+    away = replace(
+        record.tail.fallbacks[0],
+        sources=(Source(name='metro', archive=tmp_path / 'metro.zip'),),
+    )
+    with pytest.raises(HandoffError):
+        write_handoff(
+            path=data_dir / 'work' / 'handoff.json',
+            record=replace(
+                record, tail=replace(record.tail, fallbacks=(away,)),
+            ),
+        )
+
+
+def test_handoff_refuses_malformed_fallbacks(data_dir: Path) -> None:
+    """A fallback that is not a well-typed attempt is refused."""
+    raw = handoff_module.record_json(record=with_fallback(
+        record=refresh_record(data_dir=data_dir, lock_fd=7),
+        data_dir=data_dir,
+    ))
+    tail = raw['tail']
+    assert isinstance(tail, dict)
+    (attempt,) = tail['fallbacks']
+    path = data_dir / 'work' / 'handoff.json'
+    for broken in (
+        [3],
+        [{**attempt, 'start': '16 Oct'}],
+        [{**attempt, 'sources': [3]}],
+        [{**attempt, 'days': '9'}],
+    ):
+        path.write_text(
+            json.dumps({**raw, 'tail': {**tail, 'fallbacks': broken}}),
+            encoding='utf-8',
+        )
+        with pytest.raises(HandoffError):
+            read_handoff(path=path)
 
 
 def test_handoff_refuses_paths_outside_work(
@@ -328,6 +383,115 @@ def test_lost_lock_stops_the_swap(data_dir: Path, loaded: Path) -> None:
     assert 'LockLostError' in (data_dir / 'log' / 'errors.jsonl').read_text(
         encoding='utf-8',
     )
+
+
+class Execed(Exception):
+    """Raised by the stand-in for os.execv."""
+
+
+@pytest.mark.usefixtures('restored_logging')
+def test_failed_extras_hand_back_to_the_retry_program(
+    data_dir: Path, lock_fd: int, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With an attempt left, a failure execs into retry, lock kept."""
+    seen: list[list[str]] = []
+
+    def execv(path: str, argv: list[str]) -> None:
+        """
+        Note the arguments instead of replacing the process.
+
+        Parameters
+        ----------
+        path : str
+            Interpreter.
+        argv : list[str]
+            Its arguments.
+
+        Raises
+        ------
+        Execed
+            Always.
+        """
+        seen.append([path, *argv[1:]])
+        raise Execed
+
+    monkeypatch.setattr(os, 'execv', execv)
+    record = with_fallback(
+        record=refresh_record(data_dir=data_dir, lock_fd=lock_fd),
+        data_dir=data_dir,
+    )
+    record.scratch.write_bytes(b'not a timetable')
+    handoff = data_dir / 'work' / 'handoff.json'
+    write_handoff(path=handoff, record=record)
+    with pytest.raises(Execed):
+        extras.main(argv=[SYDNEY_REF, str(record.scratch), str(handoff)])
+    assert seen == [[
+        sys.executable, '-m', 'paperroute_transit.build.retry',
+        SYDNEY_REF, str(handoff),
+    ]]
+    assert handoff.exists()
+    assert os.get_inheritable(lock_fd)
+    assert (data_dir / 'timetable.db').read_bytes() == b'old timetable'
+
+
+@pytest.mark.usefixtures('restored_logging')
+def test_lost_lock_never_hands_back(
+    data_dir: Path, loaded: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without the lock, an attempt left is not tried."""
+    monkeypatch.setattr(os, 'execv', None)
+    record = with_fallback(
+        record=refresh_record(data_dir=data_dir, lock_fd=999),
+        data_dir=data_dir,
+    )
+    shutil.copy(loaded, record.scratch)
+    handoff = data_dir / 'work' / 'handoff.json'
+    write_handoff(path=handoff, record=record)
+    assert extras.main(
+        argv=[SYDNEY_REF, str(record.scratch), str(handoff)],
+    ) == 1
+    assert not list((data_dir / 'work').iterdir())
+
+
+@pytest.mark.usefixtures('restored_logging')
+def test_failure_inside_the_swap_never_hands_back(
+    data_dir: Path, loaded: Path, lock_fd: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A fault after the swap's first move is a plain failure."""
+    monkeypatch.setattr(swap, 'MIN_TRIPS', 1)
+    monkeypatch.setattr(os, 'execv', None)
+
+    def broken(*, path: Path) -> None:
+        """
+        Fail the way a full disk would, after the first move.
+
+        Parameters
+        ----------
+        path : Path
+            Folder to sync.
+
+        Raises
+        ------
+        OSError
+            Always.
+        """
+        raise OSError(f'cannot sync {path}')
+
+    monkeypatch.setattr(swap, 'fsync_dir', broken)
+    record = with_fallback(
+        record=refresh_record(data_dir=data_dir, lock_fd=lock_fd),
+        data_dir=data_dir,
+    )
+    shutil.copy(loaded, record.scratch)
+    handoff = data_dir / 'work' / 'handoff.json'
+    write_handoff(path=handoff, record=record)
+    assert extras.main(
+        argv=[SYDNEY_REF, str(record.scratch), str(handoff)],
+    ) == 1
+    assert not list((data_dir / 'work').iterdir())
+    with pytest.raises(OSError):
+        os.fstat(lock_fd)
 
 
 def test_plain_build_hand_over_replaces_out(

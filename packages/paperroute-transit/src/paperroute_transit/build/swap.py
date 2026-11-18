@@ -21,6 +21,7 @@ from paperroute_transit.build.handoff import (
     HandoffError,
     HandoffRecord,
     RefreshTail,
+    hand_back,
     read_handoff,
 )
 from paperroute_transit.build.layout import Layout
@@ -224,12 +225,12 @@ def check_scratch(*, record: HandoffRecord, scratch: Path) -> None:
         raise HandoffError(f'handoff is for {record.scratch}, not {scratch}')
 
 
-def finish_refresh(
+def prepare_refresh(
     *, record: HandoffRecord, tail: RefreshTail, scratch: Path,
     held: bool, build: Callable[[Path], None],
-) -> RefreshReport:
+) -> bool:
     """
-    Build the run tables, then check and swap in a handed-over timetable.
+    Build the run tables and check a handed-over timetable, before any swap.
 
     Parameters
     ----------
@@ -246,8 +247,8 @@ def finish_refresh(
 
     Returns
     -------
-    RefreshReport
-        What the whole refresh did; the peak covers the load and the extras.
+    bool
+        Always True.
 
     Raises
     ------
@@ -260,6 +261,27 @@ def finish_refresh(
     build(record.scratch)
     os.replace(record.scratch, record.out)
     check_timetable(path=record.out)
+    return True
+
+
+def finish_refresh(
+    *, record: HandoffRecord, tail: RefreshTail,
+) -> RefreshReport:
+    """
+    Swap a checked, handed-over timetable in and report the refresh.
+
+    Parameters
+    ----------
+    record : HandoffRecord
+        The handoff.
+    tail : RefreshTail
+        Its refresh tail.
+
+    Returns
+    -------
+    RefreshReport
+        What the whole refresh did; the peak covers the load and the extras.
+    """
     swap_in(layout=Layout(data_dir=tail.data_dir), built=record.out,
             fetched=tail.fetched)
     return RefreshReport(
@@ -296,7 +318,7 @@ def printed(*, report: RefreshReport | None) -> int:
 
 def complete_refresh(
     *, record: HandoffRecord, tail: RefreshTail, scratch: Path,
-    build: Callable[[Path], None],
+    build: Callable[[Path], None], path: Path, city_ref: str,
 ) -> int:
     """
     Finish a handed-over refresh and print its report, logging failures.
@@ -304,7 +326,9 @@ def complete_refresh(
     Work is cleared whatever happens, so a failure leaves the old
     timetable, sources and states in place. The lock descriptor is closed
     only when it was checked to be the lock: otherwise its number may
-    belong to another file.
+    belong to another file. A failure before the swap, with the lock held
+    and an attempt left, hands back to the retry program instead, keeping
+    work and the lock.
 
     Parameters
     ----------
@@ -316,6 +340,10 @@ def complete_refresh(
         Scratch file from the command line.
     build : Callable[[Path], None]
         Adds the run tables to a scratch file.
+    path : Path
+        Handoff file, for the retry program.
+    city_ref : str
+        The city's reference, for the retry program.
 
     Returns
     -------
@@ -325,15 +353,25 @@ def complete_refresh(
     layout = Layout(data_dir=tail.data_dir)
     held = holds_lock(fd=tail.lock_fd, path=layout.lock)
     configure_logging(error_file=tail.error_log)
+    report = None
+    retry = False
     try:
-        report = guarded(step=lambda: finish_refresh(
+        ready = guarded(step=lambda: prepare_refresh(
             record=record, tail=tail, scratch=scratch, held=held,
             build=build,
         ))
+        retry = not ready and held and bool(tail.fallbacks)
+        if ready:
+            report = guarded(
+                step=lambda: finish_refresh(record=record, tail=tail),
+            )
     finally:
-        clear_work(work=layout.work)
-        if held:
-            os.close(tail.lock_fd)
+        if not retry:
+            clear_work(work=layout.work)
+            if held:
+                os.close(tail.lock_fd)
+    if retry:
+        hand_back(path=path, city_ref=city_ref, lock_fd=tail.lock_fd)
     return printed(report=report)
 
 
@@ -374,8 +412,31 @@ def complete_build(
     return 0
 
 
+def readable(*, path: Path) -> HandoffRecord | None:
+    """
+    Read a handoff file, logging to stderr when it can't be.
+
+    Parameters
+    ----------
+    path : Path
+        Handoff file.
+
+    Returns
+    -------
+    HandoffRecord | None
+        The record, or None when the file is unreadable.
+    """
+    try:
+        return read_handoff(path=path)
+    except (OSError, ValueError):
+        configure_logging()
+        logger.exception('handoff unreadable')
+        return None
+
+
 def land(
     *, scratch: Path, path: Path, build: Callable[[Path], None],
+    city_ref: str,
 ) -> int:
     """
     Read a handoff file and finish the build or refresh it describes.
@@ -392,21 +453,21 @@ def land(
         Handoff file.
     build : Callable[[Path], None]
         Adds the run tables to a scratch file.
+    city_ref : str
+        The city's reference, for the retry program.
 
     Returns
     -------
     int
         Exit status.
     """
-    try:
-        record = read_handoff(path=path)
-    except (OSError, ValueError):
-        configure_logging()
-        logger.exception('handoff unreadable')
+    record = readable(path=path)
+    if record is None:
         return 1
     if record.tail is not None:
         return complete_refresh(
             record=record, tail=record.tail, scratch=scratch, build=build,
+            path=path, city_ref=city_ref,
         )
     return complete_build(
         record=record, path=path, scratch=scratch, build=build,

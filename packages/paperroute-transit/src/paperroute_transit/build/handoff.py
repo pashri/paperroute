@@ -15,6 +15,7 @@ from paperroute_transit.build.source_state import SourceState
 
 HANDOFF_NAME: Final[str] = 'handoff.json'
 EXTRAS_MODULE: Final[str] = 'paperroute_transit.build.extras'
+RETRY_MODULE: Final[str] = 'paperroute_transit.build.retry'
 STATE_FIELDS: Final[tuple[str, ...]] = ('etag', 'last_modified', 'sha256')
 
 
@@ -75,6 +76,8 @@ class RefreshTail:
         The errors.jsonl file, inside data_dir.
     lock_fd : int
         Descriptor holding the refresh lock.
+    fallbacks : tuple[Attempt, ...]
+        Builds to try in turn when this one fails after the hand over.
     """
 
     data_dir: Path
@@ -82,6 +85,7 @@ class RefreshTail:
     started: float
     error_log: Path | None
     lock_fd: int
+    fallbacks: tuple[Attempt, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -146,6 +150,76 @@ def attempt_text(*, attempt: Attempt, data_dir: Path) -> str:
     )
 
 
+def fetched_json(*, fetched: Fetched) -> dict[str, object]:
+    """
+    Turn a download outcome into JSON values.
+
+    Parameters
+    ----------
+    fetched : Fetched
+        Outcome.
+
+    Returns
+    -------
+    dict[str, object]
+        Its five fields.
+    """
+    return {
+        'states': {
+            name: asdict(state) for name, state in fetched.states.items()
+        },
+        'downloaded': list(fetched.downloaded),
+        'changed': list(fetched.changed),
+        'failed': list(fetched.failed),
+        'optional': list(fetched.optional),
+    }
+
+
+def source_json(*, source: Source) -> dict[str, object]:
+    """
+    Turn a source into JSON values.
+
+    Parameters
+    ----------
+    source : Source
+        Source.
+
+    Returns
+    -------
+    dict[str, object]
+        Its fields, the archive as a string.
+    """
+    return {
+        'name': source.name,
+        'archive': str(source.archive),
+        'optional': source.optional,
+    }
+
+
+def attempt_json(*, attempt: Attempt) -> dict[str, object]:
+    """
+    Turn an attempt into JSON values.
+
+    Parameters
+    ----------
+    attempt : Attempt
+        Attempt.
+
+    Returns
+    -------
+    dict[str, object]
+        The outcome's fields, then its sources, start and days.
+    """
+    return {
+        **fetched_json(fetched=attempt.fetched),
+        'sources': [
+            source_json(source=source) for source in attempt.sources
+        ],
+        'start': attempt.start.isoformat(),
+        'days': attempt.days,
+    }
+
+
 def tail_json(*, tail: RefreshTail) -> dict[str, object]:
     """
     Turn a refresh tail into JSON values.
@@ -162,17 +236,13 @@ def tail_json(*, tail: RefreshTail) -> dict[str, object]:
     """
     return {
         'data_dir': str(tail.data_dir),
-        'states': {
-            name: asdict(state)
-            for name, state in tail.fetched.states.items()
-        },
-        'downloaded': list(tail.fetched.downloaded),
-        'changed': list(tail.fetched.changed),
-        'failed': list(tail.fetched.failed),
-        'optional': list(tail.fetched.optional),
+        **fetched_json(fetched=tail.fetched),
         'started': tail.started,
         'error_log': None if tail.error_log is None else str(tail.error_log),
         'lock_fd': tail.lock_fd,
+        'fallbacks': [
+            attempt_json(attempt=attempt) for attempt in tail.fallbacks
+        ],
     }
 
 
@@ -281,12 +351,102 @@ def states_of(*, raw: dict[str, object]) -> dict[str, SourceState]:
     }
 
 
+def fetched_of(*, raw: dict[str, object]) -> Fetched:
+    """
+    Read a download outcome back from JSON values.
+
+    A file without ``failed`` or ``optional``, written before those fields
+    existed, reads as no source failing and none optional.
+
+    Parameters
+    ----------
+    raw : dict[str, object]
+        Values from fetched_json.
+
+    Returns
+    -------
+    Fetched
+        The outcome.
+    """
+    return Fetched(
+        states=states_of(raw=raw),
+        downloaded=names_of(raw=raw, key='downloaded'),
+        changed=names_of(raw=raw, key='changed'),
+        failed=names_of(raw={'failed': [], **raw}, key='failed'),
+        optional=names_of(raw={'optional': [], **raw}, key='optional'),
+    )
+
+
+def source_of(*, raw: object) -> Source:
+    """
+    Read one source from a handoff file.
+
+    Parameters
+    ----------
+    raw : object
+        Parsed source.
+
+    Returns
+    -------
+    Source
+        The source.
+
+    Raises
+    ------
+    HandoffError
+        When it is not an object with the right fields.
+    """
+    if not isinstance(raw, dict):
+        raise HandoffError('handoff source is not an object')
+    return Source(
+        name=field_of(raw=raw, key='name', kind=str),
+        archive=Path(field_of(raw=raw, key='archive', kind=str)),
+        optional=field_of(raw=raw, key='optional', kind=bool),
+    )
+
+
+def attempt_of(*, raw: object) -> Attempt:
+    """
+    Read one attempt from a handoff file.
+
+    Parameters
+    ----------
+    raw : object
+        Parsed attempt.
+
+    Returns
+    -------
+    Attempt
+        The attempt.
+
+    Raises
+    ------
+    HandoffError
+        When it is not an object with the right fields.
+    """
+    if not isinstance(raw, dict):
+        raise HandoffError('handoff attempt is not an object')
+    try:
+        start = date.fromisoformat(field_of(raw=raw, key='start', kind=str))
+    except ValueError as error:
+        raise HandoffError('handoff attempt start is not a date') from error
+    return Attempt(
+        fetched=fetched_of(raw=raw),
+        sources=tuple(
+            source_of(raw=source)
+            for source in field_of(raw=raw, key='sources', kind=list)
+        ),
+        start=start,
+        days=field_of(raw=raw, key='days', kind=int),
+    )
+
+
 def tail_of(*, raw: dict[str, object]) -> RefreshTail:
     """
     Read a refresh tail back from JSON values.
 
-    A file without ``failed`` or ``optional``, written before those fields
-    existed, reads as no source failing and none optional.
+    A file without ``failed``, ``optional`` or ``fallbacks``, written
+    before those fields existed, reads as none of them.
 
     Parameters
     ----------
@@ -301,13 +461,7 @@ def tail_of(*, raw: dict[str, object]) -> RefreshTail:
     error_log = raw.get('error_log')
     return RefreshTail(
         data_dir=Path(field_of(raw=raw, key='data_dir', kind=str)),
-        fetched=Fetched(
-            states=states_of(raw=raw),
-            downloaded=names_of(raw=raw, key='downloaded'),
-            changed=names_of(raw=raw, key='changed'),
-            failed=names_of(raw={'failed': [], **raw}, key='failed'),
-            optional=names_of(raw={'optional': [], **raw}, key='optional'),
-        ),
+        fetched=fetched_of(raw=raw),
         started=field_of(raw=raw, key='started', kind=float),
         error_log=(
             None
@@ -315,6 +469,12 @@ def tail_of(*, raw: dict[str, object]) -> RefreshTail:
             else Path(field_of(raw=raw, key='error_log', kind=str))
         ),
         lock_fd=field_of(raw=raw, key='lock_fd', kind=int),
+        fallbacks=tuple(
+            attempt_of(raw=attempt)
+            for attempt in field_of(
+                raw={'fallbacks': [], **raw}, key='fallbacks', kind=list,
+            )
+        ),
     )
 
 
@@ -396,8 +556,8 @@ def check_record(*, record: HandoffRecord, path: Path) -> None:
     """
     Check every path in a record lies inside the handoff file's work dir.
 
-    For a refresh, that work dir must be the data dir's work/ and the
-    error log must be inside the data dir.
+    For a refresh, that work dir must be the data dir's work/, and the
+    error log and every fallback archive must be inside the data dir.
 
     Parameters
     ----------
@@ -426,6 +586,13 @@ def check_record(*, record: HandoffRecord, path: Path) -> None:
         path=tail.error_log, folder=tail.data_dir.resolve(),
     ):
         raise HandoffError('handoff error log must be inside the data dir')
+    data = tail.data_dir.resolve()
+    if not all(
+        inside(path=source.archive, folder=data)
+        for attempt in tail.fallbacks
+        for source in attempt.sources
+    ):
+        raise HandoffError('handoff fallback archives must be in the data dir')
 
 
 def write_handoff(*, path: Path, record: HandoffRecord) -> None:
@@ -516,4 +683,22 @@ def hand_over(
             str(handoff.path),
         ],
         keep=() if record.tail is None else (record.tail.lock_fd,),
+    )
+
+
+def hand_back(*, path: Path, city_ref: str, lock_fd: int) -> NoReturn:
+    """
+    Exec into the retry program, keeping the refresh lock.
+
+    Parameters
+    ----------
+    path : Path
+        The handoff file the retry program reads.
+    city_ref : str
+        The city's reference, such as ``package.module:NAME``.
+    lock_fd : int
+        Descriptor holding the refresh lock.
+    """
+    exec_python(
+        args=['-m', RETRY_MODULE, city_ref, str(path)], keep=(lock_fd,),
     )

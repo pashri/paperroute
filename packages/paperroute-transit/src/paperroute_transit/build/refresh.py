@@ -27,7 +27,9 @@ from paperroute_transit.build.source_state import (
     SourceError,
     SourceState,
     load_states,
+    read_rule,
     save_states,
+    write_rule,
 )
 from paperroute_transit.build.sources import (
     BuildParts,
@@ -43,6 +45,7 @@ from paperroute_transit.build.swap import (
     clear_work,
     guarded,
     progress,
+    store_rules,
     swap_in,
 )
 from paperroute_transit.build.timetable import (
@@ -267,7 +270,37 @@ def fetched_zip(
         timeout_s=TIMEOUT_S,
         limiter=LIMITER,
     )
-    return cut_into(name=spec.name, cut=spec.cut, download=download, out=kept)
+    digest = cut_into(
+        name=spec.name,
+        cut=spec.cut,
+        download=download,
+        out=kept,
+    )
+    if spec.cut_rule is not None:
+        write_rule(directory=layout.work, name=spec.name, rule=spec.cut_rule)
+    return digest
+
+
+def rule_kept(*, layout: Layout, spec: SourceSpec) -> bool:
+    """
+    Tell whether a source's stored cut was made by its current rule.
+
+    Parameters
+    ----------
+    layout : Layout
+        Data paths.
+    spec : SourceSpec
+        Source.
+
+    Returns
+    -------
+    bool
+        True when the source has no rule, or its rule file matches.
+    """
+    if spec.cut_rule is None:
+        return True
+    stored = read_rule(directory=layout.sources, name=spec.name)
+    return stored == spec.cut_rule
 
 
 def fetch_source(
@@ -311,6 +344,7 @@ def fetch_source(
         stored=stored,
         fresh=fresh,
         zip_exists=intact is not None,
+        rule_kept=rule_kept(layout=layout, spec=spec),
     ):
         return SourceOutcome(
             state=replace(fresh, sha256=intact),
@@ -724,6 +758,7 @@ def update(
         or (origin is not None and origin != city.projection.origin_text)
     )
     if not (fetched.changed or force or stale):
+        store_rules(layout=layout, fetched=fetched)
         save_states(path=layout.states, states=fetched.states)
         return False, fetched
     built, fetched = build_or_fall_back(

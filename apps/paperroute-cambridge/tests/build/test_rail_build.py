@@ -18,8 +18,13 @@ import pytest
 from paperroute_cambridge.__main__ import CAMBRIDGE_PARTS
 from paperroute_cambridge.build.__main__ import CAMBRIDGE_BUILD
 from paperroute_cambridge.build.bods_sources import CAMBRIDGE_SOURCES
-from paperroute_cambridge.build.rail_cut import crs_of, cut_rail
-from paperroute_cambridge.city import CAMBRIDGE, CAMBRIDGE_REF, CAMBRIDGE_ZONE
+from paperroute_cambridge.build.rail_cut import KEPT_CRS, crs_of, cut_rail
+from paperroute_cambridge.city import (
+    CAMBRIDGE,
+    CAMBRIDGE_REF,
+    CAMBRIDGE_ZONE,
+    RAIL_SOURCE,
+)
 from paperroute_device.adapters.rate_limit import SyncStartLimiter
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.adapters.pin_options import SqlitePinOptions
@@ -906,3 +911,9 @@ def test_an_east_midlands_train_leaves_ely(tmp_path: Path) -> None:
     assert ('07:45', 'EM', '', 'Peterborough', 'train', 'train') in (
         departures(path=path, day=RECORDED_DAY, place=ELY)
     )
+
+
+def test_rail_cut_rule_is_the_sorted_kept_stations() -> None:
+    """The rail source's rule is derived from the kept stations."""
+    rail = next(s for s in CAMBRIDGE_SOURCES if s.name == RAIL_SOURCE)
+    assert rail.cut_rule == ','.join(sorted(KEPT_CRS))

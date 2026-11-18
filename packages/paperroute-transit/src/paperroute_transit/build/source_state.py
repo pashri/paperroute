@@ -59,6 +59,68 @@ def save_states(*, path: Path, states: dict[str, SourceState]) -> None:
     os.replace(scratch, path)
 
 
+def rule_file(*, directory: Path, name: str) -> Path:
+    """
+    Name the file that records the rule a source's stored cut was made by.
+
+    Parameters
+    ----------
+    directory : Path
+        Directory holding the cut.
+    name : str
+        Source name.
+
+    Returns
+    -------
+    Path
+        The rule file beside the cut.
+    """
+    return directory / f'{name}.rule'
+
+
+def read_rule(*, directory: Path, name: str) -> str | None:
+    """
+    Read the rule a source's stored cut was made by.
+
+    Parameters
+    ----------
+    directory : Path
+        Directory holding the cut.
+    name : str
+        Source name.
+
+    Returns
+    -------
+    str | None
+        The rule, or None when the file is missing or unreadable.
+    """
+    try:
+        return rule_file(directory=directory, name=name).read_text(
+            encoding='utf-8',
+        )
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def write_rule(*, directory: Path, name: str, rule: str) -> None:
+    """
+    Record the rule a source's cut was made by.
+
+    Parameters
+    ----------
+    directory : Path
+        Directory holding the cut.
+    name : str
+        Source name.
+    rule : str
+        The rule.
+    """
+    rule_file(directory=directory, name=name).write_text(
+        rule,
+        encoding='utf-8',
+    )
+
+
 def fsync_dir(*, path: Path) -> None:
     """
     Flush a directory's entries, so renames into it survive a power cut.

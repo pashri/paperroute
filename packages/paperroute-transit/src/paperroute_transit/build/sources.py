@@ -57,6 +57,9 @@ class SourceSpec:
         copy to build from.
     size_limit : int | None
         Largest download accepted, in bytes; None accepts any size.
+    cut_rule : str | None
+        A short stable string naming the rule the cut applies; a stored
+        cut made under another rule is cut again. None skips the check.
     """
 
     name: str
@@ -64,6 +67,7 @@ class SourceSpec:
     cut: SourceCut | None = None
     optional: bool = False
     size_limit: int | None = None
+    cut_rule: str | None = None
 
 
 class DownloadTooLarge(Exception):
@@ -296,6 +300,7 @@ def needs_download(
     stored: SourceState | None,
     fresh: SourceState,
     zip_exists: bool,
+    rule_kept: bool = True,
 ) -> bool:
     """
     Whether the headers fail to show the stored zip is current.
@@ -308,14 +313,17 @@ def needs_download(
         Validators from a new HEAD.
     zip_exists : bool
         Whether the stored zip is on disk.
+    rule_kept : bool
+        Whether the stored zip was cut by the source's current rule.
 
     Returns
     -------
     bool
-        True when there is no stored state or zip, the server sent
-        neither validator, or either validator changed.
+        True when there is no stored state or zip, the stored zip was cut
+        by another rule, the server sent neither validator, or either
+        validator changed.
     """
-    if stored is None or not zip_exists:
+    if stored is None or not zip_exists or not rule_kept:
         return True
     if fresh.etag is None and fresh.last_modified is None:
         return True

@@ -30,7 +30,12 @@ from paperroute_transit.build.handoff import (
     read_handoff,
     write_handoff,
 )
-from paperroute_transit.build.source_state import SourceState
+from paperroute_transit.build.layout import Layout
+from paperroute_transit.build.source_state import (
+    SourceState,
+    rule_file,
+    save_states,
+)
 from paperroute_transit.build.swap import TimetableCheckError, check_timetable
 from paperroute_transit.build.timetable import Window, build_timetable
 from tests.build.network_feed import network_feed
@@ -690,3 +695,22 @@ def test_fetched_all_failed_needs_every_source() -> None:
     assert not some.all_failed
     assert every.all_failed
     assert not none.all_failed
+
+
+def test_swap_in_removes_the_rule_file_of_a_forgotten_copy(
+    tmp_path: Path,
+) -> None:
+    """A source left out of the stored states loses its rule file."""
+    layout = Layout(data_dir=tmp_path)
+    layout.work.mkdir()
+    layout.sources.mkdir()
+    state = SourceState(etag=None, last_modified=None, sha256='ab' * 32)
+    save_states(path=layout.states, states={'rail': state, 'bods': state})
+    for name in ('rail', 'bods'):
+        rule_file(directory=layout.sources, name=name).write_text('A')
+    built = layout.work / 'timetable.db'
+    built.write_bytes(b'db')
+    fetched = Fetched(states={'bods': state}, downloaded=(), changed=())
+    swap.swap_in(layout=layout, built=built, fetched=fetched)
+    assert not rule_file(directory=layout.sources, name='rail').exists()
+    assert rule_file(directory=layout.sources, name='bods').exists()

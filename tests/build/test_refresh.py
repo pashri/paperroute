@@ -931,7 +931,9 @@ def test_refresh_hands_over_after_the_load(
 EXTRA: Final[str] = '/v2/gtfs/schedule/extra'
 
 
-def extra_parts(*, server: FeedServer, cut: SourceCut) -> BuildParts:
+def extra_parts(
+    *, server: FeedServer, cut: SourceCut, rule: str | None = None,
+) -> BuildParts:
     """
     Sydney's build parts and one optional source, cut after download.
 
@@ -941,6 +943,8 @@ def extra_parts(*, server: FeedServer, cut: SourceCut) -> BuildParts:
         Feed server.
     cut : SourceCut
         The extra source's cut.
+    rule : str | None
+        The extra source's cut rule.
 
     Returns
     -------
@@ -950,6 +954,7 @@ def extra_parts(*, server: FeedServer, cut: SourceCut) -> BuildParts:
     parts = parts_for(server=server)
     extra = SourceSpec(
         name='extra', path=EXTRA.removeprefix('/'), cut=cut, optional=True,
+        cut_rule=rule,
     )
     return replace(parts, sources=(*parts.sources, extra))
 
@@ -982,6 +987,7 @@ def run_extra(
     data_dir: Path,
     cut: SourceCut = commented,
     force: bool = False,
+    rule: str | None = None,
 ) -> RefreshReport:
     """
     Refresh Sydney's sources and the extra one.
@@ -996,6 +1002,8 @@ def run_extra(
         The extra source's cut.
     force : bool
         Rebuild even when nothing changed.
+    rule : str | None
+        The extra source's cut rule.
 
     Returns
     -------
@@ -1005,7 +1013,7 @@ def run_extra(
     return refresh(
         data_dir=data_dir,
         city=SYDNEY,
-        parts=extra_parts(server=server, cut=cut),
+        parts=extra_parts(server=server, cut=cut, rule=rule),
         days=DAYS,
         force=force,
     )
@@ -1023,6 +1031,53 @@ def test_a_cut_source_stores_its_cut(
     states = load_states(path=data_dir / 'sources' / 'sources.json')
     assert states['extra'].sha256 == file_sha256(path=stored)
     assert 'extra' in report.changed and report.rebuilt
+
+
+def test_a_cut_stored_under_another_rule_is_cut_again(
+    server: FeedServer, data_dir: Path, tmp_path: Path,
+) -> None:
+    """Unchanged validators do not keep a cut made by a different rule."""
+    serve_extra(server=server, tmp_path=tmp_path, comment=b'one')
+    run_extra(server=server, data_dir=data_dir, rule='A,B')
+    report = run_extra(server=server, data_dir=data_dir, rule='A,C')
+    assert 'extra' in report.downloaded
+    rule = data_dir / 'sources' / 'extra.rule'
+    assert rule.read_text(encoding='utf-8') == 'A,C'
+
+
+def test_a_cut_with_no_rule_file_is_cut_again(
+    server: FeedServer, data_dir: Path, tmp_path: Path,
+) -> None:
+    """A stored cut from before rules were recorded is cut again."""
+    serve_extra(server=server, tmp_path=tmp_path, comment=b'one')
+    run_extra(server=server, data_dir=data_dir, rule='A,B')
+    (data_dir / 'sources' / 'extra.rule').unlink()
+    report = run_extra(server=server, data_dir=data_dir, rule='A,B')
+    assert 'extra' in report.downloaded
+    assert (data_dir / 'sources' / 'extra.rule').exists()
+
+
+def test_a_cut_stored_under_the_same_rule_is_kept(
+    server: FeedServer, data_dir: Path, tmp_path: Path,
+) -> None:
+    """Unchanged validators and a matching rule skip the download."""
+    serve_extra(server=server, tmp_path=tmp_path, comment=b'one')
+    run_extra(server=server, data_dir=data_dir, rule='A,B')
+    report = run_extra(server=server, data_dir=data_dir, rule='A,B')
+    assert 'extra' not in report.downloaded
+
+
+def test_a_source_with_no_rule_leaves_no_rule_file(
+    server: FeedServer, data_dir: Path, tmp_path: Path,
+) -> None:
+    """Sources without a rule store no rule file, and no extra state."""
+    serve_extra(server=server, tmp_path=tmp_path, comment=b'one')
+    run_extra(server=server, data_dir=data_dir)
+    assert list((data_dir / 'sources').glob('*.rule')) == []
+    raw = json.loads(
+        (data_dir / 'sources' / 'sources.json').read_text(encoding='utf-8'),
+    )
+    assert set(raw['extra']) == {'etag', 'last_modified', 'sha256'}
 
 
 def test_unchanged_cut_bytes_do_not_rebuild(

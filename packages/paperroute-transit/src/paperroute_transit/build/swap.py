@@ -28,6 +28,8 @@ from paperroute_transit.build.layout import Layout
 from paperroute_transit.build.source_state import (
     SourceError,
     fsync_dir,
+    load_states,
+    rule_file,
     save_states,
 )
 
@@ -128,6 +130,28 @@ def check_timetable(*, path: Path, optional: tuple[str, ...] = ()) -> None:
         raise TimetableCheckError(f'{trips} trips, want {MIN_TRIPS}')
 
 
+def store_rules(*, layout: Layout, fetched: Fetched) -> None:
+    """
+    Store the rule files of the cuts just made; drop those of forgotten ones.
+
+    Parameters
+    ----------
+    layout : Layout
+        Data paths.
+    fetched : Fetched
+        Downloads to store.
+    """
+    for name in fetched.downloaded:
+        staged = rule_file(directory=layout.work, name=name)
+        if staged.exists():
+            os.replace(staged, rule_file(directory=layout.sources, name=name))
+    for name in load_states(path=layout.states):
+        if name not in fetched.states:
+            rule_file(directory=layout.sources, name=name).unlink(
+                missing_ok=True,
+            )
+
+
 def swap_in(*, layout: Layout, built: Path, fetched: Fetched) -> None:
     """
     Make a checked timetable live, then store the zips it came from.
@@ -149,6 +173,7 @@ def swap_in(*, layout: Layout, built: Path, fetched: Fetched) -> None:
     fsync_dir(path=layout.data_dir)
     for name in fetched.changed:
         os.replace(layout.work / f'{name}.zip', layout.sources / f'{name}.zip')
+    store_rules(layout=layout, fetched=fetched)
     fsync_dir(path=layout.sources)
     save_states(path=layout.states, states=fetched.states)
 

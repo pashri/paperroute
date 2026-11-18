@@ -741,6 +741,23 @@ def test_refresh_rebuilds_when_schema_version_differs(
     assert report.rebuilt
 
 
+def test_refresh_rebuilds_a_schema_eight_timetable(
+    server: FeedServer,
+    data_dir: Path,
+) -> None:
+    """A timetable stored as schema 8 is rebuilt with no source change."""
+    run(server=server, data_dir=data_dir)
+    with closing(sqlite3.connect(data_dir / 'timetable.db')) as conn:
+        conn.execute(
+            "UPDATE meta SET value = '8' WHERE key = 'schema_version'",
+        )
+        conn.commit()
+    server.state.hits.clear()
+    report = run(server=server, data_dir=data_dir)
+    assert report.changed == ()
+    assert report.rebuilt
+
+
 @pytest.mark.parametrize(
     ('origin', 'rebuilt'),
     [('0.0,51.5', True), ('151.2093,-33.8688', False), (None, False)],

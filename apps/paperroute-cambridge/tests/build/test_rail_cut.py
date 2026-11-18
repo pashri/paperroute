@@ -307,3 +307,105 @@ def test_a_cut_with_no_trips_is_refused(tmp_path: Path) -> None:
     """A file with no trip calling at the stations stops the cut."""
     with pytest.raises(ValueError, match='no trip calls at the stations'):
         cut_rail(archive=RAIL, out=tmp_path / 'cut.zip', crs=frozenset())
+
+
+def without(*, member: str) -> Callable[
+    [dict[str, list[dict[str, str]]]], None
+]:
+    """
+    Make a change that removes tables.
+
+    Parameters
+    ----------
+    member : str
+        The member to remove; ``calendar`` removes both calendar tables.
+
+    Returns
+    -------
+    Callable[[dict[str, list[dict[str, str]]]], None]
+        The change.
+    """
+    names = (
+        ['calendar.txt', 'calendar_dates.txt']
+        if member == 'calendar'
+        else [member]
+    )
+
+    def change(tables: dict[str, list[dict[str, str]]]) -> None:
+        """
+        Remove the tables.
+
+        Parameters
+        ----------
+        tables : dict[str, list[dict[str, str]]]
+            Rows by member, changed in place.
+        """
+        for name in names:
+            del tables[name]
+
+    return change
+
+
+@pytest.mark.parametrize(
+    'member',
+    ['stops.txt', 'stop_times.txt', 'trips.txt', 'routes.txt', 'calendar'],
+)
+def test_a_file_missing_a_needed_table_is_refused(
+    tmp_path: Path, member: str,
+) -> None:
+    """A release without a table the cut needs is refused, no cut left."""
+    archive = changed(
+        out=tmp_path / 'short.zip', change=without(member=member),
+    )
+    with pytest.raises(ValueError, match='missing'):
+        cut_rail(archive=archive, out=tmp_path / 'cut.zip')
+    assert not (tmp_path / 'cut.zip').exists()
+
+
+@pytest.mark.parametrize('member', ['calendar.txt', 'calendar_dates.txt'])
+def test_one_calendar_table_is_enough(tmp_path: Path, member: str) -> None:
+    """A release with either calendar table is cut."""
+    archive = changed(out=tmp_path / 'one.zip', change=without(member=member))
+    assert cut_rail(archive=archive, out=tmp_path / 'cut.zip').trips == 6
+
+
+def test_kept_trips_with_no_route_rows_are_refused(tmp_path: Path) -> None:
+    """Trips whose routes are not in routes.txt stop the cut."""
+
+    def orphan(tables: dict[str, list[dict[str, str]]]) -> None:
+        """
+        Point every trip at a route that is not there.
+
+        Parameters
+        ----------
+        tables : dict[str, list[dict[str, str]]]
+            Rows by member, changed in place.
+        """
+        for row in tables['trips.txt']:
+            row['route_id'] = 'nowhere'
+
+    archive = changed(out=tmp_path / 'orphan.zip', change=orphan)
+    with pytest.raises(ValueError, match='no routes for the trips'):
+        cut_rail(archive=archive, out=tmp_path / 'cut.zip')
+    assert not (tmp_path / 'cut.zip').exists()
+
+
+def test_kept_trips_with_no_service_days_are_refused(tmp_path: Path) -> None:
+    """Trips whose services are in neither calendar table stop the cut."""
+
+    def orphan(tables: dict[str, list[dict[str, str]]]) -> None:
+        """
+        Point every trip at a service that is not there.
+
+        Parameters
+        ----------
+        tables : dict[str, list[dict[str, str]]]
+            Rows by member, changed in place.
+        """
+        for row in tables['trips.txt']:
+            row['service_id'] = 'never'
+
+    archive = changed(out=tmp_path / 'orphan.zip', change=orphan)
+    with pytest.raises(ValueError, match='no service days for the trips'):
+        cut_rail(archive=archive, out=tmp_path / 'cut.zip')
+    assert not (tmp_path / 'cut.zip').exists()

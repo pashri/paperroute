@@ -49,6 +49,8 @@ class Kept:
     services: set[str] = field(default_factory=set)
     shapes: set[str] = field(default_factory=set)
     agencies: set[str] = field(default_factory=set)
+    routes_found: set[str] = field(default_factory=set)
+    services_found: set[str] = field(default_factory=set)
     stops_written: int = 0
     duplicates: int = 0
 
@@ -395,6 +397,7 @@ def _routes(*, rows: Iterable[Row], kept: Kept) -> Iterator[Row]:
     for row in firsts:
         code = row['agency_id'].removeprefix('=')
         kept.agencies.add(code)
+        kept.routes_found.add(row['route_id'])
         yield {
             **row,
             'agency_id': code,
@@ -466,12 +469,16 @@ def _services(*, rows: Iterable[Row], kept: Kept) -> Iterator[Row]:
     kept : Kept
         Holds the service ids.
 
-    Returns
-    -------
-    Iterator[dict[str, str]]
-        The rows of the kept services.
+    Yields
+    ------
+    dict[str, str]
+        A row of a kept service.
     """
-    return _matching(rows=rows, column='service_id', wanted=kept.services)
+    for row in _matching(
+        rows=rows, column='service_id', wanted=kept.services,
+    ):
+        kept.services_found.add(row['service_id'])
+        yield row
 
 
 def _shapes(*, rows: Iterable[Row], kept: Kept) -> Iterator[Row]:
@@ -492,6 +499,13 @@ def _shapes(*, rows: Iterable[Row], kept: Kept) -> Iterator[Row]:
     """
     return _matching(rows=rows, column='shape_id', wanted=kept.shapes)
 
+
+REQUIRED: Final[tuple[str, ...]] = (
+    'stops.txt', 'stop_times.txt', 'trips.txt', 'routes.txt',
+)  # tables the cut cannot do without
+CALENDARS: Final[frozenset[str]] = frozenset(
+    {'calendar.txt', 'calendar_dates.txt'},
+)  # at least one of these is needed
 
 MEMBERS: Final[
     tuple[tuple[str, Callable[..., Iterable[Row]]], ...]
@@ -593,8 +607,9 @@ def cut_rail(
     Raises
     ------
     ValueError
-        When stop_times.txt is out of trip order, or no trip calls at the
-        stations.
+        When stop_times.txt is out of trip order, a needed table is
+        missing, no trip calls at the stations, or the trips kept have no
+        routes or no service days.
     """
     kept = Kept()
     try:
@@ -618,6 +633,28 @@ def cut_rail(
     )
 
 
+def _check_members(*, feed: zipfile.ZipFile) -> None:
+    """
+    Check the archive holds the tables the cut needs.
+
+    Parameters
+    ----------
+    feed : zipfile.ZipFile
+        The archive.
+
+    Raises
+    ------
+    ValueError
+        When a needed table is missing, or both calendar tables are.
+    """
+    names = set(feed.namelist())
+    for name in REQUIRED:
+        if name not in names:
+            raise ValueError(f'{name} is missing')
+    if not names & CALENDARS:
+        raise ValueError('calendar.txt and calendar_dates.txt are missing')
+
+
 def _cut(
     *, feed: zipfile.ZipFile, out: zipfile.ZipFile, kept: Kept,
     crs: frozenset[str],
@@ -639,10 +676,16 @@ def _cut(
     Raises
     ------
     ValueError
-        When no trip calls at the stations.
+        When a needed table is missing, no trip calls at the stations, or
+        the trips kept have no routes or no service days.
     """
+    _check_members(feed=feed)
     fields, stops = _load_stops(feed=feed, kept=kept)
     _write_stop_times(feed=feed, out=out, stops=stops, kept=kept, crs=crs)
     if not kept.trips:
         raise ValueError('no trip calls at the stations')
     _write_members(feed=feed, out=out, stops=(fields, stops), kept=kept)
+    if not kept.routes_found:
+        raise ValueError('no routes for the trips')
+    if not kept.services_found:
+        raise ValueError('no service days for the trips')

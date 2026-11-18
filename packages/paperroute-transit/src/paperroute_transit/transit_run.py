@@ -2,11 +2,12 @@
 
 import argparse
 import logging
+import sqlite3
 import time
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import replace
-from datetime import tzinfo
+from datetime import date, tzinfo
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -21,7 +22,11 @@ from paperroute_transit.adapters.board_pages import PinPages
 from paperroute_transit.adapters.board_routes import BoardRoutes
 from paperroute_transit.adapters.board_section import BoardCodec
 from paperroute_transit.adapters.board_settings import BoardSettingsPlug
-from paperroute_transit.adapters.device_data import data_section
+from paperroute_transit.adapters.device_data import (
+    DataExtras,
+    data_section,
+    named_dates,
+)
 from paperroute_transit.adapters.leg_cache import LegCache
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.adapters.pin_options import SqlitePinOptions
@@ -44,6 +49,30 @@ if TYPE_CHECKING:
     from paperroute_transit.city_parts import CityParts
 
 logger = logging.getLogger(__name__)
+
+
+def source_dates_of(*, ports: Ports | None) -> dict[str, date]:
+    """
+    Read each timetable source's date.
+
+    Parameters
+    ----------
+    ports : Ports | None
+        The attached adapters, or None before `attach`.
+
+    Returns
+    -------
+    dict[str, date]
+        The dates; empty before `attach` or when the file can't be
+        read.
+    """
+    if ports is None:
+        return {}
+    try:
+        return ports.timetable.source_dates()
+    except sqlite3.Error:
+        logger.exception('timetable source dates unreadable')
+        return {}
 
 
 class TransitRun:
@@ -411,7 +440,13 @@ class TransitRun:
                 label=lambda feed: feeds.label(feed=feed),
                 daily_limit=feeds.daily_limit,
                 zone=self.city.zone,
-                credit_lines=self.parts.credits,
+                extras=DataExtras(
+                    credits=self.parts.credits,
+                    sources=named_dates(
+                        names=self.parts.sources,
+                        dates=source_dates_of(ports=self.ports),
+                    ),
+                ),
             )
 
         return written

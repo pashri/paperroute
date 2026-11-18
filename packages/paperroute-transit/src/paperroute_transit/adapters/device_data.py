@@ -2,7 +2,8 @@
 
 import html
 from collections.abc import Callable, Mapping, Sequence
-from datetime import datetime, tzinfo
+from dataclasses import dataclass
+from datetime import date, datetime, tzinfo
 from typing import Final
 
 from paperroute_device.adapters.device_page import ago_text, row
@@ -38,6 +39,27 @@ FEED_ROW: Final[str] = (
 )
 CREDIT_LINE: Final[str] = '      <p class="hint">{line}</p>\n'
 NO_FEEDS: Final[str] = '            <tr><td colspan="3">none yet</td></tr>'
+
+
+@dataclass(frozen=True)
+class DataExtras:
+    """
+    What a city adds to the Data section.
+
+    Attributes
+    ----------
+    credits : tuple[str, ...]
+        HTML lines written after the feed table, as they are.
+    sources : tuple[tuple[str, date | None], ...]
+        Each timetable source's label and date, in order; None for a
+        source with no date.
+    """
+
+    credits: tuple[str, ...] = ()
+    sources: tuple[tuple[str, date | None], ...] = ()
+
+
+NO_EXTRAS: Final[DataExtras] = DataExtras()
 
 
 def text_of(*, status: Mapping[str, object], name: str) -> str | None:
@@ -95,6 +117,49 @@ def timetable_text(*, status: Mapping[str, object], zone: tzinfo) -> str:
     return DOT.join(parts)
 
 
+def named_dates(
+    *,
+    names: Sequence[tuple[str, str]],
+    dates: Mapping[str, date],
+) -> tuple[tuple[str, date | None], ...]:
+    """
+    Label each source's date.
+
+    Parameters
+    ----------
+    names : Sequence[tuple[str, str]]
+        Each source's name and the label to show for it.
+    dates : Mapping[str, date]
+        The date of each source that has one, by name.
+
+    Returns
+    -------
+    tuple[tuple[str, date | None], ...]
+        Each label with its source's date, or None.
+    """
+    return tuple((label, dates.get(name)) for name, label in names)
+
+
+def sources_text(*, sources: Sequence[tuple[str, date | None]]) -> str:
+    """
+    Say each timetable source's date.
+
+    Parameters
+    ----------
+    sources : Sequence[tuple[str, date | None]]
+        Each source's label and date.
+
+    Returns
+    -------
+    str
+        `bus 16 Nov · rail none`.
+    """
+    return DOT.join(
+        f'{label} none' if day is None else f'{label} {day.day} {day:%b}'
+        for label, day in sources
+    )
+
+
 def tiles_text(*, facts: DeviceFacts | None, zone: tzinfo) -> str:
     """
     Say when the map tiles were built.
@@ -146,6 +211,7 @@ def data_rows(
     facts: DeviceFacts | None,
     daily_limit: int,
     zone: tzinfo,
+    sources: Sequence[tuple[str, date | None]] = (),
 ) -> str:
     """
     Draw the Data section's facts.
@@ -160,19 +226,28 @@ def data_rows(
         The API calls allowed each day.
     zone : tzinfo
         Time zone whose wall clock to show.
+    sources : Sequence[tuple[str, date | None]]
+        Each timetable source's label and date.
 
     Returns
     -------
     str
-        Timetable, map tiles and the API calls made today.
+        Timetable, its sources when any, map tiles and the API calls
+        made today.
     """
     if status is None:
         timetable, calls = UNKNOWN, UNKNOWN
     else:
         timetable = timetable_text(status=status, zone=zone)
         calls = calls_text(status=status, daily_limit=daily_limit)
+    named = (
+        [row(label='Sources', value=sources_text(sources=sources))]
+        if sources
+        else []
+    )
     return '\n'.join((
         row(label='Timetable', value=timetable),
+        *named,
         row(label='Map tiles', value=tiles_text(facts=facts, zone=zone)),
         row(label='API calls today', value=calls),
     ))
@@ -227,7 +302,7 @@ def data_section(
     label: Callable[[str], str],
     daily_limit: int,
     zone: tzinfo,
-    credit_lines: Sequence[str] = (),
+    extras: DataExtras = NO_EXTRAS,
 ) -> str:
     """
     Draw the Device page's Data section.
@@ -248,9 +323,9 @@ def data_section(
         The API calls allowed each day.
     zone : tzinfo
         Time zone whose wall clock to show.
-    credit_lines : Sequence[str]
-        HTML lines written after the feed table, each as a hint
-        paragraph, as they are.
+    extras : DataExtras
+        The city's credit lines, written after the feed table as hint
+        paragraphs as they are, and its timetable sources.
 
     Returns
     -------
@@ -261,10 +336,14 @@ def data_section(
     """
     return DATA_SECTION.format(
         rows=data_rows(
-            status=status, facts=facts, daily_limit=daily_limit, zone=zone,
+            status=status,
+            facts=facts,
+            daily_limit=daily_limit,
+            zone=zone,
+            sources=extras.sources,
         ),
         feeds=feed_rows(feeds=feeds, now=now, label=label, zone=zone),
         credits=''.join(
-            CREDIT_LINE.format(line=line) for line in credit_lines
+            CREDIT_LINE.format(line=line) for line in extras.credits
         ),
     )

@@ -1,7 +1,7 @@
 """Tests for the Device page's Data section."""
 
 from dataclasses import replace
-from datetime import UTC
+from datetime import UTC, date
 from typing import Final
 
 import pytest
@@ -15,7 +15,11 @@ from paperroute_sydney.sydney_feeds import (
     POSITION_FEEDS,
     feed_label,
 )
-from paperroute_transit.adapters.device_data import DATA_SECTION, data_section
+from paperroute_transit.adapters.device_data import (
+    DATA_SECTION,
+    DataExtras,
+    data_section,
+)
 from paperroute_transit.core.panel_screens import TilesFacts
 from tests.golden.scenes import GOLDEN
 from tests.test_observers import APP_STATUS
@@ -127,14 +131,33 @@ def test_feed_times_are_read_in_the_given_zone() -> None:
 
 def test_data_section_without_credits_is_unchanged() -> None:
     """Data section without credits is unchanged."""
-    assert section() == section(credit_lines=())
+    assert section() == section(extras=DataExtras())
     assert 'class="hint"' not in section()
 
 
 def test_data_section_writes_each_credit_after_the_feeds() -> None:
     """Data section writes each credit after the feeds."""
-    text = section(credit_lines=('One <a href="/x">x</a>.', 'Two.'))
+    text = section(
+        extras=DataExtras(credits=('One <a href="/x">x</a>.', 'Two.')),
+    )
     tail = text[text.index('</table>'):]
     assert tail.index('<p class="hint">One <a href="/x">x</a>.</p>') < (
         tail.index('<p class="hint">Two.</p>')
     ) < tail.index('</section>')
+
+
+def test_sources_row_names_each_source_and_its_date() -> None:
+    """Each named source shows its date, or none, after the Timetable row."""
+    text = section(extras=DataExtras(sources=(
+        ('bus', date(2026, 11, 16)), ('rail', None),
+    )))
+    assert '<dt>Sources</dt>\n          <dd>bus 16 Nov · rail none</dd>' in (
+        text
+    )
+    assert text.index('<dt>Timetable</dt>') < text.index('<dt>Sources</dt>')
+    assert text.index('<dt>Sources</dt>') < text.index('<dt>Map tiles</dt>')
+
+
+def test_no_sources_row_when_none_are_named() -> None:
+    """A city that names no sources shows no Sources row."""
+    assert '<dt>Sources</dt>' not in section()

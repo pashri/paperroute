@@ -92,6 +92,9 @@ class CityParts:
     credits : tuple[str, ...]
         HTML lines the city wrote, shown as they are on the Device
         page's Data section.
+    sources : tuple[tuple[str, str], ...]
+        Each timetable source's name and the word the Device page shows
+        for it, in order; none shows no Sources row.
     """
 
     assets: AssetRoot
@@ -105,3 +108,4 @@ class CityParts:
     about: str = ''
     rebuild_minutes: int = 40
     credits: tuple[str, ...] = ()
+    sources: tuple[tuple[str, str], ...] = ()

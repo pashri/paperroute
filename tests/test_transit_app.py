@@ -2,11 +2,12 @@
 
 import asyncio
 import logging
+import sqlite3
 import subprocess
 import sys
 from argparse import Namespace
 from dataclasses import dataclass, field, replace
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Final
 from zoneinfo import ZoneInfo
@@ -378,3 +379,68 @@ def test_status_keeps_its_key_order() -> None:
     ]
     settings = timings.snapshot()['settings']
     assert settings == form_values(settings=Settings())
+
+
+@dataclass
+class DatedTimetable(EmptyPlacedTimetable):
+    """A timetable that records one source's date."""
+
+    dates: dict[str, date] = field(
+        default_factory=lambda: {'bods': date(2026, 11, 16)},
+    )
+
+    def source_dates(self) -> dict[str, date]:
+        """
+        Name the date of each source the file records.
+
+        Returns
+        -------
+        dict[str, date]
+            The dates.
+        """
+        return self.dates
+
+
+def test_data_writer_shows_each_named_source_date() -> None:
+    """The Device page shows each source the city names, with its date."""
+    parts = replace(QUIET_PARTS, sources=(('bods', 'bus'), ('rail', 'rail')))
+    app = TransitApp(city=SYDNEY, parts=parts)
+    app.attach(ports=transit_ports(timetable=DatedTimetable()))
+    text = app.data_writer(timings=app.timings())()
+    assert '<dd>bus 16 Nov · rail none</dd>' in text
+
+
+def test_data_writer_shows_no_sources_for_a_city_naming_none() -> None:
+    """A city that names no sources gets no Sources row."""
+    app = TransitApp(city=SYDNEY, parts=QUIET_PARTS)
+    app.attach(ports=transit_ports(timetable=DatedTimetable()))
+    assert '<dt>Sources</dt>' not in app.data_writer(timings=app.timings())()
+
+
+@dataclass
+class DatesFailingTimetable(EmptyPlacedTimetable):
+    """A timetable whose source dates can't be read."""
+
+    def source_dates(self) -> dict[str, date]:
+        """
+        Fail like a damaged database file.
+
+        Returns
+        -------
+        dict[str, date]
+            Never returns.
+
+        Raises
+        ------
+        sqlite3.Error
+            Always.
+        """
+        raise sqlite3.OperationalError('disk I/O error')
+
+
+def test_data_writer_survives_unreadable_source_dates() -> None:
+    """A timetable whose dates can't be read shows each source as none."""
+    parts = replace(QUIET_PARTS, sources=(('bods', 'bus'),))
+    app = TransitApp(city=SYDNEY, parts=parts)
+    app.attach(ports=transit_ports(timetable=DatesFailingTimetable()))
+    assert '<dd>bus none</dd>' in app.data_writer(timings=app.timings())()

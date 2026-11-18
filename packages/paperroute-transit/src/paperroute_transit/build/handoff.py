@@ -29,19 +29,21 @@ class Fetched:
     downloaded: tuple[str, ...]
     changed: tuple[str, ...]
     failed: tuple[str, ...] = ()
+    optional: tuple[str, ...] = ()
 
     @property
     def all_failed(self) -> bool:
         """
-        Tell whether every source with a state failed.
+        Tell whether every required source with a state failed.
 
         Returns
         -------
         bool
-            True when some source failed and every source with a state
-            failed.
+            True when some required source has a state and every one that
+            has failed.
         """
-        return bool(self.failed) and set(self.states) <= set(self.failed)
+        required = set(self.states) - set(self.optional)
+        return bool(required) and required <= set(self.failed)
 
 
 @dataclass(frozen=True)
@@ -133,6 +135,7 @@ def tail_json(*, tail: RefreshTail) -> dict[str, object]:
         'downloaded': list(tail.fetched.downloaded),
         'changed': list(tail.fetched.changed),
         'failed': list(tail.fetched.failed),
+        'optional': list(tail.fetched.optional),
         'started': tail.started,
         'error_log': None if tail.error_log is None else str(tail.error_log),
         'lock_fd': tail.lock_fd,
@@ -248,8 +251,8 @@ def tail_of(*, raw: dict[str, object]) -> RefreshTail:
     """
     Read a refresh tail back from JSON values.
 
-    A file without ``failed``, written before that field existed, reads as
-    no source failing.
+    A file without ``failed`` or ``optional``, written before those fields
+    existed, reads as no source failing and none optional.
 
     Parameters
     ----------
@@ -269,6 +272,7 @@ def tail_of(*, raw: dict[str, object]) -> RefreshTail:
             downloaded=names_of(raw=raw, key='downloaded'),
             changed=names_of(raw=raw, key='changed'),
             failed=names_of(raw={'failed': [], **raw}, key='failed'),
+            optional=names_of(raw={'optional': [], **raw}, key='optional'),
         ),
         started=field_of(raw=raw, key='started', kind=float),
         error_log=(

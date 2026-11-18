@@ -1,12 +1,9 @@
 """Refresh the timetable from the city's sources and swap it in."""
 
-import csv
 import fcntl
 import logging
 import sqlite3
 import time
-import zipfile
-import zlib
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, replace
@@ -58,16 +55,6 @@ logger = logging.getLogger(__name__)
 TIMEOUT_S: Final[float] = 60
 MIN_DAYS_LEFT: Final[int] = 7
 DOWNLOAD_SUFFIX: Final[str] = '.download.zip'
-CUT_ERRORS: Final[tuple[type[Exception], ...]] = (
-    ValueError,
-    KeyError,
-    TypeError,
-    OSError,
-    EOFError,
-    zipfile.BadZipFile,
-    zlib.error,
-    csv.Error,
-)
 BUILD_STARTS_PER_S: Final[float] = 1.0  # leaves the panel's share of 5/s
 LIMITER: Final[SyncStartLimiter] = SyncStartLimiter(
     per_second=BUILD_STARTS_PER_S,
@@ -257,13 +244,13 @@ def cut_into(
     """
     try:
         cut(archive=download, out=out)
-    except CUT_ERRORS as error:
+        return file_sha256(path=out)
+    except Exception as error:
         raise SourceError(
             f'{name}: cut failed, {type(error).__name__}',
         ) from error
     finally:
         download.unlink(missing_ok=True)
-    return file_sha256(path=out)
 
 
 def fetched_zip(
@@ -487,6 +474,7 @@ def download_changed(
             for name, outcome in outcomes.items()
             if outcome is None or outcome.failed
         ),
+        optional=tuple(spec.name for spec in parts.sources if spec.optional),
     )
 
 
@@ -617,6 +605,131 @@ def days_left(*, meta: dict[str, str], zone: tzinfo) -> int:
     return (end - yesterday(zone=zone)).days - 1
 
 
+def without_new_copies(*, layout: Layout, fetched: Fetched) -> Fetched | None:
+    """
+    Drop the new copy of every optional source that was just downloaded.
+
+    A source with an intact stored zip goes back to its stored state; one
+    without is left out. Each is marked failed.
+
+    Parameters
+    ----------
+    layout : Layout
+        Data paths.
+    fetched : Fetched
+        Outcome of download_changed.
+
+    Returns
+    -------
+    Fetched | None
+        The outcome without the new copies, or None when no optional
+        source has one.
+    """
+    dropped = tuple(
+        name for name in fetched.changed if name in fetched.optional
+    )
+    if not dropped:
+        return None
+    stored = load_states(path=layout.states)
+    states = {
+        name: state
+        for name, state in fetched.states.items()
+        if name not in dropped
+    }
+    for name in dropped:
+        if intact_sha(layout=layout, name=name, stored=stored) is not None:
+            states[name] = stored[name]
+    return replace(
+        fetched,
+        states=states,
+        downloaded=tuple(n for n in fetched.downloaded if n not in dropped),
+        changed=tuple(n for n in fetched.changed if n not in dropped),
+        failed=(*fetched.failed, *dropped),
+    )
+
+
+def build_or_fall_back(
+    *,
+    layout: Layout,
+    fetched: Fetched,
+    days: int,
+    handoff: Handoff | None,
+    city: City,
+    parts: BuildParts,
+) -> tuple[Path, Fetched]:
+    """
+    Build the timetable, again without any new optional copy if that fails.
+
+    Parameters
+    ----------
+    layout : Layout
+        Data paths.
+    fetched : Fetched
+        Outcome of download_changed.
+    days : int
+        Days the timetable covers.
+    handoff : Handoff | None
+        Hand the rebuild over to the extras program; see build_and_check.
+    city : City
+        The city, for its time zone.
+    parts : BuildParts
+        The city's reference and its sources.
+
+    Returns
+    -------
+    tuple[Path, Fetched]
+        The checked timetable and the outcome it was built from.
+
+    Raises
+    ------
+    Exception
+        The build's own, when no optional source's new copy was in it.
+    """
+    try:
+        built = build_and_check(
+            layout=layout, changed=fetched.changed, days=days,
+            handoff=handoff, city=city,
+            parts=present_parts(parts=parts, fetched=fetched),
+        )
+    except Exception:
+        fallback = without_new_copies(layout=layout, fetched=fetched)
+        if fallback is not None:
+            dropped = set(fetched.changed) - set(fallback.changed)
+            logger.exception(
+                'build failed, building again without the new %s',
+                ', '.join(sorted(dropped)),
+            )
+            return build_and_check(
+                layout=layout, changed=fallback.changed, days=days,
+                handoff=handed(handoff=handoff, fetched=fallback), city=city,
+                parts=present_parts(parts=parts, fetched=fallback),
+            ), fallback
+        raise
+    return built, fetched
+
+
+def handed(*, handoff: Handoff | None, fetched: Fetched) -> Handoff | None:
+    """
+    Point a handoff's refresh tail at another outcome.
+
+    Parameters
+    ----------
+    handoff : Handoff | None
+        The handoff, if any.
+    fetched : Fetched
+        The outcome the tail should carry.
+
+    Returns
+    -------
+    Handoff | None
+        The handoff with its tail's outcome replaced, or as it was when it
+        has no tail.
+    """
+    if handoff is None or handoff.tail is None:
+        return handoff
+    return replace(handoff, tail=replace(handoff.tail, fetched=fetched))
+
+
 def update(
     *,
     layout: Layout,
@@ -626,7 +739,7 @@ def update(
     city: City,
     parts: BuildParts,
     handoff: Handoff | None = None,
-) -> bool:
+) -> tuple[bool, Fetched]:
     """
     Rebuild and swap in when needed, else just store the new validators.
 
@@ -649,11 +762,13 @@ def update(
 
     Returns
     -------
-    bool
-        Whether the timetable was rebuilt. It is rebuilt when a source
-        changed, when forced, when there is no timetable or fewer than
-        MIN_DAYS_LEFT days remain in its window, or when it was built with
-        another SCHEMA_VERSION or records another projection origin.
+    tuple[bool, Fetched]
+        Whether the timetable was rebuilt, and the outcome stored. It is
+        rebuilt when a source changed, when forced, when there is no
+        timetable or fewer than MIN_DAYS_LEFT days remain in its window,
+        or when it was built with another SCHEMA_VERSION or records
+        another projection origin. The outcome differs from the one given
+        when a build without an optional source's new copy was needed.
     """
     meta = read_meta(path=layout.timetable)
     origin = meta.get('origin')
@@ -664,17 +779,17 @@ def update(
     )
     if not (fetched.changed or force or stale):
         save_states(path=layout.states, states=fetched.states)
-        return False
-    built = build_and_check(
+        return False, fetched
+    built, fetched = build_or_fall_back(
         layout=layout,
-        changed=fetched.changed,
+        fetched=fetched,
         days=days,
         handoff=handoff,
         city=city,
-        parts=present_parts(parts=parts, fetched=fetched),
+        parts=parts,
     )
     swap_in(layout=layout, built=built, fetched=fetched)
-    return True
+    return True, fetched
 
 
 def fresh_work(*, layout: Layout) -> None:
@@ -748,7 +863,7 @@ def refresh(
                 data_dir=data_dir, fetched=fetched, started=started,
                 error_log=error_log, lock_fd=lock_fd,
             )
-            rebuilt = update(
+            rebuilt, fetched = update(
                 layout=layout, fetched=fetched, days=days, force=force,
                 city=city, parts=parts,
                 handoff=(

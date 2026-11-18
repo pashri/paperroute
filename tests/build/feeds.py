@@ -12,6 +12,7 @@ from typing import Final
 from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.sources import SourceCut
 from paperroute_transit.build.timetable import (
     Window,
     create_indexes,
@@ -425,3 +426,40 @@ def damaged(*, archive: Path, out: Path) -> int:
     """
     del archive, out
     raise zlib.error('Error -3 while decompressing data')
+
+
+def raising(*, error: Exception) -> SourceCut:
+    """
+    Make a cut that fails with the given error.
+
+    Parameters
+    ----------
+    error : Exception
+        What the cut raises.
+
+    Returns
+    -------
+    SourceCut
+        A cut that always raises error.
+    """
+
+    def cut(*, archive: Path, out: Path) -> int:
+        """
+        Raise the error.
+
+        Parameters
+        ----------
+        archive : Path
+            The downloaded zip.
+        out : Path
+            Where the cut would go.
+
+        Returns
+        -------
+        int
+            Never returns.
+        """
+        del archive, out
+        raise error
+
+    return cut

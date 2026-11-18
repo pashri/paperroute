@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import sqlite3
+import struct
 import zipfile
 from collections.abc import Iterator
 from contextlib import closing
@@ -51,6 +52,7 @@ from tests.build.feeds import (
     bus_files,
     commented,
     damaged,
+    raising,
     refused,
 )
 from tests.core.test_state import fresh
@@ -969,7 +971,11 @@ def serve_extra(
 
 
 def run_extra(
-    *, server: FeedServer, data_dir: Path, cut: SourceCut = commented,
+    *,
+    server: FeedServer,
+    data_dir: Path,
+    cut: SourceCut = commented,
+    force: bool = False,
 ) -> RefreshReport:
     """
     Refresh Sydney's sources and the extra one.
@@ -982,6 +988,8 @@ def run_extra(
         Data directory.
     cut : SourceCut
         The extra source's cut.
+    force : bool
+        Rebuild even when nothing changed.
 
     Returns
     -------
@@ -993,6 +1001,7 @@ def run_extra(
         city=SYDNEY,
         parts=extra_parts(server=server, cut=cut),
         days=DAYS,
+        force=force,
     )
 
 
@@ -1033,10 +1042,16 @@ def test_a_refused_cut_keeps_the_stored_cut(
     serve_extra(server=server, tmp_path=tmp_path, comment=b'one')
     run_extra(server=server, data_dir=data_dir)
     stored = (data_dir / 'sources' / 'extra.zip').read_bytes()
+    before = load_states(path=data_dir / 'sources' / 'sources.json')
     serve_extra(server=server, tmp_path=tmp_path, comment=b'two', etag='"2"')
-    report = run_extra(server=server, data_dir=data_dir, cut=refused)
+    report = run_extra(
+        server=server, data_dir=data_dir, cut=refused, force=True,
+    )
     assert (report.failed, report.all_failed) == (('extra',), False)
     assert (data_dir / 'sources' / 'extra.zip').read_bytes() == stored
+    assert report.rebuilt and report.changed == ()
+    after = load_states(path=data_dir / 'sources' / 'sources.json')
+    assert after['extra'] == before['extra']
 
 
 def test_an_optional_source_with_no_copy_is_left_out(
@@ -1085,16 +1100,126 @@ def test_cut_into_turns_a_refusal_into_a_source_error(tmp_path: Path) -> None:
     assert not download.exists()
 
 
-def test_all_failed_counts_only_the_sources_built_from() -> None:
-    """Every source failing means every source there is a state for."""
-    states = {'bods': SourceState(etag=None, last_modified=None, sha256='a')}
-    assert not Fetched(
-        states=states, downloaded=(), changed=(), failed=('rail',),
-    ).all_failed
-    assert Fetched(
-        states=states, downloaded=(), changed=(), failed=('bods', 'rail'),
-    ).all_failed
+def test_all_failed_counts_only_the_required_sources() -> None:
+    """Every required source failing is a failed refresh; rail is not."""
+    states = {
+        'bods': SourceState(etag=None, last_modified=None, sha256='a'),
+        'rail': SourceState(etag=None, last_modified=None, sha256='b'),
+    }
+
+    def fetched(*failed: str) -> Fetched:
+        """
+        Fetched with the given sources failed and rail optional.
+
+        Parameters
+        ----------
+        *failed : str
+            Names of the sources that failed.
+
+        Returns
+        -------
+        Fetched
+            The outcome.
+        """
+        return Fetched(
+            states=states, downloaded=(), changed=(), failed=failed,
+            optional=('rail',),
+        )
+
+    assert not fetched('rail').all_failed
+    assert fetched('bods').all_failed
+    assert fetched('bods', 'rail').all_failed
+    assert not fetched().all_failed
+
+
+def test_all_failed_is_false_with_no_states() -> None:
+    """With nothing to build from, nothing counts as having failed."""
     assert not Fetched(states={}, downloaded=(), changed=()).all_failed
+    assert not Fetched(
+        states={}, downloaded=(), changed=(), failed=('rail',),
+        optional=('rail',),
+    ).all_failed
+    assert not Fetched(
+        states={}, downloaded=(), changed=(), failed=('rail',),
+    ).all_failed
+
+
+@pytest.mark.parametrize(
+    'error',
+    [
+        RuntimeError('encrypted'),
+        NotImplementedError('compression'),
+        OSError('disk'),
+        struct.error('bad header'),
+    ],
+)
+def test_cut_into_turns_any_exception_into_a_source_error(
+    tmp_path: Path, error: Exception,
+) -> None:
+    """Whatever a cut raises, the source fails with its class name."""
+    download = tmp_path / 'extra.download.zip'
+    download.write_bytes(metro_zip(tmp_path=tmp_path, comment=b'one'))
+    with pytest.raises(
+        SourceError, match=f'extra: cut failed, {type(error).__name__}',
+    ):
+        cut_into(
+            name='extra', cut=raising(error=error), download=download,
+            out=tmp_path / 'extra.zip',
+        )
+    assert not download.exists()
+
+
+def test_cut_into_turns_a_failed_hash_into_a_source_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An OSError while hashing the cut fails the source."""
+
+    def failing(*, path: Path) -> str:
+        """
+        Fail as a read error does.
+
+        Parameters
+        ----------
+        path : Path
+            Ignored.
+
+        Raises
+        ------
+        OSError
+            Always.
+        """
+        raise OSError(str(path))
+
+    monkeypatch.setattr(refresh_module, 'file_sha256', failing)
+    download = tmp_path / 'extra.download.zip'
+    download.write_bytes(metro_zip(tmp_path=tmp_path, comment=b'one'))
+    with pytest.raises(SourceError, match='extra: cut failed, OSError'):
+        cut_into(
+            name='extra', cut=commented, download=download,
+            out=tmp_path / 'extra.zip',
+        )
+    assert not download.exists()
+
+
+@pytest.mark.parametrize(
+    'error',
+    [RuntimeError('encrypted'), NotImplementedError('compression')],
+)
+def test_a_failing_cut_keeps_the_stored_cut(
+    server: FeedServer, data_dir: Path, tmp_path: Path, error: Exception,
+) -> None:
+    """A cut that raises something unexpected fails the source only."""
+    serve_extra(server=server, tmp_path=tmp_path, comment=b'one')
+    run_extra(server=server, data_dir=data_dir)
+    before = load_states(path=data_dir / 'sources' / 'sources.json')
+    serve_extra(server=server, tmp_path=tmp_path, comment=b'two', etag='"2"')
+    report = run_extra(
+        server=server, data_dir=data_dir, cut=raising(error=error),
+        force=True,
+    )
+    assert (report.failed, report.rebuilt) == (('extra',), True)
+    after = load_states(path=data_dir / 'sources' / 'sources.json')
+    assert after['extra'] == before['extra']
 
 
 def test_a_damaged_download_keeps_the_stored_cut(
@@ -1105,6 +1230,12 @@ def test_a_damaged_download_keeps_the_stored_cut(
     run_extra(server=server, data_dir=data_dir)
     stored = (data_dir / 'sources' / 'extra.zip').read_bytes()
     serve_extra(server=server, tmp_path=tmp_path, comment=b'two', etag='"2"')
-    report = run_extra(server=server, data_dir=data_dir, cut=damaged)
+    before = load_states(path=data_dir / 'sources' / 'sources.json')
+    report = run_extra(
+        server=server, data_dir=data_dir, cut=damaged, force=True,
+    )
     assert (report.failed, report.all_failed) == (('extra',), False)
     assert (data_dir / 'sources' / 'extra.zip').read_bytes() == stored
+    assert report.rebuilt and report.changed == ()
+    after = load_states(path=data_dir / 'sources' / 'sources.json')
+    assert after['extra'] == before['extra']

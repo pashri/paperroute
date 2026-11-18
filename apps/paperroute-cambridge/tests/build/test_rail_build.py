@@ -2,6 +2,7 @@
 
 import shutil
 import sqlite3
+from collections.abc import Callable
 from contextlib import closing
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
@@ -24,7 +25,11 @@ from paperroute_transit.build import swap
 from paperroute_transit.build.cli import given_sources, parse_args
 from paperroute_transit.build.gtfs_files import Source, read_rows
 from paperroute_transit.build.refresh import refresh
-from paperroute_transit.build.source_state import SourceError, SourceState
+from paperroute_transit.build.source_state import (
+    SourceError,
+    SourceState,
+    load_states,
+)
 from paperroute_transit.build.sources import (
     SourceSpec,
     UrlDownloader,
@@ -33,6 +38,7 @@ from paperroute_transit.build.sources import (
 from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.core.chooser import Level
 from paperroute_transit.core.model import Pin, StopPlace
+from tests.build.test_rail_cut import XC_TRIP, changed
 from tests.conftest import FIXTURES, RECORDED_DAY
 
 BODS: Final[Path] = FIXTURES / 'bods.zip'
@@ -374,17 +380,19 @@ def test_buses_keep_their_timetable_whatever_the_rail_source_does(
     parts = replace(CAMBRIDGE_BUILD, downloader=shelf)
     data_dir = tmp_path / 'data'
     data_dir.mkdir()
-    reports, counts = [], []
+    reports, counts, stored = [], [], []
     for gone in ({'rail'}, set(), {'rail'}):
         shelf.gone = gone
         reports.append(refresh(
             data_dir=data_dir, city=CAMBRIDGE, parts=parts, days=1, force=True,
         ))
         counts.append(trip_counts(data_dir=data_dir))
+        stored.append(load_states(path=data_dir / 'sources' / 'sources.json'))
     assert [(r.failed, r.all_failed, r.rebuilt) for r in reports] == [
         (('rail',), False, True), ((), False, True), (('rail',), False, True),
     ]
     assert reports[1].changed == ('rail',)
+    assert 'rail' not in stored[0] and stored[2]['rail'] == stored[1]['rail']
     assert counts == [
         {'bods': 67}, {'bods': 67, 'rail': 5}, {'bods': 67, 'rail': 5},
     ]
@@ -414,3 +422,174 @@ def test_the_build_command_cuts_the_rail_zip_it_is_given(
     ]
     stops = read_rows(archive=sources[1].archive, member='stops.txt')
     assert 'rail:CBG' in {row['stop_id'] for row in stops}
+
+
+def bad_route_type(tables: dict[str, list[dict[str, str]]]) -> None:
+    """
+    Give every route a route_type the loader cannot read.
+
+    Parameters
+    ----------
+    tables : dict[str, list[dict[str, str]]]
+        Rows by member, changed in place.
+    """
+    for row in tables['routes.txt']:
+        row['route_type'] = 'rail'
+
+
+def blank_time(tables: dict[str, list[dict[str, str]]]) -> None:
+    """
+    Blank the times of one kept call.
+
+    Parameters
+    ----------
+    tables : dict[str, list[dict[str, str]]]
+        Rows by member, changed in place.
+    """
+    call = next(
+        row for row in tables['stop_times.txt'] if row['trip_id'] == XC_TRIP
+    )
+    call['arrival_time'] = ''
+    call['departure_time'] = ''
+
+
+def no_trips_file(tables: dict[str, list[dict[str, str]]]) -> None:
+    """
+    Remove trips.txt, as a release missing a table does.
+
+    Parameters
+    ----------
+    tables : dict[str, list[dict[str, str]]]
+        Rows by member, changed in place.
+    """
+    del tables['trips.txt']
+
+
+@pytest.fixture(name='data_dir')
+def _data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """
+    An empty data directory, a fixed window start and a low trip floor.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Test directory.
+    monkeypatch : pytest.MonkeyPatch
+        Patcher.
+
+    Returns
+    -------
+    Path
+        The data directory.
+    """
+    monkeypatch.setattr(swap, 'MIN_TRIPS', 1)
+    monkeypatch.setattr(
+        refresh_module, 'yesterday', lambda *, zone: RECORDED_DAY,
+    )
+    path = tmp_path / 'data'
+    path.mkdir()
+    return path
+
+
+def night(*, data_dir: Path, shelf: Shelf) -> swap.RefreshReport:
+    """
+    Refresh Cambridge's one-day timetable from the shelf.
+
+    Parameters
+    ----------
+    data_dir : Path
+        Data directory.
+    shelf : Shelf
+        Where the sources come from.
+
+    Returns
+    -------
+    swap.RefreshReport
+        The refresh's report.
+    """
+    return refresh(
+        data_dir=data_dir,
+        city=CAMBRIDGE,
+        parts=replace(CAMBRIDGE_BUILD, downloader=shelf),
+        days=1,
+        force=True,
+    )
+
+
+def rail_date(*, data_dir: Path) -> date | None:
+    """
+    Read the date of the rail source in the live timetable.
+
+    Parameters
+    ----------
+    data_dir : Path
+        Data directory.
+
+    Returns
+    -------
+    date | None
+        The rail source's date, or None when the timetable has none.
+    """
+    path = data_dir / 'timetable.db'
+    with closing(SqliteTimetableRepository(city=CAMBRIDGE, path=path)) as repo:
+        return repo.source_dates().get('rail')
+
+
+FAULTS: Final[dict[str, Callable[[dict[str, list[dict[str, str]]]], None]]] = {
+    'route_type': bad_route_type,
+    'blank_time': blank_time,
+    'no_trips_file': no_trips_file,
+}
+
+
+@pytest.mark.parametrize('fault', list(FAULTS))
+def test_a_rail_file_the_loader_rejects_leaves_the_buses_built(
+    data_dir: Path, tmp_path: Path, fault: str,
+) -> None:
+    """On a first night, buses build alone and the exit is a success."""
+    bad = changed(out=tmp_path / 'bad.zip', change=FAULTS[fault])
+    shelf = Shelf(files={'bods': BODS, 'rail': bad})
+    report = night(data_dir=data_dir, shelf=shelf)
+    assert (report.failed, report.all_failed, report.rebuilt) == (
+        ('rail',), False, True,
+    )
+    assert trip_counts(data_dir=data_dir) == {'bods': 67}
+    states = load_states(path=data_dir / 'sources' / 'sources.json')
+    assert 'rail' not in states
+    assert swap.printed(report=report) == 0
+
+
+@pytest.mark.parametrize('fault', list(FAULTS))
+def test_a_rail_file_the_loader_rejects_keeps_the_earlier_trains(
+    data_dir: Path, tmp_path: Path, fault: str,
+) -> None:
+    """After a good night, the earlier trains stay, night after night."""
+    bad = changed(out=tmp_path / 'bad.zip', change=FAULTS[fault])
+    shelf = Shelf(files={'bods': BODS, 'rail': RAIL})
+    night(data_dir=data_dir, shelf=shelf)
+    good = departures(path=data_dir / 'timetable.db', day=RECORDED_DAY)
+    before = load_states(path=data_dir / 'sources' / 'sources.json')
+    shelf.files['rail'] = bad
+    for _ in range(2):
+        report = night(data_dir=data_dir, shelf=shelf)
+        assert (report.failed, report.all_failed) == (('rail',), False)
+        assert trip_counts(data_dir=data_dir) == {'bods': 67, 'rail': 5}
+        assert departures(
+            path=data_dir / 'timetable.db', day=RECORDED_DAY,
+        ) == good
+        assert rail_date(data_dir=data_dir) == date(2026, 11, 16)
+        after = load_states(path=data_dir / 'sources' / 'sources.json')
+        assert after == before
+
+
+def test_a_bus_source_that_fails_still_fails_the_refresh(
+    data_dir: Path,
+) -> None:
+    """With the buses unreachable and the rail fine, every required fails."""
+    shelf = Shelf(files={'bods': BODS, 'rail': RAIL})
+    night(data_dir=data_dir, shelf=shelf)
+    shelf.gone = {'bods'}
+    report = night(data_dir=data_dir, shelf=shelf)
+    assert report.failed == ('bods',)
+    assert report.all_failed
+    assert swap.printed(report=report) == 1

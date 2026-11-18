@@ -170,6 +170,7 @@ def refresh_record(*, data_dir: Path, lock_fd: int) -> HandoffRecord:
                     etag='"2"', last_modified=None, sha256='ab' * 32,
                 )},
                 downloaded=('metro',), changed=(), failed=(),
+                optional=('rail',),
             ),
             started=time.monotonic(),
             error_log=data_dir / 'log' / 'errors.jsonl',
@@ -191,7 +192,7 @@ def test_handoff_round_trip(data_dir: Path) -> None:
     }
     assert set(raw['tail']) == {
         'data_dir', 'states', 'downloaded', 'changed', 'failed',
-        'started', 'error_log', 'lock_fd',
+        'optional', 'started', 'error_log', 'lock_fd',
     }
     plain = replace(record, tail=None)
     write_handoff(path=path, record=plain)

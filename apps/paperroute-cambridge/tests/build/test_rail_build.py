@@ -1111,6 +1111,35 @@ def test_line_trips_leave_out_a_trips_skipped_days(
     assert to_ely == {'XC:Birmingham & Stansted': 3}
 
 
+def test_line_trips_need_a_set_down_at_the_destination(
+    week_built: Path, tmp_path: Path,
+) -> None:
+    """A train that does not set down at Ely does not link to it."""
+    path = tmp_path / 'timetable.db'
+    shutil.copyfile(week_built, path)
+    with closing(sqlite3.connect(path)) as conn, conn:
+        conn.execute(
+            'UPDATE stop_times SET dropoff = 1'
+            " WHERE trip_id = ? AND stop_id = 'rail:9100ELYY'",
+            (XC_BUILT,),
+        )
+    assert line_trips(path=path, origin=STATION, destination=ELY) == {}
+
+
+def test_line_trips_ignore_a_skip_on_a_day_it_does_not_run(
+    week_built: Path, tmp_path: Path,
+) -> None:
+    """A skipped day outside the service's days takes nothing off."""
+    path = tmp_path / 'timetable.db'
+    shutil.copyfile(week_built, path)
+    with closing(sqlite3.connect(path)) as conn, conn:
+        conn.execute(
+            'INSERT INTO trip_skip VALUES (?, ?)', (XC_BUILT, '2000-01-01'),
+        )
+    to_ely = line_trips(path=path, origin=STATION, destination=ELY)
+    assert to_ely == {'XC:Birmingham & Stansted': 5}
+
+
 def test_line_trips_ignore_a_call_that_does_not_pick_up(
     rail_built: Path,
 ) -> None:

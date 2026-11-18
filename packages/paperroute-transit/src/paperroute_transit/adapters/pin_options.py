@@ -108,7 +108,9 @@ LINE_TRIPS: Final[str] = """
 SELECT r.short_name, r.long_name, r.type, r.agency_id,
   SUM(
     (SELECT COUNT(*) FROM services v WHERE v.service_id = t.service_id)
-    - (SELECT COUNT(*) FROM trip_skip k WHERE k.trip_id = t.trip_id)
+    - (SELECT COUNT(*) FROM trip_skip k JOIN services w
+       ON w.service_id = t.service_id AND w.date = k.date
+       WHERE k.trip_id = t.trip_id)
   )
 FROM trips t JOIN routes r ON r.route_id = t.route_id
 WHERE t.trip_id IN (

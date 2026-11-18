@@ -4,6 +4,7 @@ import csv
 import io
 import sqlite3
 import zipfile
+import zlib
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -76,15 +77,17 @@ def feed_date(*, archive: Path) -> date | None:
     -------
     date | None
         The first row's feed_start_date; None when the zip has no
-        feed_info.txt, no row, or a value that does not parse.
+        feed_info.txt, no row, a short row, or a member that is damaged,
+        undecodable or does not parse.
     """
-    for row in read_rows(archive=archive, member='feed_info.txt'):
-        try:
+    try:
+        for row in read_rows(archive=archive, member='feed_info.txt'):
             return datetime.strptime(
                 row['feed_start_date'], '%Y%m%d',
             ).date()
-        except (KeyError, ValueError):
-            return None
+    except (KeyError, TypeError, ValueError, csv.Error,
+            zipfile.BadZipFile, zlib.error):
+        return None
     return None
 
 

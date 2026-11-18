@@ -5,6 +5,7 @@ import logging
 import os
 import sqlite3
 import sys
+import zipfile
 from contextlib import closing
 from dataclasses import dataclass, field
 from datetime import date
@@ -593,6 +594,22 @@ def test_feed_date(
         }
     archive = write_feed(path=tmp_path / 'f.zip', files=files)
     assert feed_date(archive=archive) == day
+
+
+def test_feed_date_of_a_short_first_row_is_none(tmp_path: Path) -> None:
+    """A first row with fewer fields than the header gives no date."""
+    archive = tmp_path / 'f.zip'
+    with zipfile.ZipFile(archive, 'w') as feed:
+        feed.writestr('feed_info.txt', 'feed_lang,feed_start_date\nen\n')
+    assert feed_date(archive=archive) is None
+
+
+def test_feed_date_of_an_undecodable_member_is_none(tmp_path: Path) -> None:
+    """A feed_info member that is not UTF-8 gives no date."""
+    archive = tmp_path / 'f.zip'
+    with zipfile.ZipFile(archive, 'w') as feed:
+        feed.writestr('feed_info.txt', b'feed_start_date\n\xff\xfe\n')
+    assert feed_date(archive=archive) is None
 
 
 def test_meta_records_each_source_date(tmp_path: Path) -> None:

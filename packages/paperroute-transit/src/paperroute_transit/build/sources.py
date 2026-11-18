@@ -55,12 +55,39 @@ class SourceSpec:
     optional : bool
         When True, the build goes on without this source if it has no
         copy to build from.
+    size_limit : int | None
+        Largest download accepted, in bytes; None accepts any size.
     """
 
     name: str
     path: str
     cut: SourceCut | None = None
     optional: bool = False
+    size_limit: int | None = None
+
+
+class DownloadTooLarge(Exception):
+    """A download is larger than its source's size limit."""
+
+
+def check_size(*, size: int, limit: int | None) -> None:
+    """
+    Refuse a size over a limit.
+
+    Parameters
+    ----------
+    size : int
+        Bytes downloaded or declared.
+    limit : int | None
+        Largest size accepted; none accepts any.
+
+    Raises
+    ------
+    DownloadTooLarge
+        If a limit is set and the size is over it.
+    """
+    if limit is not None and size > limit:
+        raise DownloadTooLarge(f'{size} bytes is over {limit}')
 
 
 class Downloader(Protocol):
@@ -121,8 +148,9 @@ class Downloader(Protocol):
         Raises
         ------
         SourceError
-            On an HTTP error, a short body or a write failure. The message
-            holds the source name and the status or error class only.
+            On an HTTP error, a short body, an oversized body or a write
+            failure. The message holds the source name and the status or
+            error class only.
         """
 
 
@@ -195,7 +223,12 @@ def open_source(
     return response
 
 
-def stream_to(*, response: http.client.HTTPResponse, out: Path) -> str:
+def stream_to(
+    *,
+    response: http.client.HTTPResponse,
+    out: Path,
+    limit: int | None = None,
+) -> str:
     """
     Copy a response body to a file in chunks.
 
@@ -205,6 +238,8 @@ def stream_to(*, response: http.client.HTTPResponse, out: Path) -> str:
         Open response.
     out : Path
         File to write.
+    limit : int | None
+        Largest body accepted, in bytes; none accepts any size.
 
     Returns
     -------
@@ -215,10 +250,17 @@ def stream_to(*, response: http.client.HTTPResponse, out: Path) -> str:
     ------
     http.client.IncompleteRead
         If the body ends before its Content-Length.
+    DownloadTooLarge
+        If the Content-Length or the bytes read pass the limit.
     """
+    if response.length is not None:
+        check_size(size=response.length, limit=limit)
     digest = hashlib.sha256()
+    total = 0
     with out.open('wb') as file:
         for chunk in iter(partial(response.read, CHUNK_BYTES), b''):
+            total += len(chunk)
+            check_size(size=total, limit=limit)
             digest.update(chunk)
             file.write(chunk)
         file.flush()
@@ -432,8 +474,9 @@ class UrlDownloader:
         Raises
         ------
         SourceError
-            On an HTTP error, a short body or a write failure. The message
-            holds the source name and the status or error class only.
+            On an HTTP error, a short body, an oversized body or a write
+            failure. The message holds the source name and the status or
+            error class only.
         """
         built = self.request(spec=spec, method='GET')
         try:
@@ -443,7 +486,16 @@ class UrlDownloader:
                 timeout_s=timeout_s,
                 limiter=limiter,
             ) as response:
-                return stream_to(response=response, out=out)
-        except (http.client.HTTPException, OSError) as error:
+                return stream_to(
+                    response=response,
+                    out=out,
+                    limit=spec.size_limit,
+                )
+        except (
+            http.client.HTTPException,
+            OSError,
+            DownloadTooLarge,
+        ) as error:
+            out.unlink(missing_ok=True)
             message = f'{spec.name}: {type(error).__name__}'
             raise SourceError(message) from error

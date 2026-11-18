@@ -21,6 +21,7 @@ class Served:
     body: bytes
     etag: str | None = '"1"'
     last_modified: str | None = 'Thu, 15 Oct 2026 10:00:00 GMT'
+    length: bool = True
 
 
 @dataclass
@@ -153,7 +154,8 @@ class FeedHandler(BaseHTTPRequestHandler):
             Whether to write the body.
         """
         self.send_response(HTTPStatus.OK)
-        self.send_header('Content-Length', str(len(served.body)))
+        if served.length:
+            self.send_header('Content-Length', str(len(served.body)))
         if served.etag is not None:
             self.send_header('ETag', served.etag)
         if served.last_modified is not None:

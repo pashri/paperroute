@@ -851,3 +851,10 @@ def test_a_handed_over_build_falls_back_when_the_run_tables_fail(
         stop.value.code, trip_counts(data_dir=data_dir), runs.calls,
         reports,
     ) == expected
+
+
+def test_each_source_declares_a_size_limit() -> None:
+    """The bus zip may reach 250 MB and the national rail zip 150 MB."""
+    assert [spec.size_limit for spec in CAMBRIDGE_SOURCES] == [
+        250_000_000, 150_000_000,
+    ]

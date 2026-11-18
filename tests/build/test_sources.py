@@ -8,6 +8,7 @@ from typing import Final
 import pytest
 
 from paperroute_transit.build.source_state import (
+    SourceError,
     SourceState,
     load_states,
     save_states,
@@ -25,6 +26,9 @@ SAME: Final[SourceState] = SourceState(
     sha256='abc',
 )
 PLAIN: Final[SourceSpec] = SourceSpec(name='plain', path='plain/')
+BIG: Final[SourceSpec] = SourceSpec(
+    name='big', path='big/', size_limit=1000,
+)
 
 
 @pytest.fixture(name='server')
@@ -135,3 +139,43 @@ def test_url_downloader_sends_the_headers_it_is_given(
     )
     downloader.head(spec=PLAIN, timeout_s=5, limiter=None)
     assert server.last_headers()['X-Test'] == 'plain'
+
+
+@pytest.mark.parametrize('length', [True, False], ids=['length', 'none'])
+def test_url_downloader_abandons_a_body_over_its_limit(
+    server: FeedServer, tmp_path: Path, length: bool,
+) -> None:
+    """A body past the limit fails and leaves no file."""
+    server.state.files['/big/'] = Served(body=b'x' * 2000, length=length)
+    out = tmp_path / 'big.zip'
+    with pytest.raises(SourceError, match='big: DownloadTooLarge'):
+        UrlDownloader(base_url=server.base_url).download(
+            spec=BIG, out=out, timeout_s=5, limiter=None,
+        )
+    assert not out.exists()
+
+
+def test_url_downloader_keeps_a_body_at_its_limit(
+    server: FeedServer, tmp_path: Path,
+) -> None:
+    """A body of exactly the limit is downloaded."""
+    server.state.files['/big/'] = Served(body=b'x' * 1000, length=False)
+    out = tmp_path / 'big.zip'
+    UrlDownloader(base_url=server.base_url).download(
+        spec=BIG, out=out, timeout_s=5, limiter=None,
+    )
+    assert out.stat().st_size == 1000
+
+
+def test_url_downloader_removes_a_partial_file(
+    server: FeedServer, tmp_path: Path,
+) -> None:
+    """A body cut short leaves nothing behind."""
+    server.state.files['/plain/'] = Served(body=b'x' * 10_000)
+    server.state.fail_midway.add('/plain/')
+    out = tmp_path / 'p.zip'
+    with pytest.raises(SourceError, match='plain: IncompleteRead'):
+        UrlDownloader(base_url=server.base_url).download(
+            spec=PLAIN, out=out, timeout_s=5, limiter=None,
+        )
+    assert not out.exists()

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Final
 
 import pytest
-from aiohttp import web
+from aiohttp import ClientResponse, web
 from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute_cambridge.adapters.web_board import (
@@ -23,6 +23,7 @@ from paperroute_transit.adapters.board_pages import PinPages
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.adapters.pin_options import SqlitePinOptions
 from paperroute_transit.core.messages import Event, PinSaved
+from paperroute_transit.core.model import Pin, StopPlace, pin_ref
 from paperroute_transit.observers import PinsSeen
 from tests.build.test_rail_build import built
 from tests.conftest import RECORDED_DAY
@@ -72,9 +73,22 @@ def posted_fixture() -> list[Event]:
     return []
 
 
+@pytest.fixture(name='saved')
+def saved_fixture() -> list[Pin]:
+    """
+    Hold the pins the app has reported.
+
+    Returns
+    -------
+    list[Pin]
+        The pins, empty to start.
+    """
+    return []
+
+
 @pytest.fixture(name='client')
 async def client_fixture(
-    network: SqliteNetworkRepository, posted: list[Event],
+    network: SqliteNetworkRepository, posted: list[Event], saved: list[Pin],
 ) -> AsyncIterator[Client]:
     """
     Serve Cambridge's pin pages over the recorded timetable.
@@ -85,6 +99,8 @@ async def client_fixture(
         The network.
     posted : list[Event]
         Where the events go.
+    saved : list[Pin]
+        The pins the app has reported.
 
     Yields
     ------
@@ -93,7 +109,7 @@ async def client_fixture(
     """
     pages = PinPages(
         head=BoardHead(nav=CAMBRIDGE_NAV),
-        pins=lambda: PinsSeen(pins=(), shown=None, revision=1),
+        pins=lambda: PinsSeen(pins=tuple(saved), shown=None, revision=1),
         options=SqlitePinOptions(network=network),
         modes=CAMBRIDGE.modes,
         plug=None,
@@ -379,3 +395,79 @@ async def test_the_destination_comes_before_the_strip_line(
     })
     text = await page.text()
     assert text.index('name="to"') < text.index('name="route"')
+
+
+CAMBRIDGE_STATION: Final[StopPlace] = StopPlace(
+    stop_id='rail:CBG', name='Cambridge', point=None,
+)
+ELY: Final[StopPlace] = StopPlace(stop_id='rail:ELY', name='Ely', point=None)
+
+
+async def ways_save(
+    client: Client, *, pin: Pin, to: str,
+) -> ClientResponse:
+    """
+    Save a saved pin on the ways page with a Destination.
+
+    Parameters
+    ----------
+    client : Client
+        The client.
+    pin : Pin
+        The saved pin.
+    to : str
+        The Destination ID posted.
+
+    Returns
+    -------
+    ClientResponse
+        The response.
+    """
+    return await client.post(
+        '/pins/ways/save',
+        data={'ref': pin_ref(pin=pin), 'from': pin.origin.stop_id, 'to': to},
+        allow_redirects=False,
+    )
+
+
+async def test_a_ways_save_keeps_the_line_of_an_unchanged_train_pin(
+    client: Client, posted: list[Event], saved: list[Pin],
+) -> None:
+    """The same From and Destination keep the Strip line."""
+    pin = Pin(
+        origin=CAMBRIDGE_STATION, destination=ELY, kind='train',
+        routes=(KINGS_LYNN,),
+    )
+    saved.append(pin)
+    response = await ways_save(client, pin=pin, to='rail:ELY')
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert saved_routes(posted=posted) == (KINGS_LYNN,)
+
+
+async def test_a_ways_save_picks_the_busiest_line_for_a_new_pair(
+    client: Client, posted: list[Event], saved: list[Pin],
+) -> None:
+    """A changed Destination gets the busiest line between the pair."""
+    pin = Pin(
+        origin=CAMBRIDGE_STATION, destination=ELY, kind='train',
+        routes=(LIVERPOOL,),
+    )
+    saved.append(pin)
+    response = await ways_save(client, pin=pin, to='rail:RYS')
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert saved_routes(posted=posted) == (KINGS_LYNN,)
+    posted.clear()
+    await ways_save(client, pin=pin, to='rail:BHM')
+    assert saved_routes(posted=posted) == (XC,)
+
+
+async def test_the_destination_ids_used_by_the_ways_tests_exist(
+    client: Client,
+) -> None:
+    """Royston and Birmingham are stations a train reaches."""
+    page = await client.get(
+        '/pins/edit', params={'stop': 'rail:CBG', 'kind': 'train'},
+    )
+    text = await page.text()
+    assert 'value="rail:RYS"' in text
+    assert 'value="rail:BHM"' in text

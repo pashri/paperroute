@@ -4,6 +4,7 @@ from dataclasses import replace
 
 from multidict import MultiDict
 
+from paperroute_sydney.city import SYDNEY, SydneyMode
 from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN_WAY,
     CONSTITUTION,
@@ -84,3 +85,15 @@ def test_never_choices_cover_every_leg() -> None:
     """The never list offers each leg's routes once, then the never ones."""
     pin = replace(WORK, never=('999',))
     assert never_choices(options=OPTIONS, pin=pin) == ('660', '665', '999')
+
+
+def test_a_ways_save_clears_a_sydney_trains_line() -> None:
+    """Sydney trains and buses lose their routes on a ways save."""
+    draft = ways_draft(query=MultiDict(ways_query(pin=WORK, ref='r')))
+    for kind, routes in ((SydneyMode.TRAIN, ('T1',)), (SydneyMode.BUS, ('9',))):
+        base = replace(WORK, kind=kind, routes=routes)
+        found = draft_pin(
+            options=OPTIONS, draft=draft, base=base, modes=SYDNEY.modes,
+        )
+        assert found is not None
+        assert found.routes == ()

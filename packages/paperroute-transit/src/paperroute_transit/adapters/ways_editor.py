@@ -21,6 +21,12 @@ from paperroute_transit.core.model import (
     Way,
     way_key,
 )
+from paperroute_transit.core.modes import (
+    ModeSpec,
+    destination_first_modes,
+    pin_value,
+)
+from paperroute_transit.core.pin_choices import busiest_line
 from paperroute_transit.ports import PinOptions
 
 CHANGE_SEP: Final[str] = '|'  # between the changes of an encoded way
@@ -313,8 +319,61 @@ def picked_way(*, options: PinOptions, text: str) -> Way | None:
     return stop_way(places=known)
 
 
+def strip_routes(
+    *,
+    options: PinOptions,
+    base: Pin | None,
+    origin: StopPlace,
+    destination: StopPlace,
+    modes: Sequence[ModeSpec],
+) -> tuple[str, ...]:
+    """
+    Give the routes a ways save leaves on a pin.
+
+    Parameters
+    ----------
+    options : PinOptions
+        What the timetable offers.
+    base : Pin | None
+        The saved pin being edited, or None.
+    origin : StopPlace
+        The From.
+    destination : StopPlace
+        The To.
+    modes : Sequence[ModeSpec]
+        The city's modes.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The base pin's routes when its kind is destination-first and its
+        From and To are unchanged; the busiest line between the new pair
+        when they changed, or none when no line links them. Empty for
+        any other pin.
+    """
+    if base is None or base.kind not in destination_first_modes(modes=modes):
+        return ()
+    ids = (origin.stop_id, destination.stop_id)
+    if base.destination is not None and ids == (
+        base.origin.stop_id, base.destination.stop_id,
+    ):
+        return base.routes
+    trips = options.line_trips(
+        origin=origin, destination=destination, kind=base.kind,
+    )
+    line = busiest_line(
+        lines=options.lines_at(stop_id=origin.stop_id, kind=base.kind),
+        trips=trips,
+    )
+    return (pin_value(choice=line),) if line is not None and trips else ()
+
+
 def draft_pin(
-    *, options: PinOptions, draft: WaysDraft, base: Pin | None,
+    *,
+    options: PinOptions,
+    draft: WaysDraft,
+    base: Pin | None,
+    modes: Sequence[ModeSpec] = (),
 ) -> Pin | None:
     """
     Make the pin a ways draft stands for.
@@ -327,6 +386,8 @@ def draft_pin(
         The choices made.
     base : Pin | None
         The saved pin being edited, or None.
+    modes : Sequence[ModeSpec]
+        The city's modes; a destination-first pin keeps a Strip line.
 
     Returns
     -------
@@ -340,7 +401,11 @@ def draft_pin(
         return None
     pin = replace(
         base or Pin(origin=origin),
-        origin=origin, destination=destination, routes=(), only=(),
+        origin=origin, destination=destination, only=(),
+        routes=strip_routes(
+            options=options, base=base, origin=origin,
+            destination=destination, modes=modes,
+        ),
         ways=draft_ways(options=options, draft=draft),
         never=draft.never, nickname=draft.nickname,
     )

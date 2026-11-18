@@ -1,7 +1,7 @@
 """Serve the ways page of a pin with a Destination."""
 
 import html
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from http import HTTPStatus
 from typing import Final
@@ -46,6 +46,7 @@ from paperroute_transit.adapters.web_pins import (
 )
 from paperroute_transit.core.connection_model import way_legs
 from paperroute_transit.core.model import Pin, StopPlace, Way
+from paperroute_transit.core.modes import ModeSpec
 from paperroute_transit.core.pin_choices import NICKNAME_MAX
 from paperroute_transit.observers import PinsSeen
 from paperroute_transit.ports import PinOptions
@@ -508,6 +509,8 @@ class WaysPages:
         none.
     head : BoardHead
         The extra stylesheets and scripts each page links, and its nav.
+    modes : Sequence[ModeSpec]
+        The city's modes; none for a city with no destination-first mode.
     """
 
     def __init__(
@@ -518,12 +521,14 @@ class WaysPages:
         options: PinOptions | None,
         card: CardOf = plain_card,
         head: BoardHead = BoardHead(),
+        modes: Sequence[ModeSpec] = (),
     ) -> None:
         self._pages = pages
         self._pins = pins
         self.options = options
         self.card = card
         self.head = head
+        self.modes = modes
 
     def routes(self) -> list[web.RouteDef]:
         """
@@ -672,9 +677,8 @@ class WaysPages:
             raise web.HTTPSeeOther(location='/pins?done=gone')
         return found[1]
 
-    @staticmethod
     def _pin(
-        *, options: PinOptions, draft: WaysDraft, base: Pin | None,
+        self, *, options: PinOptions, draft: WaysDraft, base: Pin | None,
         started: bool,
     ) -> Pin | None:
         """
@@ -699,7 +703,9 @@ class WaysPages:
         """
         if not started and base is not None and base.destination:
             return base
-        return draft_pin(options=options, draft=draft, base=base)
+        return draft_pin(
+            options=options, draft=draft, base=base, modes=self.modes,
+        )
 
     async def _save(self, request: web.Request) -> web.Response:
         """
@@ -729,7 +735,7 @@ class WaysPages:
         draft = ways_draft(query=fields)
         pin = draft_pin(
             options=self.options, draft=draft,
-            base=self._base(ref=draft.ref),
+            base=self._base(ref=draft.ref), modes=self.modes,
         )
         windows = windows_of(rows=rows_of(fields=fields))
         if pin is None or isinstance(windows, str):

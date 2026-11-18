@@ -198,6 +198,7 @@ class PinPages:
             pins=self._pins,
             options=self._options,
             head=self._head,
+            modes=self._modes,
         )
         plugged = (
             self._plug.pages(ways=ways, skip_school=skip_school)

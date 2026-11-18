@@ -31,6 +31,7 @@ from paperroute_transit.build.handoff import (
     write_handoff,
 )
 from paperroute_transit.build.source_state import SourceState
+from paperroute_transit.build.swap import TimetableCheckError, check_timetable
 from paperroute_transit.build.timetable import Window, build_timetable
 from tests.build.network_feed import network_feed
 
@@ -369,6 +370,47 @@ def test_failed_extras_keep_the_old_timetable(
         encoding='utf-8',
     ).splitlines()
     assert json.loads(lines[0])['msg'] == 'refresh failed'
+
+
+@pytest.mark.usefixtures('restored_logging')
+def test_extras_check_counts_only_the_required_sources(
+    data_dir: Path, loaded: Path, lock_fd: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """After a hand over, an optional source's trips do not count."""
+    monkeypatch.setattr(swap, 'MIN_TRIPS', 1)
+    record = refresh_record(data_dir=data_dir, lock_fd=lock_fd)
+    assert record.tail is not None
+    fetched = replace(record.tail.fetched, optional=('sydneytrains',))
+    record = replace(record, tail=replace(record.tail, fetched=fetched))
+    shutil.copy(loaded, record.scratch)
+    handoff = data_dir / 'work' / 'handoff.json'
+    write_handoff(path=handoff, record=record)
+    assert extras.main(
+        argv=[SYDNEY_REF, str(record.scratch), str(handoff)],
+    ) == 1
+    assert (data_dir / 'timetable.db').read_bytes() == b'old timetable'
+    assert 'TimetableCheckError' in (
+        data_dir / 'log' / 'errors.jsonl'
+    ).read_text(encoding='utf-8')
+
+
+def test_check_counts_only_the_trips_of_required_sources(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rail trips cannot lift a short bus timetable over the floor."""
+    monkeypatch.setattr(swap, 'MIN_TRIPS', 3)
+    path = tmp_path / 'timetable.db'
+    with closing(sqlite3.connect(path)) as conn:
+        conn.execute('CREATE TABLE trips (trip_id TEXT, source TEXT)')
+        conn.executemany('INSERT INTO trips VALUES (?, ?)', [
+            ('b1', 'bods'), ('b2', 'bods'),
+            *((f'r{n}', 'rail') for n in range(5)),
+        ])
+        conn.commit()
+    check_timetable(path=path)
+    with pytest.raises(TimetableCheckError, match='2 trips, want 3'):
+        check_timetable(path=path, optional=('rail',))
 
 
 @pytest.mark.usefixtures('restored_logging')

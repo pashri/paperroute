@@ -609,6 +609,17 @@ def test_a_bus_source_that_fails_still_fails_the_refresh(
     assert swap.printed(report=report) == 1
 
 
+def test_the_trip_floor_counts_the_buses_alone(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """67 bus trips stay under a floor of 68, whatever the trains add."""
+    monkeypatch.setattr(swap, 'MIN_TRIPS', 68)
+    shelf = Shelf(files={'bods': BODS, 'rail': RAIL})
+    with pytest.raises(swap.TimetableCheckError, match='67 trips, want 68'):
+        night(data_dir=data_dir, shelf=shelf)
+    assert not (data_dir / 'timetable.db').exists()
+
+
 def nowhere(tables: dict[str, list[dict[str, str]]]) -> None:
     """
     Send the XC trip to Nowhere, so a build can tell this copy apart.

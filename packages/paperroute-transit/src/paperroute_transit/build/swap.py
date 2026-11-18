@@ -97,7 +97,7 @@ def clear_work(*, work: Path) -> None:
             entry.unlink()
 
 
-def check_timetable(*, path: Path) -> None:
+def check_timetable(*, path: Path, optional: tuple[str, ...] = ()) -> None:
     """
     Check a built timetable before it goes live.
 
@@ -105,16 +105,23 @@ def check_timetable(*, path: Path) -> None:
     ----------
     path : Path
         Built timetable.
+    optional : tuple[str, ...]
+        Sources whose trips do not count towards the floor.
 
     Raises
     ------
     TimetableCheckError
-        If SQLite's integrity check fails or it has under MIN_TRIPS trips.
+        If SQLite's integrity check fails or it has under MIN_TRIPS trips
+        from its required sources.
     """
     progress(phase='check')
     with closing(sqlite3.connect(f'file:{path}?mode=ro', uri=True)) as conn:
         (verdict,) = conn.execute('PRAGMA integrity_check').fetchone()
-        (trips,) = conn.execute('SELECT count(*) FROM trips').fetchone()
+        (trips,) = conn.execute(
+            'SELECT count(*) FROM trips'
+            ' WHERE source NOT IN (SELECT value FROM json_each(?))',
+            (json.dumps(list(optional)),),
+        ).fetchone()
     if verdict != 'ok':
         raise TimetableCheckError(f'integrity_check: {verdict}')
     if trips < MIN_TRIPS:
@@ -260,7 +267,7 @@ def prepare_refresh(
     check_scratch(record=record, scratch=scratch)
     build(record.scratch)
     os.replace(record.scratch, record.out)
-    check_timetable(path=record.out)
+    check_timetable(path=record.out, optional=tail.fetched.optional)
     return True
 
 

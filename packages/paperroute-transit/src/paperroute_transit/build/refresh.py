@@ -490,7 +490,7 @@ def build_and_check(
         out=out,
         handoff=handoff,
     )
-    check_timetable(path=out)
+    check_timetable(path=out, optional=attempt.fetched.optional)
     return out
 
 

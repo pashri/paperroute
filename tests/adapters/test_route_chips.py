@@ -82,3 +82,14 @@ def test_every_kind_has_a_letter() -> None:
     }
     assert '>R</span>' in letters[SydneyMode.REPLACEMENT]
     assert '>S</span>' in letters[SydneyMode.SCHOOL]
+
+
+def test_a_line_value_chips_as_its_badge() -> None:
+    """A pin's named line shows its operator badge on the chip."""
+    pin = Pin(
+        origin=STOP,
+        destination=STOP,
+        kind=SydneyMode.TRAIN,
+        routes=('GA:Norwich',),
+    )
+    assert '>GA</span>' in chip_of(pin=pin)

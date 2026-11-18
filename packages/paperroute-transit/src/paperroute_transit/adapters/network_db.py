@@ -23,7 +23,7 @@ from paperroute_transit.core.chooser import (
 )
 from paperroute_transit.core.city import City, LineGroup
 from paperroute_transit.core.model import StopPlace, until_revisit
-from paperroute_transit.core.modes import ModeSpec, line_modes
+from paperroute_transit.core.modes import ModeSpec, line_modes, line_value
 from paperroute_transit.core.reach import (
     ReachInput,
     RunTail,
@@ -176,7 +176,9 @@ def replacing_spec(
     )
 
 
-def route_choices(*, rows: Iterable[Row]) -> tuple[Choice, ...]:
+def route_choices(
+    *, rows: Iterable[Row], line_kind: str | None = None,
+) -> tuple[Choice, ...]:
     """
     Turn chooser_routes rows into route choices.
 
@@ -184,18 +186,51 @@ def route_choices(*, rows: Iterable[Row]) -> tuple[Choice, ...]:
     ----------
     rows : Iterable[Row]
         Route key, number, name and tag.
+    line_kind : str | None
+        The mode of the rows when it is chosen by line, else None.
 
     Returns
     -------
     tuple[Choice, ...]
-        Choices in row order.
+        Choices in row order; each has the value its key gives when that
+        differs from its number.
     """
     return tuple(
         Choice(
-            key=str(key), label=str(name), badge=str(number), tag=str(tag),
+            key=str(key),
+            label=str(name),
+            badge=str(number),
+            tag=str(tag),
+            value=route_value(
+                key=str(key), number=str(number), kind=line_kind,
+            ),
         )
         for key, number, name, tag in rows
     )
+
+
+def route_value(*, key: str, number: str, kind: str | None) -> str:
+    """
+    Give the value a route key adds to its number.
+
+    Parameters
+    ----------
+    key : str
+        The route key.
+    number : str
+        The route number.
+    kind : str | None
+        The mode of a line, or None for a route.
+
+    Returns
+    -------
+    str
+        The key without its mode when that is not the number, else ''.
+    """
+    if kind is None:
+        return ''
+    value = line_value(key=key, kind=kind)
+    return '' if value == number else value
 
 
 def ruled_off(
@@ -613,7 +648,7 @@ class SqliteNetworkRepository:
         """
         rows = self.fetch(sql=ROUTES_OF_KIND, params=(kind,))
         lines = ruled_off(
-            lines=route_choices(rows=rows),
+            lines=route_choices(rows=rows, line_kind=kind),
             group_of=self.city.catalogue.line_group,
         )
         return Column(level=Level.LINE, items=lines)

@@ -10,7 +10,7 @@ from paperroute_transit.adapters.route_chips import (
     named_routes,
 )
 from paperroute_transit.core.model import Pin, pin_ref, ticked_ways
-from paperroute_transit.core.modes import ModeSpec
+from paperroute_transit.core.modes import ModeSpec, line_badge
 from paperroute_transit.core.route_colours import RouteColour
 from paperroute_transit.observers import PinsSeen
 
@@ -81,7 +81,7 @@ def pin_line(*, pin: Pin) -> str:
     line = pin.origin.name
     if pin.destination is not None:
         line += f' → {pin.destination.name}'
-    routes = named_routes(pin=pin)
+    routes = tuple(line_badge(value=r) for r in named_routes(pin=pin))
     boards = dict.fromkeys(
         change.board.name
         for way in ticked_ways(pin=pin)

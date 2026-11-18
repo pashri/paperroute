@@ -9,7 +9,7 @@ from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_web import board_text
 from paperroute_transit.adapters.pin_windows import DEFAULT_BUTTON
 from paperroute_transit.core.model import StopPlace
-from paperroute_transit.core.modes import ModeSpec, spec_of
+from paperroute_transit.core.modes import ModeSpec, pin_value, spec_of
 from paperroute_transit.core.pin_choices import (
     NICKNAME_MAX,
     PinDraft,
@@ -299,7 +299,7 @@ def line_field(*, editor: PinEditor, modes: Sequence[ModeSpec]) -> str:
     options = option(value='', label=f'Pick a {label.lower()}', chosen=chosen)
     options += ''.join(
         option(
-            value=line.badge,
+            value=pin_value(choice=line),
             label=(
                 line.badge
                 if line.label == line.badge

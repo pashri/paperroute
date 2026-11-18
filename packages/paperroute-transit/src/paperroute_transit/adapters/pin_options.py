@@ -24,7 +24,7 @@ from paperroute_transit.build.catalogue import route_order
 from paperroute_transit.core.chooser import UNPICKED, Choice, focusable
 from paperroute_transit.core.geo import Projection, to_lonlat
 from paperroute_transit.core.model import StopPlace
-from paperroute_transit.core.modes import skippable_modes
+from paperroute_transit.core.modes import pin_value, skippable_modes
 from paperroute_transit.core.pin_choices import (
     ChangeStop,
     StopMatch,
@@ -259,9 +259,9 @@ def match_of(
     )
 
 
-def unique_by_badge(*, lines: Iterable[Choice]) -> tuple[Choice, ...]:
+def unique_lines(*, lines: Iterable[Choice]) -> tuple[Choice, ...]:
     """
-    Keep the first choice of each route number.
+    Keep the first choice of each pinned line or route.
 
     Parameters
     ----------
@@ -271,11 +271,11 @@ def unique_by_badge(*, lines: Iterable[Choice]) -> tuple[Choice, ...]:
     Returns
     -------
     tuple[Choice, ...]
-        The choices, without a later one of a number already seen.
+        The choices, without a later one of a pin value already seen.
     """
     seen: dict[str, Choice] = {}
     for line in lines:
-        seen.setdefault(line.badge, line)
+        seen.setdefault(pin_value(choice=line), line)
     return tuple(seen.values())
 
 
@@ -471,7 +471,12 @@ class SqlitePinOptions:
         rows = self.network.fetch(
             sql=sql, params={'kind': str(kind), 'station': station},
         )
-        return unique_by_badge(lines=route_choices(rows=rows))
+        return unique_lines(
+            lines=route_choices(
+                rows=rows,
+                line_kind=kind if sql is STATION_LINES else None,
+            ),
+        )
 
     def destinations(
         self, *, origin: StopPlace, kind: str, line: Choice,
@@ -501,7 +506,9 @@ class SqlitePinOptions:
             return self.line_stations(origin=origin, kind=kind, line=line)
         data = self.network.reach_input(
             key=StripKey(
-                station=origin.stop_id, kind=kind, routes=(line.badge,),
+                station=origin.stop_id,
+                kind=kind,
+                routes=(pin_value(choice=line),),
             ),
             origin=origin,
         )

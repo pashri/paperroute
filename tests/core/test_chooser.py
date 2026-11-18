@@ -27,6 +27,7 @@ from paperroute_transit.core.chooser import (
 from paperroute_transit.core.chooser_station import knob_pressed
 from paperroute_transit.core.chooser_view import build_chooser_view
 from paperroute_transit.core.model import Pin
+from paperroute_transit.core.modes import pin_value
 from paperroute_transit.core.reach import RowKind, StripKey
 from tests.core.chooser_walks import (
     BUS_606,
@@ -40,10 +41,12 @@ from tests.core.chooser_walks import (
     T1_STATIONS,
     T1_TO,
     TOWARDS,
+    TRAIN_LINES,
     at_from,
     at_replacement_towards,
     at_stations,
     at_to,
+    at_to_column,
     at_towards,
     fed,
     opened_at_kind,
@@ -315,3 +318,26 @@ def test_replacement_place_starts_on_its_parent_row() -> None:
     shown = Pin(origin=place('X'), kind=SydneyMode.REPLACEMENT)
     chooser, _ = opened(shown=shown, modes=SYDNEY.modes)
     assert chooser.prefer == SydneyMode.BUS
+
+
+def test_a_named_line_commits_its_value() -> None:
+    """A line whose value differs from its badge pins the value."""
+    named = Column(
+        level=Level.LINE,
+        items=(
+            replace(TRAIN_LINES.items[0], value='T1:North Shore & Western'),
+            TRAIN_LINES.items[1],
+        ),
+    )
+    chooser = at_to_column(lines=named)
+    _, pin = knob_pressed(chooser=chooser, reach=None)
+    assert pin == Pin(
+        origin=T1_PLACES['E2'],
+        kind=SydneyMode.TRAIN,
+        routes=('T1:North Shore & Western',),
+    )
+
+
+def test_pin_value_falls_back_to_the_badge() -> None:
+    """A choice without a value pins its badge."""
+    assert pin_value(choice=TRAIN_LINES.items[0]) == 'T1'

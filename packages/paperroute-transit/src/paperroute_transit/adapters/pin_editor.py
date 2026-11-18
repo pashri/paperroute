@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 
 from paperroute_transit.core.chooser import Choice
 from paperroute_transit.core.model import Pin, StopPlace
+from paperroute_transit.core.modes import pin_value
 from paperroute_transit.core.pin_choices import (
     PinDraft,
     PinEditor,
@@ -128,8 +129,13 @@ def line_step(
         was kept.
     """
     lines = () if kind is None else options.lines_at(stop_id=stop, kind=kind)
-    step = pick(given=given, offered=[line.badge for line in lines])
-    line = next((line for line in lines if line.badge == step.value), None)
+    step = pick(
+        given=given, offered=[pin_value(choice=line) for line in lines],
+    )
+    line = next(
+        (line for line in lines if pin_value(choice=line) == step.value),
+        None,
+    )
     return lines, line, step.kept
 
 
@@ -235,7 +241,7 @@ def pin_of(
         origin=origin,
         destination=destination,
         kind=draft.kind,
-        routes=(line.badge,),
+        routes=(pin_value(choice=line),),
         only=draft.only,
         nickname=clean_nickname(text=draft.nickname or ''),
     )
@@ -330,7 +336,7 @@ def with_origin(
     checked = PinDraft(
         stop=stop,
         kind=kind,
-        route='' if line is None else line.badge,
+        route='' if line is None else pin_value(choice=line),
         to='' if destination is None else destination.stop_id,
         only=only,
         nickname=draft.nickname,

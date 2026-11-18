@@ -20,7 +20,10 @@ from paperroute_sydney.city import (
 )
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_testkit.core.factories import inputs_of
-from paperroute_transit.adapters.network_db import SqliteNetworkRepository
+from paperroute_transit.adapters.network_db import (
+    SqliteNetworkRepository,
+    route_choices,
+)
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.timetable import Window, build_timetable
@@ -1188,3 +1191,15 @@ def test_coach_opens_a_route_column(copy: Path) -> None:
     assert coaches == Column(level=Level.ROUTE, items=(
         Choice(key='coach:C1:x', label='Far', badge='C1'),
     ))
+
+
+def test_route_choices_carry_a_named_line_value() -> None:
+    """A line keyed by long name keeps its value; others leave it empty."""
+    rows = [
+        ('train:GA:Norwich', 'GA', 'Norwich', ''),
+        ('train:T1', 'T1', 'North Shore & Western', ''),
+    ]
+    assert [
+        (c.badge, c.value) for c in route_choices(rows=rows, line_kind='train')
+    ] == [('GA', 'GA:Norwich'), ('T1', '')]
+    assert {c.value for c in route_choices(rows=rows)} == {''}

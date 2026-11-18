@@ -113,3 +113,25 @@ def test_nearby_comes_only_from_the_missing_pin() -> None:
     assert edited(options=fake, draft=PinDraft()).nearby == ()
     found = edited(options=fake, draft=PinDraft(), missing=missing)
     assert found.nearby == (WORK,)
+
+
+def test_line_step_matches_on_the_value() -> None:
+    """Two lines of one badge are told apart by their values."""
+    norwich = Choice(
+        key='train:GA:Norwich', label='Norwich', badge='GA',
+        value='GA:Norwich',
+    )
+    liverpool = Choice(
+        key='train:GA:Liverpool Street', label='Liverpool Street',
+        badge='GA', value='GA:Liverpool Street',
+    )
+    found = edited(
+        options=FakePinOptions(
+            places={'S': StopPlace(stop_id='S', name='Sta', point=None)},
+            lines={('S', SydneyMode.TRAIN): (norwich, liverpool)},
+        ),
+        draft=PinDraft(stop='S', kind=SydneyMode.TRAIN, route='GA:Norwich'),
+    )
+    assert found.draft.route == 'GA:Norwich'
+    assert found.pin is not None
+    assert found.pin.routes == ('GA:Norwich',)

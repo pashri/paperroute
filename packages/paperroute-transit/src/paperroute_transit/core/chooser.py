@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Final
 
 from paperroute_transit.core.model import Departure, Pin, StopPlace
-from paperroute_transit.core.modes import ModeSpec, spec_of
+from paperroute_transit.core.modes import ModeSpec, pin_value, spec_of
 from paperroute_transit.core.reach import Reach, RowKind, StripKey
 from paperroute_transit.core.strip_follow import origin_of
 from paperroute_transit.core.strip_model import ALL_TAG
@@ -55,6 +55,8 @@ class Choice:
         Whether it is greyed out: never focused.
     place : StopPlace | None
         A station row's place, with its point; None for other rows.
+    value : str
+        What a pin stores when it differs from the badge; '' for the badge.
     """
 
     key: str
@@ -67,6 +69,7 @@ class Choice:
     heading: bool = False
     dim: bool = False
     place: StopPlace | None = None
+    value: str = ''
 
 
 def focusable(*, choice: Choice) -> bool:
@@ -967,8 +970,8 @@ def chosen_pin(
         (key for level, key in path if level is Level.REPLACEMENTS),
         path[0][1],
     )
-    badges = [
-        chosen(chooser=chooser, index=index).badge
+    values = [
+        pin_value(choice=chosen(chooser=chooser, index=index))
         for index in range(len(path))
         if chooser.columns[index].level in NAMED_BY_BADGE
     ]
@@ -976,5 +979,5 @@ def chosen_pin(
         origin=chooser.origin,
         destination=destination,
         kind=kind,
-        routes=tuple(badges[-1:]),
+        routes=tuple(values[-1:]),
     )

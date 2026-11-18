@@ -5,7 +5,7 @@ from collections.abc import Iterable, Sequence
 from typing import Final
 
 from paperroute_transit.core.model import Pin
-from paperroute_transit.core.modes import ModeSpec, spec_of
+from paperroute_transit.core.modes import ModeSpec, line_badge, spec_of
 from paperroute_transit.core.route_colours import RouteColour
 from paperroute_transit.observers import PinsSeen
 from paperroute_transit.ports import PinOptions
@@ -54,9 +54,11 @@ def chip_route(*, pin: Pin) -> str | None:
     Returns
     -------
     str | None
-        The first of `named_routes`; None when there are none.
+        The badge of the first of `named_routes`; None when there are
+        none.
     """
-    return next(iter(named_routes(pin=pin)), None)
+    route = next(iter(named_routes(pin=pin)), None)
+    return None if route is None else line_badge(value=route)
 
 
 def chip_html(

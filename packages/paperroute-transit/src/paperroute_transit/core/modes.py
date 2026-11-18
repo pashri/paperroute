@@ -4,7 +4,10 @@ import re
 from collections import Counter
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass
-from typing import Final, Protocol
+from typing import TYPE_CHECKING, Final, Protocol
+
+if TYPE_CHECKING:
+    from paperroute_transit.core.chooser import Choice
 
 MODE_ID: Final[re.Pattern[str]] = re.compile(r'^[a-z][a-z0-9_]*$')
 HEX_COLOUR: Final[re.Pattern[str]] = re.compile(r'^#[0-9a-f]{6}$')
@@ -225,6 +228,23 @@ def line_badge(*, value: str) -> str:
         The text before the first colon, or all of it.
     """
     return value.split(':', 1)[0]
+
+
+def pin_value(*, choice: 'Choice') -> str:
+    """
+    What a pin stores for a chosen line or route.
+
+    Parameters
+    ----------
+    choice : Choice
+        The chosen line or route.
+
+    Returns
+    -------
+    str
+        The choice's value, else its badge.
+    """
+    return choice.value or choice.badge
 
 
 def tagged_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:

@@ -385,9 +385,14 @@ def at_to() -> ChooserState:
     return chooser
 
 
-def at_stations() -> ChooserState:
+def at_stations(*, lines: Column = TRAIN_LINES) -> ChooserState:
     """
     Walk Train and T1 to the focused STATION column.
+
+    Parameters
+    ----------
+    lines : Column
+        The LINE column answered.
 
     Returns
     -------
@@ -395,7 +400,7 @@ def at_stations() -> ChooserState:
         The chooser focused on T1's stations, cursor on Richmond.
     """
     chooser = opened_at_kind(kind=SydneyMode.TRAIN)
-    chooser, request = fed(chooser, ColumnRequest(path=T1[:1]), TRAIN_LINES)
+    chooser, request = fed(chooser, ColumnRequest(path=T1[:1]), lines)
     chooser, request = pressed(chooser=chooser, reach=None)
     chooser, request = fed(chooser, request, T1_STATIONS)
     chooser, request = pressed(chooser=chooser, reach=None)
@@ -404,7 +409,10 @@ def at_stations() -> ChooserState:
 
 
 def at_to_column(
-    *, steps: int = 3, column: Column = T1_TO,
+    *,
+    steps: int = 3,
+    column: Column = T1_TO,
+    lines: Column = TRAIN_LINES,
 ) -> ChooserState:
     """
     Press a T1 station and load its TO column.
@@ -415,13 +423,15 @@ def at_to_column(
         Detents from Richmond to the From; 3 reaches Penrith.
     column : Column
         The TO column answered.
+    lines : Column
+        The LINE column answered.
 
     Returns
     -------
     ChooserState
         The chooser focused on the TO column.
     """
-    chooser, _ = turned(chooser=at_stations(), steps=steps, reach=None)
+    chooser, _ = turned(chooser=at_stations(lines=lines), steps=steps, reach=None)
     chooser, request = knob_pressed(chooser=chooser, reach=None)
     chooser, _ = fed(chooser, request, column)
     return chooser

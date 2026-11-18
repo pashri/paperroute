@@ -162,6 +162,18 @@ def test_pin_line_without_a_to_names_only_its_filter() -> None:
     )
 
 
+def test_pin_line_shows_the_badge_of_a_named_line() -> None:
+    """A stored named line reads as its operator badge."""
+    station = StopPlace(stop_id='P', name='Parramatta Station', point=None)
+    pin = Pin(
+        origin=station,
+        destination=station,
+        kind=SydneyMode.TRAIN,
+        routes=('GA:Norwich',),
+    )
+    assert pin_line(pin=pin) == 'Parramatta Station → Parramatta Station · GA'
+
+
 def test_pin_line_joins_from_to_and_routes() -> None:
     """The line has the To and routes only when there are some."""
     assert pin_line(pin=WORK) == 'Hollis St → Parramatta · 606'

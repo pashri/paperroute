@@ -89,7 +89,8 @@ the bus was last heard 4 minutes ago.
 The Cambridge app shows buses and coaches from the Bus Open Data Service
 (BODS), and trains at timetable times from the national rail timetable that
 the gb-transit project publishes on GitHub. Its data lives in
-`data/cambridge/`.
+`data/cambridge/`. Trains are listed by line, named for where they go; a
+train pin asks for its Destination and fills in the busiest line.
 
 Build the timetable. `refresh` downloads the public BODS timetable (no key)
 and the latest gb-transit release's `gtfs-national-rail-only.zip`, keeps every
@@ -108,7 +109,7 @@ To build from local zips:
       --out /tmp/timetable.db --start 2026-11-16 --days 14
 
 On the Mac, the build of the 2026-11-16 feeds took about 24 s with a peak of
-about 80 MB and made a 30 MB file with 62 routes and 7,276 trips: 5,735 bus
+about 80 MB and made a 30 MB file with 66 routes and 7,276 trips: 5,735 bus
 and coach trips and 1,541 train trips.
 
 Download Geofabrik's `cambridgeshire`, `bedfordshire`, `hertfordshire`,

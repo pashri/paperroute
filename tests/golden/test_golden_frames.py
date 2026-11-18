@@ -25,6 +25,7 @@ from paperroute_transit.core.connection_strip import (
 )
 from paperroute_transit.core.map_view import MapView
 from paperroute_transit.core.messages import ScreenView
+from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.core.strip_model import StripMapView, StripView
 from tests.golden.scenes import (
     GOLDEN,
@@ -197,3 +198,24 @@ def test_panel_planes_match_baseline() -> None:
     text = json.dumps(hashes, indent=2, sort_keys=True) + '\n'
     stored = baseline_bytes(path=PLANES, data=text.encode())
     assert json.loads(stored) == hashes
+
+
+def test_cambridge_trains_show_timetable_platforms() -> None:
+    """Cambridge trains show badge and platform under the no-feed banner."""
+    view = view_of(state=SCENES['stop_cambridge_trains']())
+    assert isinstance(view, StopView)
+    assert (view.origin, view.destination) == ('Cambridge', 'Ely')
+    assert view.banner == 'Timetable times · no live feed for this service'
+    assert view.hero is not None
+    assert (
+        view.hero.route,
+        view.hero.vehicle,
+        view.hero.bay,
+        view.hero.platform,
+        view.hero.arrives_at,
+    ) == ('XC', 'train', 'platform', '4', '7:22')
+    assert [(row.route, row.platform) for row in view.rows] == [
+        ('GN', '4'),
+        ('GA', '5'),
+        ('GN', '1'),
+    ]

@@ -3,7 +3,7 @@
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from types import MappingProxyType
 from typing import Final, cast
@@ -11,6 +11,7 @@ from typing import Final, cast
 import numpy as np
 from numpy.typing import NDArray
 
+from paperroute_cambridge.city import CAMBRIDGE, CAMBRIDGE_ZONE
 from paperroute_device.core.banners import banner_line
 from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import (
@@ -40,6 +41,7 @@ from paperroute_testkit.core.factories import (
     EIGHT,
     START,
     calls,
+    departure,
     example_reach,
     line_pattern,
     pattern,
@@ -70,19 +72,26 @@ from paperroute_transit.core.messages import (
     ShapesLoaded,
     StripLoaded,
 )
-from paperroute_transit.core.model import Pin
+from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.panel_screens import TilesFacts
 from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.places import shown
 from paperroute_transit.core.realtime import (
     EVERY_STOP,
     RealtimeSnapshot,
     StopUpdate,
     TripRealtime,
 )
-from paperroute_transit.core.saved import LiveView, MapFraming
+from paperroute_transit.core.reducers import initial_state
+from paperroute_transit.core.saved import LiveView, MapFraming, seeded
 from paperroute_transit.core.sleep import sleep_view
-from paperroute_transit.core.state_model import State
-from paperroute_transit.core.state_views import banner_live_view, current_view
+from paperroute_transit.core.state_model import RELOAD_BEFORE, State
+from paperroute_transit.core.state_views import (
+    LOADING_WAIT,
+    banner_live_view,
+    current_view,
+)
+from paperroute_transit.core.stop_view import HORIZON
 from paperroute_transit.core.tiles import (
     TILE,
     LabelKind,
@@ -224,7 +233,25 @@ class GoldenTiles:
         return 'golden'
 
 
-APP: Final = TransitApp(city=SYDNEY, parts=QUIET_PARTS)
+APPS: Final[dict[str, TransitApp]] = {
+    city.name: TransitApp(city=city, parts=QUIET_PARTS)
+    for city in (SYDNEY, CAMBRIDGE)
+}
+CAMBRIDGE_AT: Final[datetime] = datetime(
+    2026, 11, 16, 7, 0, tzinfo=CAMBRIDGE_ZONE,
+)
+CAMBRIDGE_TO_ELY: Final[Pin] = Pin(
+    origin=StopPlace(stop_id='rail:CBG', name='Cambridge', point=None),
+    destination=StopPlace(stop_id='rail:ELY', name='Ely', point=None),
+    kind='train',
+)
+# Minutes after CAMBRIDGE_AT, minutes to Ely, badge, headsign, platform.
+ELY_TRAINS: Final[tuple[tuple[int, int, str, str, str], ...]] = (
+    (6, 16, 'XC', 'Birmingham New Street', '4'),
+    (21, 17, 'GN', 'Kings Lynn', '4'),
+    (33, 18, 'GA', 'Norwich', '5'),
+    (51, 17, 'GN', 'Kings Lynn', '1'),
+)
 
 
 def view_of(*, state: State) -> ScreenView:
@@ -245,7 +272,7 @@ def view_of(*, state: State) -> ScreenView:
     """
     if state.power is not None and state.last_view is not None:
         return state.last_view
-    app, device = APP, device_of(state=state)
+    app, device = APPS[state.city.name], device_of(state=state)
     overlay = panel_view(
         device=device, app=app, state=state, zone=state.city.zone,
     )
@@ -274,7 +301,7 @@ def frame_of(*, state: State) -> NDArray[np.uint8]:
     NDArray[np.uint8]
         480 by 800 grey pixels.
     """
-    app = TransitApp(city=SYDNEY, parts=QUIET_PARTS)
+    app = TransitApp(city=state.city, parts=QUIET_PARTS)
     app.maps = MapRenderer(tiles=GoldenTiles())
     return drawing(app=app, view=view_of(state=state))()
 
@@ -385,6 +412,42 @@ def stop_trainlink() -> State:
     )
     board = replace(state.board, departures=departures)
     return replace(state, board=board)
+
+
+def stop_cambridge_trains() -> State:
+    """
+    Show four invented Cambridge trains on the Stop view.
+
+    Returns
+    -------
+    State
+        State at `CAMBRIDGE_AT`.
+    """
+    state = initial_state(
+        saved=seeded(pin=CAMBRIDGE_TO_ELY, city=CAMBRIDGE),
+        now=CAMBRIDGE_AT,
+        city=CAMBRIDGE,
+    )
+    refresh = replace(state.refresh, started_at=CAMBRIDGE_AT - LOADING_WAIT)
+    state = replace(state, refresh=refresh)
+    departures = tuple(
+        departure(
+            departs=CAMBRIDGE_AT + timedelta(minutes=after),
+            ride=ride,
+            route=badge,
+            mode='train',
+            kind='train',
+            headsign=headsign,
+            platform=platform,
+        )
+        for after, ride, badge, headsign, platform in ELY_TRAINS
+    )
+    state, _ = step(state, DeparturesLoaded(
+        pin=shown(state=state),
+        departures=departures,
+        until=CAMBRIDGE_AT + HORIZON + RELOAD_BEFORE,
+    ))
+    return state
 
 
 def map_scene() -> State:
@@ -652,6 +715,7 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     'stop_larger_inverted': stop_larger_inverted,
     'stop_no_key': stop_no_key,
     'stop_trainlink': stop_trainlink,
+    'stop_cambridge_trains': stop_cambridge_trains,
     'stop_estimates': lambda: estimated(
         state=stop(), lates={0: (-2, False), 1: (2, False)},
     ),

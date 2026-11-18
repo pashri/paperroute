@@ -13,12 +13,14 @@ from typing import Final
 
 from paperroute_device.adapters.rate_limit import SyncStartLimiter
 from paperroute_device.rss import max_rss_mb
-from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.attempts import attempts_of, intact_sha
 from paperroute_transit.build.handoff import (
     HANDOFF_NAME,
+    Attempt,
     Fetched,
     Handoff,
     RefreshTail,
+    attempt_text,
 )
 from paperroute_transit.build.layout import Layout
 from paperroute_transit.build.source_state import (
@@ -39,6 +41,7 @@ from paperroute_transit.build.swap import (
     RefreshReport,
     check_timetable,
     clear_work,
+    guarded,
     progress,
     swap_in,
 )
@@ -182,33 +185,6 @@ def stored_copy(
     if stored is None or intact is None:
         raise SourceError(f'{name}: failed, with no stored zip to use')
     return SourceOutcome(state=stored, downloaded=False, failed=True)
-
-
-def intact_sha(*, layout: Layout, name: str,
-               stored: dict[str, SourceState]) -> str | None:
-    """
-    The stored SHA-256 of a source, if its zip on disk still matches it.
-
-    Parameters
-    ----------
-    layout : Layout
-        Data paths.
-    name : str
-        Source name.
-    stored : dict[str, SourceState]
-        Stored states.
-
-    Returns
-    -------
-    str | None
-        The digest, or None when there's no state, no zip, or the zip's
-        bytes no longer hash to the stored digest.
-    """
-    path = layout.sources / f'{name}.zip'
-    expected = stored[name].sha256 if name in stored else None
-    if expected is None or not path.exists():
-        return None
-    return expected if file_sha256(path=path) == expected else None
 
 
 def cut_into(
@@ -478,38 +454,12 @@ def download_changed(
     )
 
 
-def present_parts(*, parts: BuildParts, fetched: Fetched) -> BuildParts:
-    """
-    Keep the sources there is a copy of to build from.
-
-    Parameters
-    ----------
-    parts : BuildParts
-        The city's reference and its sources.
-    fetched : Fetched
-        Outcome of download_changed.
-
-    Returns
-    -------
-    BuildParts
-        The parts without any optional source that has no copy.
-    """
-    return replace(
-        parts,
-        sources=tuple(
-            spec for spec in parts.sources if spec.name in fetched.states
-        ),
-    )
-
-
 def build_and_check(
     *,
     layout: Layout,
-    changed: tuple[str, ...],
-    days: int,
+    attempt: Attempt,
     handoff: Handoff | None,
-    city: City,
-    parts: BuildParts,
+    city_ref: str,
 ) -> Path:
     """
     Build a timetable in the scratch directory and check it.
@@ -518,18 +468,13 @@ def build_and_check(
     ----------
     layout : Layout
         Data paths.
-    changed : tuple[str, ...]
-        Sources to take from the scratch directory; the rest come from
-        the stored zips.
-    days : int
-        Days the timetable covers, from yesterday in the city's zone.
+    attempt : Attempt
+        The sources to load and the dates to cover.
     handoff : Handoff | None
         When set, the build execs into the extras program, which checks
         and swaps in, and this never returns.
-    city : City
-        The city, for its time zone.
-    parts : BuildParts
-        The city's reference and its sources, in the order they load.
+    city_ref : str
+        The city's reference.
 
     Returns
     -------
@@ -539,18 +484,9 @@ def build_and_check(
     progress(phase='build')
     out = layout.work / 'timetable.db'
     build_timetable(
-        sources=[
-            Source(
-                name=spec.name,
-                archive=(
-                    layout.work if spec.name in changed else layout.sources
-                ) / f'{spec.name}.zip',
-                optional=spec.optional,
-            )
-            for spec in parts.sources
-        ],
-        window=Window(start=yesterday(zone=city.zone), days=days),
-        city_ref=parts.city_ref,
+        sources=list(attempt.sources),
+        window=Window(start=attempt.start, days=attempt.days),
+        city_ref=city_ref,
         out=out,
         handoff=handoff,
     )
@@ -605,47 +541,47 @@ def days_left(*, meta: dict[str, str], zone: tzinfo) -> int:
     return (end - yesterday(zone=zone)).days - 1
 
 
-def without_new_copies(*, layout: Layout, fetched: Fetched) -> Fetched | None:
+def first_try(
+    *,
+    layout: Layout,
+    attempt: Attempt,
+    following: Attempt,
+    handoff: Handoff | None,
+    city_ref: str,
+) -> Path | None:
     """
-    Drop the new copy of every optional source that was just downloaded.
-
-    A source with an intact stored zip goes back to its stored state; one
-    without is left out. Each is marked failed.
+    Build an attempt, logging its failure and the one to try next.
 
     Parameters
     ----------
     layout : Layout
         Data paths.
-    fetched : Fetched
-        Outcome of download_changed.
+    attempt : Attempt
+        The attempt to build.
+    following : Attempt
+        The attempt to build if this one fails.
+    handoff : Handoff | None
+        Hand the build over to the extras program; see build_and_check.
+    city_ref : str
+        The city's reference.
 
     Returns
     -------
-    Fetched | None
-        The outcome without the new copies, or None when no optional
-        source has one.
+    Path | None
+        The checked timetable, or None when the build failed.
     """
-    dropped = tuple(
-        name for name in fetched.changed if name in fetched.optional
+    built = guarded(
+        step=lambda: build_and_check(
+            layout=layout, attempt=attempt, handoff=handoff,
+            city_ref=city_ref,
+        ),
     )
-    if not dropped:
-        return None
-    stored = load_states(path=layout.states)
-    states = {
-        name: state
-        for name, state in fetched.states.items()
-        if name not in dropped
-    }
-    for name in dropped:
-        if intact_sha(layout=layout, name=name, stored=stored) is not None:
-            states[name] = stored[name]
-    return replace(
-        fetched,
-        states=states,
-        downloaded=tuple(n for n in fetched.downloaded if n not in dropped),
-        changed=tuple(n for n in fetched.changed if n not in dropped),
-        failed=(*fetched.failed, *dropped),
-    )
+    if built is None:
+        logger.warning(
+            'building again from %s',
+            attempt_text(attempt=following, data_dir=layout.data_dir),
+        )
+    return built
 
 
 def build_or_fall_back(
@@ -658,7 +594,7 @@ def build_or_fall_back(
     parts: BuildParts,
 ) -> tuple[Path, Fetched]:
     """
-    Build the timetable, again without any new optional copy if that fails.
+    Build the timetable, then fall down the ladder of attempts if it fails.
 
     Parameters
     ----------
@@ -683,41 +619,38 @@ def build_or_fall_back(
     Raises
     ------
     Exception
-        The build's own, when no optional source's new copy was in it.
+        The last attempt's error.
     """
-    try:
-        built = build_and_check(
-            layout=layout, changed=fetched.changed, days=days,
-            handoff=handoff, city=city,
-            parts=present_parts(parts=parts, fetched=fetched),
+    attempts = attempts_of(
+        layout=layout, parts=parts, fetched=fetched,
+        start=yesterday(zone=city.zone), days=days,
+    )
+    for attempt, following in zip(attempts, attempts[1:]):
+        built = first_try(
+            layout=layout, attempt=attempt, following=following,
+            handoff=handed(handoff=handoff, attempt=attempt),
+            city_ref=parts.city_ref,
         )
-    except Exception:
-        fallback = without_new_copies(layout=layout, fetched=fetched)
-        if fallback is not None:
-            dropped = set(fetched.changed) - set(fallback.changed)
-            logger.exception(
-                'build failed, building again without the new %s',
-                ', '.join(sorted(dropped)),
-            )
-            return build_and_check(
-                layout=layout, changed=fallback.changed, days=days,
-                handoff=handed(handoff=handoff, fetched=fallback), city=city,
-                parts=present_parts(parts=parts, fetched=fallback),
-            ), fallback
-        raise
-    return built, fetched
+        if built is not None:
+            return built, attempt.fetched
+    last = attempts[-1]
+    return build_and_check(
+        layout=layout, attempt=last,
+        handoff=handed(handoff=handoff, attempt=last),
+        city_ref=parts.city_ref,
+    ), last.fetched
 
 
-def handed(*, handoff: Handoff | None, fetched: Fetched) -> Handoff | None:
+def handed(*, handoff: Handoff | None, attempt: Attempt) -> Handoff | None:
     """
-    Point a handoff's refresh tail at another outcome.
+    Point a handoff's refresh tail at an attempt's outcome.
 
     Parameters
     ----------
     handoff : Handoff | None
         The handoff, if any.
-    fetched : Fetched
-        The outcome the tail should carry.
+    attempt : Attempt
+        The attempt whose outcome the tail should carry.
 
     Returns
     -------
@@ -727,7 +660,9 @@ def handed(*, handoff: Handoff | None, fetched: Fetched) -> Handoff | None:
     """
     if handoff is None or handoff.tail is None:
         return handoff
-    return replace(handoff, tail=replace(handoff.tail, fetched=fetched))
+    return replace(
+        handoff, tail=replace(handoff.tail, fetched=attempt.fetched),
+    )
 
 
 def update(
@@ -768,7 +703,7 @@ def update(
         timetable or fewer than MIN_DAYS_LEFT days remain in its window,
         or when it was built with another SCHEMA_VERSION or records
         another projection origin. The outcome differs from the one given
-        when a build without an optional source's new copy was needed.
+        when a later attempt was built.
     """
     meta = read_meta(path=layout.timetable)
     origin = meta.get('origin')
@@ -819,7 +754,9 @@ def refresh(
     Fetch changed sources and rebuild the timetable if their bytes changed.
 
     A source whose HEAD, download or cut fails is logged and built from
-    its stored zip. A failed required source with no stored zip fails the
+    its stored zip. A build that fails with an optional source in it is
+    tried again without that source's new copy, then without any optional
+    source. A failed required source with no stored zip fails the
     refresh and an optional one is left out. Any other failure before the
     swap leaves timetable.db, sources/ and the stored states as they
     were.

@@ -5,9 +5,11 @@ import os
 import sys
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
+from datetime import date
 from pathlib import Path
 from typing import Final, NoReturn
 
+from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.layout import Layout
 from paperroute_transit.build.source_state import SourceState
 
@@ -44,6 +46,16 @@ class Fetched:
         """
         required = set(self.states) - set(self.optional)
         return bool(required) and required <= set(self.failed)
+
+
+@dataclass(frozen=True)
+class Attempt:
+    """One build to try: the sources it loads and the outcome it stores."""
+
+    fetched: Fetched
+    sources: tuple[Source, ...]
+    start: date
+    days: int
 
 
 @dataclass(frozen=True)
@@ -110,6 +122,28 @@ class HandoffRecord:
     overnight: int
     peak_mb: float
     tail: RefreshTail | None
+
+
+def attempt_text(*, attempt: Attempt, data_dir: Path) -> str:
+    """
+    Name the archives an attempt loads.
+
+    Parameters
+    ----------
+    attempt : Attempt
+        The attempt.
+    data_dir : Path
+        The data dir the archives are relative to.
+
+    Returns
+    -------
+    str
+        Each archive relative to the data dir, joined by commas.
+    """
+    return ', '.join(
+        str(source.archive.relative_to(data_dir))
+        for source in attempt.sources
+    )
 
 
 def tail_json(*, tail: RefreshTail) -> dict[str, object]:

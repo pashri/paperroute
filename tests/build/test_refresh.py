@@ -6,6 +6,7 @@ import json
 import os
 import sqlite3
 import struct
+import sys
 import zipfile
 from collections.abc import Iterator
 from contextlib import closing
@@ -29,7 +30,9 @@ from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.build import handoff as handoff_module
 from paperroute_transit.build import refresh as refresh_module
 from paperroute_transit.build import swap
-from paperroute_transit.build.handoff import Fetched
+from paperroute_transit.build.attempts import without_optional
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.handoff import Fetched, Handoff
 from paperroute_transit.build.refresh import RefreshBusy, cut_into, refresh
 from paperroute_transit.build.source_state import (
     SourceError,
@@ -43,7 +46,9 @@ from paperroute_transit.build.sources import (
     file_sha256,
 )
 from paperroute_transit.build.swap import RefreshReport, TimetableCheckError
+from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.core.banners import timetable_banner
+from paperroute_transit.core.city import MergeReport
 from paperroute_transit.core.messages import TimetableSeen
 from tests.build.feed_server import FeedServer, Served, feed_server
 from tests.build.feeds import (
@@ -1239,3 +1244,75 @@ def test_a_damaged_download_keeps_the_stored_cut(
     assert report.rebuilt and report.changed == ()
     after = load_states(path=data_dir / 'sources' / 'sources.json')
     assert after['extra'] == before['extra']
+
+
+def test_without_optional_leaves_out_every_optional_source() -> None:
+    """Optional sources leave the states and are named failed, once."""
+    state = SourceState(etag=None, last_modified=None, sha256='a')
+    fetched = Fetched(
+        states={'metro': state, 'extra': state},
+        downloaded=('metro', 'extra'), changed=('metro', 'extra'),
+        failed=('extra',), optional=('extra',),
+    )
+    assert without_optional(fetched=fetched) == Fetched(
+        states={'metro': state}, downloaded=('metro',),
+        changed=('metro',), failed=('extra',), optional=('extra',),
+    )
+    bare = Fetched(
+        states={'metro': state}, downloaded=(), changed=(),
+        optional=('extra',),
+    )
+    assert without_optional(fetched=bare) is None
+
+
+def test_a_fallback_build_starts_after_the_failure_is_handled(
+    server: FeedServer, data_dir: Path, tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The build without the new copy runs with no exception in hand."""
+    real = build_timetable
+    handling: list[BaseException | None] = []
+
+    def build(
+        *, sources: list[Source], window: Window, out: Path,
+        city_ref: str, handoff: Handoff | None = None,
+    ) -> MergeReport:
+        """
+        Note the exception being handled, then refuse the extra source.
+
+        Parameters
+        ----------
+        sources : list[Source]
+            Feeds to load.
+        window : Window
+            Dates to cover.
+        out : Path
+            Timetable file.
+        city_ref : str
+            The city's reference.
+        handoff : Handoff | None
+            Passed on.
+
+        Returns
+        -------
+        MergeReport
+            The real build's report.
+
+        Raises
+        ------
+        ValueError
+            When the extra source is among the sources.
+        """
+        handling.append(sys.exception())
+        if any(source.name == 'extra' for source in sources):
+            raise ValueError('extra rejected')
+        return real(
+            sources=sources, window=window, out=out, city_ref=city_ref,
+            handoff=handoff,
+        )
+
+    monkeypatch.setattr(refresh_module, 'build_timetable', build)
+    serve_extra(server=server, tmp_path=tmp_path, comment=b'one')
+    report = run_extra(server=server, data_dir=data_dir)
+    assert (report.failed, report.rebuilt) == (('extra',), True)
+    assert handling == [None, None]

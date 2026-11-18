@@ -24,6 +24,7 @@ from paperroute_transit.build import refresh as refresh_module
 from paperroute_transit.build import swap
 from paperroute_transit.build.cli import given_sources, parse_args
 from paperroute_transit.build.gtfs_files import Source, read_rows
+from paperroute_transit.build.handoff import Handoff
 from paperroute_transit.build.refresh import refresh
 from paperroute_transit.build.source_state import (
     SourceError,
@@ -37,6 +38,7 @@ from paperroute_transit.build.sources import (
 )
 from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.core.chooser import Level
+from paperroute_transit.core.city import MergeReport
 from paperroute_transit.core.model import Pin, StopPlace
 from tests.build.test_rail_cut import XC_TRIP, changed
 from tests.conftest import FIXTURES, RECORDED_DAY
@@ -593,3 +595,99 @@ def test_a_bus_source_that_fails_still_fails_the_refresh(
     assert report.failed == ('bods',)
     assert report.all_failed
     assert swap.printed(report=report) == 1
+
+
+def nowhere(tables: dict[str, list[dict[str, str]]]) -> None:
+    """
+    Send the XC trip to Nowhere, so a build can tell this copy apart.
+
+    Parameters
+    ----------
+    tables : dict[str, list[dict[str, str]]]
+        Rows by member, changed in place.
+    """
+    for row in tables['trips.txt']:
+        if row['trip_id'] == XC_TRIP:
+            row['trip_headsign'] = 'Nowhere'
+
+
+@dataclass
+class Refusing:
+    """Stand in for build_timetable, refusing builds that load a source."""
+
+    names: frozenset[str]  # a build loading one fails; empty fails all
+    calls: int = 0
+
+    def __call__(
+        self, *, sources: list[Source], window: Window, out: Path,
+        city_ref: str, handoff: Handoff | None = None,
+    ) -> MergeReport:
+        """
+        Count the build, then refuse it or run the real one.
+
+        Parameters
+        ----------
+        sources : list[Source]
+            Feeds to load.
+        window : Window
+            Dates to cover.
+        out : Path
+            Timetable file.
+        city_ref : str
+            The city's reference.
+        handoff : Handoff | None
+            Passed on.
+
+        Returns
+        -------
+        MergeReport
+            The real build's report.
+
+        Raises
+        ------
+        ValueError
+            When the build is refused.
+        """
+        self.calls += 1
+        if not self.names or self.names & {s.name for s in sources}:
+            raise ValueError('the build refused a source')
+        return build_timetable(
+            sources=sources, window=window, out=out, city_ref=city_ref,
+            handoff=handoff,
+        )
+
+
+def test_a_stored_rail_copy_the_build_rejects_leaves_the_buses_built(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With no new rail copy to drop, the buses are built alone."""
+    shelf = Shelf(files={'bods': BODS, 'rail': RAIL})
+    night(data_dir=data_dir, shelf=shelf)
+    refusing = Refusing(names=frozenset({'rail'}))
+    monkeypatch.setattr(refresh_module, 'build_timetable', refusing)
+    report = night(data_dir=data_dir, shelf=shelf)
+    assert (report.failed, report.all_failed, report.rebuilt) == (
+        ('rail',), False, True,
+    )
+    assert trip_counts(data_dir=data_dir) == {'bods': 67}
+    assert rail_date(data_dir=data_dir) is None
+    states = load_states(path=data_dir / 'sources' / 'sources.json')
+    assert 'rail' not in states
+    assert refusing.calls == 2
+    assert swap.printed(report=report) == 0
+
+
+def test_a_build_that_fails_without_the_trains_still_fails(
+    data_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """New copy, stored copy, no trains: three builds, then the error."""
+    shelf = Shelf(files={'bods': BODS, 'rail': RAIL})
+    night(data_dir=data_dir, shelf=shelf)
+    before = trip_counts(data_dir=data_dir)
+    shelf.files['rail'] = changed(out=tmp_path / 'new.zip', change=nowhere)
+    refusing = Refusing(names=frozenset())
+    monkeypatch.setattr(refresh_module, 'build_timetable', refusing)
+    with pytest.raises(ValueError, match='refused'):
+        night(data_dir=data_dir, shelf=shelf)
+    assert refusing.calls == 3
+    assert trip_counts(data_dir=data_dir) == before

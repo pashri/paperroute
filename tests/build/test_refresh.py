@@ -1042,7 +1042,63 @@ def test_a_cut_stored_under_another_rule_is_cut_again(
     report = run_extra(server=server, data_dir=data_dir, rule='A,C')
     assert 'extra' in report.downloaded
     rule = data_dir / 'sources' / 'extra.rule'
-    assert rule.read_text(encoding='utf-8') == 'A,C'
+    assert rule.read_text(encoding='utf-8').startswith('A,C\n')
+
+
+def test_a_rule_file_for_another_cut_is_not_trusted(
+    server: FeedServer, data_dir: Path, tmp_path: Path,
+) -> None:
+    """The right rule beside a different cut's digest cuts again."""
+    serve_extra(server=server, tmp_path=tmp_path, comment=b'one')
+    run_extra(server=server, data_dir=data_dir, rule='A,B')
+    rule = data_dir / 'sources' / 'extra.rule'
+    rule.write_text('A,B\n' + 'ff' * 32 + '\n', encoding='utf-8')
+    report = run_extra(server=server, data_dir=data_dir, rule='A,B')
+    assert 'extra' in report.downloaded
+    digest = file_sha256(path=data_dir / 'sources' / 'extra.zip')
+    assert rule.read_text(encoding='utf-8') == f'A,B\n{digest}\n'
+
+
+def test_a_one_line_rule_file_is_cut_again(
+    server: FeedServer, data_dir: Path, tmp_path: Path,
+) -> None:
+    """A rule file with no digest is not trusted."""
+    serve_extra(server=server, tmp_path=tmp_path, comment=b'one')
+    run_extra(server=server, data_dir=data_dir, rule='A,B')
+    rule = data_dir / 'sources' / 'extra.rule'
+    rule.write_text('A,B', encoding='utf-8')
+    report = run_extra(server=server, data_dir=data_dir, rule='A,B')
+    assert 'extra' in report.downloaded
+
+
+def test_a_failed_rule_write_fails_only_that_source(
+    server: FeedServer,
+    data_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An OSError writing the rule leaves the source out for the night."""
+    def full_disk(**_: object) -> None:
+        """
+        Fail as a full disk does.
+
+        Parameters
+        ----------
+        **_ : object
+            Ignored.
+
+        Raises
+        ------
+        OSError
+            Always.
+        """
+        raise OSError('disk full')
+
+    monkeypatch.setattr(refresh_module, 'write_rule', full_disk)
+    serve_extra(server=server, tmp_path=tmp_path, comment=b'one')
+    report = run_extra(server=server, data_dir=data_dir, rule='A,B')
+    assert (report.failed, report.rebuilt) == (('extra',), True)
+    assert not (data_dir / 'sources' / 'extra.zip').exists()
 
 
 def test_a_cut_with_no_rule_file_is_cut_again(

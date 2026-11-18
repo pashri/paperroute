@@ -707,7 +707,7 @@ def test_swap_in_removes_the_rule_file_of_a_forgotten_copy(
     state = SourceState(etag=None, last_modified=None, sha256='ab' * 32)
     save_states(path=layout.states, states={'rail': state, 'bods': state})
     for name in ('rail', 'bods'):
-        rule_file(directory=layout.sources, name=name).write_text('A')
+        rule_file(directory=layout.sources, name=name).write_text('A', encoding='utf-8')
     built = layout.work / 'timetable.db'
     built.write_bytes(b'db')
     fetched = Fetched(states={'bods': state}, downloaded=(), changed=())

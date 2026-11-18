@@ -80,7 +80,7 @@ def rule_file(*, directory: Path, name: str) -> Path:
 
 def read_rule(*, directory: Path, name: str) -> str | None:
     """
-    Read the rule a source's stored cut was made by.
+    Read a source's rule file.
 
     Parameters
     ----------
@@ -92,7 +92,7 @@ def read_rule(*, directory: Path, name: str) -> str | None:
     Returns
     -------
     str | None
-        The rule, or None when the file is missing or unreadable.
+        The file's text, or None when it is missing or unreadable.
     """
     try:
         return rule_file(directory=directory, name=name).read_text(
@@ -102,9 +102,34 @@ def read_rule(*, directory: Path, name: str) -> str | None:
         return None
 
 
-def write_rule(*, directory: Path, name: str, rule: str) -> None:
+def rule_text(*, rule: str, digest: str) -> str:
     """
-    Record the rule a source's cut was made by.
+    Lay out a rule file: the rule, then the cut's digest, one per line.
+
+    Parameters
+    ----------
+    rule : str
+        The rule.
+    digest : str
+        SHA-256 of the cut the rule made.
+
+    Returns
+    -------
+    str
+        The file's text.
+    """
+    return f'{rule}\n{digest}\n'
+
+
+def write_rule(
+    *,
+    directory: Path,
+    name: str,
+    rule: str,
+    digest: str,
+) -> None:
+    """
+    Record the rule a source's cut was made by, and the cut's digest.
 
     Parameters
     ----------
@@ -114,9 +139,11 @@ def write_rule(*, directory: Path, name: str, rule: str) -> None:
         Source name.
     rule : str
         The rule.
+    digest : str
+        SHA-256 of the cut.
     """
     rule_file(directory=directory, name=name).write_text(
-        rule,
+        rule_text(rule=rule, digest=digest),
         encoding='utf-8',
     )
 

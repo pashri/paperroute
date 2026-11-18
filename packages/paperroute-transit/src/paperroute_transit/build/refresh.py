@@ -28,6 +28,7 @@ from paperroute_transit.build.source_state import (
     SourceState,
     load_states,
     read_rule,
+    rule_text,
     save_states,
     write_rule,
 )
@@ -276,12 +277,49 @@ def fetched_zip(
         download=download,
         out=kept,
     )
-    if spec.cut_rule is not None:
-        write_rule(directory=layout.work, name=spec.name, rule=spec.cut_rule)
+    stage_rule(layout=layout, spec=spec, digest=digest)
     return digest
 
 
-def rule_kept(*, layout: Layout, spec: SourceSpec) -> bool:
+def stage_rule(*, layout: Layout, spec: SourceSpec, digest: str) -> None:
+    """
+    Write a source's rule file into the scratch directory.
+
+    Parameters
+    ----------
+    layout : Layout
+        Data paths.
+    spec : SourceSpec
+        Source.
+    digest : str
+        SHA-256 of the cut.
+
+    Raises
+    ------
+    SourceError
+        If the file can't be written.
+    """
+    if spec.cut_rule is None:
+        return
+    try:
+        write_rule(
+            directory=layout.work,
+            name=spec.name,
+            rule=spec.cut_rule,
+            digest=digest,
+        )
+    except OSError as error:
+        raise SourceError(
+            f'{spec.name}: rule write failed, {type(error).__name__}',
+        ) from error
+
+
+def rule_kept(
+    *,
+    layout: Layout,
+    spec: SourceSpec,
+    intact: str | None,
+) -> bool:
     """
     Tell whether a source's stored cut was made by its current rule.
 
@@ -291,16 +329,21 @@ def rule_kept(*, layout: Layout, spec: SourceSpec) -> bool:
         Data paths.
     spec : SourceSpec
         Source.
+    intact : str | None
+        Digest of the stored zip if it is intact, else None.
 
     Returns
     -------
     bool
-        True when the source has no rule, or its rule file matches.
+        True when the source has no rule, or its rule file names the
+        current rule and the digest of the intact stored zip.
     """
     if spec.cut_rule is None:
         return True
+    if intact is None:
+        return False
     stored = read_rule(directory=layout.sources, name=spec.name)
-    return stored == spec.cut_rule
+    return stored == rule_text(rule=spec.cut_rule, digest=intact)
 
 
 def fetch_source(
@@ -344,7 +387,7 @@ def fetch_source(
         stored=stored,
         fresh=fresh,
         zip_exists=intact is not None,
-        rule_kept=rule_kept(layout=layout, spec=spec),
+        rule_kept=rule_kept(layout=layout, spec=spec, intact=intact),
     ):
         return SourceOutcome(
             state=replace(fresh, sha256=intact),

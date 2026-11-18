@@ -218,8 +218,7 @@ KIT_UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
     'paperroute-on-screen.service': {
         'Unit': {
             'ConditionPathExists': '/dev/spidev0.0',
-            'StartLimitIntervalSec': '60',
-            'StartLimitBurst': '4',
+            'Before': 'paperroute.service',
         },
         'Service': {
             'Type': 'oneshot',
@@ -228,10 +227,9 @@ KIT_UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
             'SupplementaryGroups': 'spi gpio',
             'NoNewPrivileges': 'yes',
             'TimeoutStartSec': '30',
-            'Restart': 'on-failure',
-            'RestartSec': '3',
             'ExecStart': (
-                '/opt/paperroute/current/.venv/bin/python'
+                '-/usr/bin/timeout 20'
+                ' /opt/paperroute/current/.venv/bin/python'
                 ' -m paperroute_device.screen --image'
                 ' /usr/local/share/paperroute/deploy/screens/on.raw'
                 ' --state /opt/paperroute/data/state.json'
@@ -3327,6 +3325,33 @@ def test_screens_run_as_the_app_user_with_its_groups() -> None:
         f' --groups={groups} --'
     )
     assert ' '.join(hook.split()).count(drop) == 1
+
+
+def test_on_screen_is_best_effort_and_runs_before_the_board() -> None:
+    """The splash is ordered before the board and can never fail."""
+    text = (SYSTEMD / 'paperroute-on-screen.service').read_text(
+        encoding='utf-8',
+    )
+    unit = read_unit(name='paperroute-on-screen.service')
+    keys = ('Restart', 'RestartSec', 'StartLimitIntervalSec')
+    assert unit['Unit']['Before'] == 'paperroute.service'
+    assert not [
+        line
+        for line in text.splitlines()
+        if line.startswith((*keys, 'StartLimitBurst='))
+    ]
+    service = unit['Service']
+    python = '/opt/paperroute/current/.venv/bin/python -m paperroute_device'
+    assert service['ExecStart'].startswith(
+        f'-/usr/bin/timeout 20 {python}.screen ',
+    )
+    assert service['TimeoutStartSec'] == '30'
+    assert service['Type'] == 'oneshot'
+    assert service['User'] == 'paperroute'
+    assert unit['Unit']['ConditionPathExists'] == '/dev/spidev0.0'
+    assert unit['Install']['WantedBy'] == 'multi-user.target'
+    board = (SYSTEMD / 'paperroute.service').read_text(encoding='utf-8')
+    assert 'paperroute-on-screen' not in board
 
 
 def link_tree(*, root: Path) -> tuple[Path, Path]:

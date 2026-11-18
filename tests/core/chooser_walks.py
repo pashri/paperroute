@@ -431,7 +431,9 @@ def at_to_column(
     ChooserState
         The chooser focused on the TO column.
     """
-    chooser, _ = turned(chooser=at_stations(lines=lines), steps=steps, reach=None)
+    chooser, _ = turned(
+        chooser=at_stations(lines=lines), steps=steps, reach=None,
+    )
     chooser, request = knob_pressed(chooser=chooser, reach=None)
     chooser, _ = fed(chooser, request, column)
     return chooser

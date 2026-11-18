@@ -25,6 +25,8 @@ from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_testkit.page_markup import inside, parse_page, parse_tree
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages
+from paperroute_transit.adapters.pin_editor import edited
+from paperroute_transit.adapters.web_pin_edit import line_field
 from paperroute_transit.adapters.web_pins import (
     SEEN_POLL_S,
     SEEN_WAIT_S,
@@ -41,7 +43,7 @@ from paperroute_transit.core.messages import (
     PinsOrdered,
 )
 from paperroute_transit.core.model import AutoWindow, Pin, StopPlace, pin_ref
-from paperroute_transit.core.pin_choices import StopMatch
+from paperroute_transit.core.pin_choices import PinDraft, StopMatch
 from paperroute_transit.core.route_colours import RouteColour
 from paperroute_transit.observers import PinsSeen
 from tests.adapters.test_web_device import sydney_site
@@ -1071,3 +1073,23 @@ async def test_search_title(editor: Client) -> None:
     """A search page is titled for a pin."""
     plain = await (await editor.get('/pins/new?q=Hollis')).text()
     assert '<title>Add a pin' in plain
+
+
+def test_line_field_posts_the_value_and_shows_the_badge() -> None:
+    """A named line's option holds its value and reads as its badge."""
+    lines = (
+        Choice(key='k1', label='GA', badge='GA', value='GA:Norwich & Co'),
+        Choice(key='k2', label='GA', badge='GA', value='GA:Liverpool'),
+    )
+    found = edited(
+        options=FakePinOptions(
+            places={'S': StopPlace(stop_id='S', name='Sta', point=None)},
+            lines={('S', SydneyMode.TRAIN): lines},
+        ),
+        draft=PinDraft(stop='S', kind=SydneyMode.TRAIN),
+    )
+    text = line_field(editor=found, modes=SYDNEY.modes)
+    assert re.findall(r'<option value="([^"]*)"', text) == [
+        '', 'GA:Norwich &amp; Co', 'GA:Liverpool',
+    ]
+    assert re.findall(r'>([^<]*)</option>', text)[1:] == ['GA', 'GA']

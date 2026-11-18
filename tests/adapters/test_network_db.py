@@ -1203,3 +1203,38 @@ def test_route_choices_carry_a_named_line_value() -> None:
         (c.badge, c.value) for c in route_choices(rows=rows, line_kind='train')
     ] == [('GA', 'GA:Norwich'), ('T1', '')]
     assert {c.value for c in route_choices(rows=rows)} == {''}
+
+
+def add_named_lines(*, path: Path) -> None:
+    """
+    Add two GA lines, named apart, that both serve station C.
+
+    Parameters
+    ----------
+    path : Path
+        Timetable file, changed in place.
+    """
+    add_routes(path=path, rows=[
+        ('train:GA:Norwich', 'train', '', 0, 'GA', 201, 'Norwich', '', ''),
+        ('train:GA:Liverpool', 'train', '', 0, 'GA', 202, 'Liverpool', '', ''),
+    ])
+    with closing(sqlite3.connect(path)) as conn:
+        conn.executemany(
+            "INSERT INTO line_stations VALUES (?, 0, 'C', '')",
+            [('train:GA:Norwich',), ('train:GA:Liverpool',)],
+        )
+        conn.commit()
+
+
+def test_line_column_carries_a_named_line_value(copy: Path) -> None:
+    """A train line keyed by long name has that name as its value."""
+    add_named_lines(path=copy)
+    with closing(SqliteNetworkRepository(
+        path=copy,
+        city=SYDNEY,
+    )) as repo:
+        lines = repo.choices(path=TRAIN)
+    assert lines is not None
+    assert [(c.badge, c.value) for c in lines.items] == [
+        ('T1', ''), ('T2', ''), ('GA', 'GA:Norwich'), ('GA', 'GA:Liverpool'),
+    ]

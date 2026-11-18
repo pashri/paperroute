@@ -4,6 +4,7 @@ import shutil
 import sqlite3
 from collections.abc import Iterator
 from contextlib import closing
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -17,7 +18,7 @@ from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.pin_choices import kind_names
 from paperroute_transit.core.reach import RowKind, StripKey, build_reach
 from paperroute_transit.core.route_colours import RouteColour
-from tests.adapters.test_network_db import T1, build_network
+from tests.adapters.test_network_db import T1, add_named_lines, build_network
 
 SCHOOL_RUN: str = (
     "INSERT INTO runs VALUES (90, 'school', 'S901', '[\"B1\", \"B2\"]', 3)"
@@ -410,3 +411,56 @@ def test_call_order_unknown_kind_sorts_as_non_station() -> None:
     unknown = len(kind_names(modes=SYDNEY.modes)) + 5
     station_first = frozenset({2, 3, 4, 5})
     assert pin_options.call_order((unknown, 0, 'X'), station_first)[0]
+
+
+def test_unique_lines_keeps_lines_of_one_badge_apart() -> None:
+    """Lines sharing a badge stay apart; a repeated value collapses."""
+    norwich = Choice(key='a', label='N', badge='GA', value='GA:Norwich')
+    liverpool = Choice(key='b', label='L', badge='GA', value='GA:Liverpool')
+    again = replace(norwich, key='c')
+    found = pin_options.unique_lines(lines=[norwich, liverpool, again])
+    assert found == (norwich, liverpool)
+
+
+def test_lines_at_a_station_lists_named_lines_apart(
+    built: Path, tmp_path: Path,
+) -> None:
+    """Two lines of one badge are both offered, each with its value."""
+    copy = Path(shutil.copy(built, tmp_path / 'timetable.db'))
+    add_named_lines(path=copy)
+    with closing(SqliteNetworkRepository(
+        path=copy,
+        city=SYDNEY,
+    )) as network:
+        found = SqlitePinOptions(network=network).lines_at(
+            stop_id='C', kind=SydneyMode.TRAIN,
+        )
+    assert [(c.badge, c.value) for c in found] == [
+        ('T1', ''), ('T2', ''), ('GA', 'GA:Norwich'), ('GA', 'GA:Liverpool'),
+    ]
+
+
+def test_destinations_strip_is_keyed_by_the_line_value(
+    network: SqliteNetworkRepository,
+    options: SqlitePinOptions,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A route-first To list asks for the strip of the pinned value."""
+    keys: list[StripKey] = []
+
+    def record(*, key: StripKey, origin: StopPlace) -> None:
+        """Note the key asked for and answer nothing."""
+        del origin
+        keys.append(key)
+
+    monkeypatch.setattr(network, 'reach_input', record)
+    line = replace(
+        options.lines_at(stop_id='B2', kind=SydneyMode.BUS)[1],
+        value='811:Named',
+    )
+    options.destinations(
+        origin=at(options=options, stop_id='B2'),
+        kind=SydneyMode.BUS,
+        line=line,
+    )
+    assert [key.routes for key in keys] == [('811:Named',)]

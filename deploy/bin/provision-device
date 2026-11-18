@@ -158,9 +158,9 @@ copy_tree() {
     move_in "$2"
 }
 
-# The kit's copy stays at $SHARE/deploy, where the screen units look. The
-# app's waits at $SHARE/apps/APP_NAME.new until take_app_copy has checked
-# it.
+# The kit's copy stays at $SHARE/deploy, where the board and the off hook
+# find their screens. The app's waits at $SHARE/apps/APP_NAME.new until
+# take_app_copy has checked it.
 copy_deploy() {
     copy_tree "$DIR/kit" deploy
     make_dir root 0755 "$SHARE/apps"

@@ -15,6 +15,7 @@ from xml.etree import ElementTree
 import numpy as np
 import pytest
 
+from paperroute_device.boot_splash import SPLASH_IMAGE
 from paperroute_hardware.screen import load_frame
 
 ROOT: Final[Path] = Path(__file__).parents[1]
@@ -213,28 +214,6 @@ KIT_UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
             'Description': 'paperroute',
         },
         'Service': APP_SERVICE,
-        'Install': {'WantedBy': 'multi-user.target'},
-    },
-    'paperroute-on-screen.service': {
-        'Unit': {
-            'ConditionPathExists': '/dev/spidev0.0',
-            'Before': 'paperroute.service',
-        },
-        'Service': {
-            'Type': 'oneshot',
-            'User': 'paperroute',
-            'Group': 'paperroute',
-            'SupplementaryGroups': 'spi gpio',
-            'NoNewPrivileges': 'yes',
-            'TimeoutStartSec': '30',
-            'ExecStart': (
-                '-/usr/bin/timeout -k 5 20'
-                ' /opt/paperroute/current/.venv/bin/python'
-                ' -m paperroute_device.screen --image'
-                ' /usr/local/share/paperroute/deploy/screens/on.raw'
-                ' --state /opt/paperroute/data/state.json'
-            ),
-        },
         'Install': {'WantedBy': 'multi-user.target'},
     },
     'paperroute-led-boot.service': {
@@ -774,7 +753,7 @@ def test_kit_deploy_names_no_app() -> None:
         for path in paths
         if APP_WORDS.search(script_text(path=path))
     ]
-    assert len(paths) == 10
+    assert len(paths) == 9
     assert not named
 
 
@@ -1728,7 +1707,7 @@ def test_no_unit_reads_m2a_env() -> None:
         for path in sorted(folder.rglob('*'))
         if path.is_file()
     ]
-    assert len(units) == 7
+    assert len(units) == 6
     for unit in units:
         text = unit.read_text(encoding='utf-8')
         assert 'EnvironmentFile' not in text, unit.name
@@ -3298,8 +3277,8 @@ def test_off_hook_draws_on_poweroff_only(
         ]
 
 
-def test_install_files_installs_hook_and_enables_on_screen() -> None:
-    """The hook is installed 0755 and the boot screen unit is enabled."""
+def test_install_files_installs_hook_and_enables_the_kit() -> None:
+    """The hook is installed 0755 and the kit's units are enabled."""
     path = BIN / 'install-files'
     assert commands(path=path, word='system-shutdown') == [
         'install -D -m 0755 -o root -g root'
@@ -3307,17 +3286,13 @@ def test_install_files_installs_hook_and_enables_on_screen() -> None:
         ' /usr/lib/systemd/system-shutdown/paperroute-off-screen',
     ]
     assert commands(path=path, word='enable') == [
-        'systemctl enable paperroute-led-boot paperroute'
-        ' paperroute-on-screen $timers',
+        'systemctl enable paperroute-led-boot paperroute $timers',
     ]
 
 
-def test_screens_run_as_the_app_user_with_its_groups() -> None:
-    """The boot unit and the shutdown hook drop root as the app does."""
+def test_off_hook_runs_as_the_app_user_with_its_groups() -> None:
+    """The shutdown hook drops root as the app does."""
     app = read_unit(name='paperroute.service')['Service']
-    screen = read_unit(name='paperroute-on-screen.service')['Service']
-    keys = ('User', 'Group', 'SupplementaryGroups')
-    assert {key: screen[key] for key in keys} == {key: app[key] for key in keys}
     hook = script_text(path=OFF_HOOK).replace('\\\n', ' ')
     groups = ','.join(app['SupplementaryGroups'].split())
     drop = (
@@ -3327,31 +3302,11 @@ def test_screens_run_as_the_app_user_with_its_groups() -> None:
     assert ' '.join(hook.split()).count(drop) == 1
 
 
-def test_on_screen_is_best_effort_and_runs_before_the_board() -> None:
-    """The splash is ordered before the board, with a best-effort start."""
-    text = (SYSTEMD / 'paperroute-on-screen.service').read_text(
-        encoding='utf-8',
-    )
-    unit = read_unit(name='paperroute-on-screen.service')
-    keys = ('Restart', 'RestartSec', 'StartLimitIntervalSec')
-    assert unit['Unit']['Before'] == 'paperroute.service'
-    assert not [
-        line
-        for line in text.splitlines()
-        if line.startswith((*keys, 'StartLimitBurst='))
-    ]
-    service = unit['Service']
-    python = '/opt/paperroute/current/.venv/bin/python -m paperroute_device'
-    assert service['ExecStart'].startswith(
-        f'-/usr/bin/timeout -k 5 20 {python}.screen ',
-    )
-    assert service['TimeoutStartSec'] == '30'
-    assert service['Type'] == 'oneshot'
-    assert service['User'] == 'paperroute'
-    assert unit['Unit']['ConditionPathExists'] == '/dev/spidev0.0'
-    assert unit['Install']['WantedBy'] == 'multi-user.target'
-    board = (SYSTEMD / 'paperroute.service').read_text(encoding='utf-8')
-    assert 'paperroute-on-screen' not in board
+def test_no_on_screen_unit_ships() -> None:
+    """The board draws the ON picture; no unit of its own ships or is named."""
+    assert not (SYSTEMD / 'paperroute-on-screen.service').exists()
+    for path in (SYSTEMD / 'paperroute.service', BIN / 'install-files'):
+        assert 'paperroute-on-screen' not in script_text(path=path)
 
 
 def link_tree(*, root: Path) -> tuple[Path, Path]:
@@ -4270,9 +4225,7 @@ INSTALL_FILES_FUNCTIONS: Final[tuple[str, ...]] = (
 ACTIVE_LINES: Final[str] = (
     'ACTIVE=$(active_app) || exit\nAPP_SRC=$SHARE/apps/$ACTIVE'
 )
-KIT_ENABLED: Final[str] = (
-    'enable paperroute-led-boot paperroute paperroute-on-screen'
-)
+KIT_ENABLED: Final[str] = 'enable paperroute-led-boot paperroute'
 
 
 @dataclass(frozen=True)
@@ -4484,6 +4437,35 @@ def test_install_files_removes_units_outside_the_set(tmp_path: Path) -> None:
         'disable --now paperroute-timetable.service',
         'disable --now paperroute-timetable.timer',
     ]
+
+
+def test_install_files_retires_the_on_screen_unit(tmp_path: Path) -> None:
+    """The Pi's copy is disabled while its file is there, then removed."""
+    device = make_device(root=tmp_path, app=WITHOUT_UNITS)
+    (device.etc / 'paperroute-on-screen.service').write_text(
+        '[Service]\nType=oneshot\n\n[Install]\nWantedBy=multi-user.target\n',
+        encoding='utf-8',
+    )
+    stub_commands(
+        root=tmp_path,
+        scripts={
+            'systemctl': (
+                '#!/bin/sh\n'
+                f'printf "%s\\n" "$*" >>{device.log}\n'
+                'if [ "$1" = disable ] && [ -f "' + str(device.etc)
+                + '/$3" ]; then\n'
+                f'  printf "%s\\n" "$3 still there" >>{device.log}\n'
+                'fi\n'
+            ),
+        },
+    )
+    result = install_units(device=device)
+    assert (result.returncode, result.stderr) == (0, '')
+    lines = logged(device=device).splitlines()
+    start = lines.index('disable --now paperroute-on-screen.service')
+    assert lines[start + 1] == 'paperroute-on-screen.service still there'
+    assert not (device.etc / 'paperroute-on-screen.service').exists()
+    assert 'enable paperroute-led-boot paperroute' in lines
 
 
 def test_install_files_keeps_the_zone_drop_in(tmp_path: Path) -> None:
@@ -4919,9 +4901,7 @@ def test_provision_keeps_the_kit_copy_in_place(tmp_path: Path) -> None:
         if name.startswith('bin/')
     } == {0o755}
     screen = '/usr/local/share/paperroute/deploy/screens/on.raw'
-    assert screen in read_unit(name='paperroute-on-screen.service')[
-        'Service'
-    ]['ExecStart']
+    assert SPLASH_IMAGE == Path(screen)
     assert screen.replace('on.raw', 'off.raw') in script_text(path=OFF_HOOK)
     assert script_value(path=BIN / 'provision-device', name='SHARE') == (
         '/usr/local/share/paperroute'
@@ -4972,8 +4952,8 @@ def test_provision_writes_contract_and_manifest(
     (
         ('ssh.service', 'the app may not ship systemd/ssh.service'),
         (
-            'paperroute-on-screen.service',
-            'the app may not replace systemd/paperroute-on-screen.service',
+            'paperroute-led-boot.service',
+            'the app may not replace systemd/paperroute-led-boot.service',
         ),
         (
             'paperroute_job.timer',
@@ -4992,10 +4972,6 @@ def test_provision_writes_contract_and_manifest(
             'the app may not ship systemd/paperroute.service.d/notes.txt',
         ),
         ('ssh.service.d/x.conf', 'the app may not ship systemd/ssh.service.d'),
-        (
-            'paperroute-on-screen.service.d/x.conf',
-            'the app may not change systemd/paperroute-on-screen.service',
-        ),
         (
             'paperroute-led-boot.service.d/x.conf',
             'the app may not change systemd/paperroute-led-boot.service',

@@ -157,7 +157,7 @@ enable_units() {
     systemctl daemon-reload
     # The names are checked at provision, so they split safely.
     # shellcheck disable=SC2086
-    systemctl enable paperroute-led-boot paperroute paperroute-on-screen $timers
+    systemctl enable paperroute-led-boot paperroute $timers
     if [[ -n $timers ]]; then
         # shellcheck disable=SC2086
         systemctl start $timers

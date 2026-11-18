@@ -522,6 +522,7 @@ def test_a_dropped_stop_may_lack_coordinates(tmp_path: Path) -> None:
 
 NORWICH_TRIP: Final[str] = 'Y95001_20261102_20261211'
 NEITHER_TRIP: Final[str] = 'Y95002_20261102_20261211'
+NORWICH_GA_TRIP: Final[str] = 'Z96001_20261102_20261211'
 
 
 def add_east_midlands_stops(tables: dict[str, list[dict[str, str]]]) -> None:
@@ -608,3 +609,36 @@ def test_cut_keeps_a_train_calling_at_ely_with_its_badge(
     assert routes['EM'] == ('EM', 'EM')
     stops = {row['stop_id'] for row in table(archive=cut, member='stops.txt')}
     assert {'rail:NRW', 'rail:ELY', 'rail:PBO'} <= stops
+
+
+def with_norwich(tables: dict[str, list[dict[str, str]]]) -> None:
+    """
+    Add the East Midlands trips and a Greater Anglia train to Norwich.
+
+    Parameters
+    ----------
+    tables : dict[str, list[dict[str, str]]]
+        Rows by member, changed in place.
+    """
+    with_east_midlands(tables)
+    trip = next(
+        r for r in tables['trips.txt']
+        if r['trip_id'] == 'C30002_20261102_20261211'
+    )
+    call = next(
+        r for r in tables['stop_times.txt']
+        if r['trip_id'] == trip['trip_id']
+    )
+    tables['trips.txt'].append({
+        **trip, 'trip_id': NORWICH_GA_TRIP, 'trip_headsign': 'Norwich',
+    })
+    tables['stop_times.txt'] += [
+        {**call, 'trip_id': NORWICH_GA_TRIP, 'stop_id': stop_id,
+         'arrival_time': time, 'departure_time': time,
+         'stop_sequence': str(seq)}
+        for seq, (stop_id, time) in enumerate(
+            (('9100CAMBDGE1', '07:50:00'), ('9100ELYY', '08:05:00'),
+             ('9100NRCH', '09:05:00')),
+            start=1,
+        )
+    ]

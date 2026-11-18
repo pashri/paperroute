@@ -14,6 +14,12 @@ from paperroute_cambridge.area import (
     COACH_BOX,
     TRIM_RADIUS,
 )
+from paperroute_cambridge.build.rail_lines import (
+    RAIL_LINES,
+    assign_rail_lines,
+    rail_line_groups,
+    rail_line_sort,
+)
 from paperroute_cambridge.build.stations import StationSpec, group_stations
 from paperroute_cambridge.build.trim import trim_timetable
 from paperroute_cambridge.cambridge_feeds import CambridgeFeeds
@@ -84,6 +90,7 @@ CAMBRIDGE_MODES: Final[tuple[ModeSpec, ...]] = (
         letter='T',
         chip=RAIL_BLUE,
         by_line=True,
+        named_lines=True,
     ),
 )
 
@@ -186,11 +193,14 @@ def merge_cambridge(*, conn: sqlite3.Connection) -> MergeReport:
         kept_sources=frozenset({RAIL_SOURCE}),
     )
     group_stations(conn=conn, stations=STATIONS)
+    lined = assign_rail_lines(conn=conn, lines=RAIL_LINES, source=RAIL_SOURCE)
     logger.info(
-        'kept %d routes, removed %d trips, shortened %d coach trips',
+        'kept %d routes, removed %d trips, shortened %d coach trips, '
+        '%d trains on lines',
         report.routes,
         report.dropped,
         report.cut,
+        lined,
     )
     return MergeReport(dropped=report.dropped, partial=0, overnight=0)
 
@@ -213,9 +223,12 @@ PLACE_SUFFIX: Final[re.Pattern[str]] = re.compile(
 NEVER: Final[re.Pattern[str]] = re.compile(r'(?!)')
 
 
+LINE_GROUPS: Final[dict[str, int]] = rail_line_groups(lines=RAIL_LINES)
+
+
 def cambridge_line_group(*, number: str) -> int:
     """
-    Sort a line number into the group it is listed in.
+    Group a train line by its operator; other numbers after them.
 
     Parameters
     ----------
@@ -225,10 +238,9 @@ def cambridge_line_group(*, number: str) -> int:
     Returns
     -------
     int
-        Always 0: Cambridge lists no lines in groups.
+        The operator's group, or one past the last group.
     """
-    del number
-    return 0
+    return LINE_GROUPS.get(number, len(LINE_GROUPS))
 
 
 MAP_PLACES: Final[MapPlaces] = MapPlaces(
@@ -251,7 +263,7 @@ MAP_PLACES: Final[MapPlaces] = MapPlaces(
     ),
 )
 CAMBRIDGE_CATALOGUE: Final[CatalogueRules] = CatalogueRules(
-    line_sort={},
+    line_sort=rail_line_sort(lines=RAIL_LINES),
     replacement=NEVER,
     replacement_lines={},
     numbered_lines=NEVER,

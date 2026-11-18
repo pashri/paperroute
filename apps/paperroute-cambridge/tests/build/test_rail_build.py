@@ -52,7 +52,12 @@ from paperroute_transit.core.chooser import Level
 from paperroute_transit.core.city import MergeReport
 from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.modes import Classifier
-from tests.build.test_rail_cut import XC_TRIP, changed, with_east_midlands
+from tests.build.test_rail_cut import (
+    XC_TRIP,
+    changed,
+    with_east_midlands,
+    with_norwich,
+)
 from tests.conftest import FIXTURES, RECORDED_DAY
 
 BODS: Final[Path] = FIXTURES / 'bods.zip'
@@ -351,32 +356,111 @@ def test_a_rail_station_is_never_merged_with_a_bus_stop(
         ).fetchone() == (0,)
 
 
-def test_the_train_chooser_lists_one_line_per_operator(
-    rail_built: Path,
+@pytest.fixture(name='norwich_built', scope='module')
+def norwich_built_fixture(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """
+    Build the recorded day with trains, adding a train to Norwich.
+
+    Parameters
+    ----------
+    tmp_path_factory : pytest.TempPathFactory
+        Makes the directory for the files.
+
+    Returns
+    -------
+    Path
+        The timetable file.
+    """
+    out = tmp_path_factory.mktemp('norwich')
+    rail = changed(out=out / 'norwich.zip', change=with_norwich)
+    return built(
+        out=out / 'timetable.db', start=RECORDED_DAY, days=1, rail=rail,
+    )
+
+
+def test_the_train_chooser_lists_lines_by_where_they_go(
+    norwich_built: Path,
 ) -> None:
-    """Train lists GA, GN, TL and XC, each by its stations, then To."""
-    line = ((Level.KIND, 'train'), (Level.LINE, 'train:GN'))
+    """Train lists drawing B's lines, ruled off between operators."""
+    line = ((Level.KIND, 'train'), (Level.LINE, 'train:GA:Norwich'))
+    gn = (
+        (Level.KIND, 'train'),
+        (Level.LINE, 'train:GN:Kings Lynn & Kings Cross'),
+    )
     with closing(
-        SqliteNetworkRepository(city=CAMBRIDGE, path=rail_built),
+        SqliteNetworkRepository(city=CAMBRIDGE, path=norwich_built),
     ) as network:
         kinds = network.kind_column()
         lines = network.next_column(path=((Level.KIND, 'train'),))
         stations = network.next_column(path=line)
         towards = network.next_column(
-            path=(*line, (Level.STATION, 'rail:CBG')),
+            path=(*gn, (Level.STATION, 'rail:CBG')),
         )
     assert [choice.label for choice in kinds.items] == [
         'Bus', 'Coach', 'Train',
     ]
     assert lines is not None and stations is not None and towards is not None
-    assert [(c.key, c.badge, c.label) for c in lines.items] == [
-        ('train:GA', 'GA', 'Greater Anglia'),
-        ('train:GN', 'GN', 'Great Northern'),
-        ('train:TL', 'TL', 'Thameslink'),
-        ('train:XC', 'XC', 'CrossCountry'),
-    ]
-    assert 'rail:CBG' in [choice.key for choice in stations.items]
     assert 'rail:KGX' in [choice.key for choice in towards.items]
+    assert lines.items[3].value == 'GA:Norwich'
+    assert [(c.key, c.badge, c.label) for c in lines.items] == [
+        ('train:GN:Kings Lynn & Kings Cross', 'GN',
+         'Kings Lynn & Kings Cross'),
+        ('train:TL:Brighton via St Pancras', 'TL', 'Brighton via St Pancras'),
+        ('train:GA:Liverpool Street', 'GA', 'Liverpool Street'),
+        ('train:GA:Norwich', 'GA', 'Norwich'),
+        ('train:XC:Birmingham & Stansted', 'XC', 'Birmingham & Stansted'),
+        ('train:EM:Norwich & Liverpool', 'EM', 'Norwich & Liverpool'),
+    ]
+    assert [c.rule_above for c in lines.items] == [
+        False, True, True, False, True, True,
+    ]
+    assert {'rail:CBG', 'rail:ELY', 'rail:NRW'} <= {
+        c.key for c in stations.items
+    }
+
+
+def test_each_train_line_has_its_own_stations(norwich_built: Path) -> None:
+    """Every train line lists stations; Liverpool Street is not Norwich."""
+    with closing(sqlite3.connect(norwich_built)) as conn:
+        listed = {row[0] for row in conn.execute(
+            "SELECT DISTINCT line_key FROM line_stations"
+            " WHERE line_key LIKE 'train:%'",
+        )}
+        kept = {row[0] for row in conn.execute(
+            "SELECT route_key FROM chooser_routes WHERE kind = 'train'",
+        )}
+        on = {
+            (row[0], row[1]) for row in conn.execute(
+                "SELECT line_key, station_id FROM line_stations"
+                " WHERE station_id = 'rail:LST'",
+            )
+        }
+    assert len(kept) == 6
+    assert listed == kept
+    assert ('train:GA:Liverpool Street', 'rail:LST') in on
+    assert ('train:GA:Norwich', 'rail:LST') not in on
+
+
+def test_the_replacement_bus_joins_its_operators_line(
+    tmp_path: Path,
+) -> None:
+    """The Sunday replacement bus sits on Great Northern's first line."""
+    path = built(out=tmp_path / 'timetable.db', start=SUNDAY, days=1)
+    with closing(
+        SqliteNetworkRepository(city=CAMBRIDGE, path=path),
+    ) as network:
+        lines = network.next_column(path=((Level.KIND, 'train'),))
+    assert lines is not None
+    assert [(c.key, c.badge) for c in lines.items] == [
+        ('train:GN:Kings Lynn & Kings Cross', 'GN'),
+    ]
+    assert departures(path=path, day=SUNDAY) == [
+        ('06:10', 'GN', '', 'Royston', 'train', 'train'),
+    ]
+    with closing(sqlite3.connect(path)) as conn:
+        assert conn.execute(
+            "SELECT type FROM routes WHERE route_id LIKE 'rail:GN_RRB:%'",
+        ).fetchall() == [(714,)]
 
 
 def test_the_rail_end_does_not_shorten_the_bus_timetable(

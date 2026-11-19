@@ -156,8 +156,10 @@ def _add_route(
     """
     new_id = f'{route_id}:{line.name}'
     conn.execute(
-        'INSERT OR IGNORE INTO routes SELECT ?, short_name, ?, type, color,'
-        ' text_color, agency_id, source FROM routes WHERE route_id = ?',
+        'INSERT OR IGNORE INTO routes (route_id, short_name, long_name,'
+        ' type, color, text_color, agency_id, source)'
+        ' SELECT ?, short_name, ?, type, color, text_color, agency_id,'
+        ' source FROM routes WHERE route_id = ?',
         (new_id, line.name, route_id),
     )
     return new_id

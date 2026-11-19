@@ -363,6 +363,20 @@ async def test_a_saved_line_that_is_also_the_busiest_opens_unmarked(
     assert saved_routes(posted=posted) == (LIVERPOOL,)
 
 
+async def test_a_saved_pin_opened_by_ref_shows_its_line_as_a_hand_pick(
+    client: Client, saved: list[Pin],
+) -> None:
+    """The stored line is selected, unmarked, with no suggestion."""
+    pin = Pin(
+        origin=CAMBRIDGE_STATION, kind='train', routes=(KINGS_LYNN,),
+    )
+    saved.append(pin)
+    page = await client.get('/pins/edit', params={'ref': pin_ref(pin=pin)})
+    text = await page.text()
+    assert 'chosen for you' not in text
+    assert shown(text=text) == (KINGS_LYNN, '')
+
+
 async def test_the_strip_line_offers_every_line_through_the_from(
     client: Client, posted: list[Event],
 ) -> None:

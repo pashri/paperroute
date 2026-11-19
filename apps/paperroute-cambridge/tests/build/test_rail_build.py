@@ -362,6 +362,23 @@ def test_trains_leave_cambridge_with_their_badge_and_platform(
     ]
 
 
+def test_the_merge_logs_the_routes_left_after_the_line_split(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The routes kept are the routes the finished file holds."""
+    rail = changed(out=tmp_path / 'norwich.zip', change=with_norwich)
+    with caplog.at_level(logging.INFO):
+        path = built(
+            out=tmp_path / 'timetable.db',
+            start=RECORDED_DAY,
+            days=1,
+            rail=rail,
+        )
+    with closing(sqlite3.connect(path)) as conn:
+        (count,) = conn.execute('SELECT COUNT(*) FROM routes').fetchone()
+    assert f'kept {count} routes' in caplog.text
+
+
 def test_a_replacement_bus_is_a_train_with_no_platform(tmp_path: Path) -> None:
     """The Sunday replacement bus is a GN train departure, platform blank."""
     path = built(out=tmp_path / 'timetable.db', start=SUNDAY, days=1)

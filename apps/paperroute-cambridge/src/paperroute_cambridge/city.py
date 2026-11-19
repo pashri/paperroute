@@ -199,7 +199,7 @@ def merge_cambridge(*, conn: sqlite3.Connection) -> MergeReport:
     logger.info(
         'kept %d routes, removed %d trips, shortened %d coach trips, '
         '%d trains on lines',
-        report.routes,
+        conn.execute('SELECT COUNT(*) FROM routes').fetchone()[0],
         report.dropped,
         report.cut,
         lined,

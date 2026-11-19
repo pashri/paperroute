@@ -110,12 +110,15 @@ async def end_group(*, process: asyncio.subprocess.Process) -> None:
     """
     Kill a process's whole group and wait for the process.
 
+    A group that has already exited is ignored. On macOS an exited
+    process that has not been reaped raises `PermissionError`.
+
     Parameters
     ----------
     process : asyncio.subprocess.Process
         A process that leads its own session.
     """
-    with contextlib.suppress(ProcessLookupError):
+    with contextlib.suppress(ProcessLookupError, PermissionError):
         os.killpg(process.pid, signal.SIGKILL)
     await process.wait()
 

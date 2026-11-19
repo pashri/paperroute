@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import time
 from pathlib import Path
 
@@ -340,3 +341,16 @@ async def test_switch_refuses_an_active_or_unknown_key(
     await box.switch.refresh()
     assert await box.switch.switch(key=key) is False
     assert box.systemctl_log() == []
+
+
+async def test_end_group_ignores_a_permission_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A group that cannot be signalled is not an error."""
+    def deny(pid: int, sig: int) -> None:
+        raise PermissionError
+
+    monkeypatch.setattr(os, 'killpg', deny)
+    process = await asyncio.create_subprocess_exec('true')
+    await app_switch.end_group(process=process)
+    assert process.returncode == 0

@@ -14,12 +14,23 @@ from paperroute_sydney.adapters.tfnsw import (
 from paperroute_transit.build.source_state import SourceError, SourceState
 from paperroute_transit.build.sources import SourceSpec, UrlDownloader
 
+SMALL_ZIP_SIZE_LIMIT: Final[int] = 100_000_000  # bytes
+BUNDLE_SIZE_LIMIT: Final[int] = 1_000_000_000  # bytes
 SYDNEY_SOURCES: Final[tuple[SourceSpec, ...]] = (
-    SourceSpec(name='sydneytrains', path='v1/gtfs/schedule/sydneytrains'),
-    SourceSpec(name='metro', path='v2/gtfs/schedule/metro'),
+    SourceSpec(
+        name='sydneytrains',
+        path='v1/gtfs/schedule/sydneytrains',
+        size_limit=SMALL_ZIP_SIZE_LIMIT,
+    ),
+    SourceSpec(
+        name='metro',
+        path='v2/gtfs/schedule/metro',
+        size_limit=SMALL_ZIP_SIZE_LIMIT,
+    ),
     SourceSpec(
         name='bundle',
         path='v1/publictransport/timetables/complete/gtfs',
+        size_limit=BUNDLE_SIZE_LIMIT,
     ),
 )
 

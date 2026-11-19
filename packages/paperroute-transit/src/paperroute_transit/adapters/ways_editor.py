@@ -7,6 +7,7 @@ from typing import Final
 from multidict import MultiMapping
 
 from paperroute_transit.adapters.state_change import ALLOW_MAX, ALLOW_MIN
+from paperroute_transit.core.chooser import Choice
 from paperroute_transit.core.connection_model import (
     default_allow,
     direct_leg,
@@ -346,26 +347,60 @@ def strip_routes(
     Returns
     -------
     tuple[str, ...]
-        The base pin's routes when its kind is destination-first and its
-        From and To are unchanged; the busiest line between the new pair
-        when they changed, or none when no line links them. Empty for
-        any other pin.
+        For a destination-first pin, its routes when its From and To are
+        unchanged and they are a line offered at the From; otherwise the
+        busiest line between the pair, or none when no line links them.
+        Empty for any other pin.
     """
     if base is None or base.kind not in destination_first_modes(modes=modes):
         return ()
-    ids = (origin.stop_id, destination.stop_id)
-    if base.destination is not None and ids == (
-        base.origin.stop_id, base.destination.stop_id,
+    lines = options.lines_at(stop_id=origin.stop_id, kind=base.kind)
+    if kept_routes(
+        base=base, origin=origin, destination=destination, lines=lines,
     ):
         return base.routes
     trips = options.line_trips(
         origin=origin, destination=destination, kind=base.kind,
     )
-    line = busiest_line(
-        lines=options.lines_at(stop_id=origin.stop_id, kind=base.kind),
-        trips=trips,
-    )
+    line = busiest_line(lines=lines, trips=trips)
     return (pin_value(choice=line),) if line is not None and trips else ()
+
+
+def kept_routes(
+    *,
+    base: Pin,
+    origin: StopPlace,
+    destination: StopPlace,
+    lines: Sequence[Choice],
+) -> bool:
+    """
+    Say whether a ways save leaves a pin's routes as they are.
+
+    Parameters
+    ----------
+    base : Pin
+        The saved pin being edited.
+    origin : StopPlace
+        The From.
+    destination : StopPlace
+        The To.
+    lines : Sequence[Choice]
+        The lines offered at the From.
+
+    Returns
+    -------
+    bool
+        True when the From and To are unchanged and the stored routes
+        are one line offered at the From.
+    """
+    if base.destination is None or base.routes == ():
+        return False
+    same = (origin.stop_id, destination.stop_id) == (
+        base.origin.stop_id, base.destination.stop_id,
+    )
+    return same and base.routes in [
+        (pin_value(choice=line),) for line in lines
+    ]
 
 
 def draft_pin(

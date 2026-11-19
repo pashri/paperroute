@@ -531,20 +531,41 @@ async def test_a_ways_save_with_a_new_from_picks_the_busiest_line(
 async def test_a_ways_save_leaves_a_bus_pin_without_routes(
     client: Client, posted: list[Event], saved: list[Pin],
 ) -> None:
-    """A bus pin gets no routes from a ways save."""
+    """A bus pin storing a route ends with none after a ways save."""
     pin = Pin(
         origin=StopPlace(
             stop_id='0500CCITY227', name='Drummer St', point=None,
         ),
         destination=StopPlace(
-            stop_id='0500HSTIV059', name='Post Box', point=None,
+            stop_id='0500SCOTO007', name='Scotsdales', point=None,
         ),
         kind='bus',
+        routes=('4',),
     )
     saved.append(pin)
-    response = await ways_save(client, pin=pin, to='0500HSTIV059')
+    response = await ways_save(client, pin=pin, to='0500SCOTO007')
     assert response.status == HTTPStatus.SEE_OTHER
     assert saved_routes(posted=posted) == ()
+
+
+async def test_a_ways_save_with_only_the_from_changed_picks_a_line(
+    client: Client, posted: list[Event], saved: list[Pin],
+) -> None:
+    """A From-only change drops the stored line for the pair's busiest."""
+    pin = Pin(
+        origin=CAMBRIDGE_STATION,
+        destination=StopPlace(
+            stop_id='rail:BHM', name='Birmingham', point=None,
+        ),
+        kind='train',
+        routes=('TL:Brighton via St Pancras',),
+    )
+    saved.append(pin)
+    response = await ways_save(
+        client, pin=pin, to='rail:BHM', origin='rail:CMS',
+    )
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert saved_routes(posted=posted) == (XC,)
 
 
 async def test_the_destination_ids_used_by_the_ways_tests_exist(

@@ -32,7 +32,7 @@ from tests.build.network_feed import LAT, LON, STEP_LON, network_feed
 RUN_TABLES: Final[set[str]] = {
     'runs', 'run_stops', 'run_calls', 'trip_runs', 'trip_next',
     'trip_joins', 'route_patterns', 'chooser_routes', 'chooser_towards',
-    'rail_hops', 'track_places',
+    'rail_hops', 'track_places', 'weekday_runs',
 }
 IMPORTS_ONLY: Final[str] = (
     'import paperroute_transit.build.extras, sys; '
@@ -129,8 +129,10 @@ def test_run_extras_prints_each_phase(
     assert lines[1].endswith('s')
     assert lines[2] == 'progress passed'
     assert lines[3].startswith('progress passed done ')
-    assert lines[4] == 'progress catalogue'
-    assert lines[5].startswith('progress catalogue done ')
+    assert lines[4] == 'progress weekday'
+    assert lines[5].startswith('progress weekday done ')
+    assert lines[6] == 'progress catalogue'
+    assert lines[7].startswith('progress catalogue done ')
     assert lines[-1].startswith('progress extras peak ')
     assert lines[-1].endswith('MB')
     assert RUN_TABLES <= tables_of(db=db)

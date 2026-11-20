@@ -15,6 +15,7 @@ from paperroute_transit.build.passed import write_passed
 from paperroute_transit.build.runs import RUN_SCHEMA, load_runs
 from paperroute_transit.build.swap import land
 from paperroute_transit.build.track_db import read_track_db
+from paperroute_transit.build.weekday import write_weekday_runs
 from paperroute_transit.core.city import City
 from paperroute_transit.core.modes import end_point_modes
 
@@ -119,6 +120,12 @@ def run_extras(*, path: Path, city: City, tiles: Path | None) -> None:
         timed(
             phase='passed',
             step=lambda: run_passed(conn=conn, city=city, tiles=tiles),
+        )
+        timed(
+            phase='weekday',
+            step=lambda: write_weekday_runs(
+                conn=conn, kinds=end_point_modes(modes=city.modes),
+            ),
         )
         timed(
             phase='catalogue',

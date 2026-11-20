@@ -64,7 +64,8 @@ then build the tiles on the Mac:
       --timetable data/timetable.db --out data/tiles.db
 
 This builds all of NSW. It takes about 17 minutes on an Apple-silicon Mac,
-needs about 1.2 GB of RAM and makes about 490 MB. Add `--bbox` to build a
+needs about 1.2 GB of RAM and makes about 490 MB. `--track-osm` defaults to
+`--osm`. Add `--bbox` to build a
 smaller area for trying things out. Without `data/tiles.db` the Map shows
 "Map not installed". The app shows "Map not installed" when the tiles file
 was built for other zoom levels or another map style; rebuild the tiles when

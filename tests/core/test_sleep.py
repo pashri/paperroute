@@ -334,7 +334,16 @@ def asleep_with_trip(
         PatternsLoaded(
             trip_ids=frozenset({trip.trip_id}),
             patterns={
-                trip.trip_id: pattern(trip_id=trip.trip_id, shape_id='b:0'),
+                trip.trip_id: pattern(
+                    trip_id=trip.trip_id,
+                    shape_id='b:0',
+                    stops=calls(
+                        stations='AB',
+                        start=EIGHT,
+                        step=60,
+                        points={'A': LINE.points[0], 'B': LINE.points[1]},
+                    ),
+                ),
             },
             shapes={},
         ),
@@ -348,7 +357,7 @@ def test_sleep_screen_waits_for_its_route_line_and_stops() -> None:
     assert isinstance(view, SleepView)
     assert not view.loading
     assert [line.shape_id for line in view.map.base.lines] == ['b:0']
-    assert view.map.base.dashed_stops == ((0.0, 0.0), (1000.0, 0.0))
+    assert view.map.base.dashed_stops == LINE.points
     assert view.map.markers == ()
     _, effects = step(state, Tick(now=START + timedelta(seconds=40)))
     assert not renders(effects=effects)
@@ -360,7 +369,7 @@ def test_sleep_map_follows_the_map_framing() -> None:
     (view,) = renders(effects=effects)
     assert isinstance(view, SleepView)
     assert (view.map.base.centre, view.map.base.mpp) == (CENTRE, 8)
-    assert view.map.base.dashed_stops == ()
+    assert view.map.base.dashed_stops == LINE.points
 
 
 def test_wake_draws_at_once() -> None:

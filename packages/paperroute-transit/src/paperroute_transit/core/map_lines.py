@@ -4,8 +4,14 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import tzinfo
 from math import dist
+from typing import Final
 
-from paperroute_transit.core.geo import Point, Shape, nearest_along
+from paperroute_transit.core.geo import (
+    Point,
+    Shape,
+    nearest_along,
+    point_along,
+)
 from paperroute_transit.core.map_line import MapLine
 from paperroute_transit.core.map_view import (
     MapInputs,
@@ -18,6 +24,8 @@ from paperroute_transit.core.model import Departure, service_seconds
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.strip_times import from_call
 from paperroute_transit.core.tiles import ZOOMS
+
+RING_REACH: Final[float] = 150.0  # metres
 
 
 def map_line_key(*, departure: Departure) -> str:
@@ -344,6 +352,68 @@ def plain_lines(
     return tuple(lines)
 
 
+def near_shape(*, shape: Shape, point: Point) -> bool:
+    """
+    Tell whether a point lies within ring reach of a shape.
+
+    Parameters
+    ----------
+    shape : Shape
+        The drawn shape.
+    point : Point
+        The point.
+
+    Returns
+    -------
+    bool
+        True when the shape's nearest position is at most `RING_REACH`
+        metres from the point.
+    """
+    nearest = point_along(
+        shape=shape, distance=nearest_along(shape=shape, point=point),
+    )
+    return dist(point, nearest) <= RING_REACH
+
+
+def ringable(
+    *, inputs: MapInputs, centre: Point, shape: Shape | None, point: Point,
+) -> bool:
+    """
+    Tell whether a call's point gets a ring.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs.
+    centre : Point
+        The map's centre.
+    shape : Shape | None
+        The shape drawn for the call's trip.
+    point : Point
+        The call's point.
+
+    Returns
+    -------
+    bool
+        True when the point is on the map and within ring reach of the
+        shape.
+    """
+    return (
+        shape is not None
+        and near_shape(shape=shape, point=point)
+        and visible(
+            at=screen_point(
+                width=inputs.width,
+                projection=inputs.projection,
+                point=point,
+                mpp=ZOOMS[inputs.zoom],
+                centre=centre,
+            ),
+            width=inputs.width,
+        )
+    )
+
+
 def ring_points(
     *,
     inputs: MapInputs,
@@ -390,15 +460,11 @@ def ring_points(
             continue
         spans = [line.solid for line in matching if line.solid is not None]
         for index, stop in enumerate(pattern.stops):
-            if stop.point is None or stop.passes or not visible(
-                at=screen_point(
-                    centre=centre,
-                    mpp=ZOOMS[inputs.zoom],
-                    point=stop.point,
-                    projection=inputs.projection,
-                    width=inputs.width,
-                ),
-                width=inputs.width,
+            if stop.point is None or stop.passes or not ringable(
+                inputs=inputs,
+                centre=centre,
+                shape=drawn,
+                point=stop.point,
             ):
                 continue
             along = None if pattern.along is None else pattern.along[index]

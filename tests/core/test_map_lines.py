@@ -439,3 +439,34 @@ def test_departures_with_no_shape_id_draw_their_own_shapes() -> None:
         choice=CHOICE,
     )
     assert [line.shape_id for line in lines] == ['east', 'north']
+
+
+def ringed_with(
+    *, index: int, point: Point,
+) -> tuple[tuple[Point, ...], ...]:
+    """Rings of RIDE with its call `index` moved to `point`."""
+    base = east_pattern(trip_id=RIDE.trip_id)
+    stops = list(base.stops)
+    stops[index] = replace(stops[index], point=point)
+    return rings_of(ride=replace(base, stops=tuple(stops)))
+
+
+def test_a_call_near_the_line_is_ringed() -> None:
+    """A call 100 m from the shape is ringed, solid or dashed."""
+    solid, _ = ringed_with(index=3, point=(3000.0, 100.0))
+    _, dashed = ringed_with(index=4, point=(4000.0, 100.0))
+    assert (3000.0, 100.0) in solid
+    assert (4000.0, 100.0) in dashed
+
+
+def test_a_call_far_from_the_line_is_not_ringed() -> None:
+    """A call 200 m from the shape gets no ring, solid or dashed."""
+    for index, point in ((3, (3000.0, 200.0)), (4, (4000.0, 200.0))):
+        assert point not in sum(ringed_with(index=index, point=point), ())
+
+
+def test_a_call_beyond_a_truncated_shape_is_not_ringed() -> None:
+    """A call more than 150 m past the shape's end gets no ring."""
+    near, far = (5100.0, 0.0), (5200.0, 0.0)
+    assert near in sum(ringed_with(index=4, point=near), ())
+    assert far not in sum(ringed_with(index=4, point=far), ())

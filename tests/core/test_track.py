@@ -5,6 +5,7 @@ from typing import Final
 
 from paperroute_testkit.core.factories import calls, pattern
 from paperroute_transit.core.geo import Point, make_shape
+from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.track import call_pairs, tracked_shape
 
 POINTS: Final[dict[str, Point]] = {
@@ -104,17 +105,21 @@ def test_a_one_point_hop_is_not_held() -> None:
     ) is None
 
 
+def tracked_id(*, trip: TripPattern) -> str:
+    """Give the id of a pattern's tracked shape, which must exist."""
+    shape = tracked_shape(
+        pattern=trip, shape=FEED, hops={('A', 'B'): HOP}, version='v1',
+    )
+    assert shape is not None
+    return shape.shape_id
+
+
 def test_the_id_changes_with_the_calls() -> None:
     """Two trips on one shape with the same hops but another end differ."""
     short = replace(
         RAIL, stops=RAIL.stops[:2], along=RAIL.along[:2] if RAIL.along else None,
     )
-    ids = {
-        tracked_shape(
-            pattern=trip, shape=FEED, hops={('A', 'B'): HOP}, version='v1',
-        ).shape_id  # type: ignore[union-attr]
-        for trip in (RAIL, short)
-    }
+    ids = {tracked_id(trip=trip) for trip in (RAIL, short)}
     assert len(ids) == 2
 
 

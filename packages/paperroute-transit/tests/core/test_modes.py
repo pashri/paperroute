@@ -2,8 +2,11 @@
 
 from dataclasses import replace
 
+import pytest
+
 from paperroute_transit.core.modes import (
     ModeSpec,
+    is_road,
     line_badge,
     line_key,
     line_modes,
@@ -106,3 +109,25 @@ def test_line_value_and_badge() -> None:
     assert value == 'GN:Kings Lynn & Kings Cross'
     assert line_badge(value=value) == 'GN'
     assert line_badge(value='T1') == 'T1'
+
+
+@pytest.mark.parametrize(
+    ('route_type', 'road'),
+    [
+        (3, True),
+        (11, True),
+        (199, False),
+        (200, True),
+        (299, True),
+        (300, False),
+        (699, False),
+        (700, True),
+        (799, True),
+        (800, False),
+    ],
+)
+def test_is_road_at_the_edges_of_each_range(
+    route_type: int, road: bool,
+) -> None:
+    """Types 3, 11, 200-299 and 700-799 are road; their neighbours not."""
+    assert is_road(route_type=route_type) is road

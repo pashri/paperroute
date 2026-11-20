@@ -171,7 +171,7 @@ class HopTimetable(EmptyPlacedTimetable):
         self, *, pairs: Collection[tuple[str, str]],
     ) -> dict[tuple[str, str], tuple[Point, ...]]:
         """
-        Give the A to B track when it is asked for.
+        Give the A to B track when it is asked for, either way round.
 
         Parameters
         ----------
@@ -181,13 +181,14 @@ class HopTimetable(EmptyPlacedTimetable):
         Returns
         -------
         dict[tuple[str, str], tuple[Point, ...]]
-            The hop, when asked for.
+            The hop for A to B as stored, and for B to A reversed.
         """
-        return {
-            key: points
-            for key, points in {('A', 'B'): HOP}.items()
-            if key in pairs
-        }
+        found: dict[tuple[str, str], tuple[Point, ...]] = {}
+        if ('A', 'B') in pairs:
+            found[('A', 'B')] = HOP
+        if ('B', 'A') in pairs:
+            found[('B', 'A')] = tuple(reversed(HOP))
+        return found
 
 
 LOAD: Final[LoadPatterns] = LoadPatterns(

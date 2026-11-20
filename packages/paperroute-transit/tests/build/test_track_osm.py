@@ -3,7 +3,9 @@
 from collections.abc import Mapping
 from pathlib import Path
 
+import osmium
 import pytest
+from osmium.osm.mutable import Node, Way
 
 from paperroute_testkit.build.osm_factory import write_rail_osm
 from paperroute_testkit.fake_city import TEST_PROJECTION
@@ -11,6 +13,7 @@ from paperroute_transit.build.track_osm import (
     rail_station,
     read_track,
     running_line,
+    track_entities,
 )
 from paperroute_transit.core.geo import to_metres
 
@@ -142,3 +145,41 @@ def test_running_line(tags: Mapping[str, str], expected: bool) -> None:
 def test_rail_station(tags: Mapping[str, str], expected: bool) -> None:
     """A station is named, and not a subway or light rail stop."""
     assert rail_station(tags=tags) is expected
+
+
+def test_only_objects_with_a_rail_tag_reach_the_classifiers(
+    tmp_path: Path,
+) -> None:
+    """Untagged nodes and ways without ``railway`` are never yielded."""
+    path = tmp_path / 'mixed.osm.pbf'
+    with osmium.SimpleWriter(path, overwrite=True) as writer:
+        for node_id, tags in (
+            (1, {}),
+            (2, {'railway': 'halt', 'name': 'Halt'}),
+            (3, {}),
+            (4, {'amenity': 'cafe'}),
+        ):
+            writer.add_node(Node(
+                id=node_id, location=(151.0 + node_id / 100, -33.8),
+                tags=tags,
+            ))
+        writer.add_way(Way(id=1, nodes=[1, 2, 3], tags={'railway': 'rail'}))
+        writer.add_way(Way(id=2, nodes=[1, 3], tags={'highway': 'road'}))
+    found = [
+        (type(entity).__name__, entity.id, 'railway' in entity.tags)
+        for entity in track_entities(path=path)
+    ]
+    assert found == [('Node', 2, True), ('Way', 1, True)]
+
+
+def test_a_filtered_way_keeps_its_untagged_nodes_located(
+    rail_osm: Path,
+) -> None:
+    """Track nodes are untagged, yet each kept way's nodes have places."""
+    located = [
+        [node.location.valid() for node in entity.nodes]
+        for entity in track_entities(path=rail_osm)
+        if isinstance(entity, osmium.osm.Way)
+    ]
+    assert [len(way) for way in located] == [3, 2, 2]
+    assert all(all(way) for way in located)

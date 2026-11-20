@@ -17,6 +17,7 @@ NOT_RAIL: Final[frozenset[str]] = frozenset(
 )
 STATION_KINDS: Final[frozenset[str]] = frozenset({'station', 'halt'})
 INDEX: Final[str] = 'flex_mem'
+TRACK_KEYS: Final[tuple[str, ...]] = ('railway',)
 
 Spot = tuple[float, float]
 
@@ -85,74 +86,82 @@ class TrackParts:
     stations: dict[int, TrackStation] = field(default_factory=dict)
 
 
-class TrackHandler(osmium.SimpleHandler):
+def keep_station(
+    *,
+    node: osmium.osm.Node,
+    parts: TrackParts,
+    projection: Projection,
+) -> None:
     """
-    Collects running ways and station nodes into shared parts.
+    Keep a node that is a rail station.
 
     Parameters
     ----------
+    node : osmium.osm.Node
+        The node.
     parts : TrackParts
-        Where to put what is found. Objects already in it are skipped.
+        Where to put it. A node already in it is skipped.
     projection : Projection
-        Projects stations to metres.
+        Projects the station to metres.
     """
+    if node.id in parts.stations or not node.location.valid():
+        return
+    tags = dict(node.tags)
+    if rail_station(tags=tags):
+        x, y = to_metres(
+            lon=node.location.lon,
+            lat=node.location.lat,
+            projection=projection,
+        )
+        parts.stations[node.id] = TrackStation(
+            osm_id=node.id,
+            name=tags['name'],
+            lat=node.location.lat,
+            lon=node.location.lon,
+            x=x,
+            y=y,
+        )
 
-    def __init__(
-        self,
-        *,
-        parts: TrackParts,
-        projection: Projection,
-    ) -> None:
-        super().__init__()
-        self.parts = parts
-        self.projection = projection
 
-    def node(self, n: osmium.osm.Node) -> None:
-        """
-        Keep a node that is a rail station.
+def keep_way(*, way: osmium.osm.Way, parts: TrackParts) -> None:
+    """
+    Keep a way that is a running line.
 
-        Parameters
-        ----------
-        n : osmium.osm.Node
-            The node.
-        """
-        if n.id in self.parts.stations or not n.location.valid():
-            return
-        tags = dict(n.tags)
-        if rail_station(tags=tags):
-            x, y = to_metres(
-                lon=n.location.lon,
-                lat=n.location.lat,
-                projection=self.projection,
-            )
-            self.parts.stations[n.id] = TrackStation(
-                osm_id=n.id,
-                name=tags['name'],
-                lat=n.location.lat,
-                lon=n.location.lon,
-                x=x,
-                y=y,
-            )
+    Parameters
+    ----------
+    way : osmium.osm.Way
+        The way, with node locations.
+    parts : TrackParts
+        Where to put it. A way already in it is skipped.
+    """
+    if way.id in parts.ways or not running_line(tags=dict(way.tags)):
+        return
+    located = [node for node in way.nodes if node.location.valid()]
+    for node in located:
+        parts.spots[node.ref] = (node.location.lon, node.location.lat)
+    parts.ways[way.id] = tuple(node.ref for node in located)
 
-    def way(self, w: osmium.osm.Way) -> None:
-        """
-        Keep a way that is a running line.
 
-        Parameters
-        ----------
-        w : osmium.osm.Way
-            The way, with node locations.
-        """
-        if w.id in self.parts.ways or not running_line(tags=dict(w.tags)):
-            return
-        refs = tuple(n.ref for n in w.nodes if n.location.valid())
-        for node in w.nodes:
-            if node.location.valid():
-                self.parts.spots[node.ref] = (
-                    node.location.lon,
-                    node.location.lat,
-                )
-        self.parts.ways[w.id] = refs
+def track_entities(*, path: Path) -> osmium.FileProcessor:
+    """
+    Open an OSM file for the nodes and ways that carry a rail tag.
+
+    Parameters
+    ----------
+    path : Path
+        The ``.osm.pbf`` file.
+
+    Returns
+    -------
+    osmium.FileProcessor
+        Yields only objects with a ``railway`` tag. Every way's nodes
+        have locations, though untagged nodes are not yielded.
+    """
+    return (
+        osmium.FileProcessor(path)
+        .with_locations(INDEX)
+        .with_filter(osmium.filter.KeyFilter(*TRACK_KEYS))
+    )
 
 
 def largest_part(*, ways: Sequence[tuple[int, ...]]) -> set[int]:
@@ -268,9 +277,13 @@ def read_track(
     """
     parts = TrackParts()
     for path in paths:
-        TrackHandler(parts=parts, projection=projection).apply_file(
-            str(path),
-            locations=True,
-            idx=INDEX,
-        )
+        for entity in track_entities(path=path):
+            if isinstance(entity, osmium.osm.Node):
+                keep_station(
+                    node=entity,
+                    parts=parts,
+                    projection=projection,
+                )
+            elif isinstance(entity, osmium.osm.Way):
+                keep_way(way=entity, parts=parts)
     return build_track(parts=parts, projection=projection)

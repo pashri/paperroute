@@ -1,14 +1,22 @@
 """Tests for the map projection and shape geometry."""
 
 import math
+from collections.abc import Sequence
+
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 from paperroute_transit.core.geo import (
+    Point,
     Projection,
+    Shape,
     cut,
     make_shape,
     nearest_along,
+    nearest_from,
     pack_shape,
     point_along,
+    project_onto_segment,
     stop_distances,
     to_lonlat,
     to_metres,
@@ -140,3 +148,104 @@ def test_cut_clamps_to_the_shape() -> None:
 def test_nearest_along_projects_onto_the_shape() -> None:
     """A point beside the shape is measured where it projects."""
     assert nearest_along(shape=SHORT, point=(130.0, 7.0)) == 130.0
+
+
+CASES: int = 2000
+COORDINATE = st.floats(min_value=-400.0, max_value=400.0).map(
+    lambda value: round(value, 3),
+)
+WHOLE = st.integers(min_value=-40, max_value=40).map(float)
+POINT = st.tuples(COORDINATE, COORDINATE) | st.tuples(WHOLE, WHOLE)
+SPINE = st.tuples(
+    st.just(0.0),
+    st.floats(min_value=0.0, max_value=30.0).map(
+        lambda value: round(value, 2),
+    ),
+)
+BESIDE = st.tuples(
+    st.floats(min_value=-1.0, max_value=1.0).map(
+        lambda value: round(value, 2),
+    ),
+    st.floats(min_value=-1.0, max_value=2.0).map(
+        lambda value: round(value, 2),
+    ),
+)
+
+
+def brute_nearest_from(
+    *, shape: Shape, stop: Point, first: int,
+) -> tuple[int, float]:
+    """The plain scan of every segment from `first`."""
+    best = (math.inf, first, shape.along[first])
+    for index in range(first, len(shape.points) - 1):
+        gap, offset = project_onto_segment(
+            point=stop,
+            start=shape.points[index],
+            end=shape.points[index + 1],
+        )
+        if gap < best[0]:
+            best = (gap, index, shape.along[index] + offset)
+    return best[1], best[2]
+
+
+@st.composite
+def tracks(
+    draw: st.DrawFn, *, spot: st.SearchStrategy[Point] = POINT,
+) -> list[Point]:
+    """A path that sometimes repeats a point or returns to one."""
+    points: list[Point] = [draw(spot)]
+    for _ in range(draw(st.integers(min_value=0, max_value=40))):
+        step = draw(st.sampled_from(('new', 'repeat', 'revisit')))
+        if step == 'repeat':
+            points.append(points[-1])
+        elif step == 'revisit':
+            points.append(draw(st.sampled_from(points)))
+        else:
+            points.append(draw(spot))
+    return points
+
+
+def stored(*, shape: Shape) -> Shape:
+    """The shape as the timetable keeps it, in rounded decimetres."""
+    return unpack_shape(shape_id=shape.shape_id, blob=pack_shape(shape=shape))
+
+
+def same_search(*, shape: Shape, stop: Point, first: int) -> bool:
+    """Whether the search and the plain scan agree."""
+    return nearest_from(shape=shape, stop=stop, first=first) == (
+        brute_nearest_from(shape=shape, stop=stop, first=first)
+    )
+
+
+@settings(max_examples=CASES, deadline=None, derandomize=True)
+@given(points=tracks(), stop=POINT, offset=st.integers(min_value=0))
+def test_nearest_from_matches_the_plain_scan(
+    points: Sequence[Point], stop: Point, offset: int,
+) -> None:
+    """The search gives the plain scan's segment and distance."""
+    shape = make_shape(shape_id='s', points=points)
+    assert same_search(shape=shape, stop=stop, first=offset % len(points))
+
+
+@settings(max_examples=CASES, deadline=None, derandomize=True)
+@given(
+    points=tracks(spot=SPINE),
+    stop=BESIDE,
+    offset=st.integers(min_value=0),
+)
+def test_nearest_from_matches_the_plain_scan_on_stored_shapes(
+    points: Sequence[Point], stop: Point, offset: int,
+) -> None:
+    """The same holds once packing has rounded points and distances."""
+    shape = stored(shape=make_shape(shape_id='s', points=points))
+    assert same_search(shape=shape, stop=stop, first=offset % len(points))
+
+
+def test_nearest_from_finds_a_pass_that_rounding_shortened() -> None:
+    """A stretch stored shorter than its straight line is not skipped."""
+    shape = Shape(
+        shape_id='s',
+        points=((0.0, 1.0), (0.0, 20.0), (0.0, 0.95)),
+        along=(0.0, 19.0, 37.95),
+    )
+    assert nearest_from(shape=shape, stop=(0.0, 0.0), first=0) == (1, 38.05)

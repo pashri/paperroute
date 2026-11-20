@@ -181,13 +181,13 @@ class Timing:
         budget : int | None
             Milliseconds before scaling; the stage's own when None.
         """
-        limit = BUDGETS[name] if budget is None else budget
+        limit = (BUDGETS[name] if budget is None else budget) * self.scale
         median = statistics.median(millis)
         print(
             f'{name}: {median:.1f} ms, {max(millis):.1f} ms '
-            f'(budget {limit} ms)',
+            f'(budget {limit:g} ms)',
         )
-        if median > limit * self.scale:
+        if median > limit:
             self.over.append(name)
 
 
@@ -738,7 +738,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     repo=repo,
                     stop=args.stop,
                     start=start,
-                    asked=bool(args.at),
+                    asked=args.at is not None,
                 ),
                 file=sys.stderr,
             )

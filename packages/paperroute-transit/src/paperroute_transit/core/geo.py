@@ -262,7 +262,7 @@ def project_onto_segment(
     return math.dist(point, nearest), t * length
 
 
-SKIP_SLACK: Final[float] = 1e-6  # metres
+SKIP_SLACK: Final[float] = 0.5  # metres, twice the decimetre packing error
 ALONG_CACHE: Final[int] = 1024  # placements held
 
 

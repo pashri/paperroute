@@ -7,7 +7,6 @@ from typing import Final
 from multidict import MultiMapping
 
 from paperroute_transit.adapters.state_change import ALLOW_MAX, ALLOW_MIN
-from paperroute_transit.core.chooser import Choice, pin_value
 from paperroute_transit.core.connection_model import (
     default_allow,
     direct_leg,
@@ -23,7 +22,6 @@ from paperroute_transit.core.model import (
     way_key,
 )
 from paperroute_transit.core.modes import ModeSpec, end_point_modes
-from paperroute_transit.core.pin_choices import busiest_line
 from paperroute_transit.ports import PinOptions
 
 CHANGE_SEP: Final[str] = '|'  # between the changes of an encoded way
@@ -316,89 +314,6 @@ def picked_way(*, options: PinOptions, text: str) -> Way | None:
     return stop_way(places=known)
 
 
-def strip_routes(
-    *,
-    options: PinOptions,
-    base: Pin | None,
-    origin: StopPlace,
-    destination: StopPlace,
-    modes: Sequence[ModeSpec],
-) -> tuple[str, ...]:
-    """
-    Give the routes a ways save leaves on a pin.
-
-    Parameters
-    ----------
-    options : PinOptions
-        What the timetable offers.
-    base : Pin | None
-        The saved pin being edited, or None.
-    origin : StopPlace
-        The From.
-    destination : StopPlace
-        The To.
-    modes : Sequence[ModeSpec]
-        The city's modes.
-
-    Returns
-    -------
-    tuple[str, ...]
-        For a destination-first pin, its routes when its From and To are
-        unchanged and they are a line offered at the From; otherwise the
-        busiest line between the pair, or none when no line links them.
-        Empty for any other pin.
-    """
-    if base is None or base.kind not in end_point_modes(modes=modes):
-        return ()
-    lines = options.lines_at(stop_id=origin.stop_id, kind=base.kind)
-    if kept_routes(
-        base=base, origin=origin, destination=destination, lines=lines,
-    ):
-        return base.routes
-    trips = options.line_trips(
-        origin=origin, destination=destination, kind=base.kind,
-    )
-    line = busiest_line(lines=lines, trips=trips)
-    return (pin_value(choice=line),) if line is not None and trips else ()
-
-
-def kept_routes(
-    *,
-    base: Pin,
-    origin: StopPlace,
-    destination: StopPlace,
-    lines: Sequence[Choice],
-) -> bool:
-    """
-    Say whether a ways save leaves a pin's routes as they are.
-
-    Parameters
-    ----------
-    base : Pin
-        The saved pin being edited.
-    origin : StopPlace
-        The From.
-    destination : StopPlace
-        The To.
-    lines : Sequence[Choice]
-        The lines offered at the From.
-
-    Returns
-    -------
-    bool
-        True when the From and To are unchanged and the stored routes
-        are one line offered at the From.
-    """
-    if base.destination is None or base.routes == ():
-        return False
-    same = (origin.stop_id, destination.stop_id) == (
-        base.origin.stop_id, base.destination.stop_id,
-    )
-    return same and base.routes in [
-        (pin_value(choice=line),) for line in lines
-    ]
-
-
 def draft_pin(
     *,
     options: PinOptions,
@@ -418,7 +333,7 @@ def draft_pin(
     base : Pin | None
         The saved pin being edited, or None.
     modes : Sequence[ModeSpec]
-        The city's modes; a destination-first pin keeps a Strip line.
+        The city's modes; a pin of an end-point kind keeps no routes.
 
     Returns
     -------
@@ -430,12 +345,13 @@ def draft_pin(
     destination = options.place(stop_id=draft.destination)
     if origin is None or destination is None:
         return None
+    start = base or Pin(origin=origin)
     pin = replace(
-        base or Pin(origin=origin),
+        start,
         origin=origin, destination=destination, only=(),
-        routes=strip_routes(
-            options=options, base=base, origin=origin,
-            destination=destination, modes=modes,
+        routes=(
+            () if start.kind in end_point_modes(modes=modes)
+            else start.routes
         ),
         ways=draft_ways(options=options, draft=draft),
         never=draft.never, nickname=draft.nickname,

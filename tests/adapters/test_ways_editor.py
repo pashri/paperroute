@@ -87,13 +87,27 @@ def test_never_choices_cover_every_leg() -> None:
     assert never_choices(options=OPTIONS, pin=pin) == ('660', '665', '999')
 
 
-def test_a_ways_save_clears_a_sydney_trains_line() -> None:
-    """Sydney trains and buses lose their routes on a ways save."""
+def test_a_way_by_train_keeps_no_route() -> None:
+    """A train leg stores no route; a bus leg keeps its own."""
     draft = ways_draft(query=MultiDict(ways_query(pin=WORK, ref='r')))
-    for kind, routes in ((SydneyMode.TRAIN, ('T1',)), (SydneyMode.BUS, ('9',))):
-        base = replace(WORK, kind=kind, routes=routes)
+    for kind, routes in (
+        (SydneyMode.TRAIN, ()), (SydneyMode.BUS, ('9',)),
+    ):
+        base = replace(WORK, kind=kind, routes=('9',))
         found = draft_pin(
             options=OPTIONS, draft=draft, base=base, modes=SYDNEY.modes,
         )
         assert found is not None
-        assert found.routes == ()
+        assert found.routes == routes
+
+
+def test_a_ways_save_clears_an_old_train_pins_routes() -> None:
+    """An old train pin with stored routes saves with none."""
+    draft = ways_draft(query=MultiDict(ways_query(pin=WORK, ref='r')))
+    base = replace(WORK, kind=SydneyMode.TRAIN, routes=('T1', 'T2'))
+    found = draft_pin(
+        options=OPTIONS, draft=draft, base=base, modes=SYDNEY.modes,
+    )
+    assert found is not None
+    assert found.routes == ()
+    assert found.kind == SydneyMode.TRAIN

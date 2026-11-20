@@ -45,6 +45,7 @@ from paperroute_testkit.core.factories import (
     example_reach,
     line_pattern,
     pattern,
+    place,
     snapshot,
     train,
     vehicle,
@@ -105,6 +106,7 @@ from tests.core.test_chains import TRAINS
 from tests.core.test_connection_screens import started, with_legs
 from tests.core.test_connection_strip import PATTERNS as LEG_PATTERNS
 from tests.core.test_state import BUS_POSITIONS, CENTRE, PRESS, fresh, loaded
+from tests.core.test_stop_hero import FROM, RUN, STAND
 
 GOLDEN: Final[Path] = Path(__file__).parent
 UPDATING: Final[bool] = os.getenv('GOLDEN_UPDATE') == '1'
@@ -450,6 +452,46 @@ def stop_cambridge_trains() -> State:
     return state
 
 
+def stop_no_destination() -> State:
+    """
+    Show the Stop view of a pin with no Destination and a seen bus.
+
+    Returns
+    -------
+    State
+        State at `START`.
+    """
+    state, _ = on_view(
+        view=LiveView.STOP,
+        pin=Pin(
+            origin=place(STAND, name='Hollis St', point=CENTRE),
+            kind=SydneyMode.BUS,
+        ),
+        departures=tuple(
+            departure(
+                departs=START + timedelta(minutes=minutes),
+                mode=SydneyFeed.BUS,
+                kind=SydneyMode.BUS,
+                platform='B',
+            )
+            for minutes in (3, 6, 9)
+        ),
+        station=FROM,
+    )
+    state = estimated(state=state, lates={0: (2, False)})
+    state = patterns_loaded(state=state, patterns={'trip-0803': RUN})
+    report = vehicle(
+        timestamp=int(START.timestamp()),
+        trip_id='trip-0803',
+        point=(-75.0, 0.0),
+    )
+    state, _ = step(state, PositionsFetched(
+        feed=BUS_POSITIONS,
+        snapshot=snapshot(fetched_at=START, vehicles=(report,)),
+    ))
+    return state
+
+
 def map_scene() -> State:
     """
     Show the Map with a route line and a live bus.
@@ -716,6 +758,7 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     'stop_no_key': stop_no_key,
     'stop_trainlink': stop_trainlink,
     'stop_cambridge_trains': stop_cambridge_trains,
+    'stop_no_destination': stop_no_destination,
     'stop_estimates': lambda: estimated(
         state=stop(), lates={0: (-2, False), 1: (2, False)},
     ),

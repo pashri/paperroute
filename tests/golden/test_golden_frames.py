@@ -25,8 +25,10 @@ from paperroute_transit.core.connection_strip import (
 )
 from paperroute_transit.core.map_view import MapView
 from paperroute_transit.core.messages import ScreenView
+from paperroute_transit.core.stop_under import UnderNumber
 from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.core.strip_model import StripMapView, StripView
+from tests.core.test_stop_hero import CALLS
 from tests.golden.scenes import (
     GOLDEN,
     SCENES,
@@ -222,3 +224,19 @@ def test_cambridge_trains_show_timetable_platforms() -> None:
     assert [row.note for row in view.rows] == [
         'platform 4', 'platform 5', 'platform 1',
     ]
+
+
+def test_a_pin_with_no_destination_shows_what_is_known_under_the_number(
+) -> None:
+    """The open Stop view says status, platform, place and next calls."""
+    view = view_of(state=SCENES['stop_no_destination']())
+    assert isinstance(view, StopView)
+    assert view.under == UnderNumber(
+        status='2 min late',
+        platform='stand B',
+        then=('8:06', '8:09'),
+        delay=120,
+        place='1 stop away, last seen at Mays Hill',
+        calls=CALLS,
+    )
+    assert [row.leaves_at for row in view.rows] == ['8:06', '8:09']

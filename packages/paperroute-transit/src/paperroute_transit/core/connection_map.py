@@ -12,7 +12,7 @@ from paperroute_transit.core.connection_view import (
     chain_rows,
     no_pair_text,
 )
-from paperroute_transit.core.geo import Point, Shape, cut, stop_distances
+from paperroute_transit.core.geo import Point, Shape, cut
 from paperroute_transit.core.map_fit import (
     banner_room,
     bottom_room,
@@ -33,6 +33,7 @@ from paperroute_transit.core.model import Change, Departure, Pin, StopPlace
 from paperroute_transit.core.ridden import SECOND_RIDE_WINDOW, route_stops
 from paperroute_transit.core.rides import Ride, rides_of
 from paperroute_transit.core.saved import ConnectionMap
+from paperroute_transit.core.stop_fit import stop_distances
 from paperroute_transit.core.tiles import ZOOMS
 
 SIDEBAR_PAIRS: Final[int] = 4

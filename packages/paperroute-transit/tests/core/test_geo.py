@@ -3,6 +3,7 @@
 import math
 from collections.abc import Sequence
 
+import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -17,7 +18,6 @@ from paperroute_transit.core.geo import (
     pack_shape,
     point_along,
     project_onto_segment,
-    stop_distances,
     to_lonlat,
     to_metres,
     unpack_shape,
@@ -96,25 +96,6 @@ def test_point_along_interpolates_and_clamps() -> None:
     assert point_along(shape=shape, distance=15.0) == (10.0, 5.0)
     assert point_along(shape=shape, distance=-1.0) == (0.0, 0.0)
     assert point_along(shape=shape, distance=99.0) == (10.0, 10.0)
-
-
-def test_stop_distances_never_decrease_on_a_loop() -> None:
-    """A loop route passing a corner twice keeps its stop order."""
-    shape = make_shape(
-        shape_id='loop',
-        points=[
-            (0.0, 0.0),
-            (100.0, 0.0),
-            (100.0, 100.0),
-            (0.0, 100.0),
-            (0.0, 5.0),
-        ],
-    )
-    distances = stop_distances(
-        shape=shape,
-        stops=[(0.0, 0.0), (100.0, 50.0), (0.0, 2.0)],
-    )
-    assert distances == (0.0, 150.0, 395.0)
 
 
 def test_pack_shape_round_trips_to_a_decimetre() -> None:
@@ -249,3 +230,10 @@ def test_nearest_from_finds_a_pass_that_rounding_shortened() -> None:
         along=(0.0, 19.0, 37.95),
     )
     assert nearest_from(shape=shape, stop=(0.0, 0.0), first=0) == (1, 38.05)
+
+
+def test_project_onto_segment_skips_an_underflowing_segment() -> None:
+    """A segment whose squared length underflows measures from its start."""
+    assert project_onto_segment(
+        point=(1.0, 1.0), start=(0.0, 0.0), end=(1e-170, 0.0),
+    ) == pytest.approx((math.sqrt(2.0), 0.0))

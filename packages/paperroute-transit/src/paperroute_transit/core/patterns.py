@@ -10,9 +10,9 @@ from paperroute_transit.core.geo import (
     Shape,
     point_along,
     project_onto_segment,
-    stop_distances,
 )
 from paperroute_transit.core.model import service_seconds
+from paperroute_transit.core.stop_fit import stop_distances
 
 
 @dataclass(frozen=True)

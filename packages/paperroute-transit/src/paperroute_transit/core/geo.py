@@ -251,13 +251,15 @@ def project_onto_segment(
     -------
     tuple[float, float]
         The distance from the point to the segment, and the metres from
-        the segment start to the nearest position on it.
+        the segment start to the nearest position on it. A segment with
+        no length, or one too short to square, measures from its start.
     """
     dx, dy = end[0] - start[0], end[1] - start[1]
     length = math.hypot(dx, dy)
-    if length == 0.0:
+    squared = length**2
+    if squared == 0.0:
         return math.dist(point, start), 0.0
-    t = ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / length**2
+    t = ((point[0] - start[0]) * dx + (point[1] - start[1]) * dy) / squared
     t = min(1.0, max(0.0, t))
     nearest = (start[0] + dx * t, start[1] + dy * t)
     return math.dist(point, nearest), t * length
@@ -405,43 +407,6 @@ def nearest_along(*, shape: Shape, point: Point) -> float:
         with the same fingerprint share placements.
     """
     return ALONG.place(shape=shape, point=point)
-
-
-def stop_distances(
-    *,
-    shape: Shape,
-    stops: Sequence[Point],
-) -> tuple[float, ...]:
-    """Place stops along a shape, in order.
-
-    Each stop is matched only to segments from the previous stop's segment
-    onwards, so a loop that passes the same corner twice keeps its order.
-
-    Parameters
-    ----------
-    shape : Shape
-        The path the stops lie on.
-    stops : Sequence[Point]
-        Stop positions in metres, in running order.
-
-    Returns
-    -------
-    tuple[float, ...]
-        Metres along the shape for each stop; never decreasing.
-    """
-    result: list[float] = []
-    segment = 0
-    for stop in stops:
-        if len(shape.points) < 2:
-            result.append(0.0)
-            continue
-        segment, distance = nearest_from(
-            shape=shape,
-            stop=stop,
-            first=min(segment, len(shape.points) - 2),
-        )
-        result.append(max(distance, result[-1] if result else 0.0))
-    return tuple(result)
 
 
 def pack_shape(*, shape: Shape) -> bytes:

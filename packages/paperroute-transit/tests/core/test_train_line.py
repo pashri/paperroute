@@ -502,6 +502,7 @@ def exits_reach(
     points = {
         'C': (0, 0),
         'N1': (0, 900),
+        'N3': (0, 1000),
         'E': (0, -900),
         'Z': (0, -1800),
     }
@@ -631,3 +632,14 @@ def test_a_destination_beyond_the_return_is_not_cut() -> None:
         stations=('C', 'E', 'C', 'F'), hops={}, destination='F',
     )
     assert names(reach=reach) == ['C', 'E', 'F']
+
+
+def test_a_destination_train_on_side_zero_keeps_its_sides_exits() -> None:
+    """A train north to its Destination keeps exits by another north hop."""
+    reach = exits_reach(
+        runs={'C N1 N2': 40, 'C N3 W': 8, 'C E Z': 8},
+        below=('C', 'N1', 'N2'),
+        destination='N2',
+    )
+    assert names(reach=reach) == ['C', 'N3', 'N1', 'N2']
+    assert reach.rows[1].kind is RowKind.EXIT

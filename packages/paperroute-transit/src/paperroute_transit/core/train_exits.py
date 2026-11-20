@@ -126,6 +126,8 @@ class Request:
         The first stations of the main train's side; None for all.
     loop_name : str
         The name of a train that returns to the From; empty for none.
+    on_line : frozenset[str]
+        The main line's stations as a set.
     """
 
     network: TrainNetwork
@@ -133,6 +135,7 @@ class Request:
     line: Sequence[str]
     first_hops: frozenset[str] | None
     loop_name: str
+    on_line: frozenset[str]
 
 
 @dataclass
@@ -191,10 +194,12 @@ def train_exits(
         line=line,
         first_hops=first_hops,
         loop_name=loop_name,
+        on_line=frozenset(line),
     )
     groups = grouped(tails=cut_tails(request=request))
+    onward = onward_trains(runs=network.runs, origin=origin)
     found = [
-        exit_of(group=group, runs=network.runs)
+        exit_of(group=group, onward=onward)
         for group in groups
         if group.trains >= EXIT_TRAINS
     ]
@@ -242,11 +247,16 @@ def cut_run(
     -------
     tuple[str, Tail] | None
         The junction and tail, or None when the run does not call at
-        the From, is not on the main train's side, is a loop with no
-        name or in the reverse direction, or ends on the line.
+        the From, has no trains, is not on the main train's side, is a
+        loop with no name or in the reverse direction, or ends on the
+        line.
     """
     rest, loops = from_origin(stations=run.stations, origin=request.origin)
-    if not rest or (loops and not request.loop_name):
+    if (
+        not rest
+        or run.trains <= 0
+        or (loops and not request.loop_name)
+    ):
         return None
     path = [
         station
@@ -256,9 +266,12 @@ def cut_run(
     ]
     if not wanted(path=path, loops=loops, request=request):
         return None
-    on_line = set(request.line)
     last = max(
-        (index for index, station in enumerate(path) if station in on_line),
+        (
+            index
+            for index, station in enumerate(path)
+            if station in request.on_line
+        ),
         default=-1,
     )
     if last < 0 or last == len(path) - 1:
@@ -327,7 +340,9 @@ def grouped(*, tails: Iterable[tuple[str, Tail]]) -> list[Group]:
     return groups
 
 
-def exit_of(*, group: Group, runs: Sequence[WeekdayRun]) -> TrainExit:
+def exit_of(
+    *, group: Group, onward: Counter[tuple[str, str]],
+) -> TrainExit:
     """
     Turn a group into an exit with its names.
 
@@ -335,8 +350,9 @@ def exit_of(*, group: Group, runs: Sequence[WeekdayRun]) -> TrainExit:
     ----------
     group : Group
         The tails leaving at one junction.
-    runs : Sequence[WeekdayRun]
-        The runs through the From, for what runs on past an end.
+    onward : Counter[tuple[str, str]]
+        Weekday trains running on past a station, by route and station,
+        from `onward_trains`.
 
     Returns
     -------
@@ -344,7 +360,7 @@ def exit_of(*, group: Group, runs: Sequence[WeekdayRun]) -> TrainExit:
         The exit. When no end qualifies the end with the most trains
         names it.
     """
-    named = named_ends(tails=group.tails, runs=runs)
+    named = named_ends(tails=group.tails, onward=onward)
     if not named:
         ends = ends_of(tails=group.tails)
         named = frozenset({min(ends, key=lambda end: (-ends[end], end))})
@@ -352,7 +368,7 @@ def exit_of(*, group: Group, runs: Sequence[WeekdayRun]) -> TrainExit:
     return TrainExit(
         junction=group.junction,
         first=branches(node=root)[0][0],
-        names=walk_order(tails=group.tails, named=named),
+        names=walk_tree(root=root, named=named),
         trains=group.trains,
     )
 
@@ -378,7 +394,7 @@ def ends_of(*, tails: Iterable[Tail]) -> Counter[str]:
 
 
 def named_ends(
-    *, tails: Sequence[Tail], runs: Sequence[WeekdayRun],
+    *, tails: Sequence[Tail], onward: Counter[tuple[str, str]],
 ) -> frozenset[str]:
     """
     Pick the ends of an exit that earn a name.
@@ -387,8 +403,8 @@ def named_ends(
     ----------
     tails : Sequence[Tail]
         The tails of one exit.
-    runs : Sequence[WeekdayRun]
-        Every run through the From.
+    onward : Counter[tuple[str, str]]
+        Weekday trains running on past a station, by route and station.
 
     Returns
     -------
@@ -404,7 +420,6 @@ def named_ends(
         routes.setdefault(tail.stations[-1], set()).add(tail.route)
         for station in tail.stations[:-1]:
             through[station] += tail.trains
-    onward = onward_trains(runs=runs)
     return frozenset(
         end
         for end, count in ends.items()
@@ -415,24 +430,29 @@ def named_ends(
     )
 
 
-def onward_trains(*, runs: Iterable[WeekdayRun]) -> Counter[tuple[str, str]]:
+def onward_trains(
+    *, runs: Iterable[WeekdayRun], origin: str,
+) -> Counter[tuple[str, str]]:
     """
     Count the trains of each route that call at a station and run on.
 
     Parameters
     ----------
     runs : Iterable[WeekdayRun]
-        The runs.
+        The runs through the From.
+    origin : str
+        The From station ID.
 
     Returns
     -------
     Counter[tuple[str, str]]
-        Weekday trains by route and station, for stations that are not
-        the run's last.
+        Weekday trains by route and station, counting the stations after
+        the run's first call at the From, except the last.
     """
     found: Counter[tuple[str, str]] = Counter()
     for run in runs:
-        for station in set(run.stations[:-1]):
+        rest, _ = from_origin(stations=run.stations, origin=origin)
+        for station in set(rest[:-1]):
             found[run.route, station] += run.trains
     return found
 
@@ -497,8 +517,27 @@ def walk_order(
     tuple[str, ...]
         Each named station once, where the walk first reaches it.
     """
+    return walk_tree(root=tree_of(tails=tails), named=named)
+
+
+def walk_tree(*, root: Node, named: frozenset[str]) -> tuple[str, ...]:
+    """
+    Name the ends of a tree in a depth-first walk, busiest first.
+
+    Parameters
+    ----------
+    root : Node
+        The junction's tree.
+    named : frozenset[str]
+        The stations that earn a name.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Each named station once, where the walk first reaches it.
+    """
     found: list[str] = []
-    stack = branches(node=tree_of(tails=tails))[::-1]
+    stack = branches(node=root)[::-1]
     while stack:
         station, node = stack.pop()
         if station in named and station not in found:

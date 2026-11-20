@@ -272,13 +272,14 @@ def train_reach(
             if above is None
             else with_exits(
                 data=data, trips=trips, item=above, rows=before,
-                hops=(sides, 0), loop_name=loop_name,
+                sides=sides, side=0, loop_name=loop_name,
             )
         ),
         origin=origin,
         ahead=with_exits(
             data=data, trips=trips, item=main, rows=ahead,
-            hops=(sides, 1), loop_name=loop_name,
+            sides=sides, side=None if above is None else 1,
+            loop_name=loop_name,
         ),
     )
 
@@ -373,7 +374,8 @@ def with_exits(
     trips: TripInputs,
     item: LiveDeparture | None,
     rows: list[ReachRow],
-    hops: tuple[tuple[frozenset[str], frozenset[str]] | None, int],
+    sides: tuple[frozenset[str], frozenset[str]] | None,
+    side: int | None,
     loop_name: str,
 ) -> list[ReachRow]:
     """
@@ -390,9 +392,12 @@ def with_exits(
     rows : list[ReachRow]
         The train's rows after the From, parented from the From at
         index 0.
-    hops : tuple[tuple[frozenset[str], frozenset[str]] | None, int]
+    sides : tuple[frozenset[str], frozenset[str]] | None
         The first stations above and below, from `north_hops`, or None
-        with no network; and which side to take, 0 above and 1 below.
+        with no network.
+    side : int | None
+        Which side the train is on, 0 above and 1 below; None takes the
+        side holding its first station.
     loop_name : str
         The name of a train that returns to the From.
 
@@ -402,7 +407,6 @@ def with_exits(
         The rows with exit rows added, parents moved to match; the rows
         unchanged when there is no network or train.
     """
-    sides, side = hops
     if data.network is None or sides is None or item is None:
         return rows
     origin = data.origin.stop_id
@@ -415,7 +419,7 @@ def with_exits(
         line=[origin, *(row.place.stop_id for row in rows)],
         first_hops=(
             frozenset() if first is None else side_of_first(
-                sides=sides[side], first=first,
+                sides=sides, side=side, first=first,
             )
         ),
         loop_name=loop_name,
@@ -423,14 +427,21 @@ def with_exits(
     return hung(rows=rows, exits=found, data=data)
 
 
-def side_of_first(*, sides: frozenset[str], first: str) -> frozenset[str]:
+def side_of_first(
+    *,
+    sides: tuple[frozenset[str], frozenset[str]],
+    side: int | None,
+    first: str,
+) -> frozenset[str]:
     """
     Take the first stations a train's exits may start with.
 
     Parameters
     ----------
-    sides : frozenset[str]
-        First stations on the train's side.
+    sides : tuple[frozenset[str], frozenset[str]]
+        First stations above and below.
+    side : int | None
+        The train's side; None takes the one holding `first`.
     first : str
         The train's own first station.
 
@@ -440,7 +451,9 @@ def side_of_first(*, sides: frozenset[str], first: str) -> frozenset[str]:
         The side's first stations, or just the train's own when it is
         not among them.
     """
-    return sides if first in sides else frozenset({first})
+    if side is None:
+        side = 0 if first in sides[0] else 1
+    return sides[side] if first in sides[side] else frozenset({first})
 
 
 def hung(

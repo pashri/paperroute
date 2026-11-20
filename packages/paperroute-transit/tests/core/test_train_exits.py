@@ -5,6 +5,7 @@ from paperroute_transit.core.train_exits import (
     Tail,
     TrainExit,
     named_ends,
+    onward_trains,
     train_exits,
     walk_order,
 )
@@ -82,12 +83,15 @@ def junction_runs() -> list[WeekdayRun]:
     -------
     list[WeekdayRun]
         Six GA trains end at N1, two more GA trains run on to N2 with
-        eighteen GB trains.
+        eighteen GB trains; each has its return run.
     """
     return [
         run_of(route='GA', stations='C S R N1', trains=6),
         run_of(route='GA', stations='C S R N1 N2', trains=2),
         run_of(route='GB', stations='C S R N1 N2', trains=18),
+        run_of(route='GA', stations='N1 R S C', trains=6),
+        run_of(route='GA', stations='N2 N1 R S C', trains=2),
+        run_of(route='GB', stations='N2 N1 R S C', trains=18),
     ]
 
 
@@ -141,7 +145,7 @@ def test_an_end_under_thirty_percent_is_not_named_by_share() -> None:
             Tail(route='A', stations=('E',), trains=6, loop=False),
             Tail(route='A', stations=('E', 'F'), trains=15, loop=False),
         ],
-        runs=runs,
+        onward=onward_trains(runs=runs, origin='C'),
     ) == frozenset({'F'})
 
 
@@ -275,3 +279,33 @@ def test_passed_stations_are_part_of_the_tail() -> None:
         hops={('S', 'T'): Hop(passed=('P',), inside=True)},
     )
     assert found[0].first == 'P'
+
+
+def test_a_return_run_starting_at_an_end_is_not_onward() -> None:
+    """Return runs from N1 do not count as running on past N1."""
+    found = exits_of(runs=junction_runs())
+    assert found[0].names == ('N1', 'N2')
+
+
+def test_a_run_with_no_trains_does_not_bridge_two_exits() -> None:
+    """A run with no trains joining P and Q leaves two exits."""
+    found = exits_of(runs=[
+        run_of(route='A', stations='C S P', trains=7),
+        run_of(route='B', stations='C S Q', trains=9),
+        run_of(route='C', stations='C S P Q', trains=0),
+    ])
+    assert [each.first for each in found] == ['Q', 'P']
+
+
+def test_a_bridging_tail_merges_three_groups_in_any_order() -> None:
+    """A meets B and B meets C, so the three are one group."""
+    tails = [
+        run_of(route='A', stations='C S P', trains=6),
+        run_of(route='B', stations='C S P Q', trains=7),
+        run_of(route='C', stations='C S Q', trains=8),
+    ]
+    for order in ([0, 1, 2], [0, 2, 1], [2, 0, 1], [1, 0, 2], [2, 1, 0]):
+        found = exits_of(runs=[tails[index] for index in order])
+        assert [(each.junction, each.trains) for each in found] == [
+            ('S', 21),
+        ]

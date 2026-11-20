@@ -1134,3 +1134,56 @@ def test_empty_window_is_paper(empty: FeatureStore) -> None:
     )
     tile = draw_window(store=empty, window=window)
     assert (tile == PAPER).all()
+
+
+@pytest.mark.parametrize(('mpp', 'overlap'), [(14, PAPER), (8, LIGHT)])
+def test_ground_fills_stack_in_order(
+    empty: FeatureStore,
+    mpp: int,
+    overlap: int,
+) -> None:
+    """Water covers an apron, which covers green from 14 m/px out."""
+    window = tile_window(mpp=mpp)
+    x, y = float(window.left), float(window.top)
+    for layer, box in (
+        ('water', (x + 100, y + 100, x + 200, y + 200)),
+        ('apron', (x + 60, y + 60, x + 160, y + 160)),
+        ('green', (x + 20, y + 20, x + 120, y + 120)),
+    ):
+        add_pixel_area(store=empty, layer=layer, box=box, mpp=mpp)
+    tile = draw_window(store=empty, window=window)
+    assert tile[40, 40] == LIGHT
+    assert tile[80, 80] == overlap
+    assert tile[110, 110] == DARK
+
+
+@pytest.mark.parametrize(('mpp', 'grey'), [(3, DARK), (5, DARK), (8, PAPER)])
+def test_platform_areas_fill_at_3_and_5_only(
+    empty: FeatureStore,
+    mpp: int,
+    grey: int,
+) -> None:
+    """A platform area is dark grey at 3 and 5 m/px and absent beyond."""
+    window = tile_window(mpp=mpp)
+    x, y = float(window.left), float(window.top)
+    add_pixel_area(
+        store=empty,
+        layer='platform',
+        box=(x + 50, y + 50, x + 150, y + 70),
+        mpp=mpp,
+    )
+    assert draw_window(store=empty, window=window)[60, 100] == grey
+
+
+def test_platform_way_lies_over_paths(empty: FeatureStore) -> None:
+    """An open platform covers the dotted path it crosses."""
+    window = tile_window(mpp=SEAM_MPP)
+    x, y = float(window.left), float(window.top)
+    for layer, pixels in (
+        ('path', [(x + 20, y + 50.5), (x + 200, y + 50.5)]),
+        ('platform', [(x + 100.0, y + 10), (x + 100.0, y + 240)]),
+    ):
+        add_pixel_line(store=empty, layer=layer, pixels=pixels, mpp=SEAM_MPP)
+    tile = draw_window(store=empty, window=window)
+    assert (tile[50, 99:101] == DARK).all()
+    assert (tile[50, 20:90] == INK).any()

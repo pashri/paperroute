@@ -108,6 +108,9 @@ def test_line_layer_rules(tags: Mapping[str, str], layer: str | None) -> None:
         ({'aeroway': 'runway'}, 'runway'),
         ({'aeroway': 'taxiway'}, 'taxiway'),
         ({'aeroway': 'aerodrome'}, None),
+        ({'railway': 'platform'}, 'platform'),
+        ({'public_transport': 'platform'}, 'platform'),
+        ({'highway': 'footway', 'public_transport': 'platform'}, 'platform'),
     ],
 )
 def test_line_layer_extras(tags: Mapping[str, str], layer: str | None) -> None:
@@ -115,15 +118,50 @@ def test_line_layer_extras(tags: Mapping[str, str], layer: str | None) -> None:
     assert line_layer(tags=tags) == layer
 
 
-def test_read_osm_reads_extra_lines(tmp_path: Path) -> None:
-    """Paths, a footway loop, service roads and airfield lines are read."""
+@pytest.mark.parametrize(
+    ('tags', 'layer'),
+    [
+        ({'railway': 'platform'}, 'platform'),
+        ({'public_transport': 'platform'}, 'platform'),
+        ({'aeroway': 'apron'}, 'apron'),
+        ({'landuse': 'forest'}, 'green'),
+        ({'landuse': 'cemetery'}, 'green'),
+        ({'landuse': 'village_green'}, 'green'),
+        ({'natural': 'scrub'}, 'green'),
+        ({'leisure': 'pitch'}, 'green'),
+        ({'leisure': 'common'}, 'green'),
+        ({'leisure': 'garden'}, 'green'),
+        ({'leisure': 'garden', 'access': 'private'}, None),
+        ({'leisure': 'park', 'landuse': 'grass'}, 'park'),
+        ({'natural': 'water', 'landuse': 'grass'}, 'water'),
+        ({'aeroway': 'runway'}, None),
+    ],
+)
+def test_area_layer_extras(tags: Mapping[str, str], layer: str | None) -> None:
+    """Platforms, aprons and green land are areas; water and parks win."""
+    assert area_layer(tags=tags) == layer
+
+
+def test_read_osm_reads_extra_areas(tmp_path: Path) -> None:
+    """A closed platform is an area only; an open one is a line."""
     path = tmp_path / 'extras.osm.pbf'
     write_extras_osm(path=path)
-    features = read_osm(path=path, bbox=TINY_BBOX, index='flex_mem')
+    features = list(read_osm(path=path, bbox=TINY_BBOX, index='flex_mem'))
     lines = sorted(
         item.layer for item in features if isinstance(item, OsmLine)
     )
-    assert lines == ['path', 'path', 'runway', 'service', 'taxiway']
+    areas = sorted(
+        item.layer for item in features if isinstance(item, OsmArea)
+    )
+    assert lines == [
+        'path',
+        'path',
+        'platform',
+        'runway',
+        'service',
+        'taxiway',
+    ]
+    assert areas == ['apron', 'green', 'platform']
 
 
 @pytest.mark.parametrize(

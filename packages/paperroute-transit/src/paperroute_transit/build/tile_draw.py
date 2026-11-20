@@ -18,7 +18,9 @@ from paperroute_transit.build.geometry import (
 )
 from paperroute_transit.build.map_style import (
     AREA_GREYS,
+    AREA_ORDER,
     DARK,
+    OVER_ROADS,
     RIVER_STYLE,
     ROAD_LAYERS,
     STATION_FACE,
@@ -27,6 +29,7 @@ from paperroute_transit.build.map_style import (
     SUPERSAMPLE,
     TRANSIT_LAYERS,
     UNDER_ROADS,
+    area_drawn,
     extra_strokes,
     road_style,
     transit_style,
@@ -164,7 +167,7 @@ def big_enough(*, rings: Sequence[Ring], mpp: int) -> bool:
 
 def draw_areas(*, canvas: Canvas, store: FeatureStore, window: Window) -> None:
     """
-    Fill parks, then water and sea.
+    Fill the ground: parks and green, aprons, water and sea, then platforms.
 
     Parameters
     ----------
@@ -179,9 +182,10 @@ def draw_areas(*, canvas: Canvas, store: FeatureStore, window: Window) -> None:
     areas = [
         (layer, rings)
         for layer, rings in store.areas_in(box=box)
-        if layer in AREA_GREYS and big_enough(rings=rings, mpp=window.mpp)
+        if area_drawn(layer=layer, mpp=window.mpp)
+        and big_enough(rings=rings, mpp=window.mpp)
     ]
-    for layer, rings in sorted(areas, key=lambda area: area[0] != 'park'):
+    for layer, rings in sorted(areas, key=lambda area: AREA_ORDER[area[0]]):
         canvas.rings(
             rings=[
                 window.local(points=ring)
@@ -325,7 +329,7 @@ def draw_roads(
 
 def draw_lines(*, canvas: Canvas, store: FeatureStore, window: Window) -> None:
     """
-    Stroke rivers, paths and service roads, roads by class, then transit.
+    Stroke the ground lines, roads, platforms, then transit.
 
     Transit is drawn from whole lines, not clipped ones, so a dashed
     line's dashes start at the same place in every tile.
@@ -341,6 +345,12 @@ def draw_lines(*, canvas: Canvas, store: FeatureStore, window: Window) -> None:
     """
     layers = by_layer(store=store, box=window.metres(grow=GEOMETRY_MARGIN))
     draw_roads(canvas=canvas, window=window, layers=layers)
+    draw_extras(
+        canvas=canvas,
+        window=window,
+        layers=layers,
+        names=OVER_ROADS,
+    )
     for layer in TRANSIT_LAYERS:
         for stroke in transit_style(layer=layer, mpp=window.mpp):
             stroke_all(

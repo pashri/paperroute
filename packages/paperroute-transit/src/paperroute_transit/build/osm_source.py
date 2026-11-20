@@ -49,6 +49,21 @@ ROADSIDE_FOOTWAYS: Final[frozenset[str]] = frozenset({'sidewalk', 'crossing'})
 PRIVATE_SERVICES: Final[frozenset[str]] = frozenset(
     {'driveway', 'parking_aisle', 'drive-through', 'emergency_access'},
 )
+GREEN_LANDUSE: Final[frozenset[str]] = frozenset(
+    {
+        'forest',
+        'meadow',
+        'grass',
+        'recreation_ground',
+        'cemetery',
+        'allotments',
+        'village_green',
+    },
+)
+GREEN_NATURAL: Final[frozenset[str]] = frozenset(
+    {'wood', 'grassland', 'heath', 'scrub'},
+)
+GREEN_LEISURE: Final[frozenset[str]] = frozenset({'common', 'pitch'})
 AIRFIELD_LINES: Final[frozenset[str]] = frozenset({'runway', 'taxiway'})
 MINOR_STATIONS: Final[frozenset[str]] = frozenset({'halt', 'tram_stop'})
 FILTER_KEYS: Final[tuple[str, ...]] = (
@@ -62,6 +77,8 @@ FILTER_KEYS: Final[tuple[str, ...]] = (
     'place',
     'amenity',
     'aeroway',
+    'landuse',
+    'public_transport',
 )
 
 
@@ -146,9 +163,53 @@ class OsmPlace:
     lat: float
 
 
+def is_platform(*, tags: Mapping[str, str]) -> bool:
+    """
+    Check whether tags mark a platform.
+
+    Parameters
+    ----------
+    tags : Mapping[str, str]
+        The object's tags.
+
+    Returns
+    -------
+    bool
+        True for ``railway=platform`` or ``public_transport=platform``.
+    """
+    return (
+        tags.get('railway') == 'platform'
+        or tags.get('public_transport') == 'platform'
+    )
+
+
+def is_green(*, tags: Mapping[str, str]) -> bool:
+    """
+    Check whether tags mark green land.
+
+    Parameters
+    ----------
+    tags : Mapping[str, str]
+        The area's tags.
+
+    Returns
+    -------
+    bool
+        True for forest, grass, scrub, pitches and similar land, and for
+        a garden that is not private.
+    """
+    if tags.get('leisure') == 'garden':
+        return tags.get('access') != 'private'
+    return (
+        tags.get('landuse') in GREEN_LANDUSE
+        or tags.get('natural') in GREEN_NATURAL
+        or tags.get('leisure') in GREEN_LEISURE
+    )
+
+
 def extra_line_layer(*, tags: Mapping[str, str]) -> str | None:
     """
-    Pick the path, service road or airfield layer for a way's tags.
+    Pick the platform, path, service road or airfield layer for a way.
 
     Parameters
     ----------
@@ -158,10 +219,12 @@ def extra_line_layer(*, tags: Mapping[str, str]) -> str | None:
     Returns
     -------
     str | None
-        ``path`` for a foot or cycle path that is not a roadside
-        footway, ``service`` for a service road that is not private,
-        ``runway`` or ``taxiway``, else None.
+        ``platform`` for a platform, ``path`` for a foot or cycle path
+        that is not a roadside footway, ``service`` for a service road
+        that is not private, ``runway`` or ``taxiway``, else None.
     """
+    if is_platform(tags=tags):
+        return 'platform'
     highway = tags.get('highway', '')
     if highway in PATH_KINDS:
         return None if tags.get('footway') in ROADSIDE_FOOTWAYS else 'path'
@@ -202,6 +265,27 @@ def line_layer(*, tags: Mapping[str, str]) -> str | None:
     return extra_line_layer(tags=tags)
 
 
+def extra_area_layer(*, tags: Mapping[str, str]) -> str | None:
+    """
+    Pick the platform, apron or green layer for an area's tags.
+
+    Parameters
+    ----------
+    tags : Mapping[str, str]
+        The area's tags.
+
+    Returns
+    -------
+    str | None
+        ``platform``, ``apron`` or ``green``, else None.
+    """
+    if is_platform(tags=tags):
+        return 'platform'
+    if tags.get('aeroway') == 'apron':
+        return 'apron'
+    return 'green' if is_green(tags=tags) else None
+
+
 def area_layer(*, tags: Mapping[str, str]) -> str | None:
     """
     Pick the area layer for an area's tags.
@@ -214,7 +298,8 @@ def area_layer(*, tags: Mapping[str, str]) -> str | None:
     Returns
     -------
     str | None
-        ``water``, ``park``, or None when the area is not drawn.
+        ``water``, ``park``, a layer from `extra_area_layer`, or None
+        when the area is not drawn.
     """
     if tags.get('natural') == 'water' or tags.get('waterway') == 'riverbank':
         return 'water'
@@ -222,7 +307,7 @@ def area_layer(*, tags: Mapping[str, str]) -> str | None:
         return 'park'
     if tags.get('boundary') == 'national_park':
         return 'park'
-    return None
+    return extra_area_layer(tags=tags)
 
 
 def place_kind(
@@ -311,12 +396,12 @@ def way_line(
     Returns
     -------
     OsmLine | None
-        The line, or None when it is not drawn or has no usable
-        geometry.
+        The line, or None when it is not drawn, has no usable geometry,
+        or is a closed platform, which is drawn as an area.
     """
     tags = dict(way.tags)
     layer = line_layer(tags=tags)
-    if layer is None:
+    if layer is None or (layer == 'platform' and way.is_closed()):
         return None
     try:
         wkb = bytes.fromhex(factory.create_linestring(way))

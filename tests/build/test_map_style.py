@@ -5,10 +5,12 @@ import pytest
 from paperroute_device.render.canvas import INK, PAPER, Face
 from paperroute_transit.build.map_style import (
     AREA_GREYS,
+    AREA_ORDER,
     CITY_PLACES,
     DARK,
     LIGHT,
     MAIN_ROAD_PX,
+    OVER_ROADS,
     RIVER_STYLE,
     ROAD_LAYERS,
     ROAD_WIDTHS,
@@ -19,6 +21,7 @@ from paperroute_transit.build.map_style import (
     SUBURB_FACE,
     UNDER_ROADS,
     Stroke,
+    area_drawn,
     extra_strokes,
     named_roads,
     road_style,
@@ -142,7 +145,15 @@ def test_faces_and_areas_match_the_spec() -> None:
     assert STREET_FACE == Face(weight=700, px=12)
     assert SUBURB_FACE == Face(weight=700, px=13)
     assert STATION_FACE == Face(weight=800, px=14)
-    assert AREA_GREYS == {'park': LIGHT, 'water': DARK, 'sea': DARK}
+    assert AREA_GREYS == {
+        'park': LIGHT,
+        'water': DARK,
+        'sea': DARK,
+        'green': LIGHT,
+        'apron': PAPER,
+        'platform': DARK,
+    }
+    assert AREA_ORDER.keys() == AREA_GREYS.keys()
     assert RIVER_STYLE == (2, DARK)
 
 
@@ -251,3 +262,31 @@ def test_extra_strokes(layer: str, mpp: int, strokes: list[Stroke]) -> None:
 def test_under_roads_order() -> None:
     """Service roads, paths, taxiways and runways are stroked in order."""
     assert UNDER_ROADS == ('service', 'path', 'taxiway', 'runway')
+
+
+@pytest.mark.parametrize(
+    ('layer', 'mpp', 'drawn'),
+    [
+        ('platform', 3, True),
+        ('platform', 5, True),
+        ('platform', 8, False),
+        ('apron', 8, False),
+        ('apron', 14, True),
+        ('apron', 45, True),
+        ('green', 3, True),
+        ('green', 45, True),
+        ('park', 45, True),
+        ('residential', 3, False),
+    ],
+)
+def test_area_drawn(layer: str, mpp: int, drawn: bool) -> None:
+    """Each area layer is filled at its own zooms."""
+    assert area_drawn(layer=layer, mpp=mpp) is drawn
+
+
+def test_platform_strokes_and_order() -> None:
+    """Open platforms are 2 px dark grey at 3 and 5 m/px, over roads."""
+    assert extra_strokes(layer='platform', mpp=3) == [(2, DARK, None)]
+    assert extra_strokes(layer='platform', mpp=5) == [(2, DARK, None)]
+    assert extra_strokes(layer='platform', mpp=8) == []
+    assert OVER_ROADS == ('platform',)

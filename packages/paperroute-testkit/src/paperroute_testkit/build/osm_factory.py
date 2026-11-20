@@ -140,11 +140,12 @@ def write_rail_osm(*, path: Path) -> None:
 
 def write_extras_osm(*, path: Path) -> None:
     """
-    Write an OSM file of paths, service roads and airfield lines.
+    Write an OSM file of paths, service roads, airfields and ground areas.
 
     It holds a footway, a closed footway loop, a roadside footway, a
     service road, a driveway, a runway, a taxiway and a closed
-    aerodrome.
+    aerodrome. It also holds a closed platform, an open platform
+    footway, an apron, a grass area and a private garden.
 
     Parameters
     ----------
@@ -160,6 +161,15 @@ def write_extras_osm(*, path: Path) -> None:
         (6, (7, 8), {'aeroway': 'runway'}),
         (7, (3, 4), {'aeroway': 'taxiway'}),
         (8, (5, 6, 8, 7, 5), {'aeroway': 'aerodrome'}),
+        (9, (1, 2, 4, 3, 1), {'railway': 'platform'}),
+        (
+            10,
+            (3, 4),
+            {'highway': 'footway', 'public_transport': 'platform'},
+        ),
+        (11, (3, 4, 6, 5, 3), {'aeroway': 'apron'}),
+        (12, (5, 6, 8, 7, 5), {'landuse': 'grass'}),
+        (13, (1, 2, 4, 3, 1), {'leisure': 'garden', 'access': 'private'}),
     )
     header = osmium.io.Header()
     header.set('osmosis_replication_timestamp', TIMESTAMP)

@@ -42,7 +42,23 @@ AREA_GREYS: Final[dict[str, int]] = {
     'park': LIGHT,
     'water': DARK,
     'sea': DARK,
+    'green': LIGHT,
+    'apron': PAPER,
+    'platform': DARK,
 }
+AREA_ORDER: Final[dict[str, int]] = {
+    'park': 0,
+    'green': 0,
+    'apron': 1,
+    'water': 2,
+    'sea': 2,
+    'platform': 3,
+}  # fill rank, lowest first
+AREA_ZOOMS: Final[dict[str, frozenset[int]]] = {
+    'apron': frozenset({14, 25, 45}),
+    'platform': frozenset({3, 5}),
+}  # layers missing here are filled at every zoom
+OVER_ROADS: Final[tuple[str, ...]] = ('platform',)
 LIGHT_RAIL_TICKS: Final[dict[int, tuple[int, int]]] = {
     3: (6, 8),
     5: (6, 8),
@@ -61,6 +77,7 @@ EXTRA_STROKES: Final[dict[str, dict[int, list[Stroke]]]] = {
         45: [(1, PAPER, None)],
     },
     'taxiway': {14: [(1, PAPER, None)]},
+    'platform': {3: [(2, DARK, None)], 5: [(2, DARK, None)]},
 }
 RIVER_STYLE: Final[tuple[int, int]] = (2, DARK)
 
@@ -174,7 +191,7 @@ def transit_style(*, layer: str, mpp: int) -> list[Stroke]:
 
 def extra_strokes(*, layer: str, mpp: int) -> list[Stroke]:
     """
-    Give the strokes for a path, service road or airfield line.
+    Give the strokes for a path, platform, service road or airfield line.
 
     Parameters
     ----------
@@ -190,6 +207,25 @@ def extra_strokes(*, layer: str, mpp: int) -> list[Stroke]:
         outside ``EXTRA_STROKES`` have none.
     """
     return list(EXTRA_STROKES.get(layer, {}).get(mpp, []))
+
+
+def area_drawn(*, layer: str, mpp: int) -> bool:
+    """
+    Check whether an area layer is filled at a zoom.
+
+    Parameters
+    ----------
+    layer : str
+        Area layer name.
+    mpp : int
+        Metres per pixel.
+
+    Returns
+    -------
+    bool
+        True when the layer has a grey and ``mpp`` is one of its zooms.
+    """
+    return layer in AREA_GREYS and mpp in AREA_ZOOMS.get(layer, ZOOMS)
 
 
 def named_roads(*, mpp: int) -> frozenset[str]:

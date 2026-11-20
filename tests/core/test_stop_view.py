@@ -18,6 +18,7 @@ from paperroute_transit.core.banners import OFFLINE_PHRASE
 from paperroute_transit.core.city import City, Nouns
 from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.model import CarryOn, TripFacts
+from paperroute_transit.core.stop_under import UnderNumber
 from paperroute_transit.core.stop_view import (
     HORIZON,
     LARGE_ROWS_UNDER_BANNER,
@@ -35,6 +36,7 @@ from paperroute_transit.core.stop_view import (
     build_stop_view,
     countdown,
     due_line,
+    hero_departure,
     live_line,
     nouns,
     pin_tag,
@@ -173,6 +175,35 @@ def hero(*, result: StopView) -> Row:
     """
     assert result.hero is not None
     return result.hero
+
+
+def on(
+    *,
+    item: LiveDeparture,
+    route: str = '606',
+    headsign: str = 'Parramatta Station',
+) -> LiveDeparture:
+    """
+    Give a departure another route and headsign.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        Departure.
+    route : str
+        Route short name.
+    headsign : str
+        Headsign.
+
+    Returns
+    -------
+    LiveDeparture
+        The departure with its route and headsign replaced.
+    """
+    return replace(
+        item,
+        departure=replace(item.departure, route=route, headsign=headsign),
+    )
 
 
 def many() -> tuple[LiveDeparture, ...]:
@@ -633,8 +664,8 @@ def test_view_cancelled_placed_by_timetabled_time() -> None:
     ]
 
 
-def test_no_destination_has_no_hero_and_lists_every_departure() -> None:
-    """A train, a bus and a light rail departure all show, in order."""
+def test_no_destination_has_a_hero_and_lists_the_rest() -> None:
+    """The first departure is the hero; a bus and a light rail follow."""
     result = view(
         departures=(
             live(minutes=9, mode=SydneyFeed.LIGHT_RAIL),
@@ -643,13 +674,9 @@ def test_no_destination_has_no_hero_and_lists_every_departure() -> None:
         ),
         destination=None,
     )
-    assert result.hero is None
-    assert [row.countdown for row in result.rows] == ['3', '6', '9']
-    assert [row.vehicle for row in result.rows] == [
-        'train',
-        'bus',
-        'light rail',
-    ]
+    assert hero(result=result).vehicle == 'train'
+    assert [row.countdown for row in result.rows] == ['6', '9']
+    assert [row.vehicle for row in result.rows] == ['bus', 'light rail']
     assert result.empty is None
 
 
@@ -657,13 +684,13 @@ def test_no_destination_scroll_clamps() -> None:
     """Scrolling past the end shows the last full page; 0 is the first."""
     first = view(departures=many(), destination=None)
     assert len(first.rows) == VISIBLE_ROWS
-    assert first.rows[0].countdown == 'now'
+    assert first.rows[0].countdown == '4'
     past = view(departures=many(), destination=None, scroll=99)
-    assert past.scroll == len(many()) - VISIBLE_ROWS
+    assert past.scroll == len(many()) - 1 - VISIBLE_ROWS
     assert past.rows[-1].leaves_at == '8:56'
     under = view(departures=many(), destination=None, scroll=99, age=None)
     assert len(under.rows) == ROWS_UNDER_BANNER
-    assert under.scroll == len(many()) - ROWS_UNDER_BANNER
+    assert under.scroll == len(many()) - 1 - ROWS_UNDER_BANNER
 
 
 def test_no_destination_rows_keep_cancelled_but_never_faster() -> None:
@@ -676,7 +703,8 @@ def test_no_destination_rows_keep_cancelled_but_never_faster() -> None:
         ),
         destination=None,
     )
-    assert [row.pill for row in result.rows] == [Pill.CANCELLED, None, None]
+    assert hero(result=result).countdown == '6'
+    assert [row.pill for row in result.rows] == [Pill.CANCELLED, None]
 
 
 def test_row_carries_on_tag() -> None:
@@ -706,8 +734,9 @@ def test_train_row_carries_on_to_another_line() -> None:
         ),
         destination=None,
     )
-    assert result.rows[0].then is not None
-    assert result.rows[0].then.route == 'T9'
+    then = hero(result=result).then
+    assert then is not None
+    assert then.route == 'T9'
 
 
 def test_row_for_carry_on() -> None:
@@ -765,7 +794,7 @@ def test_large_shows_six_rows() -> None:
     banner = view(departures=items, destination=None, large=True, age=None)
     assert len(banner.rows) == LARGE_ROWS_UNDER_BANNER == 5
     far = view(departures=items, destination=None, large=True, scroll=99)
-    assert far.scroll == len(items) - 6
+    assert far.scroll == len(items) - 1 - 6
     assert far.large
 
 
@@ -1043,3 +1072,91 @@ def test_a_mode_without_platform_notes_has_no_note() -> None:
     )
     assert row_of(item=train, city=SYDNEY).note == ''
     assert row_of(item=bus, city=SYDNEY).note == ''
+
+
+def test_a_late_hero_says_how_late() -> None:
+    """2 min late reads as such, and the delay is kept in seconds."""
+    result = view(
+        departures=(live(minutes=3, late=2), live(minutes=6),
+                    live(minutes=9)),
+        destination=None,
+    )
+    assert result.under == UnderNumber(
+        status='2 min late', then=('8:06', '8:09'), delay=120,
+    )
+
+
+def test_a_cancelled_first_departure_stays_in_the_list_under_the_hero(
+) -> None:
+    """The hero is the first that runs; the cancelled one is listed."""
+    result = view(
+        departures=(live(minutes=3, cancelled=True), live(minutes=6),
+                    live(minutes=9)),
+        destination=None,
+    )
+    assert hero(result=result).countdown == '6'
+    assert [row.pill for row in result.rows] == [Pill.CANCELLED, None]
+    assert [row.countdown for row in result.head_rows] == ['6', '3', '9']
+    departure = hero_departure(view=result)
+    assert departure is not None
+    assert departure.departs == START + timedelta(minutes=6)
+
+
+def test_an_early_uncertain_hero_says_so() -> None:
+    """An uncertain estimate one minute early carries both facts."""
+    item = replace(
+        live(minutes=3, late=-1), estimated=True, uncertain=True,
+    )
+    result = view(departures=(item,), destination=None)
+    assert result.under is not None
+    assert result.under.status == '1 min early, uncertain'
+
+
+def test_an_on_time_hero_says_on_time() -> None:
+    """A live departure on its timetable minute is on time."""
+    result = view(departures=(live(minutes=3),), destination=None)
+    assert result.under is not None
+    assert result.under.status == 'on time'
+    assert result.under.delay == 0
+
+
+def test_a_timetable_hero_says_timetable_time() -> None:
+    """Without live data the status says the time is the timetable's."""
+    result = view(
+        departures=(live(minutes=3, is_live=False),), destination=None,
+    )
+    assert result.under is not None
+    assert result.under.status == 'timetable time'
+    assert result.under.delay == 0
+
+
+def test_then_lists_the_same_route_and_headsign() -> None:
+    """Other routes, other headsigns and cancelled trips are skipped."""
+    result = view(
+        departures=(
+            live(minutes=3),
+            on(item=live(minutes=4), route='700'),
+            live(minutes=6, cancelled=True),
+            live(minutes=9),
+            on(item=live(minutes=12), headsign='Westmead'),
+            live(minutes=15),
+        ),
+        destination=None,
+    )
+    assert result.under is not None
+    assert result.under.then == ('8:09', '8:15')
+
+
+def test_the_heros_platform_is_named_with_its_bay() -> None:
+    """A bus on platform B is at 'stand B'."""
+    item = live(minutes=3)
+    item = replace(item, departure=replace(item.departure, platform='B'))
+    result = view(departures=(item,), destination=None)
+    assert result.under is not None
+    assert result.under.platform == 'stand B'
+
+
+def test_a_destination_view_has_nothing_under_the_number() -> None:
+    """With a Destination nothing changes."""
+    result = view(departures=(live(minutes=3),))
+    assert result.under is None

@@ -22,6 +22,7 @@ SIDEBAR_ROWS: Final[int] = 5
 HORIZON: Final[timedelta] = timedelta(hours=3)
 HORIZON_TEXT: Final[str] = f'the next {HORIZON // timedelta(hours=1)} hours'
 UNCERTAIN: Final[str] = 'uncertain'
+THEN_COUNT: Final[int] = 2
 FALLBACK_NOUNS: Final[Nouns] = Nouns(
     vehicle='service', bay='platform', connection='service',
 )
@@ -81,6 +82,25 @@ class Row:
     note: str = ''
 
 
+def late_minutes(*, item: LiveDeparture) -> int:
+    """
+    Count the clock minutes a departure runs behind its timetable.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        Departure.
+
+    Returns
+    -------
+    int
+        Live clock minute less the timetabled one, negative when early.
+    """
+    live_min = int(item.departs.timestamp() // 60)
+    due_min = int(item.departure.departs.timestamp() // 60)
+    return live_min - due_min
+
+
 def row_estimate(*, item: LiveDeparture, zone: tzinfo) -> Estimate | None:
     """
     Describe a departure's estimate.
@@ -99,13 +119,38 @@ def row_estimate(*, item: LiveDeparture, zone: tzinfo) -> Estimate | None:
     """
     if not item.estimated:
         return None
-    live_min = int(item.departs.timestamp() // 60)
-    due_min = int(item.departure.departs.timestamp() // 60)
     return Estimate(
         due=clock_text(moment=item.departure.departs, zone=zone),
-        late=live_min - due_min,
+        late=late_minutes(item=item),
         uncertain=item.uncertain,
     )
+
+
+def lateness_text(*, late: int, uncertain: bool) -> str:
+    """
+    Say how late or early a departure runs.
+
+    Parameters
+    ----------
+    late : int
+        Clock minutes late, negative when early.
+    uncertain : bool
+        Whether the estimate is uncertain.
+
+    Returns
+    -------
+    str
+        'on time', '4 min late' or '2 min early', with ', uncertain'
+        when flagged.
+    """
+    if late == 0:
+        how = 'on time'
+    elif late > 0:
+        how = f'{late} min late'
+    else:
+        how = f'{-late} min early'
+    flag = f', {UNCERTAIN}' if uncertain else ''
+    return f'{how}{flag}'
 
 
 def due_line(*, estimate: Estimate) -> str:
@@ -122,14 +167,8 @@ def due_line(*, estimate: Estimate) -> str:
     str
         Such as 'due 10:07 - 4 min late', with ', uncertain' when flagged.
     """
-    if estimate.late == 0:
-        how = 'on time'
-    elif estimate.late > 0:
-        how = f'{estimate.late} min late'
-    else:
-        how = f'{-estimate.late} min early'
-    flag = f', {UNCERTAIN}' if estimate.uncertain else ''
-    return f'due {estimate.due}{DOT}{how}{flag}'
+    how = lateness_text(late=estimate.late, uncertain=estimate.uncertain)
+    return f'due {estimate.due}{DOT}{how}'
 
 
 def stops_text(*, stops: int) -> str:
@@ -727,7 +766,7 @@ def banner_text(*, inputs: StopInputs) -> tuple[Banner, ...]:
     return tuple(lines)
 
 
-def lead_index(*, rows: Sequence[Row], hero: bool) -> int | None:
+def lead_index(*, rows: Sequence[Row]) -> int | None:
     """
     Find the row shown as the hero.
 
@@ -735,20 +774,83 @@ def lead_index(*, rows: Sequence[Row], hero: bool) -> int | None:
     ----------
     rows : Sequence[Row]
         Rows in departure order.
-    hero : bool
-        True when the view has a hero, which it does with a destination.
 
     Returns
     -------
     int | None
         Index of the first row not cancelled, or None.
     """
-    if not hero:
-        return None
     return next(
         (i for i, row in enumerate(rows) if row.pill is not Pill.CANCELLED),
         None,
     )
+
+
+def under_number(
+    *,
+    items: Sequence[LiveDeparture],
+    rows: Sequence[Row],
+    lead: int,
+) -> UnderNumber:
+    """
+    Build the block under the hero's number.
+
+    Parameters
+    ----------
+    items : Sequence[LiveDeparture]
+        Departures in the order of `rows`.
+    rows : Sequence[Row]
+        Rows in departure order.
+    lead : int
+        Index of the hero.
+
+    Returns
+    -------
+    UnderNumber
+        The status, the platform, the delay in seconds and the clock
+        times of the next `THEN_COUNT` departures with the hero's route
+        and headsign.
+    """
+    item = items[lead]
+    row = rows[lead]
+    status = 'timetable time'
+    if item.live:
+        status = lateness_text(
+            late=late_minutes(item=item), uncertain=item.uncertain,
+        )
+    later = rows[lead + 1 :]
+    same = [
+        other.leaves_at
+        for other in later
+        if other.pill is not Pill.CANCELLED
+        and (other.route, other.destination)
+        == (row.route, row.destination)
+    ]
+    return UnderNumber(
+        status=status,
+        platform=f'{row.bay} {row.platform}' if row.platform else '',
+        then=tuple(same[:THEN_COUNT]),
+        delay=int(
+            item.departs.timestamp() - item.departure.departs.timestamp()
+        ),
+    )
+
+
+def hero_departure(*, view: StopView) -> Departure | None:
+    """
+    Find the departure behind the hero.
+
+    Parameters
+    ----------
+    view : StopView
+        The view-model.
+
+    Returns
+    -------
+    Departure | None
+        The first sidebar departure when the view has a hero, else None.
+    """
+    return view.head_departures[0] if view.hero else None
 
 
 def head_indexes(*, count: int, lead: int | None) -> list[int]:
@@ -787,7 +889,8 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
     StopView
         View-model, with scroll clamped to the rows that fit under any
         banner. A notice takes the banner ahead of every other line.
-        With no destination there is no hero: every departure is a row.
+        Every view with a departure that runs has a hero, and one with no
+        destination also has the block under its number.
     """
     upcoming = in_view(departures=inputs.departures, now=inputs.now)
     rows = [
@@ -804,9 +907,12 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
             strict=True,
         )
     ]
-    lead = lead_index(rows=rows, hero=inputs.destination is not None)
+    lead = lead_index(rows=rows)
     rest = [row for i, row in enumerate(rows) if i != lead]
     head = head_indexes(count=len(rows), lead=lead)
+    under = None
+    if lead is not None and inputs.destination is None:
+        under = under_number(items=upcoming, rows=rows, lead=lead)
     banner = inputs.notice or next(iter(banner_text(inputs=inputs)), None)
     shown = row_count(large=inputs.large, under_banner=banner is not None)
     offset = max(0, min(inputs.scroll, len(rest) - shown))
@@ -831,4 +937,5 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
         inverted=inputs.inverted,
         more=0 if banner is None else banner.more,
         planned=banner is not None and banner.planned,
+        under=under,
     )

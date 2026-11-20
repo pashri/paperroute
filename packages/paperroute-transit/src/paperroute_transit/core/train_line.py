@@ -595,4 +595,6 @@ def stacked(
         source=data,
         above_trip=None if upward is None else upward.departure.trip_id,
         above_day=None if upward is None else upward.departure.service_day,
+        seq=main.departure.origin_seq,
+        above_seq=None if upward is None else upward.departure.origin_seq,
     )

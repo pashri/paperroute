@@ -1,6 +1,7 @@
 """Tests for a train Strip's times and carry-on note."""
 
 from dataclasses import replace
+from datetime import timedelta
 
 from paperroute_testkit.city_setting import city_under_test
 from paperroute_testkit.core.factories import (
@@ -98,6 +99,22 @@ def test_a_trip_that_is_gone_has_no_times() -> None:
     """With no departure of the followed trip, no row has a time."""
     trips = trips_of(then=None)
     assert train_times(trips=trips, reach=reach_of(trip='gone')) == {}
+    assert train_times(trips=trips, reach=reach_of(trip='a')) == {0: '8:00'}
+
+
+def test_a_loop_train_times_the_pass_it_follows() -> None:
+    """Two passes of one trip at the From give the followed pass's time."""
+    first = departure(departs=START, trip_id='a')
+    second = replace(
+        departure(departs=START + timedelta(minutes=40), trip_id='a'),
+        origin_seq=9,
+    )
+    trips = replace(
+        trips_of(then=None),
+        departures=(live(item=first), live(item=second)),
+    )
+    followed = replace(reach_of(trip='a'), seq=9)
+    assert train_times(trips=trips, reach=followed) == {0: '8:40'}
     assert train_times(trips=trips, reach=reach_of(trip='a')) == {0: '8:00'}
 
 

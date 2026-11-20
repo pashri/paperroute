@@ -32,7 +32,11 @@ def is_train(*, reach: Reach) -> bool:
 
 
 def trip_item(
-    *, trips: TripInputs, trip: str | None, day: date | None,
+    *,
+    trips: TripInputs,
+    trip: str | None,
+    day: date | None,
+    seq: int | None = None,
 ) -> LiveDeparture | None:
     """
     Find the strip's departure of a trip on a service day.
@@ -45,12 +49,14 @@ def trip_item(
         The trip ID, or None.
     day : date | None
         The service date it runs on.
+    seq : int | None
+        The stop sequence it is boarded at; None matches any.
 
     Returns
     -------
     LiveDeparture | None
-        The first departure of that trip and day; None when it is not
-        among them.
+        The first departure of that trip, day and sequence; None when it
+        is not among them.
     """
     return next(
         (
@@ -59,6 +65,7 @@ def trip_item(
             if trip is not None
             and item.departure.trip_id == trip
             and item.departure.service_day == day
+            and (seq is None or item.departure.origin_seq == seq)
         ),
         None,
     )
@@ -85,8 +92,15 @@ def train_times(*, trips: TripInputs, reach: Reach) -> dict[int, str]:
         does not call at have none.
     """
     origin = origin_of(reach=reach)
-    main = trip_item(trips=trips, trip=reach.trip, day=reach.day)
-    above = trip_item(trips=trips, trip=reach.above_trip, day=reach.above_day)
+    main = trip_item(
+        trips=trips, trip=reach.trip, day=reach.day, seq=reach.seq,
+    )
+    above = trip_item(
+        trips=trips,
+        trip=reach.above_trip,
+        day=reach.above_day,
+        seq=reach.above_seq,
+    )
     lead = main or above
     if origin is None or lead is None:
         return {}
@@ -134,7 +148,9 @@ def train_note(
         The row where the followed train runs on as another route, with
         that change; None when it does not, or not on these rows.
     """
-    item = trip_item(trips=trips, trip=reach.trip, day=reach.day)
+    item = trip_item(
+        trips=trips, trip=reach.trip, day=reach.day, seq=reach.seq,
+    )
     then = None if item is None else item.departure.facts.then
     if item is None or then is None:
         return None

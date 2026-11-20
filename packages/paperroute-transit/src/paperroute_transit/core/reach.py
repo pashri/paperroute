@@ -287,6 +287,11 @@ class Reach:
         directions; None otherwise.
     above_day : date | None
         That trip's service date; None with no such trip.
+    seq : int | None
+        The stop sequence the followed trip is boarded at, which tells
+        apart two passes of a trip at the From; None matches any pass.
+    above_seq : int | None
+        The same for the trip read upward.
     """
 
     rows: tuple[ReachRow, ...]
@@ -297,6 +302,8 @@ class Reach:
     source: ReachInput | None = None
     above_trip: str | None = None
     above_day: date | None = None
+    seq: int | None = None
+    above_seq: int | None = None
 
 
 def approach_rows(*, tails: Sequence[RunTail], placed: set[str]

@@ -25,14 +25,6 @@ NO_MATCH: Final[str] = 'No stop or station matches “{text}”.'
 MISFIT: Final[str] = "Those choices don't fit together. Pick again."
 NO_TO: Final[str] = 'None: every departure'
 FILTER_HINT: Final[str] = 'Leave all unticked to show every route.'
-STRIP_HINT: Final[str] = (
-    'With no Destination the stop lists every route; this sets the Strip'
-    ' and the Destinations offered.'
-)
-REACH_LINE_HINT: Final[str] = (
-    'Only affects which stations the Strip draws.'
-)
-CHOSEN_FOR_YOU: Final[str] = ' · chosen for you'
 SEARCH_FORM: Final[str] = """<search>
     <form class="search" method="get" action="/pins/new">
       <label for="pin-search">Search a stop or station</label>
@@ -82,7 +74,7 @@ def draft_of(
     Parameters
     ----------
     query : Mapping[str, str]
-        Fields: `ref`, `stop`, `kind`, `route`, `suggested`, `to` and
+        Fields: `ref`, `stop`, `kind`, `route`, `to` and
         `nickname`.
     only : Sequence[str]
         Every `only` field given.
@@ -103,7 +95,6 @@ def draft_of(
         only=tuple(only),
         nickname=query.get('nickname') or None,
         ref=query.get('ref') or None,
-        suggested=query.get('suggested', ''),
     )
 
 
@@ -282,9 +273,6 @@ def line_field(*, editor: PinEditor, modes: Sequence[ModeSpec]) -> str:
     """
     Draw the Line or Route select.
 
-    With no To the stop lists every route, so the select is labelled as
-    the Strip's and says so.
-
     Parameters
     ----------
     editor : PinEditor
@@ -301,7 +289,6 @@ def line_field(*, editor: PinEditor, modes: Sequence[ModeSpec]) -> str:
         return ''
     spec = spec_of(modes=modes, mode=editor.draft.kind)
     label = 'Line' if spec is not None and spec.by_line else 'Route'
-    open_ended = not editor.draft.to
     chosen = editor.draft.route
     options = option(value='', label=f'Pick a {label.lower()}', chosen=chosen)
     options += ''.join(
@@ -318,13 +305,12 @@ def line_field(*, editor: PinEditor, modes: Sequence[ModeSpec]) -> str:
     )
     return select_field(
         name='route',
-        label=f'Strip {label.lower()}' if open_ended else label,
+        label=label,
         options=options,
-        hint=STRIP_HINT if open_ended else None,
     )
 
 
-def to_field(*, editor: PinEditor) -> str:
+def to_field(*, editor: PinEditor, end_point: bool) -> str:
     """
     Draw the Destination select.
 
@@ -332,13 +318,15 @@ def to_field(*, editor: PinEditor) -> str:
     ----------
     editor : PinEditor
         The editor.
+    end_point : bool
+        True for an end-point kind, which asks for the To with no line.
 
     Returns
     -------
     str
         A select, or an empty string before a line is chosen.
     """
-    if not editor.draft.route:
+    if not (end_point or editor.draft.route):
         return ''
     chosen = editor.draft.to
     options = option(value='', label=NO_TO, chosen=chosen) + ''.join(
@@ -346,58 +334,6 @@ def to_field(*, editor: PinEditor) -> str:
         for place in editor.destinations
     )
     return select_field(name='to', label='Destination', options=options)
-
-
-def reach_fields(*, editor: PinEditor, spec: ModeSpec, origin: str) -> str:
-    """
-    Draw the Destination and the Strip line of a destination-first kind.
-
-    Parameters
-    ----------
-    editor : PinEditor
-        The editor.
-    spec : ModeSpec
-        The chosen kind's mode.
-    origin : str
-        The From name; not escaped.
-
-    Returns
-    -------
-    str
-        The Destination select, the Strip line select and the hidden
-        field holding the suggestion.
-    """
-    draft = editor.draft
-    places = option(value='', label=NO_TO, chosen=draft.to) + ''.join(
-        option(value=place.stop_id, label=place.name, chosen=draft.to)
-        for place in editor.destinations
-    )
-    lines = ''.join(
-        option(
-            value=pin_value(choice=line),
-            label=f'{line.badge} {line.label}' + (
-                CHOSEN_FOR_YOU
-                if pin_value(choice=line) == editor.suggested
-                else ''
-            ),
-            chosen=draft.route,
-        )
-        for line in editor.lines
-    )
-    hint = html.escape(
-        f'Any station a {spec.label.lower()} from {origin} reaches.',
-    )
-    return (
-        select_field(
-            name='to', label='Destination', options=places, hint=hint,
-        )
-        + select_field(
-            name='route', label='Strip line', options=lines,
-            hint=REACH_LINE_HINT,
-        )
-        + '\n      <input type="hidden" name="suggested" '
-        f'value="{html.escape(editor.suggested)}">'
-    )
 
 
 def filter_fields(*, editor: PinEditor) -> str:
@@ -508,12 +444,10 @@ def editor_form(
     """
     draft = editor.draft
     spec = spec_of(modes=modes, mode=draft.kind)
-    if spec is not None and spec.id in end_point_modes(modes=modes):
-        routed = reach_fields(editor=editor, spec=spec, origin=origin)
-    else:
-        routed = line_field(editor=editor, modes=modes) + to_field(
-            editor=editor,
-        )
+    end_point = spec is not None and spec.id in end_point_modes(modes=modes)
+    routed = line_field(editor=editor, modes=modes) + to_field(
+        editor=editor, end_point=end_point,
+    )
     fields = (
         kind_fields(editor=editor, modes=modes) + routed
         + filter_fields(editor=editor)

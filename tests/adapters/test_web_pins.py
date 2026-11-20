@@ -654,21 +654,16 @@ async def test_editor_offers_valid_choices(editor: Client) -> None:
     assert '<legend>Mode</legend>' in text
 
 
-async def test_editor_line_without_a_to_says_it_sets_the_strip(
+async def test_editor_line_select_is_labelled_line(
     editor: Client,
 ) -> None:
-    """With no To the line select is labelled as the Strip's, not a filter."""
-    plain = await (
-        await editor.get('/pins/edit?stop=C&kind=metro&route=T1')
-    ).text()
-    assert '>Strip line<' in plain
-    assert 'aria-describedby="pin-route-hint"' in plain
-    assert 'the stop lists every route' in plain
-    to = await (
-        await editor.get('/pins/edit?stop=C&kind=metro&route=T1&to=J')
-    ).text()
-    assert '>Line<' in to
-    assert 'pin-route-hint' not in to
+    """The line select is labelled Line with or without a To."""
+    for query in ('route=T1', 'route=T1&to=J'):
+        text = await (
+            await editor.get(f'/pins/edit?stop=C&kind=metro&{query}')
+        ).text()
+        assert '>Line<' in text
+        assert 'pin-route-hint' not in text
 
 
 async def test_editor_without_line_has_no_save(editor: Client) -> None:
@@ -702,6 +697,107 @@ async def test_save_posts_pin(pins: Pins, editor: Client) -> None:
         only=('T2',),
         nickname='Home',
     ))]
+
+
+TRAIN_STOP = StopPlace(stop_id='S1', name='Strathfield', point=None)
+TRAIN_LINES = (
+    Choice(key='T1', label='North Shore', badge='T1'),
+    Choice(key='T2', label='Leppington', badge='T2'),
+)
+
+
+@pytest.fixture(name='trains')
+async def _trains(pins: Pins) -> AsyncIterator[Client]:
+    """A client whose timetable has a train station and a bus stop."""
+    pins.seen = PinsSeen(pins=(), shown=0, revision=3)
+    options = replace(
+        _options(),
+        places={'S1': TRAIN_STOP, 'J': JUNCTION, 'R': REDFERN, 'B2': BUS_STOP},
+        lines={
+            ('S1', SydneyMode.TRAIN): TRAIN_LINES,
+            ('B2', SydneyMode.BUS): TRAIN_LINES,
+        },
+        reached_by={'S1': (JUNCTION, REDFERN)},
+    )
+    client = await _client(pins=pins, options=options)
+    yield client
+    await client.close()
+
+
+async def test_the_train_form_offers_no_line(trains: Client) -> None:
+    """A train's editor has a Destination and no route select."""
+    text = await (
+        await trains.get('/pins/edit?stop=S1&kind=train')
+    ).text()
+    assert 'name="route"' not in text
+    assert 'name="to"' in text
+    assert 'formaction="/pins/save"' in text
+
+
+async def test_a_train_pin_needs_no_line(
+    pins: Pins, trains: Client,
+) -> None:
+    """A train form posted with a From and no line saves no routes."""
+    response = await trains.post(
+        '/pins/save', data=_form({'stop': 'S1', 'kind': 'train'}),
+        allow_redirects=False,
+    )
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert pins.posted == [PinSaved(ref=None, pin=Pin(
+        origin=TRAIN_STOP, kind=SydneyMode.TRAIN, routes=(),
+    ))]
+
+
+async def test_a_train_pin_saves_its_destination(
+    pins: Pins, trains: Client,
+) -> None:
+    """A Destination the From reaches is saved with no routes."""
+    await trains.post(
+        '/pins/save',
+        data=_form({'stop': 'S1', 'kind': 'train', 'to': 'R'}),
+        allow_redirects=False,
+    )
+    assert pins.posted == [PinSaved(ref=None, pin=Pin(
+        origin=TRAIN_STOP, destination=REDFERN, kind=SydneyMode.TRAIN,
+        routes=(),
+    ))]
+
+
+async def test_an_old_train_pin_opens_with_its_from_and_to(
+    pins: Pins, trains: Client,
+) -> None:
+    """A stored train line is not shown, and saving drops it."""
+    old = Pin(
+        origin=TRAIN_STOP, destination=REDFERN, kind=SydneyMode.TRAIN,
+        routes=('T2',),
+    )
+    pins.seen = PinsSeen(pins=(old,), shown=0, revision=3)
+    ref = pin_ref(pin=old)
+    text = await (await trains.get(f'/pins/edit?ref={ref}')).text()
+    assert 'name="route"' not in text
+    assert '<option value="R" selected>' in text
+    response = await trains.post(
+        '/pins/save',
+        data=_form({
+            'ref': ref, 'stop': 'S1', 'kind': 'train', 'to': 'R',
+        }),
+        allow_redirects=False,
+    )
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert pins.posted == [PinSaved(ref=ref, pin=replace(old, routes=()))]
+
+
+async def test_a_bus_pin_still_needs_its_route(
+    pins: Pins, trains: Client,
+) -> None:
+    """A bus form without a route is refused, and has a route select."""
+    text = await (await trains.get('/pins/edit?stop=B2&kind=bus')).text()
+    assert 'name="route"' in text
+    response = await trains.post(
+        '/pins/save', data=_form({'stop': 'B2', 'kind': 'bus'}),
+    )
+    assert response.status == HTTPStatus.BAD_REQUEST
+    assert not pins.posted
 
 
 async def test_save_refuses_unoffered_to(
@@ -1116,20 +1212,6 @@ def test_sydney_metro_editor_keeps_line_then_to() -> None:
     assert text.index('Pick a line') < text.index('name="to"')
 
 
-def test_the_destination_hint_escapes_the_from() -> None:
-    """A From with markup characters is escaped in the hint."""
-    found = edited(
-        options=OPTIONS,
-        draft=PinDraft(stop='S', kind='metro', to='D1'),
-        modes=ROUTED,
-    )
-    text = editor_form(
-        editor=found, origin='A & <B>', windows='', modes=ROUTED,
-    )
-    assert 'from A &amp; &lt;B&gt; reaches.' in text
-    assert '<B>' not in text
-
-
 @pytest.fixture(name='bus_editor')
 async def _bus_editor(pins: Pins) -> AsyncIterator[Client]:
     """A client whose only stop has one bus line."""
@@ -1163,7 +1245,7 @@ async def test_save_with_a_stale_suggestion_is_still_refused(
 ) -> None:
     """A train line posted after a switch to Bus is not swapped in."""
     response = await bus_editor.post('/pins/save', data=_form({
-        'stop': 'B1', 'kind': 'bus', 'route': 'T1', 'suggested': 'T1',
+        'stop': 'B1', 'kind': 'bus', 'route': 'T1',
     }))
     assert response.status == HTTPStatus.BAD_REQUEST
     assert not pins.posted

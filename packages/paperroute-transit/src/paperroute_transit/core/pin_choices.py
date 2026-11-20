@@ -93,8 +93,6 @@ class PinDraft:
         Name typed for the pin, or None.
     ref : str | None
         Ref of the pin being edited, or None for a new pin.
-    suggested : str
-        Value of the line the editor last suggested; '' for none.
     """
 
     stop: str = ''
@@ -104,7 +102,6 @@ class PinDraft:
     only: tuple[str, ...] = ()
     nickname: str | None = None
     ref: str | None = None
-    suggested: str = ''
 
 
 @dataclass(frozen=True)
@@ -131,8 +128,6 @@ class PinEditor:
     pin : Pin | None
         The pin the choices make; None until stop, kind and route are
         chosen.
-    suggested : str
-        Value of the line suggested to the owner; '' for none.
     """
 
     draft: PinDraft
@@ -143,7 +138,6 @@ class PinEditor:
     filters: tuple[str, ...]
     nearby: tuple[StopPlace, ...]
     pin: Pin | None
-    suggested: str = ''
 
 
 def clean_nickname(*, text: str) -> str | None:

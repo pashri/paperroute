@@ -9,7 +9,6 @@ from paperroute_transit.core.modes import ModeSpec, end_point_modes
 from paperroute_transit.core.pin_choices import (
     PinDraft,
     PinEditor,
-    busiest_line,
     clean_nickname,
 )
 from paperroute_transit.ports import PinOptions
@@ -147,9 +146,10 @@ def to_step(
     kind: str | None,
     line: Choice | None,
     given: str,
+    end_point: bool = False,
 ) -> tuple[tuple[StopPlace, ...], StopPlace | None]:
     """
-    Check the To against the places the line offers.
+    Check the To against the places the kind or line offers.
 
     Parameters
     ----------
@@ -163,6 +163,9 @@ def to_step(
         The line chosen, or None for none.
     given : str
         The To's ID; '' for none.
+    end_point : bool
+        True for an end-point kind, whose To is any place the kind
+        reaches from the From, with no line.
 
     Returns
     -------
@@ -170,9 +173,14 @@ def to_step(
         The places offered, and the one given when it is offered. A To
         is never chosen for the owner.
     """
-    if kind is None or line is None:
+    if kind is None:
         return (), None
-    places = options.destinations(origin=origin, kind=kind, line=line)
+    if end_point:
+        places = options.reached_from(place=origin, kind=kind)
+    elif line is None:
+        return (), None
+    else:
+        places = options.destinations(origin=origin, kind=kind, line=line)
     return places, next(
         (place for place in places if place.stop_id == given), None,
     )
@@ -216,6 +224,7 @@ def pin_of(
     origin: StopPlace,
     destination: StopPlace | None,
     line: Choice | None,
+    end_point: bool = False,
 ) -> Pin | None:
     """
     Make the pin that a checked draft stands for.
@@ -230,19 +239,22 @@ def pin_of(
         The To, or None for none.
     line : Choice | None
         The line or route chosen, or None for none.
+    end_point : bool
+        True for an end-point kind, whose pin has no routes.
 
     Returns
     -------
     Pin | None
-        The pin; None until a kind and a line are chosen.
+        The pin; None until a kind is chosen, and for any other kind a
+        line too.
     """
-    if draft.kind is None or line is None:
+    if draft.kind is None or (line is None and not end_point):
         return None
     return Pin(
         origin=origin,
         destination=destination,
         kind=draft.kind,
-        routes=(pin_value(choice=line),),
+        routes=() if line is None else (pin_value(choice=line),),
         only=draft.only,
         nickname=clean_nickname(text=draft.nickname or ''),
     )
@@ -262,8 +274,8 @@ def edited(
     filter. A choice that is not offered is dropped, with every choice
     after it, except that the filter depends on the stop and kind alone.
     A kind or line is chosen when only one is offered; a To never is.
-    For a destination-first kind the order is stop, kind, To, line, and
-    the line chosen when none is picked is the busiest.
+    For an end-point kind the order is stop, kind, then an optional To,
+    and there is no line.
 
     Parameters
     ----------
@@ -275,8 +287,7 @@ def edited(
         A pin the timetable no longer knows, whose nearby stops are
         offered; None for none.
     modes : Sequence[ModeSpec]
-        The city's modes; a destination-first kind asks for the To before
-        the line.
+        The city's modes; an end-point kind has no line step.
 
     Returns
     -------
@@ -308,58 +319,39 @@ def edited(
     )
 
 
-def chosen_line(
-    *, lines: Sequence[Choice], suggestion: Choice | None, draft: PinDraft,
-) -> tuple[Choice | None, str]:
+def is_end_point(*, kind: str | None, modes: Sequence[ModeSpec]) -> bool:
     """
-    Choose between a line the owner picked and the suggested one.
+    Say whether a kind is an end-point kind.
 
     Parameters
     ----------
-    lines : Sequence[Choice]
-        The lines offered.
-    suggestion : Choice | None
-        The line suggested now.
-    draft : PinDraft
-        The choices made so far.
+    kind : str | None
+        The kind chosen, or None for none.
+    modes : Sequence[ModeSpec]
+        The city's modes.
 
     Returns
     -------
-    tuple[Choice | None, str]
-        The draft's line when it is offered and is not the line last
-        suggested, else the suggestion; and the value of the suggestion
-        kept, '' when the line was picked or there is none.
+    bool
+        True when the kind asks for a From and an optional To, no line.
     """
-    picked = next(
-        (
-            line
-            for line in lines
-            if pin_value(choice=line) == draft.route != draft.suggested
-        ),
-        None,
-    )
-    if picked is not None:
-        return picked, ''
-    return suggestion, '' if suggestion is None else pin_value(
-        choice=suggestion,
-    )
+    return kind is not None and kind in end_point_modes(modes=modes)
 
 
-def reach_first(
+def line_and_to(
     *,
     options: PinOptions,
     draft: PinDraft,
     origin: StopPlace,
-    kind: str,
-    kinds: tuple[str, ...],
-) -> PinEditor:
+    kind: str | None,
+    kept: bool,
+    end_point: bool,
+) -> tuple[
+    tuple[Choice, ...], Choice | None,
+    tuple[StopPlace, ...], StopPlace | None,
+]:
     """
-    Check the choices of a kind that asks for the To before the line.
-
-    The To is one of the places the kind reaches from the From; it is
-    never chosen for the owner. Every line through the From is offered,
-    with the busiest to the To suggested. A line other than the last
-    suggestion is kept; an untouched suggestion follows the To.
+    Check the line and the To of a draft against the kind.
 
     Parameters
     ----------
@@ -369,60 +361,30 @@ def reach_first(
         The choices made so far.
     origin : StopPlace
         The From.
-    kind : str
-        The kind chosen.
-    kinds : tuple[str, ...]
-        The kinds the From offers.
+    kind : str | None
+        The kind chosen, or None for none.
+    kept : bool
+        Whether the draft's kind was kept.
+    end_point : bool
+        True for an end-point kind, which has no line.
 
     Returns
     -------
-    PinEditor
-        The checked draft and what is offered after it, with no nearby
-        stops.
+    tuple[tuple[Choice, ...], Choice | None, ...]
+        The lines offered, the line chosen, the places offered and the
+        To chosen.
     """
-    given = draft if draft.kind in (None, kind) else replace(
-        draft, route='', suggested='', to='', only=(),
+    lines, line, line_kept = line_step(
+        options=options, stop=origin.stop_id,
+        kind=None if end_point else kind,
+        given=draft.route if kept else '',
     )
-    places = options.reached_from(place=origin, kind=kind)
-    destination = next(
-        (place for place in places if place.stop_id == given.to), None,
+    places, destination = to_step(
+        options=options, origin=origin, kind=kind, line=line,
+        given=draft.to if kept and (line_kept or end_point) else '',
+        end_point=end_point,
     )
-    lines = options.lines_at(stop_id=origin.stop_id, kind=kind)
-    line, suggested = chosen_line(
-        lines=lines,
-        suggestion=busiest_line(
-            lines=lines,
-            trips=options.line_trips(
-                origin=origin, destination=destination, kind=kind,
-            ),
-        ),
-        draft=given,
-    )
-    filters, only = filter_step(
-        options=options, stop=origin.stop_id, kind=kind, given=given.only,
-    )
-    checked = replace(
-        given,
-        stop=origin.stop_id,
-        kind=kind,
-        route='' if line is None else pin_value(choice=line),
-        suggested=suggested,
-        to='' if destination is None else destination.stop_id,
-        only=only,
-    )
-    return PinEditor(
-        draft=checked,
-        origin=origin,
-        kinds=kinds,
-        lines=lines,
-        destinations=places,
-        filters=filters,
-        nearby=(),
-        pin=pin_of(
-            draft=checked, origin=origin, destination=destination, line=line,
-        ),
-        suggested=suggested,
-    )
+    return lines, line, places, destination
 
 
 def with_origin(
@@ -455,18 +417,10 @@ def with_origin(
     kinds, kind, kind_kept = kind_step(
         options=options, stop=origin.stop_id, given=draft.kind,
     )
-    if kind is not None and kind in end_point_modes(modes=modes):
-        return reach_first(
-            options=options, draft=draft, origin=origin, kind=kind,
-            kinds=kinds,
-        )
-    lines, line, line_kept = line_step(
-        options=options, stop=origin.stop_id, kind=kind,
-        given=draft.route if kind_kept else '',
-    )
-    places, destination = to_step(
-        options=options, origin=origin, kind=kind, line=line,
-        given=draft.to if kind_kept and line_kept else '',
+    lines, line, places, destination = line_and_to(
+        options=options, draft=draft, origin=origin, kind=kind,
+        kept=kind_kept,
+        end_point=is_end_point(kind=kind, modes=modes),
     )
     filters, only = filter_step(
         options=options, stop=origin.stop_id, kind=kind,
@@ -490,6 +444,7 @@ def with_origin(
         filters=filters,
         nearby=(),
         pin=pin_of(
-            draft=checked, origin=origin, destination=destination, line=line,
+            draft=checked, origin=origin, destination=destination,
+            line=line, end_point=is_end_point(kind=kind, modes=modes),
         ),
     )

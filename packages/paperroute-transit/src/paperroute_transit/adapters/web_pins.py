@@ -174,17 +174,9 @@ def survived(*, draft: PinDraft, editor: PinEditor) -> bool:
     -------
     bool
         True when there is a pin and no choice was dropped or changed.
-        A line equal to the posted suggestion may differ from the
-        checked one when the editor has a suggestion of its own.
     """
     checked = editor.draft
-    follows = bool(
-        checked.suggested
-        and draft.suggested
-        and draft.route == draft.suggested
-    )
-    route = checked.route if follows else draft.route
-    fields = (draft.stop, draft.kind, route, draft.to)
+    fields = (draft.stop, draft.kind, draft.route, draft.to)
     return (
         editor.pin is not None
         and fields == (checked.stop, checked.kind, checked.route, checked.to)

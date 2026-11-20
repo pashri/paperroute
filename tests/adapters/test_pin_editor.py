@@ -208,49 +208,70 @@ def routed_options() -> KindedOptions:
 OPTIONS: Final[KindedOptions] = routed_options()
 
 
-def test_an_end_points_train_suggests_the_busiest_line() -> None:
-    """With a To and no line, the busiest line is chosen and suggested."""
+def test_a_train_pin_needs_no_line() -> None:
+    """A From and a To make a train pin that has no routes."""
     editor = edited(
         options=OPTIONS, draft=PinDraft(stop='S', kind='train', to='D1'),
         modes=ROUTED,
     )
-    assert [p.stop_id for p in editor.destinations] == ['D1', 'D2']
-    assert (editor.draft.route, editor.suggested) == ('TL:B', 'TL:B')
+    assert editor.lines == ()
+    assert editor.draft.route == ''
     assert editor.pin is not None
-    assert editor.pin.routes == ('TL:B',)
+    assert (editor.pin.destination, editor.pin.routes) == (D1, ())
 
 
-def test_a_picked_line_stays_when_the_destination_changes() -> None:
-    """A line other than the suggestion is kept."""
-    draft = PinDraft(
-        stop='S', kind='train', to='D2', route='GA:L', suggested='TL:B',
+def test_a_train_pin_needs_no_destination() -> None:
+    """A From alone makes a train pin."""
+    editor = edited(
+        options=OPTIONS, draft=PinDraft(stop='S', kind='train'),
+        modes=ROUTED,
     )
-    editor = edited(options=OPTIONS, draft=draft, modes=ROUTED)
-    assert editor.draft.route == 'GA:L'
+    assert editor.pin is not None
+    assert (editor.pin.destination, editor.pin.routes) == (None, ())
 
 
-def test_an_old_train_pin_gets_the_busiest_line() -> None:
-    """A stored badge that is no longer a line is replaced."""
-    draft = PinDraft(stop='S', kind='train', to='D1', route='GN')
+def test_the_train_destinations_are_every_reached_station() -> None:
+    """The To offers every place a train reaches, by the From's reach."""
+    editor = edited(
+        options=OPTIONS, draft=PinDraft(stop='S', kind='train'),
+        modes=ROUTED,
+    )
+    assert editor.destinations == OPTIONS.reached_from(
+        place=editor.origin or D1, kind='train',
+    )
+    assert [p.stop_id for p in editor.destinations] == ['D1', 'D2']
+
+
+def test_a_stored_train_line_is_ignored() -> None:
+    """A route left on an old train pin neither shows nor saves."""
+    draft = PinDraft(stop='S', kind='train', to='D1', route='GA:L')
     editor = edited(options=OPTIONS, draft=draft, modes=ROUTED)
-    assert editor.draft.route == 'TL:B'
+    assert editor.draft.route == ''
+    assert editor.pin is not None
+    assert editor.pin.routes == ()
 
 
 def test_without_modes_the_line_comes_first() -> None:
-    """With no destination-first mode, no line is chosen for the owner."""
+    """With no end-point mode, no line is chosen for the owner."""
     draft = PinDraft(stop='S', kind='train', to='D1')
     editor = edited(options=OPTIONS, draft=draft)
     assert editor.draft.route == ''
-    assert editor.suggested == ''
     assert editor.pin is None
     assert editor.destinations == ()
 
 
-def test_a_train_destination_is_not_offered_from_another_kind() -> None:
-    """The places offered are those a train reaches, not any run."""
-    draft = PinDraft(stop='S', kind='train')
-    editor = edited(options=OPTIONS, draft=draft, modes=ROUTED)
-    assert [p.stop_id for p in editor.destinations] == ['D1', 'D2']
+def test_a_bus_pin_still_needs_its_route() -> None:
+    """A kind that is not an end-point kind waits for its line."""
+    other = Choice(key='bus:810', label='Line 810', badge='810')
+    found = edited(
+        options=FakePinOptions(
+            places={'H': HOME}, lines={('H', SydneyMode.BUS): (BUS, other)},
+        ),
+        draft=PinDraft(stop='H', kind=SydneyMode.BUS),
+        modes=ROUTED,
+    )
+    assert found.pin is None
+    assert found.lines == (BUS, other)
 
 
 def test_the_route_filter_survives_an_end_points_train() -> None:
@@ -269,28 +290,12 @@ def test_an_unknown_destination_is_dropped_not_chosen() -> None:
     assert editor.draft.to == ''
 
 
-def test_a_line_picked_by_hand_is_not_suggested_again() -> None:
-    """A hand pick equal to the busiest line posts no suggestion."""
-    draft = PinDraft(stop='S', kind='train', to='D1', route='TL:B')
-    editor = edited(options=OPTIONS, draft=draft, modes=ROUTED)
-    assert editor.draft.route == 'TL:B'
-    assert (editor.suggested, editor.draft.suggested) == ('', '')
-
-
-def test_an_old_train_pin_is_marked_as_suggested() -> None:
-    """A stored badge that is not a line gets the busiest, suggested."""
-    draft = PinDraft(stop='S', kind='train', to='D1', route='GN')
-    editor = edited(options=OPTIONS, draft=draft, modes=ROUTED)
-    assert editor.suggested == 'TL:B'
-
-
 def test_a_kind_switch_discards_the_old_kinds_choices() -> None:
     """Choices made under a kind the stop lacks are dropped."""
     draft = PinDraft(
-        stop='S', kind='ferry', to='D1', route='GA:L', suggested='GA:L',
-        only=('X1',), nickname='Me', ref='r',
+        stop='S', kind='ferry', to='D1', only=('X1',), nickname='Me',
+        ref='r',
     )
     editor = edited(options=OPTIONS, draft=draft, modes=ROUTED)
     assert (editor.draft.to, editor.draft.only) == ('', ())
-    assert (editor.draft.route, editor.suggested) == ('TL:B', 'TL:B')
     assert (editor.draft.nickname, editor.draft.ref) == ('Me', 'r')

@@ -2,20 +2,25 @@
 
 from collections.abc import Sequence
 from datetime import timedelta
+from itertools import pairwise
 from typing import Final
 
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
-from paperroute_testkit.city_setting import city_under_test
+from paperroute_testkit.city_setting import city_under_test, train_mode
 from paperroute_testkit.core.factories import (
     EAST,
+    EIGHT,
     LINE_MODE,
     LINE_SOURCE,
+    STALE_LIMIT,
     START,
+    calls,
     departure,
     example_reach,
     inputs_of,
     line_pattern,
     live,
+    pattern,
     place,
     train,
 )
@@ -25,13 +30,23 @@ from paperroute_transit.core.geo import Point
 from paperroute_transit.core.map_view import DEFAULT_ZOOM
 from paperroute_transit.core.messages import DeparturesLoaded, Effect, Event
 from paperroute_transit.core.model import Departure, Pin, StopPlace
-from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
+from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.reach import (
+    Reach,
+    ReachInput,
+    ReachRow,
+    RowKind,
+    StripKey,
+)
 from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import LiveView, Saved, default_settings
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.stop_view import HORIZON
 from paperroute_transit.core.strip_model import StripInputs, StripRow
+from paperroute_transit.core.strip_times import TripInputs
 from paperroute_transit.core.strip_view import build_strip_view
+from paperroute_transit.core.train_line import train_reach
+from paperroute_transit.core.train_network import Hop, TrainNetwork, WeekdayRun
 
 WEST: Final[tuple[str, ...]] = ('C', 'J', 'W1', 'W2')
 SOUTH: Final[tuple[str, ...]] = ('C', 'J', 'R1', 'R2', 'R3')
@@ -44,6 +59,187 @@ PIN: Final[Pin] = Pin(
 KEY: Final[StripKey] = StripKey(
     station='C', kind=LINE_MODE, routes=(),
 )
+
+
+TRAIN_LINE: Final[tuple[str, ...]] = (
+    'Wynyard',
+    'Town Hall',
+    'Central',
+    'Redfern',
+    'Newtown',
+    'Petersham',
+    'Summer Hill',
+    'Ashfield',
+    'Burwood',
+    'Strathfield',
+    'Flemington',
+    'Lidcombe',
+)  # the followed train's calls; the first two are earlier calls
+TRAIN_PASSED: Final[dict[tuple[str, str], tuple[str, ...]]] = {
+    ('Redfern', 'Newtown'): ('Macdonaldtown',),
+    ('Newtown', 'Petersham'): ('Stanmore',),
+    ('Petersham', 'Summer Hill'): ('Lewisham',),
+    ('Ashfield', 'Burwood'): ('Croydon',),
+    ('Strathfield', 'Flemington'): ('Homebush',),
+}  # the stations the train runs through between two calls
+TRAIN_HOPS: Final[dict[tuple[str, str], Hop]] = {
+    pair: Hop(passed=TRAIN_PASSED.get(pair, ()), inside=True)
+    for pair in pairwise(TRAIN_LINE)
+}
+TRAIN_TRIP: Final[str] = 'train-t1'
+SOUTH_COAST: Final[tuple[str, ...]] = (
+    'Cronulla',
+    'Waterfall',
+    'Kiama',
+    'Campbelltown',
+    'Wollongong',
+    'Bomaderry',
+    'Port Kembla',
+    'Helensburgh',
+    'Thirroul',
+)  # the places the train example's second exit names
+
+
+def train_departure() -> Departure:
+    """
+    Make the followed train's departure: Central at 8:10.
+
+    Returns
+    -------
+    Departure
+        The departure, of the first end-point mode.
+    """
+    return departure(
+        departs=START + timedelta(minutes=10),
+        trip_id=TRAIN_TRIP,
+        route='T1',
+        kind=train_mode(),
+    )
+
+
+def train_pattern() -> TripPattern:
+    """
+    Make the followed train's pattern, calling every 3 minutes.
+
+    Returns
+    -------
+    TripPattern
+        Calls at `TRAIN_LINE`; Central is at 8:10.
+    """
+    return pattern(
+        trip_id=TRAIN_TRIP,
+        route='T1',
+        stops=calls(
+            stations=TRAIN_LINE,
+            start=EIGHT + 600 - 180 * TRAIN_LINE.index('Central'),
+            step=180,
+        ),
+    )
+
+
+def train_runs() -> tuple[WeekdayRun, ...]:
+    """
+    Make the weekday runs that leave the followed train's line.
+
+    Returns
+    -------
+    tuple[WeekdayRun, ...]
+        Two for Revesby and Macarthur leaving at Redfern, and one for
+        each place in `SOUTH_COAST` leaving at Newtown.
+    """
+    return (
+        WeekdayRun(
+            route='T2',
+            stations=('Central', 'Redfern', 'Revesby'),
+            trains=8,
+        ),
+        WeekdayRun(
+            route='T2',
+            stations=('Central', 'Redfern', 'Revesby', 'Macarthur'),
+            trains=8,
+        ),
+        *(
+            WeekdayRun(
+                route='T4',
+                stations=(
+                    'Central', 'Redfern', 'Newtown', 'Sydenham', end,
+                ),
+                trains=6,
+            )
+            for end in SOUTH_COAST
+        ),
+    )
+
+
+def train_input() -> ReachInput:
+    """
+    Make the train example's Reach input: Central and its network.
+
+    Returns
+    -------
+    ReachInput
+        The From, every place named by ID, and the hops and runs.
+    """
+    ids = {
+        *TRAIN_LINE,
+        *(stop for run in train_runs() for stop in run.stations),
+        *(passed for hop in TRAIN_HOPS.values() for passed in hop.passed),
+    }
+    places = {key: place(key, name=key) for key in ids}
+    return ReachInput(
+        origin=places['Central'],
+        tails=(),
+        places=places,
+        station_of={key: key for key in ids},
+        network=TrainNetwork(hops=TRAIN_HOPS, runs=train_runs()),
+    )
+
+
+def train_trips() -> TripInputs:
+    """
+    Make the followed train's trip inputs at 8:00.
+
+    Returns
+    -------
+    TripInputs
+        One departure and its pattern, with no positions.
+    """
+    return TripInputs(
+        departures=(live(item=train_departure()),),
+        key=None,
+        patterns={TRAIN_TRIP: train_pattern()},
+        positions={},
+        now=START,
+        stale_after=STALE_LIMIT,
+        zone=city_under_test().zone,
+        station_of={},
+        line_kinds=frozenset(),
+    )
+
+
+def train_reach_example(*, destination: str = 'Lidcombe') -> Reach:
+    """
+    Build a train Strip's Reach with the real row builder.
+
+    Parameters
+    ----------
+    destination : str
+        The Destination's station ID.
+
+    Returns
+    -------
+    Reach
+        Two earlier calls, Central, then 14 rows to Lidcombe with 5
+        passed stations, and two exits: one for Revesby and Macarthur
+        at Redfern and one needing three lines at Newtown.
+    """
+    trips = train_trips()
+    return train_reach(
+        data=train_input(),
+        trips=trips,
+        main=trips.departures[0],
+        destination=destination,
+    )
 
 
 def long_reach() -> Reach:

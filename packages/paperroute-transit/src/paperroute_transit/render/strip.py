@@ -31,6 +31,7 @@ FOLD_STROKE: Final[float] = 2.0
 MAIN_PX: Final[int] = 15
 SPUR_PX: Final[int] = 13
 TIME_FACE: Final[Face] = Face(weight=400, px=15)
+SMALL_TIME_FACE: Final[Face] = Face(weight=400, px=SPUR_PX)
 TAG_FACE: Final[Face] = Face(weight=700, px=13)
 TAG_HALF: Final[float] = 10.0  # pixels above and below the row centre
 TAG_PAD: Final[float] = 12.0  # pixels around the tag text in all
@@ -53,6 +54,23 @@ NOTE_MAX: Final[float] = 190.0  # a carry-on note box's widest
 NOTE_OUTLINE: Final[float] = 2.0
 NOTE_PAD: Final[float] = 6.0  # pixels inside each end of the note box
 NOTE_GAP: Final[float] = 4.0  # pixels between the route and the arrow
+DASH: Final[int] = 7  # px
+DASH_GAP: Final[int] = 5  # px
+DASH_LEAD: Final[float] = 18.0  # pixels above a dashed top slot's centre
+DASH_CLEAR: Final[float] = 2.0  # pixels between a ring and a dash
+STUB_INSET: Final[int] = 4  # pixels a stub's text sits right of names
+EXIT_LINES: Final[int] = 3
+EXIT_ROWS: Final[tuple[tuple[float, ...], ...]] = (
+    (0.0,),
+    (-2.0, 12.0),
+    (-9.0, 4.0, 17.0),
+)  # exit label text centres from the row's centre line
+NO_MARK: Final[frozenset[RowKind]] = frozenset(
+    {RowKind.EXIT, RowKind.PASSED, RowKind.DASHED},
+)  # kinds with no station mark
+SMALL_KINDS: Final[frozenset[RowKind]] = frozenset(
+    {RowKind.PASSED, RowKind.EARLIER, RowKind.DASHED},
+)  # kinds drawn in the spur size
 
 
 @dataclass(frozen=True)
@@ -147,9 +165,67 @@ def hook_points(*, x: float, y: float, parent_y: float
     return [*arc, (x + HOOK_LENGTH, y)]
 
 
-def draw_track(canvas: Canvas, *, row: StripRow, track_x: int) -> None:
+def dash_span(*, row: StripRow, parent_y: float) -> tuple[float, float]:
+    """
+    Give the y range of the dashes on a dashed row's track.
+
+    Parameters
+    ----------
+    row : StripRow
+        A dashed row.
+    parent_y : float
+        Its parent's centre line.
+
+    Returns
+    -------
+    tuple[float, float]
+        Where the dashes start and end. A row above its parent, the top
+        slot, starts at the slot's top and ends short of the parent's
+        ring; a row below it, a stub, starts below the parent's ring and
+        ends at the stub.
+    """
+    if row.y < parent_y:
+        return row.y - DASH_LEAD, parent_y - RING_RADIUS - DASH_CLEAR
+    return parent_y + RING_RADIUS + DASH_CLEAR, row.y
+
+
+def draw_dashes(
+    canvas: Canvas, *, x: float, span: tuple[float, float], width: float,
+) -> None:
+    """
+    Draw a vertical run of dashes.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    x : float
+        Centre x.
+    span : tuple[float, float]
+        Where the first dash starts and where the run ends.
+    width : float
+        Stroke width.
+    """
+    canvas.line(
+        points=[(x, span[0]), (x, span[1])],
+        width=width,
+        grey=INK,
+        dash=(DASH, DASH_GAP),
+    )
+
+
+def draw_track(
+    canvas: Canvas,
+    *,
+    row: StripRow,
+    track_x: int,
+    dashed_from: bool = False,
+) -> None:
     """
     Draw the track from a row's parent to the row (see `track_points`).
+
+    A dashed row, and a row whose parent is a dashed stub, get dashes
+    in place of the line.
 
     Parameters
     ----------
@@ -159,24 +235,36 @@ def draw_track(canvas: Canvas, *, row: StripRow, track_x: int) -> None:
         The row; nothing is drawn when it has no parent.
     track_x : int
         Track x at depth 0.
+    dashed_from : bool
+        Whether the row's parent is a dashed row.
     """
     if row.parent_y is None:
         return
-    canvas.line(
-        points=track_points(
-            row=row, parent_y=row.parent_y, track_x=track_x,
-        ),
-        width=RIDE_WIDTH if row.ride else TRACK_WIDTH,
-        grey=INK,
-    )
+    width = RIDE_WIDTH if row.ride else TRACK_WIDTH
+    x = track_x + INDENT * row.depth
+    if row.kind is RowKind.DASHED:
+        span = dash_span(row=row, parent_y=row.parent_y)
+    elif dashed_from:
+        span = (row.parent_y, row.y)
+    else:
+        canvas.line(
+            points=track_points(
+                row=row, parent_y=row.parent_y, track_x=track_x,
+            ),
+            width=width,
+            grey=INK,
+        )
+        return
+    draw_dashes(canvas, x=x, span=span, width=width)
 
 
 def draw_station(canvas: Canvas, *, row: StripRow, x: float) -> None:
     """
     Draw a row's station mark.
 
-    The From and Destination get a disc, a closed fold two rings, an
-    exit nothing, and any other station a ring.
+    The From and Destination get a disc, a closed fold two rings, and
+    an exit, a passed station and a dashed row nothing. Any other
+    station gets a ring.
 
     Parameters
     ----------
@@ -197,7 +285,7 @@ def draw_station(canvas: Canvas, *, row: StripRow, x: float) -> None:
     if row.kind is RowKind.FOLD:
         draw_fold(canvas, y=row.y, x=x)
         return
-    if row.kind is RowKind.EXIT:
+    if row.kind in NO_MARK:
         return
     box = (x - RING_RADIUS, row.y - RING_RADIUS,
            x + RING_RADIUS, row.y + RING_RADIUS)
@@ -365,12 +453,14 @@ def name_face(*, row: StripRow) -> Face:
     Returns
     -------
     Face
-        15 px on the main line and 13 px on spurs; bold for the From,
-        the Destination and the cursor row.
+        15 px on the main line and 13 px on spurs, passed stations,
+        earlier calls and dashed rows; bold for the From, the
+        Destination and the cursor row.
     """
+    small = row.depth != 0 or row.kind in SMALL_KINDS
     return Face(
         weight=700 if row.bold or row.cursor else 400,
-        px=MAIN_PX if row.depth == 0 else SPUR_PX,
+        px=SPUR_PX if small else MAIN_PX,
     )
 
 
@@ -400,7 +490,7 @@ def draw_end(canvas: Canvas, *, row: StripRow, columns: Columns) -> float:
         canvas.text(
             at=(columns.time_right, row.y + BASELINE_DROP),
             text=row.time,
-            face=TIME_FACE,
+            face=SMALL_TIME_FACE if row.kind is RowKind.EARLIER else TIME_FACE,
             grey=PAPER if row.cursor else INK,
             anchor='rs',
         )
@@ -455,6 +545,8 @@ def name_start(canvas: Canvas, *, row: StripRow, columns: Columns
     """
     if row.kind is not RowKind.EXIT:
         left = columns.name_x + INDENT * row.depth
+        if row.kind is RowKind.DASHED:
+            left += STUB_INSET
         return max(left, row.name_after or left), name_face(row=row)
     x = columns.track_x + INDENT * row.parent_depth + HOOK_LENGTH
     label = x + hook_arrow(canvas, x=x, y=row.y)
@@ -493,12 +585,116 @@ def draw_row(canvas: Canvas, *, row: StripRow, columns: Columns) -> None:
         edge = noted_edge(
             canvas, row=row, columns=columns, left=left, edge=edge,
         )
-    canvas.text(
-        at=(left, row.y + BASELINE_DROP),
-        text=canvas.fit(text=row.name, face=face, width=edge - left),
-        face=face,
-        grey=PAPER if row.cursor else INK,
+    draw_name(canvas, row=row, left=left, face=face, edge=edge)
+
+
+def draw_name(
+    canvas: Canvas, *, row: StripRow, left: float, face: Face, edge: float,
+) -> None:
+    """
+    Draw a row's name, or an exit's label of place names.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : StripRow
+        The row.
+    left : float
+        Where the name starts.
+    face : Face
+        The name's face.
+    edge : float
+        Where the name must end.
+    """
+    if row.names:
+        lines = exit_lines(canvas=canvas, names=row.names, width=edge - left)
+        for line, offset in zip(lines, EXIT_ROWS[len(lines) - 1]):
+            canvas.text(
+                at=(left, row.y + offset),
+                text=canvas.fit(text=line, face=face, width=edge - left),
+                face=face,
+                grey=INK,
+                anchor='lm',
+            )
+    elif row.name:
+        canvas.text(
+            at=(left, row.y + BASELINE_DROP),
+            text=canvas.fit(text=row.name, face=face, width=edge - left),
+            face=face,
+            grey=PAPER if row.cursor else INK,
+        )
+
+
+def exit_lines(
+    *, canvas: Canvas, names: Sequence[str], width: float,
+) -> tuple[str, ...]:
+    """
+    Wrap an exit's place names into at most `EXIT_LINES` lines.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Used to measure text.
+    names : Sequence[str]
+        The places, in order.
+    width : float
+        The widest a line may be.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The label 'to a, b, c' broken at word breaks. Names are dropped
+        from the end until every line fits, with no count of what was
+        dropped. When even the first name does not fit, one line cut
+        short.
+    """
+    for count in range(len(names), 0, -1):
+        lines = wrapped(
+            canvas=canvas,
+            text='to ' + ', '.join(names[:count]),
+            width=width,
+        )
+        if len(lines) <= EXIT_LINES and all(
+            canvas.length(text=line, face=EXIT_FACE) <= width
+            for line in lines
+        ):
+            return lines
+    if not names:
+        return ()
+    return (
+        canvas.fit(text='to ' + names[0], face=EXIT_FACE, width=width),
     )
+
+
+def wrapped(
+    *, canvas: Canvas, text: str, width: float,
+) -> tuple[str, ...]:
+    """
+    Break text into lines at word breaks, filling each line.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Used to measure text.
+    text : str
+        The text.
+    width : float
+        The widest a line may be; a word wider than it gets a line.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The lines.
+    """
+    lines: list[str] = []
+    for word in text.split():
+        joined = f'{lines[-1]} {word}' if lines else word
+        if lines and canvas.length(text=joined, face=EXIT_FACE) <= width:
+            lines[-1] = joined
+        else:
+            lines.append(word)
+    return tuple(lines)
 
 
 def noted_edge(
@@ -565,8 +761,16 @@ def draw_rows(
     columns = Columns(
         track_x=track_x, name_x=name_x, time_right=time_right, right=right,
     )
+    stubs = {row.y for row in rows if row.kind is RowKind.DASHED}
     for row in rows:
-        draw_track(canvas, row=row, track_x=track_x)
+        draw_track(
+            canvas,
+            row=row,
+            track_x=track_x,
+            dashed_from=(
+                row.kind is not RowKind.DASHED and row.parent_y in stubs
+            ),
+        )
     for row in rows:
         draw_row(canvas, row=row, columns=columns)
 

@@ -28,6 +28,7 @@ from paperroute_device.core.panel_screens import panel_view
 from paperroute_device.runtime.outputs import drawing
 from paperroute_device_testkit.device_pages import FACTS
 from paperroute_sydney.city import SYDNEY, SydneyFeed, SydneyMode
+from paperroute_testkit.city_setting import city_under_test, train_mode
 from paperroute_testkit.core.connection_factories import (
     LEG1,
     LEG2,
@@ -56,8 +57,12 @@ from paperroute_testkit.core.strip_factories import (
     KEY,
     PIN,
     SOUTH,
+    TRAIN_TRIP,
     WEST,
     on_view,
+    train_departure,
+    train_pattern,
+    train_reach_example,
 )
 from paperroute_transit.app_render import MapRenderer
 from paperroute_transit.core.chains import Legs, leg_key
@@ -74,6 +79,7 @@ from paperroute_transit.core.messages import (
     StripLoaded,
 )
 from paperroute_transit.core.model import Pin, StopPlace
+from paperroute_transit.core.modes import end_point_modes
 from paperroute_transit.core.panel_screens import TilesFacts
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.places import shown
@@ -93,6 +99,7 @@ from paperroute_transit.core.state_views import (
     current_view,
 )
 from paperroute_transit.core.stop_view import HORIZON
+from paperroute_transit.core.strip_state import strip_key
 from paperroute_transit.core.tiles import (
     TILE,
     LabelKind,
@@ -610,6 +617,40 @@ def strip_scene(*, view: LiveView) -> State:
     return patterns_loaded(state=state, patterns=patterns)
 
 
+def train_strip_scene(*, destination: str) -> State:
+    """
+    Show a train Strip following one train to a Destination.
+
+    Parameters
+    ----------
+    destination : str
+        The Destination's station ID and name.
+
+    Returns
+    -------
+    State
+        State at `START` on the Strip, with the train example's reach
+        and the followed train's pattern.
+    """
+    pin = Pin(
+        origin=place('Central', name='Central'),
+        destination=place(destination, name=destination),
+        kind=train_mode(),
+    )
+    key = strip_key(pin=pin, end_points=end_point_modes(
+        modes=city_under_test().modes,
+    ))
+    state, _ = on_view(
+        view=LiveView.STRIP, pin=pin, departures=(train_departure(),),
+    )
+    state, _ = step(
+        state, StripLoaded(key=key, reach=train_reach_example()),
+    )
+    return patterns_loaded(
+        state=state, patterns={TRAIN_TRIP: train_pattern()},
+    )
+
+
 def patterns_loaded(
     *, state: State, patterns: dict[str, TripPattern | None],
 ) -> State:
@@ -771,6 +812,8 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     'map_centred': lambda: map_framed(framing=MapFraming.CENTRED),
     'strip': lambda: strip_scene(view=LiveView.STRIP),
     'strip_map': lambda: strip_scene(view=LiveView.STRIP_MAP),
+    'train_strip': lambda: train_strip_scene(destination='Petersham'),
+    'train_strip_ends': lambda: train_strip_scene(destination='Lidcombe'),
     'alerts': on_alerts,
     'connection': lambda: connection(view=LiveView.STOP),
     'connection_strip': lambda: connection_strip(view=LiveView.STRIP),

@@ -24,14 +24,21 @@ from paperroute_transit.core.strip_model import (
     StripRow,
 )
 from paperroute_transit.render.strip import (
+    DASH,
+    DASH_GAP,
+    EXIT_FACE,
+    EXIT_LINES,
     MAIN_PX,
     NAME_ROOM,
     NOTE_MAX,
+    RING_RADIUS,
+    SPUR_PX,
     TAG_GAP,
     TAG_HALF,
     draw_band,
     draw_rows,
     draw_strip_markers,
+    exit_lines,
     hook_arrow,
     track_points,
 )
@@ -572,3 +579,134 @@ def test_hollow_marker_has_age_tab() -> None:
     tabbed = canvas.grey()
     assert (bare[196:204, TRACK_X - 8:TRACK_X + 8] == PAPER).any()
     assert (tabbed[212:224] == INK).sum() > (bare[212:224] == INK).sum()
+
+
+LONG_NAMES = (
+    'London Liverpool Street',
+    'Stansted Airport',
+    'Bishops Stortford',
+    'Harlow Town',
+    'Sawbridgeworth',
+    'Audley End',
+    'Whittlesford Parkway',
+    'Great Chesterford',
+)
+
+
+def test_a_passed_row_has_no_ring_or_time() -> None:
+    """A passed row draws a regular 13 px name and nothing left of it."""
+    plain = strip_row(y=FROM_Y, name='Macdonaldtown')
+    passed = replace(plain, kind=RowKind.PASSED)
+    kept = drawn(rows=(plain,))
+    frame = drawn(rows=(passed,))
+    assert ink_columns(frame=kept, y=FROM_Y, left=0, right=45)
+    assert not ink_columns(frame=frame, y=FROM_Y, left=0, right=45)
+    assert not ink_columns(frame=frame, y=FROM_Y, left=300, right=RIGHT)
+    name = (frame[:, NAME_X:300] == INK).sum()
+    assert 0 < name < (kept[:, NAME_X:300] == INK).sum()
+
+
+def test_an_earlier_row_is_small_with_a_ring_and_a_time() -> None:
+    """An earlier row has a ring, a 13 px name and a 13 px time."""
+    plain = strip_row(y=FROM_Y, name='Wynyard', time='9:10')
+    earlier = replace(plain, kind=RowKind.EARLIER)
+    kept, frame = drawn(rows=(plain,)), drawn(rows=(earlier,))
+    assert ink_columns(frame=frame, y=FROM_Y, left=0, right=45)
+    for left, right in ((NAME_X, 300), (360, RIGHT)):
+        assert (
+            0
+            < (frame[:, left:right] == INK).sum()
+            < (kept[:, left:right] == INK).sum()
+        )
+
+
+def test_the_dashed_slot_is_dashed() -> None:
+    """The top slot's track runs in dashes of 7 px with gaps of 5 px."""
+    parent_y = FROM_Y
+    top = parent_y - ROW_H
+    row = replace(
+        strip_row(y=top, parent_y=parent_y, name=''),
+        kind=RowKind.DASHED,
+    )
+    frame = drawn(rows=(row,))
+    column = frame[:, TRACK_X] < 128
+    ys = np.flatnonzero(column)
+    assert ys[0] == top - 18
+    assert ys[-1] < parent_y - RING_RADIUS - 2
+    runs = np.split(ys, np.flatnonzero(np.diff(ys) > 1) + 1)
+    assert [len(run) for run in runs[:-1]] == [DASH] * (len(runs) - 1)
+    gaps = [int(b[0] - a[-1] - 1) for a, b in zip(runs, runs[1:])]
+    assert gaps == [DASH_GAP] * len(gaps)
+
+
+def test_a_stub_and_the_pinned_destination_are_dashed() -> None:
+    """The track into a stub, and from it to the Destination, is dashed."""
+    above = strip_row(y=FROM_Y)
+    stub = replace(
+        strip_row(
+            y=FROM_Y + ROW_H, parent_y=FROM_Y, name='2 stops', ride=True,
+        ),
+        kind=RowKind.DASHED,
+    )
+    end = strip_row(
+        y=FROM_Y + 2 * ROW_H, parent_y=stub.y, bold=True, ride=True,
+    )
+    frame = drawn(rows=(above, stub, end))
+    top, bottom = int(FROM_Y) + 9, int(FROM_Y + 2 * ROW_H) - 12
+    column = frame[top:bottom, TRACK_X] < 128
+    assert column.any()
+    assert not column.all()
+    assert ink_columns(frame=frame, y=stub.y + 5, left=NAME_X, right=300)
+
+
+def test_an_exit_label_keeps_to_three_lines() -> None:
+    """Names drop from the end to fit three lines, with no count."""
+    canvas = Canvas()
+    lines = exit_lines(canvas=canvas, names=LONG_NAMES, width=200.0)
+    assert 1 <= len(lines) <= EXIT_LINES
+    assert lines[0].startswith('to London Liverpool Street')
+    assert not any('+' in line for line in lines)
+    assert all(
+        canvas.length(text=line, face=EXIT_FACE) <= 200.0 for line in lines
+    )
+    joined = ' '.join(lines)
+    assert LONG_NAMES[-1] not in joined
+    one = exit_lines(canvas=canvas, names=('Aaaaaaaaaaaaaaaaaaaaaaaaaaaa',) * 1,
+                     width=60.0)
+    assert len(one) == 1
+
+
+def test_an_exit_label_wraps_at_word_breaks() -> None:
+    """Names that fit stay whole and the label breaks between words."""
+    canvas = Canvas()
+    names = ('Cronulla', 'Waterfall', 'Kiama', 'Campbelltown')
+    lines = exit_lines(canvas=canvas, names=names, width=150.0)
+    assert len(lines) == 2
+    assert ' '.join(lines) == 'to Cronulla, Waterfall, Kiama, Campbelltown'
+    assert exit_lines(canvas=canvas, names=names, width=1000.0) == (
+        'to Cronulla, Waterfall, Kiama, Campbelltown',
+    )
+    assert exit_lines(canvas=canvas, names=(), width=100.0) == ()
+
+
+def test_a_named_exit_draws_its_lines_about_the_row() -> None:
+    """One, two and three lines sit at fixed offsets from the hook."""
+    start = TRACK_X + HOOK_LENGTH + HOOK_TIP + HOOK_GAP
+    for names, offsets in (
+        (('Revesby',), (0,)),
+        (('Cronulla', 'Waterfall', 'Kiama', 'Campbelltown'), (-2, 12)),
+        (LONG_NAMES[:5], (-9, 4, 17)),
+    ):
+        row = replace(
+            strip_row(y=FROM_Y + ROW_H, parent_y=FROM_Y, name='x'),
+            kind=RowKind.EXIT,
+            names=names,
+        )
+        frame = drawn(rows=(row,))
+        for offset in offsets:
+            band = frame[
+                int(row.y + offset) - 4:int(row.y + offset) + 4,
+                int(start) + 2:TIME_RIGHT,
+            ]
+            assert (band < 128).any(), (names, offset)
+        assert not (frame[:int(row.y) - 24, int(start):] < 128).any()

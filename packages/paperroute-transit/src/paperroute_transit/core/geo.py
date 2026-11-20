@@ -262,6 +262,9 @@ def project_onto_segment(
     return math.dist(point, nearest), t * length
 
 
+SKIP_SLACK: Final[float] = 1e-6  # metres
+
+
 def nearest_from(
     *,
     shape: Shape,
@@ -283,17 +286,25 @@ def nearest_from(
     -------
     tuple[int, float]
         The chosen segment index and the metres along the shape. Ties go
-        to the earliest segment.
+        to the earliest segment. Segments too far along the shape to be
+        nearer than the best so far are skipped.
     """
-    best = (math.inf, first, shape.along[first])
-    for index in range(first, len(shape.points) - 1):
+    points, along = shape.points, shape.along
+    last = len(points) - 1
+    best = (math.inf, first, along[first])
+    index = first
+    while index < last:
         gap, offset = project_onto_segment(
-            point=stop,
-            start=shape.points[index],
-            end=shape.points[index + 1],
+            point=stop, start=points[index], end=points[index + 1],
         )
         if gap < best[0]:
-            best = (gap, index, shape.along[index] + offset)
+            best = (gap, index, along[index] + offset)
+        index += 1
+        reach = math.dist(stop, points[index]) - best[0] - SKIP_SLACK
+        if reach > 0 and index < last:
+            index = max(
+                index, bisect_left(along, along[index] + reach, index) - 1,
+            )
     return best[1], best[2]
 
 

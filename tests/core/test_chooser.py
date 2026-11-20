@@ -23,6 +23,7 @@ from paperroute_transit.core.chooser import (
     pin_value,
     pressed,
     turned,
+    turned_to,
     with_column,
     with_line,
 )
@@ -30,7 +31,7 @@ from paperroute_transit.core.chooser_station import knob_pressed
 from paperroute_transit.core.chooser_view import build_chooser_view
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.pin_choices import PinDraft
-from paperroute_transit.core.reach import RowKind, StripKey
+from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
 from tests.core.chooser_walks import (
     BUS_606,
     GROUPS,
@@ -399,3 +400,28 @@ def test_a_named_line_commits_its_value() -> None:
 def test_pin_value_falls_back_to_the_badge() -> None:
     """A choice without a value pins its badge."""
     assert pin_value(choice=TRAIN_LINES.items[0]) == 'T1'
+
+
+def test_passed_earlier_and_dashed_rows_are_not_pickable() -> None:
+    """The TO cursor steps over the rows a train Strip adds."""
+    kinds = [
+        RowKind.EARLIER, RowKind.ORIGIN, RowKind.PASSED, RowKind.DASHED,
+        RowKind.MAIN,
+    ]
+    reach = Reach(
+        rows=tuple(
+            ReachRow(
+                place=place(f'R{i}', name=f'R{i}'),
+                kind=kind,
+                depth=0,
+                above=i < 1,
+                parent=None if i == 1 else i - 1,
+            )
+            for i, kind in enumerate(kinds)
+        ),
+        stations=1,
+        station_of={},
+    )
+    chooser = turned_to(chooser=at_to(), steps=1, reach=reach)
+    assert chooser.to_cursor == 3
+    assert turned_to(chooser=chooser, steps=-1, reach=reach).to_cursor == 0

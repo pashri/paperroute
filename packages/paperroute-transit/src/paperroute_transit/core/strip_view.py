@@ -67,6 +67,12 @@ from paperroute_transit.core.strip_times import (
     trip_text,
 )
 from paperroute_transit.core.strip_vehicles import vehicle_markers
+from paperroute_transit.core.train_times import (
+    is_train,
+    train_note,
+    train_times,
+)
+from paperroute_transit.core.train_window import slot_indices, windowed
 
 
 def line_reach(*, line: Sequence[StopPlace]) -> Reach:
@@ -139,6 +145,8 @@ def row_times(
     target = destination_station(
         reach=reach, destination=inputs.destination,
     )
+    if is_train(reach=reach):
+        return train_times(trips=trips, reach=reach)
     if reach.trip is not None:
         return followed_times(
             trips=trips, reach=reach, target=target, selected=inputs.selected,
@@ -261,6 +269,8 @@ def note_of(*, inputs: StripInputs, reach: Reach
         the next strip run's change. None when there is none.
     """
     trips = trips_of(inputs=inputs)
+    if is_train(reach=reach):
+        return train_note(trips=trips, reach=reach)
     if reach.trip is None:
         return carry_note(trips=trips, reach=reach)
     return followed_note(
@@ -358,6 +368,58 @@ def strip_row(
             if marks.note is not None and marks.note[0] == index
             else None
         ),
+        names=row.names,
+    )
+
+
+def slot_rows(
+    *, inputs: StripInputs, reach: Reach, first: int, marks: Marks,
+) -> list[StripRow]:
+    """
+    Make the rows of a window's slots.
+
+    Parameters
+    ----------
+    inputs : StripInputs
+        The view's inputs.
+    reach : Reach
+        The reach.
+    first : int
+        The row in the top slot.
+    marks : Marks
+        What the rows are marked with.
+
+    Returns
+    -------
+    list[StripRow]
+        One row per slot, as many as the reach has. For an end-point
+        kind they are windowed: the top slot dashed over two earlier
+        calls and a far Destination pinned under a stub.
+    """
+    window = inputs_window(inputs=inputs)
+    indices = list(range(first, min(first + window.rows, len(reach.rows))))
+    if inputs.end_points:
+        indices = slot_indices(
+            first=first,
+            slots=window.rows,
+            total=len(reach.rows),
+            destination=marks.target,
+        )
+    rows = [
+        strip_row(
+            reach=reach, index=index, first=first, marks=marks, window=window,
+        )
+        for index in indices
+    ]
+    if not inputs.end_points:
+        return rows
+    return windowed(
+        rows=rows,
+        reach=reach,
+        first=first,
+        scroll=inputs.scroll,
+        destination=marks.target,
+        slots=window.rows,
     )
 
 
@@ -380,7 +442,10 @@ def strip_rows(*, inputs: StripInputs, reach: Reach
     """
     window = inputs_window(inputs=inputs)
     home = home_of(
-        reach=reach, destination=inputs.destination, rows=window.rows,
+        reach=reach,
+        destination=inputs.destination,
+        rows=window.rows,
+        end_points=inputs.end_points,
     )
     first = first_row(
         scroll=inputs.scroll,
@@ -390,17 +455,15 @@ def strip_rows(*, inputs: StripInputs, reach: Reach
         rows=window.rows,
     )
     band = band_of(reach=reach, first=first, window=window)
-    indices = range(first, min(first + window.rows, len(reach.rows)))
-    if band is not None:
-        indices = indices[1:] if band.top else indices[:-1]
-    marks = marks_of(inputs=inputs, reach=reach)
-    rows = tuple(
-        strip_row(
-            reach=reach, index=index, first=first, marks=marks, window=window,
-        )
-        for index in indices
+    rows = slot_rows(
+        inputs=inputs,
+        reach=reach,
+        first=first,
+        marks=marks_of(inputs=inputs, reach=reach),
     )
-    return rows, band
+    if band is not None:
+        rows = rows[1:] if band.top else rows[:-1]
+    return tuple(rows), band
 
 
 def trips_of(*, inputs: StripInputs) -> TripInputs:
@@ -626,12 +689,15 @@ def empty_of(*, inputs: StripInputs) -> str | None:
     -------
     str | None
         The given reason, `LOADING` with no reach yet, `NO_STRIP` for a
-        reach with no stations, else None.
+        reach with no stations, else None. An end-point kind's From
+        alone is drawn.
     """
     if inputs.unavailable is not None:
         return inputs.unavailable
     if inputs.reach is None:
         return LOADING
+    if inputs.end_points:
+        return None
     return NO_STRIP if inputs.reach.stations == 0 else None
 
 

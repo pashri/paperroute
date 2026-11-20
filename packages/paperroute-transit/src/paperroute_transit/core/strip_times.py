@@ -731,6 +731,49 @@ def shown_item(
     return next_item(trips=trips, origin=origin, target=target)
 
 
+def earlier_times(
+    *, item: LiveDeparture, trips: TripInputs, origin: str,
+) -> dict[str, datetime]:
+    """
+    Find when a departure calls at stations before the From.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        Departure with live times.
+    trips : TripInputs
+        The strip's loaded patterns, station map and time.
+    origin : str
+        The From station ID.
+
+    Returns
+    -------
+    dict[str, datetime]
+        Departure time by station for every call before the From that it
+        stops at, shifted by its delay at the From, those already made
+        included; empty when its pattern is unknown.
+    """
+    started = started_pattern(item=item, trips=trips, origin=origin)
+    if started is None:
+        return {}
+    pattern, start, delay = started
+    return {
+        trips.station_of.get(stop.station, stop.station): shifted(
+            moment=service_time(
+                day=item.departure.service_day,
+                seconds=(
+                    stop.arrives if stop.departs is None else stop.departs
+                ),
+                zone=trips.zone,
+            ),
+            seconds=delay,
+            zone=trips.zone,
+        )
+        for stop in pattern.stops[:start]
+        if not stop.passes
+    }
+
+
 def calls_before(
     *, item: LiveDeparture, trips: TripInputs, origin: str,
 ) -> dict[str, datetime]:
@@ -753,28 +796,11 @@ def calls_before(
         stops at, shifted by its delay at the From, leaving out the ones
         it has already made; empty when its pattern is unknown.
     """
-    started = started_pattern(item=item, trips=trips, origin=origin)
-    if started is None:
-        return {}
-    pattern, start, delay = started
-    found = {
-        trips.station_of.get(stop.station, stop.station): shifted(
-            moment=service_time(
-                day=item.departure.service_day,
-                seconds=(
-                    stop.arrives if stop.departs is None else stop.departs
-                ),
-                zone=trips.zone,
-            ),
-            seconds=delay,
-            zone=trips.zone,
-        )
-        for stop in pattern.stops[:start]
-        if not stop.passes
-    }
     return {
         station: moment
-        for station, moment in found.items()
+        for station, moment in earlier_times(
+            item=item, trips=trips, origin=origin,
+        ).items()
         if moment >= trips.now
     }
 

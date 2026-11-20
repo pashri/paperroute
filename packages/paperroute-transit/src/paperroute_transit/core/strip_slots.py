@@ -157,7 +157,41 @@ def slot_y(*, index: int, first: int, window: Window) -> float:
     return window.top + (index - first) * ROW_H + ROW_H / 2
 
 
-def home_of(*, reach: Reach, destination: str | None, rows: int) -> int:
+def end_point_home(*, reach: Reach, origin: int, destination: bool) -> int:
+    """
+    Find the top row of an end-point kind's Strip.
+
+    Parameters
+    ----------
+    reach : Reach
+        The reach.
+    origin : int
+        The From row.
+    destination : bool
+        Whether the pin has a Destination.
+
+    Returns
+    -------
+    int
+        With a Destination, the From's row less up to two earlier
+        calls. With rows above the From that are not earlier calls, the
+        two directions, five rows above it. Otherwise the From's row.
+    """
+    above = reach.rows[:origin]
+    if destination:
+        return origin - min(2, sum(r.kind is RowKind.EARLIER for r in above))
+    if any(row.kind is RowKind.MAIN for row in above):
+        return origin - min(5, origin)
+    return origin
+
+
+def home_of(
+    *,
+    reach: Reach,
+    destination: str | None,
+    rows: int,
+    end_points: bool = False,
+) -> int:
     """
     Find the unscrolled, unclamped top row of the Strip.
 
@@ -169,6 +203,9 @@ def home_of(*, reach: Reach, destination: str | None, rows: int) -> int:
         Destination stop or station ID, or None.
     rows : int
         Row slots on the strip.
+    end_points : bool
+        Whether the pin's kind is chosen by end points, which ignores
+        the ride (see `end_point_home`).
 
     Returns
     -------
@@ -184,6 +221,10 @@ def home_of(*, reach: Reach, destination: str | None, rows: int) -> int:
     origin = origin_of(reach=reach)
     if origin is None:
         return 0
+    if end_points:
+        return end_point_home(
+            reach=reach, origin=origin, destination=destination is not None,
+        )
     start = origin - PANE_FROM_ROW
     if reach.trip is not None:
         return start

@@ -240,7 +240,12 @@ def train_reach(
         None,
     )
     if lead is None:
-        return Reach(rows=(origin,), stations=0, station_of=data.station_of)
+        return Reach(
+            rows=(origin,),
+            stations=0,
+            station_of=data.station_of,
+            source=data,
+        )
     seen = {data.origin.stop_id}
     cut = destination is None
     ahead = side_rows(
@@ -276,6 +281,7 @@ def train_reach(
             )
         ),
         origin=origin,
+        upward=above,
         ahead=with_exits(
             data=data, trips=trips, item=main, rows=ahead,
             sides=sides, side=None if above is None else 1,
@@ -538,6 +544,7 @@ def stacked(
     before: list[ReachRow],
     origin: ReachRow,
     ahead: list[ReachRow],
+    upward: LiveDeparture | None = None,
 ) -> Reach:
     """
     Stack earlier rows, the From and the rows below it into a Reach.
@@ -554,11 +561,13 @@ def stacked(
         The From row.
     ahead : list[ReachRow]
         Rows below the From, parented from index 0.
+    upward : LiveDeparture | None
+        The train read upward above the From, if any.
 
     Returns
     -------
     Reach
-        The rows top to bottom.
+        The rows top to bottom, with `data` as their source.
     """
     top = len(before)
     above = [
@@ -583,4 +592,7 @@ def stacked(
         station_of=data.station_of,
         trip=main.departure.trip_id,
         day=main.departure.service_day,
+        source=data,
+        above_trip=None if upward is None else upward.departure.trip_id,
+        above_day=None if upward is None else upward.departure.service_day,
     )

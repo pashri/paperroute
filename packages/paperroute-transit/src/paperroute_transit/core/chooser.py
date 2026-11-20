@@ -8,7 +8,7 @@ from typing import Final
 
 from paperroute_transit.core.model import Departure, Pin, StopPlace
 from paperroute_transit.core.modes import ModeSpec, spec_of
-from paperroute_transit.core.reach import Reach, RowKind, StripKey
+from paperroute_transit.core.reach import TRAIN_ROWS, Reach, RowKind, StripKey
 from paperroute_transit.core.strip_follow import origin_of
 from paperroute_transit.core.strip_model import ALL_TAG
 
@@ -110,7 +110,7 @@ class Column:
 
 
 UNPICKED: Final[frozenset[RowKind]] = frozenset(
-    {RowKind.APPROACH, RowKind.EXIT},
+    {RowKind.APPROACH, RowKind.EXIT, *TRAIN_ROWS},
 )  # strip rows the TO cursor never lands on
 
 

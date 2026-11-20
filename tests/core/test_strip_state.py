@@ -2,16 +2,18 @@
 
 from collections.abc import Iterable
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Final
 
 from paperroute_device.core.kit_effects import Render
 from paperroute_device.core.kit_events import Tick
+from paperroute_device.core.text import clock_text
 from paperroute_hardware.core.knob_events import Knob, KnobPressed, KnobTurned
 from paperroute_sydney.city import SYDNEY, SydneyFeed, SydneyMode
 from paperroute_testkit.core.factories import (
     START,
     departure,
+    line_pattern,
     place,
     snapshot,
     stop_view_of,
@@ -46,7 +48,15 @@ from paperroute_transit.core.messages import (
 )
 from paperroute_transit.core.model import CarryOn, Departure, Pin
 from paperroute_transit.core.modes import end_point_modes
-from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
+from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.reach import (
+    Reach,
+    ReachInput,
+    ReachRow,
+    RowKind,
+    StripKey,
+    build_reach,
+)
 from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import LiveView, Saved, default_settings
 from paperroute_transit.core.state_model import RETRY_AFTER, State
@@ -62,10 +72,12 @@ from paperroute_transit.core.strip_model import (
 from paperroute_transit.core.strip_state import (
     keys_in_use,
     request_strips,
+    shown_reach,
     strip_inputs,
     strip_key,
     strip_patterns,
 )
+from paperroute_transit.core.train_network import Hop, TrainNetwork, WeekdayRun
 from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, OPEN, REACH, TO_STAGE
 from tests.core.test_connection_screens import started, with_legs
 
@@ -605,3 +617,324 @@ def test_connection_strip_no_load_strip() -> None:
     state, effects = step(state, KnobPressed(knob=Knob.BOTTOM))
     assert state.view is LiveView.STRIP
     assert not kinds(effects=effects, kind=LoadStrip)
+
+
+TRAIN_KEY: Final[StripKey] = StripKey(
+    station='C', kind=SydneyMode.TRAIN, routes=(),
+)
+NO_TRACK: Final[TrainNetwork] = TrainNetwork(hops={}, runs=())
+TWO_WAYS: Final[TrainNetwork] = TrainNetwork(
+    hops={},
+    runs=(
+        WeekdayRun(route='R', stations=('C', 'N1', 'N2'), trains=5),
+        WeekdayRun(route='R', stations=('C', 'S1', 'S2'), trains=6),
+    ),
+)
+TRAIN_PLACES: Final = {
+    'C': place('C', name='C', point=(0.0, 0.0)),
+    'N1': place('N1', name='N1', point=(0.0, 1000.0)),
+    'S1': place('S1', name='S1', point=(0.0, -1000.0)),
+}
+
+
+def train_trip(
+    *, trip_id: str, stations: tuple[str, ...], at: int,
+) -> tuple[Departure, TripPattern]:
+    """
+    Make a train that leaves C a number of minutes after 8:00.
+
+    Parameters
+    ----------
+    trip_id : str
+        Trip ID.
+    stations : tuple[str, ...]
+        The stations it calls at, C among them, three minutes apart.
+    at : int
+        Minutes after 8:00 that it leaves C.
+
+    Returns
+    -------
+    tuple[Departure, TripPattern]
+        The departure from C and the pattern.
+    """
+    return (
+        departure(
+            departs=START + timedelta(minutes=at),
+            mode=SydneyFeed.TRAIN,
+            route='T1',
+            trip_id=trip_id,
+            kind=SydneyMode.TRAIN,
+        ),
+        line_pattern(
+            trip_id=trip_id,
+            stations=stations,
+            minutes=at - 3 * stations.index('C'),
+        ),
+    )
+
+
+def train_state(
+    *,
+    trips: list[tuple[Departure, TripPattern]],
+    destination: str | None = None,
+    network: TrainNetwork | None = NO_TRACK,
+    selected: tuple[str, date] | None = None,
+) -> State:
+    """
+    Show a train Strip on a loaded reach, with some trains' patterns.
+
+    Parameters
+    ----------
+    trips : list[tuple[Departure, TripPattern]]
+        The trains, soonest first.
+    destination : str | None
+        The Destination station ID, or None.
+    network : TrainNetwork | None
+        The reach's hops and runs; None builds the reach with none.
+    selected : tuple[str, date] | None
+        The picked train.
+
+    Returns
+    -------
+    State
+        State on the Strip after one tick.
+    """
+    pin = replace(
+        PIN,
+        kind=SydneyMode.TRAIN,
+        destination=(
+            None
+            if destination is None
+            else place(destination, name=destination)
+        ),
+    )
+    state, _ = on_view(
+        view=LiveView.STRIP,
+        pin=pin,
+        departures=tuple(item for item, _ in trips),
+    )
+    reach = build_reach(data=ReachInput(
+        origin=TRAIN_PLACES['C'],
+        tails=(),
+        places=TRAIN_PLACES,
+        station_of={},
+        network=network,
+    ))
+    state = replace(
+        state,
+        strip=replace(
+            state.strip, reaches={TRAIN_KEY: reach}, selected=selected,
+        ),
+        map=replace(state.map, patterns={
+            shaped.trip_id: shaped for _, shaped in trips
+        }),
+    )
+    state, _ = step(state, Tick(now=START))
+    return state
+
+
+def shown_ids(*, state: State) -> list[str]:
+    """
+    List the shown reach's station IDs.
+
+    Parameters
+    ----------
+    state : State
+        State on the Strip.
+
+    Returns
+    -------
+    list[str]
+        Station IDs, top to bottom.
+    """
+    reach = shown_reach(state=state)
+    assert reach is not None
+    return [row.place.stop_id for row in reach.rows]
+
+
+def view_rows(*, state: State) -> dict[str, str]:
+    """
+    Read each drawn row's time by station.
+
+    Parameters
+    ----------
+    state : State
+        State drawn on the Strip.
+
+    Returns
+    -------
+    dict[str, str]
+        Clock time by station ID; rows with no station are left out.
+    """
+    assert isinstance(state.last_view, StripView)
+    return {
+        row.station: row.time for row in state.last_view.rows if row.station
+    }
+
+
+def test_a_train_strip_follows_the_next_train_to_the_destination() -> None:
+    """The rows are the train's earlier calls, the From and its route."""
+    line = ('E3', 'E2', 'C', 'D', 'F', 'G')
+    state = train_state(
+        trips=[
+            train_trip(trip_id='a', stations=line, at=5),
+            train_trip(trip_id='b', stations=line, at=15),
+        ],
+        destination='F',
+    )
+    reach = shown_reach(state=state)
+    assert reach is not None
+    assert [row.kind for row in reach.rows] == [
+        RowKind.EARLIER, RowKind.EARLIER, RowKind.ORIGIN,
+        RowKind.MAIN, RowKind.MAIN, RowKind.MAIN,
+    ]
+    assert shown_ids(state=state) == list(line)
+    assert reach.trip == 'a'
+    assert isinstance(state.last_view, StripView)
+    assert state.last_view.rows[0].kind is RowKind.DASHED
+    assert state.last_view.rows[1].station == 'E2'
+
+
+def test_a_picked_train_is_the_main_line() -> None:
+    """The panel's picked train, not the next, is the one followed."""
+    line = ('C', 'D', 'F')
+    state = train_state(
+        trips=[
+            train_trip(trip_id='a', stations=line, at=5),
+            train_trip(trip_id='b', stations=('C', 'X', 'F'), at=15),
+        ],
+        destination='F',
+        selected=('b', START.date()),
+    )
+    assert shown_ids(state=state) == ['C', 'X', 'F']
+
+
+def test_with_no_destination_a_train_runs_each_way() -> None:
+    """One train reads upward and one downward from the From."""
+    state = train_state(
+        trips=[
+            train_trip(trip_id='north', stations=('C', 'N1', 'N2'), at=5),
+            train_trip(trip_id='south', stations=('C', 'S1', 'S2'), at=6),
+        ],
+        network=TWO_WAYS,
+    )
+    reach = shown_reach(state=state)
+    assert reach is not None
+    assert shown_ids(state=state) == ['N2', 'N1', 'C', 'S1', 'S2']
+    assert (reach.trip, reach.above_trip) == ('south', 'north')
+    times = view_rows(state=state)
+    assert times['N1'] == clock_text(
+        moment=START + timedelta(minutes=8), zone=SYDNEY.zone,
+    )
+    assert times['S1'] == clock_text(
+        moment=START + timedelta(minutes=9), zone=SYDNEY.zone,
+    )
+    assert times['C'] == clock_text(
+        moment=START + timedelta(minutes=6), zone=SYDNEY.zone,
+    )
+
+
+def test_train_rows_are_timed_but_not_the_passed_ones() -> None:
+    """Earlier calls and calls have times; passed stations have none."""
+    line = ('E3', 'E2', 'C', 'D', 'F')
+    track = TrainNetwork(
+        hops={('D', 'F'): Hop(passed=('P',), inside=True)}, runs=(),
+    )
+    state = train_state(
+        trips=[train_trip(trip_id='a', stations=line, at=5)],
+        destination='F',
+        network=track,
+    )
+    assert shown_ids(state=state) == ['E3', 'E2', 'C', 'D', 'P', 'F']
+    assert 'E3' not in view_rows(state=state)
+    state, _ = step(state, turn(steps=-1))
+    times = view_rows(state=state)
+    assert times['E3'] == '7:59'
+    assert times['E2'] == '8:02'
+    assert times['D'] == '8:08'
+    assert times['P'] == ''
+    assert times['F'] == '8:11'
+    assert isinstance(state.last_view, StripView)
+    new = [
+        row
+        for row in state.last_view.rows
+        if row.kind in (RowKind.PASSED, RowKind.EARLIER)
+    ]
+    assert new
+    assert not any(row.bold or row.tag for row in new)
+
+
+def test_a_train_strip_has_no_fold_rows() -> None:
+    """A long run is listed in full, never closed into a fold."""
+    line = ('C', *(f'L{i}' for i in range(30)))
+    for destination in (None, 'L29'):
+        state = train_state(
+            trips=[train_trip(trip_id='a', stations=line, at=5)],
+            destination=destination,
+        )
+        reach = shown_reach(state=state)
+        assert reach is not None
+        assert len(reach.rows) == 31
+        assert RowKind.FOLD not in {row.kind for row in reach.rows}
+        assert isinstance(state.last_view, StripView)
+        assert RowKind.FOLD not in {row.kind for row in state.last_view.rows}
+
+
+def test_an_old_file_builds_with_no_passed_or_exit_rows() -> None:
+    """An empty or missing network still gives the train's own rows."""
+    trip = train_trip(trip_id='a', stations=('C', 'D', 'F'), at=5)
+    state = train_state(trips=[trip], network=NO_TRACK)
+    reach = shown_reach(state=state)
+    assert reach is not None
+    assert [row.kind for row in reach.rows] == [
+        RowKind.ORIGIN, RowKind.MAIN, RowKind.MAIN,
+    ]
+    bare = train_state(trips=[trip], network=None)
+    assert shown_reach(state=bare) is not None
+    assert isinstance(bare.last_view, StripView)
+
+
+def test_a_train_strip_with_no_pattern_draws_the_from_alone() -> None:
+    """With no loaded train the Strip shows the From and says nothing."""
+    trip = train_trip(trip_id='a', stations=('C', 'D', 'F'), at=5)
+    state = train_state(trips=[(trip[0], line_pattern(
+        trip_id='other', stations=('C', 'D'), minutes=5,
+    ))])
+    assert shown_ids(state=state) == ['C']
+    assert isinstance(state.last_view, StripView)
+    assert state.last_view.empty is None
+    assert [row.station for row in state.last_view.rows] == ['C']
+
+
+def test_a_new_main_train_sends_the_scroll_home() -> None:
+    """Scrolling holds while a train is followed; a new one resets it."""
+    line = ('C', *(f'L{i}' for i in range(19)))
+    state = train_state(
+        trips=[
+            train_trip(trip_id='a', stations=line, at=5),
+            train_trip(trip_id='b', stations=line, at=15),
+        ],
+        destination='L18',
+    )
+    state, _ = step(state, turn(steps=3))
+    assert state.strip.scroll == 3
+    state, _ = step(state, Tick(now=START + timedelta(minutes=2)))
+    assert state.strip.scroll == 3
+    state, _ = step(state, Tick(now=START + timedelta(minutes=7)))
+    reach = shown_reach(state=state)
+    assert reach is not None and reach.trip == 'b'
+    assert (state.strip.scroll, state.strip.asked) == (0, 0)
+
+
+def test_a_train_strip_notes_where_the_train_runs_on() -> None:
+    """The carry-on note sits on the followed train's last station."""
+    ride, shaped = train_trip(
+        trip_id='a', stations=('C', 'D', 'F'), at=5,
+    )
+    ride = replace(ride, facts=replace(
+        ride.facts, then=CarryOn(route='T2', headsign='Leppington', trip_id='b'),
+    ))
+    state = train_state(trips=[(ride, shaped)], destination='F')
+    assert isinstance(state.last_view, StripView)
+    noted = [row for row in state.last_view.rows if row.note is not None]
+    assert [row.station for row in noted] == ['F']

@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 from datetime import date
 from enum import StrEnum
 from itertools import takewhile
+from typing import Final
 
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.reach_layout import Entry, LineExit, lay_out
@@ -202,6 +203,12 @@ class RowKind(StrEnum):
     EXIT = 'exit'
     PASSED = 'passed'
     EARLIER = 'earlier'
+    DASHED = 'dashed'
+
+
+TRAIN_ROWS: Final[frozenset[RowKind]] = frozenset(
+    {RowKind.PASSED, RowKind.EARLIER, RowKind.DASHED},
+)  # kinds only a train Strip's rows have
 
 
 @dataclass(frozen=True)
@@ -215,7 +222,8 @@ class ReachRow:
         The station.
     kind : RowKind
         Approach, the From, the main line, a branch, a closed fold, a way
-        off the line, a station passed through, or an earlier call.
+        off the line, a station passed through, an earlier call, or a
+        dashed stand-in that only a train Strip's window makes.
     depth : int
         Indent: 0 for the main line, one more per branch level.
     above : bool
@@ -271,6 +279,14 @@ class Reach:
         order; None when they are the strip's fixed line.
     day : date | None
         That trip's service date; None with no trip.
+    source : ReachInput | None
+        What an end-point kind's reach was built from, for laying it out
+        along the followed trains; None for any other kind.
+    above_trip : str | None
+        The trip read upward above the From of a train Strip with two
+        directions; None otherwise.
+    above_day : date | None
+        That trip's service date; None with no such trip.
     """
 
     rows: tuple[ReachRow, ...]
@@ -278,6 +294,9 @@ class Reach:
     station_of: Mapping[str, str]
     trip: str | None = None
     day: date | None = None
+    source: ReachInput | None = None
+    above_trip: str | None = None
+    above_day: date | None = None
 
 
 def approach_rows(*, tails: Sequence[RunTail], placed: set[str]
@@ -444,4 +463,5 @@ def build_reach(*, data: ReachInput) -> Reach:
             kind in (RowKind.MAIN, RowKind.BRANCH) for kind, _ in rows
         ),
         station_of=data.station_of,
+        source=None if data.network is None else data,
     )

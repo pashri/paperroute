@@ -30,8 +30,16 @@ from paperroute_transit.core.state_model import RETRY_AFTER, State, elapsed
 from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.core.strip_folds import folded
 from paperroute_transit.core.strip_follow import followed_reach
-from paperroute_transit.core.strip_model import NEEDS_UPDATE, StripInputs
-from paperroute_transit.core.strip_slots import home_of, window_of
+from paperroute_transit.core.strip_model import (
+    NEEDS_UPDATE,
+    StripInputs,
+    TripDay,
+)
+from paperroute_transit.core.strip_slots import (
+    destination_station,
+    home_of,
+    window_of,
+)
 from paperroute_transit.core.strip_times import (
     TripInputs,
     joined_ids,
@@ -39,6 +47,8 @@ from paperroute_transit.core.strip_times import (
     trip_ids,
     window_departures,
 )
+from paperroute_transit.core.train_follow import Following, train_strip
+from paperroute_transit.core.train_window import shows_dash
 
 STRIP_VIEWS: Final[frozenset[LiveView]] = frozenset(
     {LiveView.STRIP, LiveView.STRIP_MAP}
@@ -348,15 +358,57 @@ def shown_reach(*, state: State) -> Reach | None:
     Reach | None
         The reach with its folds and its rows below the From along the
         train it follows, or None while it is not built or the timetable
-        has none.
+        has none. A reach built with a train network is laid out by
+        `train_strip` instead, with no folds.
     """
     key = shown_key(state=state)
     destination = destination_id(state=state)
+    built = None if key is None else state.strip.reaches.get(key)
+    if built is not None and built.source is not None:
+        return train_strip(
+            data=built.source,
+            follow=Following(
+                trips=followed_trips(state=state, key=key, reach=built),
+                destination=destination_station(
+                    reach=built, destination=destination,
+                ),
+                selected=state.strip.selected,
+                loop_name=state.city.loop_name,
+            ),
+        )
     reach = folded_reach(state=state, key=key, destination=destination)
     if reach is None:
         return None
+    return followed_reach(
+        reach=reach,
+        trips=followed_trips(state=state, key=key, reach=reach),
+        target=destination_station(reach=reach, destination=destination),
+    )
+
+
+def followed_trips(
+    *, state: State, key: StripKey | None, reach: Reach,
+) -> TripInputs:
+    """
+    Gather the departures and patterns a strip's rows are laid out from.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    key : StripKey | None
+        The strip.
+    reach : Reach
+        The strip's built reach.
+
+    Returns
+    -------
+    TripInputs
+        The departures with live times, the loaded patterns and the
+        strip's stations; no positions.
+    """
     frame, limit = frame_time(state=state), stale_after(state=state)
-    trips = TripInputs(
+    return TripInputs(
         departures=resolved(
             departures=state.board.departures,
             snapshots=state.snapshots,
@@ -374,19 +426,14 @@ def shown_reach(*, state: State) -> Reach | None:
         station_of=reach.station_of,
         line_kinds=line_modes(modes=state.city.modes),
     )
-    return followed_reach(
-        reach=reach,
-        trips=trips,
-        target=(
-            None
-            if destination is None
-            else reach.station_of.get(destination, destination)
-        ),
-    )
 
 
 def scroll_range(
-    *, reach: Reach | None, destination: str | None, banner: bool,
+    *,
+    reach: Reach | None,
+    destination: str | None,
+    banner: bool,
+    end_points: bool = False,
 ) -> tuple[int, int]:
     """
     Find how far the Strip scrolls before its rows stop moving.
@@ -399,20 +446,28 @@ def scroll_range(
         The place's Destination stop or station ID, or None.
     banner : bool
         True while a live data banner shortens the strip.
+    end_points : bool
+        Whether the shown pin's kind is chosen by end points.
 
     Returns
     -------
     tuple[int, int]
         The lowest and highest scroll; both 0 with no reach. The range
         always holds 0, the resting scroll, even when the home window sits
-        so near the top that a few scrolls down move nothing.
+        so near the top that a few scrolls down move nothing. When the
+        home window dashes its top slot, the lowest is at least one turn
+        back, which shows the earlier call the dash stands for.
     """
     if reach is None:
         return 0, 0
     rows = window_of(banner=banner).rows
-    shift = home_of(reach=reach, destination=destination, rows=rows)
-    low = min(0, -shift)
-    return low, max(low, len(reach.rows) - rows - shift)
+    shift = home_of(
+        reach=reach, destination=destination, rows=rows, end_points=end_points,
+    )
+    low, high = min(0, -shift), len(reach.rows) - rows - shift
+    if end_points and shows_dash(reach=reach, first=shift):
+        low, high = min(-1, -shift), max(0, high)
+    return low, max(low, high)
 
 
 def clamped(*, state: State, banner: bool) -> State:
@@ -434,15 +489,47 @@ def clamped(*, state: State, banner: bool) -> State:
         while there is no reach.
     """
     reach = shown_reach(state=state)
-    low, high = scroll_range(
-        reach=reach, destination=destination_id(state=state), banner=banner,
+    end_points = shown(state=state).kind in end_point_modes(
+        modes=state.city.modes,
     )
-    scroll = min(max(state.strip.asked, low), high)
+    low, high = scroll_range(
+        reach=reach,
+        destination=destination_id(state=state),
+        banner=banner,
+        end_points=end_points,
+    )
+    strip = state.strip
+    followed = followed_of(reach=reach, before=strip.followed)
+    asked = 0 if followed != strip.followed and end_points else strip.asked
     return replace(state, strip=replace(
-        state.strip,
-        scroll=scroll,
+        strip,
+        scroll=min(max(asked, low), high),
+        asked=asked,
+        followed=followed,
         bounds=None if reach is None else (low, high),
     ))
+
+
+def followed_of(*, reach: Reach | None, before: TripDay | None
+                ) -> TripDay | None:
+    """
+    Name the train a reach is laid out along.
+
+    Parameters
+    ----------
+    reach : Reach | None
+        The shown reach, or None.
+    before : TripDay | None
+        The train followed so far.
+
+    Returns
+    -------
+    TripDay | None
+        The reach's trip and day when it has one, else `before`.
+    """
+    if reach is None or reach.trip is None or reach.day is None:
+        return before
+    return reach.trip, reach.day
 
 
 def strip_window(*, state: State) -> tuple[Departure, ...]:

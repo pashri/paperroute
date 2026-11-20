@@ -243,6 +243,9 @@ class StripState:
         The trip ID and service day of the panel train picked on the
         Strip, whose times the rows below the From show; None for the
         next train.
+    followed : TripDay | None
+        The train a train Strip was last laid out along, whose change
+        sends the scroll home; None before any.
     """
 
     reaches: Mapping[StripKey, Reach | None] = field(default_factory=dict)
@@ -254,6 +257,7 @@ class StripState:
     opened: frozenset[str] = frozenset()
     context: FoldContext | None = None
     selected: TripDay | None = None
+    followed: TripDay | None = None
 
 
 @dataclass(frozen=True)

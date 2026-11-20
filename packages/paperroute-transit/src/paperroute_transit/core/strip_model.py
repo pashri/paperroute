@@ -129,6 +129,8 @@ class StripRow:
         row's disc; None for the usual place.
     note : CarryNote | None
         The carry-on note drawn on the row, if any.
+    names : tuple[str, ...]
+        The places an exit row names, in order; empty for any other row.
     """
 
     name: str
@@ -145,6 +147,7 @@ class StripRow:
     station: str
     name_after: float | None = None
     note: CarryNote | None = None
+    names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

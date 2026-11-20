@@ -40,6 +40,7 @@ from paperroute_testkit.core.connection_factories import (
 from paperroute_testkit.core.factories import (
     EAST,
     EIGHT,
+    POINTS,
     START,
     calls,
     departure,
@@ -67,7 +68,7 @@ from paperroute_testkit.core.strip_factories import (
 from paperroute_transit.app_render import MapRenderer
 from paperroute_transit.core.chains import Legs, leg_key
 from paperroute_transit.core.connection_model import way_legs
-from paperroute_transit.core.geo import Shape, make_shape, nearest_along
+from paperroute_transit.core.geo import Shape, make_shape
 from paperroute_transit.core.messages import (
     DayLinesLoaded,
     DeparturesLoaded,
@@ -82,7 +83,7 @@ from paperroute_transit.core.messages import (
 from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.modes import end_point_modes
 from paperroute_transit.core.panel_screens import TilesFacts
-from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.patterns import TripPattern, measure
 from paperroute_transit.core.places import shown
 from paperroute_transit.core.realtime import (
     EVERY_STOP,
@@ -696,7 +697,10 @@ def strip_scene(*, view: LiveView) -> State:
         view=view, pin=replace(PIN, destination=None), departures=departures,
     )
     state, _ = step(state, StripLoaded(key=KEY, reach=example_reach()))
-    line = make_shape(shape_id='strip', points=list(APPROACH.values()))
+    line = make_shape(
+        shape_id='strip',
+        points=[POINTS[station] for station in ('J', *EAST)],
+    )
     patterns: dict[str, TripPattern | None] = {
         trip: measured(
             made=line_pattern(trip_id=trip, stations=stations, minutes=minutes),
@@ -755,18 +759,10 @@ def measured(*, made: TripPattern, line: Shape) -> TripPattern:
     Returns
     -------
     TripPattern
-        The pattern naming the shape, with metres along at each call.
+        The pattern naming the shape, with metres along at each call;
+        unmeasured when a call has no point.
     """
-    return replace(
-        made,
-        shape_id=line.shape_id,
-        along=tuple(
-            0.0
-            if stop.point is None
-            else nearest_along(shape=line, point=stop.point)
-            for stop in made.stops
-        ),
-    )
+    return measure(pattern=replace(made, shape_id=line.shape_id), shape=line)
 
 
 def patterns_loaded(

@@ -97,3 +97,42 @@ def write_bare_osm(*, path: Path) -> None:
     """
     with osmium.SimpleWriter(path, overwrite=True) as writer:
         writer.add_node(Node(id=1, location=(151.0, -33.8)))
+
+
+def write_rail_osm(*, path: Path) -> None:
+    """
+    Write an OSM file of rail lines and stations.
+
+    It holds a line A-B-C, a siding off B and a separate two-node line.
+    It also holds the station "Halt One" at B, an unnamed station and a
+    ``station=subway`` node.
+
+    Parameters
+    ----------
+    path : Path
+        Destination ``.osm.pbf`` file; replaced if present.
+    """
+    nodes: tuple[NodeRow, ...] = (
+        (1, (151.000, -33.800), {}),
+        (2, (151.010, -33.800), {'railway': 'halt', 'name': 'Halt One'}),
+        (3, (151.020, -33.800), {}),
+        (4, (151.010, -33.810), {}),
+        (5, (151.100, -33.800), {}),
+        (6, (151.110, -33.800), {}),
+        (7, (151.021, -33.801), {'railway': 'station'}),
+        (
+            8,
+            (151.022, -33.801),
+            {'railway': 'station', 'name': 'Deep', 'station': 'subway'},
+        ),
+    )
+    ways: tuple[WayRow, ...] = (
+        (1, (1, 2, 3), {'railway': 'rail'}),
+        (2, (2, 4), {'railway': 'rail', 'service': 'siding'}),
+        (3, (5, 6), {'railway': 'rail'}),
+    )
+    with osmium.SimpleWriter(path, overwrite=True) as writer:
+        for node_id, location, tags in nodes:
+            writer.add_node(Node(id=node_id, location=location, tags=tags))
+        for way_id, refs, tags in ways:
+            writer.add_way(Way(id=way_id, nodes=list(refs), tags=tags))

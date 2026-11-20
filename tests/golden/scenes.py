@@ -693,9 +693,12 @@ def strip_scene(*, view: LiveView) -> State:
         train(minutes=minutes, trip_id=trip)
         for trip, (_, minutes) in STRIP_TRIPS.items()
     )
-    state, _ = on_view(
-        view=view, pin=replace(PIN, destination=None), departures=departures,
+    pin = replace(
+        PIN,
+        destination=None,
+        origin=place('C', name='Central', point=POINTS['C']),
     )
+    state, _ = on_view(view=view, pin=pin, departures=departures)
     state, _ = step(state, StripLoaded(key=KEY, reach=example_reach()))
     line = make_shape(
         shape_id='strip',

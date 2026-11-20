@@ -720,3 +720,90 @@ def test_line_frame_is_centred_at_25_m_per_px() -> None:
     stepped_in = line_frame(inputs=replace(plain(), step=-1))
     assert ZOOMS[stepped_in.zoom] == 14
     assert LINE_ZOOM == 4
+
+
+def wide_points() -> tuple[Point, ...]:
+    """Approach points 1,800 m west of the From, and the From."""
+    return FROM, (FROM[0] - 1800.0, FROM[1])
+
+
+def test_knob_in_from_a_wide_frame_keeps_the_from_inside() -> None:
+    """Two detents finer from a B2 frame, the From stays KEEP_IN inside."""
+    framed = approach_frame(
+        inputs=replace(fork_inputs(split=1000.0), step=-2),
+        points=wide_points(),
+        choice=LineChoice(station='P'),
+    )
+    assert framed.centre is not None
+    at = on_screen(centre=framed.centre, zoom=framed.zoom, point=FROM)
+    assert KEEP_IN <= at[0] <= MAP_WIDTH - KEEP_IN
+
+
+def forked_rides(*, split: float, shaped: bool) -> MapInputs:
+    """Two rides through the From on a fork, its shapes loaded or not."""
+    east, turn = fork_inputs(split=split).shapes.values()
+    rides = (through(trip_id='e'), through(trip_id='t', minutes=2))
+    buses = (
+        replace(rides[0][0], shape_id='east'),
+        replace(rides[1][0], route='610', shape_id='turn'),
+    )
+    return replace(
+        riding(rides=rides),
+        departures=buses,
+        shapes={'east': east, 'turn': turn} if shaped else {},
+        ends=(FROM, None),
+        stop_view=stop_view(destination=None),
+    )
+
+
+def test_a_frame_settled_before_the_shapes_load_widens_when_they_do() -> None:
+    """A held frame keyed without the parting is refitted once it shows."""
+    choice = LineChoice(station='A')
+    bare = forked_rides(split=1500.0, shaped=False)
+    shaped = forked_rides(split=1500.0, shaped=True)
+    settled = approach_frame(inputs=bare, choice=choice)
+    key = frame_key(inputs=bare, framing=MapFraming.APPROACH, choice=choice)
+    assert settled.centre is not None
+    wider = steady_frame(
+        inputs=shaped,
+        framing=MapFraming.APPROACH,
+        held=(settled.centre, settled.zoom),
+        key=key,
+        choice=choice,
+    )
+    assert wider.zoom == settled.zoom + 1
+    assert wider == approach_frame(inputs=shaped, choice=choice)
+
+
+def test_the_knob_out_and_back_returns_to_the_wide_opening_frame() -> None:
+    """Out one detent and in one detent is the frame the map opened at."""
+    choice = LineChoice(station='A')
+    shaped = forked_rides(split=1500.0, shaped=True)
+    zooms = [
+        steady_frame(
+            inputs=replace(shaped, step=step),
+            framing=MapFraming.APPROACH,
+            held=None,
+            key=None,
+            choice=choice,
+        ).zoom
+        for step in (0, 1, 0)
+    ]
+    assert zooms[1] == zooms[0] + 1
+    assert zooms[2] == zooms[0]
+    bare = forked_rides(split=1500.0, shaped=False)
+    assert zooms[0] == approach_frame(inputs=bare, choice=choice).zoom + 1
+
+
+@pytest.mark.parametrize('framing', [MapFraming.CENTRED])
+def test_centred_never_widens_on_a_fork(framing: MapFraming) -> None:
+    """A parting beyond the edge leaves Centred at the resting zoom."""
+    inputs = fork_inputs(split=3000.0)
+    choice = LineChoice(station='A')
+    for found in (
+        framed_map(inputs=inputs, framing=framing, choice=choice),
+        steady_frame(
+            inputs=inputs, framing=framing, held=None, key=None, choice=choice,
+        ),
+    ):
+        assert found.zoom == resting_zoom(step=0)

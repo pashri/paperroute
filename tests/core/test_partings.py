@@ -11,15 +11,15 @@ from paperroute_transit.core.partings import APART, PARTING_STEP, partings
 def fork(*, split: float) -> tuple[MapLine, MapLine]:
     """Two solid lines east from (0, 0), one turning north at `split`."""
     east = make_shape(
-        shape_id='bare-east', points=((0.0, 0.0), (20_000.0, 0.0)),
+        shape_id='east', points=((0.0, 0.0), (20_000.0, 0.0)),
     )
     turn = make_shape(
-        shape_id='bare-turn',
+        shape_id='turn',
         points=((0.0, 0.0), (split, 0.0), (split, 20_000.0)),
     )
     return (
-        MapLine(shape_id='bare-east', solid=(0.0, 20_000.0), shape=east),
-        MapLine(shape_id='bare-turn', solid=(0.0, turn.along[-1]), shape=turn),
+        MapLine(shape_id='east', solid=(0.0, 20_000.0), shape=east),
+        MapLine(shape_id='turn', solid=(0.0, turn.along[-1]), shape=turn),
     )
 
 
@@ -42,3 +42,17 @@ def test_dashed_lines_have_no_partings() -> None:
     """Only solid lines part."""
     dashed = tuple(replace(line, solid=None) for line in fork(split=3000.0))
     assert partings(lines=dashed) == ()
+
+
+def test_a_parting_with_300_m_shared_counts() -> None:
+    """The sample before the first unshared one is exactly 300 m in."""
+    assert partings(lines=fork(split=250.0))
+
+
+def test_shapes_sharing_an_id_and_span_are_cached_apart() -> None:
+    """Same ids and spans, different geometry, different partings."""
+    near = fork(split=3000.0)
+    far = fork(split=9000.0)
+    assert partings(lines=near) != partings(lines=far)
+    far_turn = replace(near[1], shape=far[1].shape)
+    assert partings(lines=(near[0], far_turn)) == partings(lines=far)

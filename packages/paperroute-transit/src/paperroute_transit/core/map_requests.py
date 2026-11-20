@@ -12,6 +12,7 @@ from paperroute_transit.core.connection_map import (
 )
 from paperroute_transit.core.day_lines import (
     day_extras,
+    line_choice,
     plain_frame,
     request_day_lines,
 )
@@ -672,6 +673,7 @@ def settled_key(*, state: State, inputs: MapInputs) -> FrameKey | None:
     return frame_key(
         inputs=replace(inputs, step=state.map.step),
         framing=state.settings.board.map_framing,
+        choice=line_choice(state=state, stop_view=inputs.stop_view),
     )
 
 

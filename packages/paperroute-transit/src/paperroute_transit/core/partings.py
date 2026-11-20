@@ -1,22 +1,18 @@
 """Where the Map's solid lines leave the road they share."""
 
 from collections import defaultdict
-from dataclasses import replace
+from dataclasses import dataclass, field
 from functools import lru_cache
 from math import dist, floor
 from typing import Final
 
 from paperroute_transit.core.geo import Point, point_along
 from paperroute_transit.core.map_line import MapLine
-from paperroute_transit.core.map_lines import LineChoice, plain_lines
-from paperroute_transit.core.map_view import MapInputs, screen_point, visible
-from paperroute_transit.core.tiles import ZOOMS
 
 PARTING_STEP: Final[float] = 25.0  # metres between samples
 PARTING_REACH: Final[float] = 16_000.0  # metres sampled from a solid start
 APART: Final[float] = 60.0  # metres off every other line that is a parting
 SHARED: Final[float] = 300.0  # metres shared before a parting counts
-LINES_COMPARED: Final[int] = 5
 
 
 def samples(*, line: MapLine) -> tuple[Point, ...]:
@@ -114,7 +110,27 @@ def parting_of(
     return None
 
 
-@lru_cache(maxsize=8)
+Fingerprint = tuple[str, tuple[float, float] | None, int, float, Point]
+
+
+@dataclass(frozen=True)
+class Solids:
+    """
+    The lines `partings` reads, compared by their geometry.
+
+    Attributes
+    ----------
+    key : tuple[Fingerprint, ...]
+        Each line's shape id, solid stretch, point count, length and
+        first point.
+    lines : tuple[MapLine, ...]
+        The lines; they do not take part in comparison.
+    """
+
+    key: tuple[Fingerprint, ...]
+    lines: tuple[MapLine, ...] = field(compare=False)
+
+
 def partings(*, lines: tuple[MapLine, ...]) -> tuple[Point, ...]:
     """
     Find where each solid line leaves the road it shares.
@@ -129,6 +145,35 @@ def partings(*, lines: tuple[MapLine, ...]) -> tuple[Point, ...]:
     tuple[Point, ...]
         At most one point per solid line, its earliest parting.
     """
+    key = tuple(
+        (
+            line.shape_id,
+            line.solid,
+            len(line.shape.points),
+            line.shape.along[-1],
+            line.shape.points[0],
+        )
+        for line in lines
+    )
+    return found_partings(solids=Solids(key=key, lines=lines))
+
+
+@lru_cache(maxsize=8)
+def found_partings(*, solids: Solids) -> tuple[Point, ...]:
+    """
+    Find the partings of a set of lines, memoised on their geometry.
+
+    Parameters
+    ----------
+    solids : Solids
+        The lines.
+
+    Returns
+    -------
+    tuple[Point, ...]
+        At most one point per solid line, its earliest parting.
+    """
+    lines = solids.lines
     solid = [samples(line=line) for line in lines if line.solid is not None]
     found: list[Point] = []
     for index, own in enumerate(solid):
@@ -140,72 +185,3 @@ def partings(*, lines: tuple[MapLine, ...]) -> tuple[Point, ...]:
         if parting is not None:
             found.append(parting)
     return tuple(found)
-
-
-def parted_beyond(
-    *, inputs: MapInputs, choice: LineChoice, centre: Point, zoom: int,
-) -> bool:
-    """
-    Tell whether a parting lies just beyond the edge of a map.
-
-    Parameters
-    ----------
-    inputs : MapInputs
-        The map's inputs.
-    choice : LineChoice
-        The kinds left out; the day's other lines are not compared.
-    centre : Point
-        The map centre.
-    zoom : int
-        A `ZOOMS` index.
-
-    Returns
-    -------
-    bool
-        True when a parting among the first five departures' solid lines
-        is off the map at `zoom` and on it one zoom further out.
-    """
-    lines = plain_lines(
-        inputs=replace(inputs, departures=inputs.departures[:LINES_COMPARED]),
-        choice=replace(choice, extras=()),
-    )
-    wider = min(zoom + 1, len(ZOOMS) - 1)
-    return any(
-        not on_map(inputs=inputs, centre=centre, zoom=zoom, point=point)
-        and on_map(inputs=inputs, centre=centre, zoom=wider, point=point)
-        for point in partings(lines=lines)
-    )
-
-
-def on_map(
-    *, inputs: MapInputs, centre: Point, zoom: int, point: Point,
-) -> bool:
-    """
-    Tell whether a point is on the map at a frame.
-
-    Parameters
-    ----------
-    inputs : MapInputs
-        The map's inputs.
-    centre : Point
-        The map centre.
-    zoom : int
-        A `ZOOMS` index.
-    point : Point
-        The point.
-
-    Returns
-    -------
-    bool
-        True within the map rectangle and its small margin.
-    """
-    return visible(
-        at=screen_point(
-            centre=centre,
-            mpp=ZOOMS[zoom],
-            point=point,
-            projection=inputs.projection,
-            width=inputs.width,
-        ),
-        width=inputs.width,
-    )

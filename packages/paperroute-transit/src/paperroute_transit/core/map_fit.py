@@ -7,14 +7,14 @@ from typing import Final
 
 from paperroute_device.core.panel_views import SLEEP_BAND
 from paperroute_transit.core.geo import Point
-from paperroute_transit.core.map_lines import LineChoice
+from paperroute_transit.core.map_lines import LineChoice, plain_lines
 from paperroute_transit.core.map_view import (
     DEFAULT_ZOOM,
     MAP_HEIGHT,
     MapInputs,
 )
 from paperroute_transit.core.modes import ModeSpec, line_modes
-from paperroute_transit.core.partings import parted_beyond
+from paperroute_transit.core.partings import partings
 from paperroute_transit.core.ridden import stretch_stops
 from paperroute_transit.core.saved import MapFraming
 from paperroute_transit.core.tiles import ZOOMS
@@ -41,12 +41,15 @@ class FrameKey:
         Map width in pixels.
     asleep : bool
         True for the sleep screen's map.
+    wide : bool
+        True when the frame opens one zoom wider for a parting.
     """
 
     ends: tuple[Point | None, Point | None]
     step: int
     width: int
     asleep: bool
+    wide: bool = False
 
 
 def stepped(*, zoom: int, step: int) -> int:
@@ -476,18 +479,87 @@ def approach_frame(
     origin = inputs.ends[0]
     if origin is None:
         return inputs
-    frame = fitted_frame(inputs=replace(inputs, step=0), points=points)
-    if parted_beyond(
-        inputs=inputs,
-        choice=choice,
+    frame = widened_from(inputs=inputs, points=points, choice=choice)
+    if frame is None:
+        return fitted_frame(inputs=inputs, points=points)
+    zoom = stepped(zoom=frame.zoom, step=1 + inputs.step)
+    centre = kept(
         centre=frame.centre or origin,
-        zoom=frame.zoom,
-    ):
-        zoom = stepped(zoom=frame.zoom, step=1 + inputs.step)
-        return replace(frame, zoom=zoom)
-    if inputs.step == 0:
+        keep=origin,
+        mpp=ZOOMS[zoom],
+        width=inputs.width,
+        rooms=(banner_room(inputs=inputs), bottom_room(inputs=inputs)),
+    )
+    return replace(frame, centre=centre, zoom=zoom)
+
+
+def widened_from(
+    *,
+    inputs: MapInputs,
+    points: Sequence[Point] | None,
+    choice: LineChoice,
+) -> MapInputs | None:
+    """
+    Fit a plain pin's map at step 0 and say whether it opens wider.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs, centred on the From.
+    points : Sequence[Point] | None
+        `approach_points` of the inputs, when already found.
+    choice : LineChoice
+        The kinds left out of the lines compared for partings.
+
+    Returns
+    -------
+    MapInputs | None
+        The step 0 fit when a parting of the solid lines lies just
+        beyond its edge; None otherwise and with no From point.
+    """
+    if inputs.ends[0] is None:
+        return None
+    frame = fitted_frame(inputs=replace(inputs, step=0), points=points)
+    if parted_beyond(inputs=inputs, choice=choice, frame=frame):
         return frame
-    return fitted_frame(inputs=inputs, points=points)
+    return None
+
+
+def parted_beyond(
+    *, inputs: MapInputs, choice: LineChoice, frame: MapInputs,
+) -> bool:
+    """
+    Tell whether a parting lies just beyond the edge of a frame.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs.
+    choice : LineChoice
+        The kinds left out; the day's other lines are not compared.
+    frame : MapInputs
+        The inputs framed at step 0.
+
+    Returns
+    -------
+    bool
+        True when a parting among the first five departures' solid lines
+        is off the frame's map and on it one zoom wider, same centre.
+    """
+    if frame.centre is None:
+        return False
+    lines = plain_lines(
+        inputs=replace(inputs, departures=inputs.departures[:5]),
+        choice=replace(choice, extras=()),
+    )
+    found = partings(lines=lines)
+    wider = min(frame.zoom + 1, len(ZOOMS) - 1)
+    here = (frame.centre, frame.zoom)
+    shown = on_map(points=found, frame=here, inputs=inputs)
+    return bool(
+        on_map(points=found, frame=(frame.centre, wider), inputs=inputs)
+        - shown
+    )
 
 
 def centred_frame(*, inputs: MapInputs) -> MapInputs:
@@ -593,6 +665,7 @@ def frame_key(
     inputs: MapInputs,
     framing: MapFraming,
     points: Sequence[Point] | None = None,
+    choice: LineChoice = LineChoice(),
 ) -> FrameKey | None:
     """
     Say what an Approach frame is fitted for, once it is settled.
@@ -605,6 +678,8 @@ def frame_key(
         The map framing setting.
     points : Sequence[Point] | None
         `approach_points` of the inputs, when already found.
+    choice : LineChoice
+        The kinds left out of the lines compared for partings.
 
     Returns
     -------
@@ -623,6 +698,8 @@ def frame_key(
         step=inputs.step,
         width=inputs.width,
         asleep=inputs.asleep,
+        wide=widened_from(inputs=inputs, points=points, choice=choice)
+        is not None,
     )
 
 
@@ -743,7 +820,9 @@ def steady_frame(
     fit = approach_frame(inputs=inputs, points=points, choice=choice)
     if held is None or key is None:
         return fit
-    own = frame_key(inputs=inputs, framing=framing, points=points)
+    own = frame_key(
+        inputs=inputs, framing=framing, points=points, choice=choice,
+    )
     if key != own or not holds(
         inputs=inputs, frame=held, points=points, fresh=fit,
     ):

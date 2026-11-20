@@ -78,8 +78,13 @@ def test_css_unsafe_values_are_problems() -> None:
     assert len(mode_problems(modes=[loose])) == 1
 
 
+def test_line_badge_splits_at_the_first_colon() -> None:
+    """The badge stops at the first colon, however many follow."""
+    assert line_badge(value='GA:Norwich:x') == 'GA'
+
+
 def test_named_line_modes() -> None:
-    """Only a spec with named_lines set is listed."""
+    """Only a by-line spec with named_lines set is listed."""
     modes = [BUS, replace(TRAIN, named_lines=True)]
     assert named_line_modes(modes=modes) == frozenset({TRAIN.id})
 

@@ -84,8 +84,8 @@ def pin_line(*, pin: Pin, end_points: Collection[str]) -> str:
     if pin.destination is not None:
         line += f' → {pin.destination.name}'
     routes = tuple(
-        line_badge(value=r)
-        for r in named_routes(pin=pin, end_points=end_points)
+        line_badge(value=row)
+        for row in named_routes(pin=pin, end_points=end_points)
     )
     boards = dict.fromkeys(
         change.board.name

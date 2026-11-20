@@ -40,6 +40,7 @@ from paperroute_transit.core.messages import (
     TimetableRebuilt,
     TimetableSeen,
 )
+from paperroute_transit.core.model import TIMETABLE_SCHEMA
 from paperroute_transit.core.rebuild import (
     BACKOFF_MAX,
     REBUILD_ROW,
@@ -54,7 +55,7 @@ from paperroute_transit.core.state_model import Rebuild, State
 from tests.core.chooser_walks import DOWN, KINDS, NEXT, OPEN
 
 OLD = TimetableSeen(version='v', schema='4')
-CURRENT = TimetableSeen(version='v', schema='7')
+CURRENT = TimetableSeen(version='v', schema=TIMETABLE_SCHEMA)
 MISSING = TimetableSeen(version=None)
 
 
@@ -284,7 +285,7 @@ def test_chooser_works_while_outdated() -> None:
     walk: list[Event] = [
         OPEN, ColumnLoaded(path=(), column=KINDS), DOWN, NEXT,
     ]
-    current = step(pinned(), TimetableSeen(version='v', schema='7'))[0]
+    current = step(pinned(), TimetableSeen(version='v', schema=TIMETABLE_SCHEMA))[0]
     outdated = step(pinned(), OLD)[0]
     assert outdated.rebuild == Rebuild(
         outdated=True,
@@ -493,14 +494,16 @@ def test_device_row_keeps_the_build_after_a_failure() -> None:
     state, _ = run_events(
         state=pinned(),
         events=[
-            TimetableSeen(version='2026-10-16T03:30:00+11:00', schema='7'),
+            TimetableSeen(version='2026-10-16T03:30:00+11:00', schema=TIMETABLE_SCHEMA),
             TimetableRebuilt(ok=False),
         ],
     )
     state, _ = step(forced(state=state)[0], TimetableRebuilt(ok=False))
     rows = {row.label: row.value for row in device_rows(state=state)}
     assert rows['Timetable'].startswith('last build failed \u00b7 16 Oct')
-    assert rows['Timetable'].endswith('version 7')
+    assert rows['Timetable'].endswith(
+        f'version {TIMETABLE_SCHEMA}',
+    )
 
 
 def test_forced_failure_keeps_the_backoff() -> None:

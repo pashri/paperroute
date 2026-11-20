@@ -307,6 +307,9 @@ class LineTables:
     """
     Read a station-first line's stations, TO column, track and exits.
 
+    A kind chosen by end points has no line: `kind_station_column` and
+    `kind_to_column` give its STATION and TO columns from its runs.
+
     Parameters
     ----------
     fetch : Fetch

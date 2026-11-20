@@ -659,9 +659,11 @@ def kind_rows(
     """
     Sort one kind's entries and give their chooser_routes rows.
 
-    Lines of a mode that replacement routes stand in for rank by
-    `rules.line_sort`; lines of a mode whose stops are wharves rank by
-    `rules.numbered_lines`.
+    Lines of a named-line mode rank by `rules.line_sort` on their
+    value; lines of a mode that replacement routes stand in for rank by
+    `rules.line_sort` on their number; lines of a mode whose stops are
+    wharves rank by `rules.numbered_lines`. Every other kind ranks by
+    number, then name.
 
     Parameters
     ----------

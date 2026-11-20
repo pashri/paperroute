@@ -55,6 +55,7 @@ from paperroute_transit.render.stop_view import (
     hero_under,
     list_row,
     open_width,
+    row_note,
     small_parts,
     small_text,
 )
@@ -537,6 +538,32 @@ def test_a_later_row_notes_its_platform_under_its_time() -> None:
     assert found[:, 0].min() >= 70 + 33 and found[:, 0].max() <= 70 + 47
     assert found[:, 1].min() >= LIST_LEAVE_RIGHT - 62
     assert found[:, 1].max() <= LIST_LEAVE_RIGHT
+
+
+def test_a_later_rows_note_reads_as_the_note_drawn_alone() -> None:
+    """The note's pixels match the same text drawn on a blank canvas."""
+    noted = replace(row(), note='platform 2B')
+    frame = draw_stop_view(view=replace(BASE, hero=None, rows=(noted,)))
+    alone = Canvas()
+    k = Scale(large=False)
+    y = HEADER + 30
+    row_note(alone, row=noted, right=LIST_LEAVE_RIGHT, y=y, k=k)
+    box = (slice(y + 33, y + 47), slice(LIST_LEAVE_RIGHT - 62, 786))
+    assert (finish(alone)[box] == INK).any()
+    assert (frame[box] == finish(alone)[box]).all()
+
+
+def test_a_long_bay_word_keeps_clear_of_the_headline() -> None:
+    """A long platform word makes the name end a gap short of it."""
+    text = 'platform Concourse 12'
+    long = replace(row(destination='Somewhere ' * 9), note=text)
+    room = note_room(face=Face(weight=700, px=NOTE_PX), text=text)
+    frame = draw_stop_view(view=replace(BASE, hero=None, rows=(long,)))
+    y = HEADER + 30
+    left = LIST_LEAVE_RIGHT - int(room)
+    assert (
+        frame[y + 33:y + 47, left + 1:left + NOTE_GAP - 1] == PAPER
+    ).all()
 
 
 def test_uncertain_wins_over_the_platform_note() -> None:

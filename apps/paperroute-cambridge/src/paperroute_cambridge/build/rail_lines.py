@@ -191,17 +191,21 @@ def assign_rail_lines(
     int
         Trips given a line.
     """
-    moves: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    moves: dict[str, list[str]] = defaultdict(list)
     for trip_id, (route_id, badge, stations) in _trip_stations(
         conn=conn, source=source,
     ).items():
         line = line_for(badge=badge, stations=stations, lines=lines)
         if line is not None:
             new_id = _add_route(conn=conn, route_id=route_id, line=line)
-            moves[new_id].append((new_id, trip_id))
+            moves[new_id].append(trip_id)
     conn.executemany(
         'UPDATE trips SET route_id = ? WHERE trip_id = ?',
-        [row for rows in moves.values() for row in rows],
+        [
+            (new_id, trip_id)
+            for new_id, trip_ids in moves.items()
+            for trip_id in trip_ids
+        ],
     )
     conn.execute(
         'DELETE FROM routes WHERE source = ? AND route_id NOT IN'

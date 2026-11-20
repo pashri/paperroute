@@ -92,7 +92,7 @@ The Cambridge app shows buses and coaches from the Bus Open Data Service
 (BODS), and trains at timetable times from the national rail timetable that
 the gb-transit project publishes on GitHub. Its data lives in
 `data/cambridge/`. Trains are listed by line, named for where they go; a
-train pin asks for its Destination and fills in the busiest line.
+train pin is a From and an optional Destination.
 
 Build the timetable. `refresh` downloads the public BODS timetable (no key)
 and the latest gb-transit release's `gtfs-national-rail-only.zip`, keeps every

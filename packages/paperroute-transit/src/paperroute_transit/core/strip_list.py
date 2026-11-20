@@ -87,10 +87,10 @@ def listed_rows(*, inputs: StripInputs, shown: int) -> tuple[Row, ...]:
     Returns
     -------
     tuple[Row, ...]
-        No rows while picking a From, else the listed rows with their pills
-        replaced. FASTER applies to an
-        end-point kind with a Destination. A row whose departure is not
-        among the inputs' is cancelled when it was, else bare.
+        No rows while picking a From, else the listed rows with their
+        pills replaced. FASTER applies to an end-point kind with a
+        Destination. When any listed row's departure is not among the
+        inputs' departures, every row keeps only CANCELLED.
     """
     if inputs.picking == PICK_FROM:
         return ()

@@ -800,13 +800,12 @@ def test_faster_covers_uncertain() -> None:
         estimate=UNSURE,
     )
     drawn = painted(row=row)
-    plain = painted(row=replace(row, pill=None, estimate=None))
+    bare = painted(row=replace(row, pill=None, estimate=None))
     assert (drawn[PANEL_TOP + 51, 712:RULE_RIGHT] == INK).all()
     assert (drawn[PANEL_TOP + 65, 712:RULE_RIGHT] == INK).all()
-    assert (plain[FASTER_BOX] == PAPER).all()
+    assert (bare[FASTER_BOX] == PAPER).all()
     outside = drawn.copy()
     outside[FASTER_BOX] = PAPER
-    bare = painted(row=replace(row, pill=None, estimate=None))
     assert (outside == bare).all()
 
 

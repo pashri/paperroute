@@ -241,15 +241,14 @@ def headline_width(*, row: Row, k: Scale) -> float:
     -------
     float
         ``LIST_WIDTH`` without a run-on tag; with one, ``TAGGED_WIDTH``,
-        or less for a row with a note so the tag clears it.
+        or less for a row with a note so the headline clears it.
     """
-    if row.then is None:
-        return LIST_WIDTH
+    widest = LIST_WIDTH if row.then is None else TAGGED_WIDTH
     text = note_text(row=row)
     if not text:
-        return TAGGED_WIDTH
+        return widest
     room = note_room(face=k.face(weight=700, px=NOTE_PX), text=text)
-    return min(TAGGED_WIDTH, LIST_LEAVE_RIGHT - LIST_LEFT - room)
+    return min(widest, LIST_LEAVE_RIGHT - LIST_LEFT - room)
 
 
 def small_parts(*, under: UnderNumber, row: Row) -> tuple[str, ...]:

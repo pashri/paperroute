@@ -69,6 +69,19 @@ def test_assign_rail_lines_splits_a_route_by_line() -> None:
     }
 
 
+def test_assign_rail_lines_marks_a_platform_by_its_station() -> None:
+    """A call at a platform counts as a call at its parent station."""
+    conn = loaded(
+        stops=[('rail:IPS', 1.1, 52.0), ('rail:IPS1', 1.1, 52.0)],
+        routes=[('rail:LE', 2, 'LE', 'GA')],
+        trips=[('t1', 'rail:LE')],
+        calls=[('t1', 'rail:IPS1')],
+        parent_of={'rail:IPS1': 'rail:IPS'},
+    )
+    assert assign_rail_lines(conn=conn, lines=RAIL_LINES, source='bods') == 1
+    assert route_ids(conn) == {'rail:LE:Ipswich'}
+
+
 def test_rail_line_sort_and_groups() -> None:
     """Lines rank from 1 in chooser order; badges group by first line."""
     sort = rail_line_sort(lines=RAIL_LINES)

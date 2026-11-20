@@ -701,7 +701,8 @@ def named_trains(*, modes: Sequence[ModeSpec]) -> tuple[ModeSpec, ...]:
         The modes, the train one keyed by long name.
     """
     return tuple(
-        replace(spec, named_lines=True) if spec.id == SydneyMode.TRAIN
+        replace(spec, named_lines=True)
+        if spec.id == SydneyMode.TRAIN
         else spec
         for spec in modes
     )
@@ -744,6 +745,22 @@ def test_named_train_lines_get_a_row_per_long_name(tmp_path: Path) -> None:
         ('T1', 'City to Hornsby'),
         ('T1', 'City to Emu'),
     ]
+
+
+def test_a_bundle_name_is_exempt(tmp_path: Path) -> None:
+    """A named kind keeps its routes' long names over the bundle's."""
+    with closing(tiny_db(path=tmp_path / 't.db', routes=[
+        RouteRow(route_id='a', number='T1', long_name='City to Emu',
+                 route_type=2, source='sydneytrains'),
+        RouteRow(route_id='bT1', number='T1', long_name='Bundle name',
+                 route_type=2, patterns=()),
+    ])) as conn:
+        load_catalogue(
+            conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+            modes=named_trains(modes=SYDNEY.modes), rules=SYDNEY.catalogue,
+        )
+        rows = chooser_rows(conn=conn, kind='train')
+    assert [row[:2] for row in rows] == [('T1', 'City to Emu')]
 
 
 def test_train_lines_in_decision_order(tmp_path: Path) -> None:

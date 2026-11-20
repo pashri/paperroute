@@ -373,7 +373,12 @@ def strip_row(
 
 
 def slot_rows(
-    *, inputs: StripInputs, reach: Reach, first: int, marks: Marks,
+    *,
+    inputs: StripInputs,
+    reach: Reach,
+    first: int,
+    marks: Marks,
+    tail: bool = True,
 ) -> list[StripRow]:
     """
     Make the rows of a window's slots.
@@ -388,6 +393,8 @@ def slot_rows(
         The row in the top slot.
     marks : Marks
         What the rows are marked with.
+    tail : bool
+        Whether an end-point kind pins a far Destination under a stub.
 
     Returns
     -------
@@ -397,13 +404,14 @@ def slot_rows(
         calls and a far Destination pinned under a stub.
     """
     window = inputs_window(inputs=inputs)
+    pinned = marks.target if tail else None
     indices = list(range(first, min(first + window.rows, len(reach.rows))))
     if inputs.end_points:
         indices = slot_indices(
             first=first,
             slots=window.rows,
             total=len(reach.rows),
-            destination=marks.target,
+            destination=pinned,
         )
     rows = [
         strip_row(
@@ -418,7 +426,7 @@ def slot_rows(
         reach=reach,
         first=first,
         scroll=inputs.scroll,
-        destination=marks.target,
+        destination=pinned,
         slots=window.rows,
     )
 
@@ -457,9 +465,13 @@ def strip_rows(*, inputs: StripInputs, reach: Reach
     )
     band = band_of(reach=reach, first=first, window=window)
     marks = marks_of(inputs=inputs, reach=reach)
-    if band is not None and not band.top:
-        marks = replace(marks, target=None)
-    rows = slot_rows(inputs=inputs, reach=reach, first=first, marks=marks)
+    rows = slot_rows(
+        inputs=inputs,
+        reach=reach,
+        first=first,
+        marks=marks,
+        tail=band is None or band.top,
+    )
     if band is not None:
         rows = rows[1:] if band.top else rows[:-1]
     return tuple(rows), band

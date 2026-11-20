@@ -446,3 +446,39 @@ def test_no_tail_while_the_from_is_below_the_window() -> None:
     assert all(row.kind is EARLIER for row in rows)
     ids = [int(row.station[1:]) for row in rows]
     assert ids == list(range(ids[0], ids[0] + len(ids)))
+
+
+def bottom_band_rows(
+    *, end_points: bool,
+) -> tuple[list[StripRow], Reach]:
+    """
+    Lay out a Strip whose From is below the window, Destination inside.
+
+    Parameters
+    ----------
+    end_points : bool
+        Whether the kind is an end-point kind.
+
+    Returns
+    -------
+    tuple[list[StripRow], Reach]
+        The shown rows and the reach.
+    """
+    reach = reach_of(kinds=[MAIN] * 30 + line_of(extra=[MAIN] * 3))
+    inputs = replace(
+        inputs_of(reach=reach, destination='R10'),
+        end_points=end_points,
+        scroll=-20,
+    )
+    rows, band = strip_rows(inputs=inputs, reach=reach)
+    assert band is not None and not band.top
+    return list(rows), reach
+
+
+def test_the_destination_stays_bold_under_a_bottom_band() -> None:
+    """A Destination inside the window is bold, for every kind."""
+    for end_points in (False, True):
+        rows, _ = bottom_band_rows(end_points=end_points)
+        by_station = {row.station: row for row in rows}
+        assert by_station['R10'].bold, end_points
+        assert RowKind.DASHED not in {row.kind for row in rows}

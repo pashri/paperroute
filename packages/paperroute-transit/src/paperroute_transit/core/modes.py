@@ -193,6 +193,26 @@ def end_point_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:
     return frozenset(spec.id for spec in modes if spec.end_points)
 
 
+def is_road(*, route_type: int) -> bool:
+    """
+    Say whether a route type runs on the road.
+
+    Parameters
+    ----------
+    route_type : int
+        GTFS route_type.
+
+    Returns
+    -------
+    bool
+        True for buses, trolleybuses, coaches and replacement buses,
+        types 3, 11, 200-299 and 700-799.
+    """
+    return route_type in {3, 11} or 200 <= route_type < 300 or (
+        700 <= route_type < 800
+    )
+
+
 def line_key(
     *, kind: str, number: str, long_name: str, named: Collection[str],
 ) -> str:

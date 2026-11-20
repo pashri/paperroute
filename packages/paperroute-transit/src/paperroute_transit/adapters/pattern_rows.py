@@ -3,7 +3,7 @@
 from datetime import date
 from typing import Final
 
-from paperroute_transit.core.modes import Classifier
+from paperroute_transit.core.modes import Classifier, is_road
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 
 JOINED_TRIPS: Final[str] = """
@@ -86,4 +86,5 @@ def pattern_of(
         stops=tuple(calls[0].get(str(row[1]), ())),
         days=tuple(running),
         next_trip=calls[1].get(str(row[1])),
+        road=is_road(route_type=int(str(row[3]))),
     )

@@ -145,6 +145,29 @@ def test_departures_bus_with_stand_and_times(
     assert found[0].arrives == at(hour=8, minute=39)
 
 
+def test_departures_carry_road(repo: SqliteTimetableRepository) -> None:
+    """The 606 bus is road and the Parramatta trains are not."""
+    bus = repo.departures(
+        pin=HOLLIS_TO_PARRA,
+        start=at(hour=8, minute=0),
+        end=at(hour=9, minute=0),
+    )
+    train = repo.departures(
+        pin=PARRA_TO_CENTRAL,
+        start=at(hour=8, minute=0),
+        end=at(hour=9, minute=30),
+    )
+    assert [d.facts.road for d in bus] == [True]
+    assert {d.facts.road for d in train} == {False}
+
+
+def test_patterns_carry_road(repo: SqliteTimetableRepository) -> None:
+    """A pattern is road by its route's type."""
+    found = repo.patterns(trip_ids={'bus-0803', 'S-0835'}, around=MONDAY)
+    assert found['bus-0803'].road is True
+    assert found['S-0835'].road is False
+
+
 def test_departures_uses_station_children_and_skips_no_pickup(
     repo: SqliteTimetableRepository,
 ) -> None:

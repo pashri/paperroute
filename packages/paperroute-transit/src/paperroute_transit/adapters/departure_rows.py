@@ -9,7 +9,7 @@ from paperroute_transit.core.model import (
     TripFacts,
     service_time,
 )
-from paperroute_transit.core.modes import Classifier, RouteClass
+from paperroute_transit.core.modes import Classifier, RouteClass, is_road
 
 STILL_AT_FROM: Final[str] = """
   AND NOT EXISTS (SELECT 1 FROM stop_times n
@@ -160,6 +160,7 @@ def facts_of(
     then, then_to, then_trip = row[14:17]
     return TripFacts(
         route_id=str(row[18]) if len(row) > 18 else '',
+        road=is_road(route_type=int(str(row[2]))),
         kind=route_class(row=row, classify=classify).kind,
         then=(
             None

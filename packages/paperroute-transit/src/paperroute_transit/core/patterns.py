@@ -67,6 +67,8 @@ class TripPattern:
     next_trip : str | None
         The trip the vehicle runs on through as, keeping its passengers;
         None when it doesn't or it isn't known.
+    road : bool
+        False for rail, metro, light rail and ferry.
     """
 
     trip_id: str
@@ -77,6 +79,7 @@ class TripPattern:
     days: tuple[date, ...]
     along: tuple[float, ...] | None = None
     next_trip: str | None = None
+    road: bool = True
 
 
 def measure(*, pattern: TripPattern, shape: Shape | None) -> TripPattern:

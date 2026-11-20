@@ -1,9 +1,16 @@
 """The trains a train Strip follows, chosen from the departures listed."""
 
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Final
 
+from paperroute_transit.core.city import City
 from paperroute_transit.core.live import LiveDeparture
-from paperroute_transit.core.reach import Reach, ReachInput
+from paperroute_transit.core.model import Departure
+from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.reach import Reach, ReachInput, StripKey
+from paperroute_transit.core.realtime import RealtimeSnapshot
 from paperroute_transit.core.stop_view import in_view
 from paperroute_transit.core.strip_model import TripDay, trip_day
 from paperroute_transit.core.strip_times import TripInputs, live_strip
@@ -134,3 +141,131 @@ def train_strip(*, data: ReachInput, follow: Following) -> Reach:
         above=above,
         loop_name=follow.loop_name,
     )
+
+
+@dataclass(frozen=True)
+class StripStamp:
+    """
+    Everything a train Strip is laid out from, as the state holds it.
+
+    The first six fields are large objects the state replaces when they
+    change; they are compared by identity. The rest are compared by
+    value.
+
+    Attributes
+    ----------
+    built : Reach
+        The built reach, whose source is the From and the network.
+    departures : Sequence[Departure]
+        The board's departures.
+    snapshots : Mapping[str, RealtimeSnapshot]
+        The latest download of each trip-updates feed.
+    patterns : Mapping[str, TripPattern | None]
+        The loaded trip patterns.
+    city : City
+        The city, whose zone, feeds and modes the strip reads.
+    key : StripKey | None
+        Which runs feed the strip.
+    frame : datetime
+        The frame time.
+    stale_after : timedelta
+        How old a live time may be before it is ignored.
+    selected : TripDay | None
+        The train picked in the panel.
+    destination : str | None
+        The Destination station ID.
+    loop_name : str
+        The city's name for a train that returns to the From.
+    """
+
+    built: Reach
+    departures: Sequence[Departure]
+    snapshots: Mapping[str, RealtimeSnapshot]
+    patterns: Mapping[str, TripPattern | None]
+    city: City
+    key: StripKey | None
+    frame: datetime
+    stale_after: timedelta
+    selected: TripDay | None
+    destination: str | None
+    loop_name: str
+
+
+IDENTITY: Final[tuple[str, ...]] = (
+    'built', 'departures', 'snapshots', 'patterns', 'city',
+)
+VALUES: Final[tuple[str, ...]] = (
+    'key', 'frame', 'stale_after', 'selected', 'destination', 'loop_name',
+)
+
+
+@dataclass
+class Remembered:
+    """
+    The last train Strip built.
+
+    Attributes
+    ----------
+    stamp : StripStamp | None
+        What it was built from; None while empty.
+    reach : Reach | None
+        The Strip.
+    """
+
+    stamp: StripStamp | None = None
+    reach: Reach | None = None
+
+
+LAST: Final[Remembered] = Remembered()
+
+
+def same_stamp(*, held: StripStamp, asked: StripStamp) -> bool:
+    """
+    Tell whether two stamps describe the same Strip.
+
+    Parameters
+    ----------
+    held : StripStamp
+        The stamp remembered.
+    asked : StripStamp
+        The stamp asked for.
+
+    Returns
+    -------
+    bool
+        True when each large object is the same object and each small
+        one is equal.
+    """
+    return all(
+        getattr(held, name) is getattr(asked, name) for name in IDENTITY
+    ) and all(
+        getattr(held, name) == getattr(asked, name) for name in VALUES
+    )
+
+
+def remembered_strip(
+    *, stamp: StripStamp, build: Callable[[], Reach],
+) -> Reach:
+    """
+    Give the train Strip for a stamp, building it only when it changed.
+
+    Parameters
+    ----------
+    stamp : StripStamp
+        What the Strip is laid out from.
+    build : Callable[[], Reach]
+        Lays the Strip out.
+
+    Returns
+    -------
+    Reach
+        The remembered Strip when the last one was built from the same
+        stamp, else a new one, which is then remembered.
+    """
+    held = LAST.stamp
+    if held is not None and LAST.reach is not None:
+        if same_stamp(held=held, asked=stamp):
+            return LAST.reach
+    reach = build()
+    LAST.stamp, LAST.reach = stamp, reach
+    return reach

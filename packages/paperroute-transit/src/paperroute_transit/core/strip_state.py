@@ -47,7 +47,12 @@ from paperroute_transit.core.strip_times import (
     trip_ids,
     window_departures,
 )
-from paperroute_transit.core.train_follow import Following, train_strip
+from paperroute_transit.core.train_follow import (
+    Following,
+    StripStamp,
+    remembered_strip,
+    train_strip,
+)
 from paperroute_transit.core.train_window import shows_dash
 
 STRIP_VIEWS: Final[frozenset[LiveView]] = frozenset(
@@ -381,16 +386,20 @@ def shown_reach(*, state: State) -> Reach | None:
     key = shown_key(state=state)
     destination = destination_id(state=state)
     built = None if key is None else state.strip.reaches.get(key)
-    if built is not None and built.source is not None:
-        return train_strip(
-            data=built.source,
-            follow=Following(
-                trips=followed_trips(state=state, key=key, reach=built),
-                destination=destination_station(
-                    reach=built, destination=destination,
+    source = None if built is None else built.source
+    if built is not None and source is not None:
+        return remembered_strip(
+            stamp=strip_stamp(state=state, key=key, built=built),
+            build=lambda: train_strip(
+                data=source,
+                follow=Following(
+                    trips=followed_trips(state=state, key=key, reach=built),
+                    destination=destination_station(
+                        reach=built, destination=destination,
+                    ),
+                    selected=state.strip.selected,
+                    loop_name=state.city.loop_name,
                 ),
-                selected=state.strip.selected,
-                loop_name=state.city.loop_name,
             ),
         )
     reach = folded_reach(state=state, key=key, destination=destination)
@@ -400,6 +409,44 @@ def shown_reach(*, state: State) -> Reach | None:
         reach=reach,
         trips=followed_trips(state=state, key=key, reach=reach),
         target=destination_station(reach=reach, destination=destination),
+    )
+
+
+def strip_stamp(
+    *, state: State, key: StripKey, built: Reach,
+) -> StripStamp:
+    """
+    Gather what a train Strip is laid out from, to tell whether it changed.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    key : StripKey
+        The strip.
+    built : Reach
+        The strip's built reach.
+
+    Returns
+    -------
+    StripStamp
+        The departures, snapshots, patterns, frame time, pick and
+        Destination the Strip reads.
+    """
+    return StripStamp(
+        built=built,
+        departures=state.board.departures,
+        snapshots=state.snapshots,
+        patterns=state.map.patterns,
+        city=state.city,
+        key=key,
+        frame=frame_time(state=state),
+        stale_after=stale_after(state=state),
+        selected=state.strip.selected,
+        destination=destination_station(
+            reach=built, destination=destination_id(state=state),
+        ),
+        loop_name=state.city.loop_name,
     )
 
 

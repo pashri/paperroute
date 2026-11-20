@@ -84,6 +84,8 @@ on the next deploy.
 Press the bottom knob to switch views; on the Map, turn it to zoom. Hollow badges are timetable positions. A small "4m" tab means
 the bus was last heard 4 minutes ago.
 
+With no Destination, the Stop view shows how the next departure is running, where its vehicle was last seen when its position is reported, and its next three calls. For this, Sydney fetches bus and train positions while the Stop view shows.
+
 ## Cambridge
 
 The Cambridge app shows buses and coaches from the Bus Open Data Service

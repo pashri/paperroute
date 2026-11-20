@@ -40,7 +40,7 @@ from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.rhythm import frame_time, stale_after
 from paperroute_transit.core.saved import LiveView
 from paperroute_transit.core.state_model import RETRY_AFTER, State, elapsed
-from paperroute_transit.core.stop_view import StopView
+from paperroute_transit.core.stop_view import StopView, hero_departure
 from paperroute_transit.core.strip_state import (
     picked_window,
     picking_to,
@@ -784,6 +784,59 @@ def sleep_effects(
     return state, (*shapes, *loads)
 
 
+def stop_patterns(*, stop_view: StopView) -> frozenset[str]:
+    """
+    List the trips whose patterns the Stop view needs.
+
+    Parameters
+    ----------
+    stop_view : StopView
+        The state's Stop view.
+
+    Returns
+    -------
+    frozenset[str]
+        The hero's trip ID when the view has a block under its number;
+        otherwise none.
+    """
+    hero = hero_departure(view=stop_view)
+    if stop_view.under is None or hero is None:
+        return frozenset()
+    return frozenset({hero.trip_id})
+
+
+def stop_effects(
+    *, state: State, stop_view: StopView
+) -> tuple[State, tuple[Effect, ...], PatternAsk | None]:
+    """
+    Keep and ask for the pattern of the Stop view's hero.
+
+    Parameters
+    ----------
+    state : State
+        State, on the Stop view with the chooser closed.
+    stop_view : StopView
+        The state's Stop view, with a block under its number.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...], PatternAsk | None]
+        State keeping only the hero's pattern and the board's own trips'
+        patterns, no effects, and the patterns wanted. The hero is
+        marked drawn so its pattern is not held back while its positions
+        fetch is in flight.
+    """
+    wanted = stop_patterns(stop_view=stop_view)
+    departures = state.board.departures
+    state = pruned(
+        state=state,
+        wanted=pin_trips(departures=departures) | wanted,
+        departures=departures,
+    )
+    ask = PatternAsk(wanted=wanted, drawn=stop_view.head_departures[:1])
+    return state, (), ask
+
+
 def map_effects(
     *, state: State, stop_view: StopView
 ) -> tuple[State, tuple[Effect, ...], PatternAsk | None]:
@@ -807,12 +860,20 @@ def map_effects(
     tuple[State, tuple[Effect, ...], PatternAsk | None]
         State with the requests recorded, the effects, and the patterns
         wanted; only the sleep map's from `sleep_effects` while asleep,
-        and nothing on the Stop view, or while the chooser lists routes
-        or picks a From. The patterns wanted are None in those cases.
+        the hero's pattern from `stop_effects` on a Stop view with a
+        block under its number, and nothing on other Stop views, or while
+        the chooser lists routes or picks a From. The patterns wanted are
+        None in those cases.
     """
     if state.panel.asleep:
         state, effects = sleep_effects(state=state, stop_view=stop_view)
         return state, effects, None
+    if (
+        state.view is LiveView.STOP
+        and state.chooser is None
+        and stop_view.under is not None
+    ):
+        return stop_effects(state=state, stop_view=stop_view)
     if not shows_vehicles(state=state):
         return state, (), None
     width = (

@@ -117,12 +117,16 @@ class Board:
         True while a load is in flight.
     legs : Legs | None
         A connection pin's leg-2 and direct departures; None otherwise.
+    station : str
+        The From's station: its parent station, or the From itself; empty
+        before a load.
     """
 
     departures: tuple[Departure, ...] = ()
     loaded_until: datetime | None = None
     loading: bool = False
     legs: Legs | None = None
+    station: str = ''
 
 
 @dataclass(frozen=True)

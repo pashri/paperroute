@@ -2308,3 +2308,16 @@ def test_a_timetable_without_source_dates_has_none(tmp_path: Path) -> None:
     db = meta_db(tmp_path=tmp_path, rows=WINDOW)
     with closing(SqliteTimetableRepository(path=db, city=SYDNEY)) as repo:
         assert repo.source_dates() == {}
+
+
+@pytest.mark.parametrize(('stop_id', 'station'), [
+    ('2145615', 'G2145615'),
+    ('2150411', '215020'),
+    ('215020', '215020'),
+    ('nowhere', 'nowhere'),
+])
+def test_station_for_names_the_parent_station(
+    repo: SqliteTimetableRepository, stop_id: str, station: str,
+) -> None:
+    """A stand or platform gives its parent; other IDs give themselves."""
+    assert repo.station_for(stop_id=stop_id) == station

@@ -12,6 +12,7 @@ from paperroute_device.adapters.sqlite_ro import (
     ReadOnlyDatabase,
     file_identity,
 )
+from paperroute_transit.adapters.departure_rows import STOP_STATION
 from paperroute_transit.adapters.network_lines import LineTables, Row
 from paperroute_transit.adapters.timetable_db import DEFAULT_PATH, to_point
 from paperroute_transit.core.chooser import (
@@ -78,10 +79,6 @@ FROM chooser_towards t, json_each(t.stations) j
 JOIN stops s ON s.stop_id = j.value
 WHERE t.towards_id = ?
 ORDER BY j.key
-"""
-STATION_OF: Final[str] = """
-SELECT COALESCE(NULLIF(parent_station, ''), stop_id) FROM stops
-WHERE stop_id = ?
 """
 RUNS_THROUGH: Final[str] = """
 SELECT r.stations, r.trips, s.pos
@@ -751,7 +748,7 @@ class SqliteNetworkRepository:
         str
             Its parent station's ID, or the ID itself.
         """
-        rows = self.fetch(sql=STATION_OF, params=(stop_id,))
+        rows = self.fetch(sql=STOP_STATION, params=(stop_id,))
         return str(rows[0][0]) if rows else stop_id
 
     def places(self, *, stations: Collection[str]) -> dict[str, StopPlace]:

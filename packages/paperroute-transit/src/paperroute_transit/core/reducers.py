@@ -256,7 +256,10 @@ def on_loaded(
     if event.until.timestamp() <= state.now.timestamp():
         return replace(state, board=replace(state.board, loading=False)), ()
     board = Board(
-        departures=event.departures, loaded_until=event.until, legs=event.legs,
+        departures=event.departures,
+        loaded_until=event.until,
+        legs=event.legs,
+        station=event.station,
     )
     feeds = feeds_of(
         departures=all_departures(

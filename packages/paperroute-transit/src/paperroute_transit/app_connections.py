@@ -63,6 +63,7 @@ def departures_read(
     if pin.destination is None:
         return replace(
             loaded,
+            station=timetable.station_for(stop_id=pin.origin.stop_id),
             departures=usable(
                 items=read(pin=pin, end=effect.end),
                 pin=replace(pin, never=()),

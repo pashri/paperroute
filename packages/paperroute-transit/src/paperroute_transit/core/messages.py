@@ -257,7 +257,9 @@ class DeparturesLoaded:
     """
     Departures arrived for a pin, from the timetable version asked.
 
-    `skip_school` and `skip_school_pins` echo the load's.
+    `skip_school` and `skip_school_pins` echo the load's. `station` is
+    the From's station: its parent station, or the From itself; empty
+    before a load.
     """
 
     pin: Pin
@@ -267,6 +269,7 @@ class DeparturesLoaded:
     legs: Legs | None = None
     skip_school: bool = True
     skip_school_pins: bool = False
+    station: str = ''
 
 
 @dataclass(frozen=True)

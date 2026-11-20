@@ -60,6 +60,21 @@ class TimetableRepository(Protocol):
             When the stop isn't in the timetable.
         """
 
+    def station_for(self, *, stop_id: str) -> str:
+        """
+        Find the station a stop belongs to.
+
+        Parameters
+        ----------
+        stop_id : str
+            Stop or station ID.
+
+        Returns
+        -------
+        str
+            Its parent station's ID, or the ID itself.
+        """
+
     def match_stop(self, *, place: StopPlace) -> StopPlace | None:
         """
         Find a place again in the current timetable.

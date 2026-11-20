@@ -33,6 +33,7 @@ from paperroute_transit.adapters.carry_on_rows import (
 )
 from paperroute_transit.adapters.departure_rows import (
     DEPARTURES,
+    STOP_STATION,
     WHOLE_STOP,
     to_departure,
 )
@@ -523,6 +524,23 @@ class SqliteTimetableRepository:
             name=str(name),
             point=to_point(lon=lon, lat=lat, projection=self.projection),
         )
+
+    def station_for(self, *, stop_id: str) -> str:
+        """
+        Find the station a stop belongs to.
+
+        Parameters
+        ----------
+        stop_id : str
+            Stop or station ID.
+
+        Returns
+        -------
+        str
+            Its parent station's ID, or the ID itself.
+        """
+        rows = self.fetch(sql=STOP_STATION, params=(stop_id,))
+        return str(rows[0][0]) if rows else stop_id
 
     def match_stop(self, *, place: StopPlace) -> StopPlace | None:
         """

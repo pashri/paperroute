@@ -26,7 +26,7 @@ from paperroute_testkit.core.strip_factories import (
 )
 from paperroute_transit.core.cycle import cycle_effects
 from paperroute_transit.core.feed_plan import FeedKind
-from paperroute_transit.core.geo import Point
+from paperroute_transit.core.geo import Point, make_shape
 from paperroute_transit.core.map_fit import BANNER_ROOM, CREDIT_ROOM, FrameKey
 from paperroute_transit.core.map_requests import (
     map_feeds,
@@ -544,3 +544,66 @@ def test_knob_moves_one_level_from_a_held_coarser_frame() -> None:
         None if moved.map.frame is None else ZOOMS[moved.map.frame[1]]
         for moved in (finer, coarser)
     ] == [5, 14]
+
+
+OPEN: Final[Pin] = Pin(
+    origin=place('2145615', name='Hollis St'), kind=SydneyMode.BUS,
+)
+
+
+def buses() -> tuple[Departure, ...]:
+    """
+    Make three Sydney buses, 3, 6 and 9 minutes after START.
+
+    Returns
+    -------
+    tuple[Departure, ...]
+        The departures.
+    """
+    return tuple(
+        departure(
+            departs=START + timedelta(minutes=minutes), mode=SydneyFeed.BUS,
+        )
+        for minutes in (3, 6, 9)
+    )
+
+
+def test_the_stop_view_asks_for_its_heros_pattern() -> None:
+    """A pin with no Destination asks for the next departure's pattern."""
+    _, effects = on_view(
+        view=LiveView.STOP, pin=OPEN, departures=buses(),
+    )
+    assert LoadPatterns(
+        trip_ids=frozenset({'trip-0803'}), day=START.date(),
+    ) in effects
+
+
+def test_the_stop_view_drops_patterns_of_trips_it_no_longer_holds() -> None:
+    """A Tick drops a pattern no departure and no hero needs."""
+    state, _ = on_view(view=LiveView.STOP, pin=OPEN, departures=buses())
+    held = {
+        trip_id: pattern(trip_id=trip_id)
+        for trip_id in ('gone', 'trip-0803')
+    }
+    state = replace(state, map=replace(state.map, patterns=held))
+    state, _ = step(state, Tick(now=state.now + timedelta(seconds=1)))
+    assert set(state.map.patterns) == {'trip-0803'}
+
+
+def test_a_destination_stop_view_keeps_its_patterns() -> None:
+    """A Stop view with a Destination prunes and asks for nothing."""
+    state, _ = on_view(view=LiveView.STOP)
+    state = replace(
+        state,
+        map=replace(
+            state.map,
+            patterns={'gone': pattern(trip_id='gone', shape_id='s')},
+            shapes={
+                's': make_shape(shape_id='s', points=[(0.0, 0.0), (1.0, 0.0)]),
+            },
+        ),
+    )
+    state, effects = step(state, Tick(now=state.now + timedelta(seconds=1)))
+    assert set(state.map.patterns) == {'gone'}
+    assert set(state.map.shapes) == {'s'}
+    assert not [e for e in effects if isinstance(e, LoadPatterns)]

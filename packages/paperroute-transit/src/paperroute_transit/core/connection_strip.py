@@ -17,6 +17,7 @@ from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.map_view import MapView, is_fresh, position_age
 from paperroute_transit.core.model import (
     Change,
+    Departure,
     Pin,
     StopPlace,
     service_seconds,
@@ -373,18 +374,18 @@ def approach_note(
 
 def leg_vehicle(
     *,
-    leg: LiveDeparture,
+    departure: Departure,
     positions: Mapping[str, PositionsSnapshot],
     now: datetime,
     limit: timedelta,
 ) -> VehiclePosition | None:
     """
-    Find a leg's vehicle while its position is fresh.
+    Find a departure's vehicle while its position is fresh.
 
     Parameters
     ----------
-    leg : LiveDeparture
-        The leg.
+    departure : Departure
+        The departure.
     positions : Mapping[str, PositionsSnapshot]
         The latest download of each positions feed.
     now : datetime
@@ -397,7 +398,7 @@ def leg_vehicle(
     VehiclePosition | None
         The freshest report of its trip, by ID or alias, when fresh.
     """
-    trips = {leg.departure.trip_id, *leg.departure.aliases}
+    trips = {departure.trip_id, *departure.aliases}
     found = [
         (position_age(vehicle=item, snapshot=feed, now=now), item)
         for feed in positions.values()
@@ -674,7 +675,7 @@ def chain_sections(
         note = approach_note(
             leg=leg.item,
             position=leg_vehicle(
-                leg=leg.item,
+                departure=leg.item.departure,
                 positions=positions,
                 now=now,
                 limit=stale_after,

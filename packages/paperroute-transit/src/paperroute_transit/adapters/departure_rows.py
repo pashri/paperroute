@@ -22,6 +22,9 @@ STILL_AT_FROM: Final[str] = """
                                         OR parent_station = :origin))
 """
 STATION_OF: Final[str] = "COALESCE(NULLIF(s.parent_station, ''), s.stop_id)"
+STOP_STATION: Final[str] = (
+    f'SELECT {STATION_OF} FROM stops s WHERE s.stop_id = ?'
+)
 
 
 def stop_count(*, trip: str, after: str, upto: str | None = None) -> str:

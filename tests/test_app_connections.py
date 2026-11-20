@@ -355,3 +355,12 @@ def test_connection_second_read_cached() -> None:
     second = departures_read(timetable=timetable, effect=effect, cache=cache)
     assert len(timetable.reads) == 3
     assert second == first
+
+
+def test_a_read_carries_the_froms_station() -> None:
+    """A pin with no Destination reads its From's station; others do not."""
+    timetable = RecordingTimetable()
+    plain = LoadDepartures(pin=pin_of('a', None), start=START, end=END)
+    assert departures_read(timetable=timetable, effect=plain).station == 'a'
+    way = LoadDepartures(pin=pin_of('a', 'b'), start=START, end=END)
+    assert departures_read(timetable=timetable, effect=way).station == ''

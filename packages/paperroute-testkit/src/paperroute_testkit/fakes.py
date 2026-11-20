@@ -209,6 +209,22 @@ class BrokenTimetable:
         """
         return StopPlace(stop_id=stop_id, name=stop_id, point=None)
 
+    def station_for(self, *, stop_id: str) -> str:
+        """
+        Give every stop as its own station.
+
+        Parameters
+        ----------
+        stop_id : str
+            Stop ID.
+
+        Returns
+        -------
+        str
+            The ID itself.
+        """
+        return stop_id
+
     def match_stop(self, *, place: StopPlace) -> StopPlace | None:
         """
         Find no place.

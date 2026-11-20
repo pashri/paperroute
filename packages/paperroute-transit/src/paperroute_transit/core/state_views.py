@@ -31,6 +31,7 @@ from paperroute_transit.core.rhythm import frame_time, stale_after
 from paperroute_transit.core.saved import LiveView, Saved
 from paperroute_transit.core.sleep import sleep_view
 from paperroute_transit.core.state_model import State, clock_waiting, elapsed
+from paperroute_transit.core.stop_hero import with_detail
 from paperroute_transit.core.stop_view import (
     StopInputs,
     StopView,
@@ -236,9 +237,21 @@ def banner_stop_view(*, state: State, banner: Banner | None) -> StopView:
     Returns
     -------
     StopView
-        View, at the frame time.
+        View, at the frame time; on the Stop view, with the hero's
+        place and calls when its pattern is loaded.
     """
-    return build_stop_view(inputs=stop_inputs(state=state, notice=banner))
+    view = build_stop_view(inputs=stop_inputs(state=state, notice=banner))
+    if state.view is not LiveView.STOP:
+        return view
+    return with_detail(
+        view=view,
+        station=state.board.station or shown(state=state).origin.stop_id,
+        patterns=state.map.patterns,
+        positions=state.map.positions,
+        now=frame_time(state=state),
+        limit=stale_after(state=state),
+        zone=state.city.zone,
+    )
 
 
 def live_stop_view(*, state: State) -> StopView:

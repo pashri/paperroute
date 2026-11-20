@@ -8,7 +8,6 @@ from typing import Final
 
 from paperroute_transit.adapters.change_rows import (
     BETWEEN,
-    REACHED,
     change_box,
     nearest_changes,
 )
@@ -29,7 +28,7 @@ from paperroute_transit.core.chooser import (
 )
 from paperroute_transit.core.geo import Projection, to_lonlat
 from paperroute_transit.core.model import StopPlace
-from paperroute_transit.core.modes import skippable_modes
+from paperroute_transit.core.modes import end_point_modes, skippable_modes
 from paperroute_transit.core.pin_choices import (
     ChangeStop,
     StopMatch,
@@ -679,7 +678,8 @@ class SqlitePinOptions:
         place : StopPlace
             The place leg 2 is joined at.
         kind : str | None
-            Count only runs of this kind; None counts every run.
+            Count only runs of this kind; None counts every run. For an
+            end-point kind, only stations the run stops at count.
 
         Returns
         -------
@@ -689,10 +689,11 @@ class SqlitePinOptions:
         """
         if not self.network.has_network():
             return ()
-        rows = self.network.fetch(sql=REACHED, params={
-            'station': self.network.station_for(stop_id=place.stop_id),
-            'kind': kind,
-        })
+        rows = self.network.lines.reached_rows(
+            station=self.network.station_for(stop_id=place.stop_id),
+            kind=kind,
+            end_point=kind in end_point_modes(modes=self.network.city.modes),
+        )
         return tuple(self.placed(row=row) for row in rows)
 
     def routes_between(

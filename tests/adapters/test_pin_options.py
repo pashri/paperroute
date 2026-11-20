@@ -18,7 +18,11 @@ from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.pin_choices import kind_names
 from paperroute_transit.core.reach import RowKind, StripKey, build_reach
 from paperroute_transit.core.route_colours import RouteColour
-from tests.adapters.test_network_db import add_named_lines, build_network
+from tests.adapters.test_network_db import (
+    add_named_lines,
+    build_network,
+    set_runs,
+)
 
 SCHOOL_RUN: str = (
     "INSERT INTO runs VALUES (90, 'school', 'S901', '[\"B1\", \"B2\"]', 3)"
@@ -212,6 +216,23 @@ def test_reached_from_without_a_kind_is_unchanged(
     assert options.reached_from(place=place) == options.reached_from(
         place=place, kind=None,
     )
+
+
+def test_reached_from_for_a_train_skips_stations_it_passes(
+    built: Path, tmp_path: Path,
+) -> None:
+    """A train kind offers only stations a stopping run calls at."""
+    copy = Path(shutil.copy(built, tmp_path / 'timetable.db'))
+    set_runs(path=copy, runs=[('W2 C E1', 3), ('W2 ~C E1 E2', 3)])
+    with closing(SqliteNetworkRepository(
+        path=copy, city=SYDNEY,
+    )) as repo:
+        options = SqlitePinOptions(network=repo)
+        place = at(options=options, stop_id='C')
+        train = options.reached_from(place=place, kind=SydneyMode.TRAIN)
+        every = options.reached_from(place=place)
+    assert [each.stop_id for each in train] == ['E1']
+    assert 'E2' in {each.stop_id for each in every}
 
 
 def test_trip_stop_lifts_to_parent(options: SqlitePinOptions) -> None:

@@ -22,6 +22,15 @@ WHERE stop_id != :station AND stop_id IN (
     AND (:kind IS NULL OR r.kind = :kind))
 ORDER BY name, stop_id
 """
+REACHED_STOPPING: Final[str] = """
+SELECT stop_id, name, lon, lat FROM stops
+WHERE stop_id != :station AND stop_id IN (
+  SELECT after.value
+  FROM runs r JOIN run_calls c ON c.run_id = r.run_id,
+    json_each(c.stops) here, json_each(c.stops) after
+  WHERE r.kind = :kind AND here.value = :station AND after.key > here.key)
+ORDER BY name, stop_id
+"""
 BETWEEN: Final[str] = """
 SELECT r.route
 FROM run_stops s JOIN run_stops d ON d.run_id = s.run_id

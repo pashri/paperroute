@@ -1420,6 +1420,58 @@ def test_reach_input_loads_the_train_network(copy: Path) -> None:
     )
 
 
+def test_reach_input_loads_only_runs_that_stop_at_the_from(
+    copy: Path,
+) -> None:
+    """A run that passes the From without stopping is not loaded."""
+    set_runs(path=copy, runs=[('W2 C E1', 3), ('W2 ~C E1 E2', 3)])
+    add_hops(
+        path=copy,
+        hops=[('W2', 'C', ()), ('C', 'E1', ()), ('E1', 'E2', ())],
+        trains=[(1, 40), (2, 60)],
+    )
+    network = reach_for(
+        path=copy, kind=SydneyMode.TRAIN, station='C',
+    ).network
+    assert network is not None
+    assert network.runs == (
+        WeekdayRun(route='T1', stations=('W2', 'C', 'E1'), trains=40),
+    )
+    assert set(network.hops) == {('W2', 'C'), ('C', 'E1')}
+
+
+def test_reach_input_without_run_calls_loads_passing_runs(
+    copy: Path,
+) -> None:
+    """A file with no run_calls cannot tell a pass from a stop."""
+    set_runs(path=copy, runs=[('W2 ~C E1', 3)])
+    add_hops(
+        path=copy, hops=[('W2', 'C', ()), ('C', 'E1', ())],
+        trains=[(1, 40)],
+    )
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute('DROP TABLE run_calls')
+        conn.commit()
+    network = reach_for(
+        path=copy, kind=SydneyMode.TRAIN, station='C',
+    ).network
+    assert network is not None
+    assert len(network.runs) == 1
+
+
+def test_train_to_column_offers_only_stations_a_stopping_run_calls_at(
+    copy: Path,
+) -> None:
+    """A station only a passing run calls at is not offered."""
+    set_runs(path=copy, runs=[('W2 C E1', 3), ('W2 ~C E1 E2', 3)])
+    with closing(SqliteNetworkRepository(
+        path=copy, city=SYDNEY,
+    )) as repo:
+        column = repo.choices(path=(*TRAIN, (Level.STATION, 'C')))
+    assert column is not None
+    assert [c.key for c in column.items[1:]] == ['E1']
+
+
 def test_reach_input_names_the_places_of_passed_stations(
     copy: Path,
 ) -> None:

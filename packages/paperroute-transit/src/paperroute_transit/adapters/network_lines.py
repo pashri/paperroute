@@ -7,7 +7,7 @@ from itertools import groupby
 from operator import itemgetter
 from typing import Final, Protocol
 
-from paperroute_transit.adapters.change_rows import REACHED
+from paperroute_transit.adapters.change_rows import REACHED, REACHED_STOPPING
 from paperroute_transit.adapters.timetable_db import to_point
 from paperroute_transit.core.chooser import Choice, Column, Level
 from paperroute_transit.core.geo import Projection
@@ -413,10 +413,37 @@ class LineTables:
                 rows=self.fetch(sql=STATION_ROW, params=(station,)),
             )
         )
-        reached = self.place_choices(rows=self.fetch(
-            sql=REACHED, params={'station': station, 'kind': kind},
+        reached = self.place_choices(rows=self.reached_rows(
+            station=station, kind=kind, end_point=True,
         ))
         return Column(level=Level.TO, items=(*first, *reached))
+
+    def reached_rows(
+        self, *, station: str, kind: str | None, end_point: bool,
+    ) -> list[Row]:
+        """
+        Fetch the stops a run calls at after a station.
+
+        Parameters
+        ----------
+        station : str
+            The station ID.
+        kind : str | None
+            Count only runs of this kind; None counts every run.
+        end_point : bool
+            True for an end-point kind: only stations a run stops at
+            count, when the file has ``run_calls``.
+
+        Returns
+        -------
+        list[Row]
+            Stop ID, name, longitude and latitude, by name and then ID.
+        """
+        stopping = end_point and self.has_tables(tables=('run_calls',))
+        return self.fetch(
+            sql=REACHED_STOPPING if stopping else REACHED,
+            params={'station': station, 'kind': kind},
+        )
 
     def place_choices(self, *, rows: Sequence[Row]) -> tuple[Choice, ...]:
         """

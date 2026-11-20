@@ -8,7 +8,13 @@ from paperroute_transit.adapters.network_lines import Fetch, Row
 from paperroute_transit.core.train_network import Hop, TrainNetwork, WeekdayRun
 
 HOP_TABLES: Final[tuple[str, ...]] = ('rail_hops', 'weekday_runs')
-CALLS_AT: Final[str] = """
+STOPS_AT: Final[str] = """
+EXISTS (
+  SELECT 1 FROM run_calls c, json_each(c.stops) j
+  WHERE c.run_id = r.run_id AND j.value = :station
+)
+"""
+PASSES_AT: Final[str] = """
 EXISTS (
   SELECT 1 FROM run_stops s
   WHERE s.run_id = r.run_id AND s.station_id = :station
@@ -17,14 +23,14 @@ EXISTS (
 WEEKDAY: Final[str] = (
     'SELECT r.route, r.stations, w.trains FROM runs r '
     'JOIN weekday_runs w ON w.run_id = r.run_id '
-    'WHERE r.kind = :kind AND ' + CALLS_AT + ' ORDER BY r.run_id'
+    'WHERE r.kind = :kind AND {at} ORDER BY r.run_id'
 )
 STATIONS: Final[str] = (
-    'SELECT r.stations FROM runs r WHERE r.kind = :kind AND ' + CALLS_AT
+    'SELECT r.stations FROM runs r WHERE r.kind = :kind AND {at}'
 )
 CALLS: Final[str] = (
     'SELECT c.stops FROM run_calls c JOIN runs r ON r.run_id = c.run_id '
-    'WHERE r.kind = :kind AND ' + CALLS_AT
+    'WHERE r.kind = :kind AND {at}'
 )
 HOPS: Final[str] = """
 SELECT a, b, passed, inside FROM rail_hops
@@ -60,9 +66,10 @@ def load_train_network(
     """
     Load the hops and weekday runs of a kind's runs through a station.
 
-    Only the runs of the kind that call at the station are read. The
-    hops are those between neighbouring calls and neighbouring run
-    stations of those runs.
+    Only the runs of the kind that stop at the station are read; a file
+    without ``run_calls`` cannot tell a stop from a pass, so every run
+    that lists the station is read. The hops are those between
+    neighbouring calls and neighbouring run stations of those runs.
 
     Parameters
     ----------
@@ -81,9 +88,12 @@ def load_train_network(
         The hops and the runs that have weekday trains.
     """
     params: dict[str, object] = {'kind': kind, 'station': station}
-    weekday = fetch(sql=WEEKDAY, params=params)
-    runs = fetch(sql=STATIONS, params=params)
-    calls = fetch(sql=CALLS, params=params) if with_calls else []
+    at = STOPS_AT if with_calls else PASSES_AT
+    weekday = fetch(sql=WEEKDAY.format(at=at), params=params)
+    runs = fetch(sql=STATIONS.format(at=at), params=params)
+    calls = (
+        fetch(sql=CALLS.format(at=at), params=params) if with_calls else []
+    )
     wanted = pairs_of(rows=runs) | pairs_of(rows=calls)
     ids = {station for pair in wanted for station in pair}
     found = fetch(sql=HOPS, params={'ids': json.dumps(sorted(ids))})

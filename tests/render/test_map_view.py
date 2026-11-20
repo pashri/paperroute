@@ -919,3 +919,4 @@ def test_end_boxes_shrink_with_the_marks() -> None:
         return right - left
 
     assert end_width(45) == pytest.approx(end_width(14) * 0.75)
+    assert end_width(25) == pytest.approx(end_width(14) * 0.85)

@@ -23,6 +23,7 @@ from paperroute_transit.core.tiles import TileVariant
 from paperroute_transit.render.map_base import draw_map_base, window_of
 from paperroute_transit.render.map_marks import draw_stop, mark_scale
 from paperroute_transit.render.trip_marks import (
+    LETTER_EDGE,
     draw_trip_ends,
     draw_trip_legs,
     draw_trip_lines,
@@ -186,8 +187,6 @@ def test_a_leg_line_of_one_point_is_skipped() -> None:
     assert np.all(canvas.grey() == PAPER)
 
 
-
-
 def ink_extent(*, values: NDArray[np.uint8]) -> int:
     """Pixels from the first to the last ink in a column."""
     ink = np.flatnonzero(values == INK)
@@ -260,3 +259,8 @@ def test_marks_shrink_at_the_two_widest_steps(
 def test_mark_scale_at_every_zoom(mpp: int, scale: float) -> None:
     """Marks are full size to 14 m/px, 0.85 at 25 and 0.75 at 45."""
     assert mark_scale(mpp=mpp) == scale
+
+
+def test_the_lettered_disc_is_edged_at_14_pixels() -> None:
+    """The paper edge of a lettered disc has radius 14."""
+    assert LETTER_EDGE == 14.0

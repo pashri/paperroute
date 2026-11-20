@@ -151,7 +151,7 @@ def spans(*, line: MapLine) -> list[tuple[bool, tuple[Point, ...]]]:
 
 
 def in_pixels(
-    *, lines: Sequence[Sequence[Point]], base: MapBase,
+    *, lines: Sequence[Sequence[Point]], base: MapBase, centre: Point,
 ) -> list[Pixels]:
     """
     Convert lines to map pixels and drop what runs off the map.
@@ -161,17 +161,18 @@ def in_pixels(
     lines : Sequence[Sequence[Point]]
         Lines in metres.
     base : MapBase
-        The base map key, with a centre.
+        The base map key.
+    centre : Point
+        The map centre in metres.
 
     Returns
     -------
     list[Pixels]
         The visible runs, in map pixels.
     """
-    assert base.centre is not None
     converted = route_pixels(
         lines=[np.asarray(line, dtype=np.float64) for line in lines],
-        centre=base.centre,
+        centre=centre,
         mpp=base.mpp,
         width=base.width,
         projection=base.projection,
@@ -198,15 +199,17 @@ def line_parts(*, base: MapBase) -> tuple[list[Pixels], list[Pixels]]:
         The solid polylines, then the dashed ones, in map pixels. Route
         lines are solid; nothing is returned without a centre.
     """
-    if base.centre is None:
+    centre = base.centre
+    if centre is None:
         return [], []
     solid = list(base.route)
     dashed: list[Sequence[Point]] = []
     for line in base.lines:
         for is_solid, points in spans(line=line):
             (solid if is_solid else dashed).append(points)
-    return in_pixels(lines=solid, base=base), in_pixels(
-        lines=dashed, base=base,
+    return (
+        in_pixels(lines=solid, base=base, centre=centre),
+        in_pixels(lines=dashed, base=base, centre=centre),
     )
 
 

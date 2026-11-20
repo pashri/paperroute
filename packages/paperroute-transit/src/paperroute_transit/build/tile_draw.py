@@ -26,6 +26,8 @@ from paperroute_transit.build.map_style import (
     SUBURB_FACE,
     SUPERSAMPLE,
     TRANSIT_LAYERS,
+    UNDER_ROADS,
+    extra_strokes,
     road_style,
     transit_style,
 )
@@ -242,6 +244,40 @@ def by_layer(*, store: FeatureStore, box: MetreBox) -> dict[str, list[Line]]:
     return layers
 
 
+def draw_extras(
+    *,
+    canvas: Canvas,
+    window: Window,
+    layers: dict[str, list[Line]],
+    names: tuple[str, ...],
+) -> None:
+    """
+    Stroke the named layers from whole lines, in order.
+
+    Lines are not clipped, so dashes start at the same place in every
+    tile.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target, the window's size.
+    window : Window
+        The window drawn.
+    layers : dict[str, list[Line]]
+        Lines in metres by layer.
+    names : tuple[str, ...]
+        Layers to stroke, first drawn first.
+    """
+    for name in names:
+        for stroke in extra_strokes(layer=name, mpp=window.mpp):
+            stroke_all(
+                canvas=canvas,
+                window=window,
+                lines=layers.get(name, []),
+                stroke=stroke,
+            )
+
+
 def draw_roads(
     *,
     canvas: Canvas,
@@ -249,7 +285,9 @@ def draw_roads(
     layers: dict[str, list[Line]],
 ) -> None:
     """
-    Stroke rivers, then roads from minor to motorway.
+    Stroke rivers, paths and service roads, then roads.
+
+    Roads run from minor to motorway.
 
     Parameters
     ----------
@@ -262,11 +300,20 @@ def draw_roads(
     """
     box = window.metres(grow=GEOMETRY_MARGIN)
     width, grey = RIVER_STYLE
-    styles = [('river', (width, grey))] + [
-        (layer, road_style(layer=layer, mpp=window.mpp))
-        for layer in ROAD_LAYERS
-    ]
-    for layer, (width, grey) in styles:
+    stroke_all(
+        canvas=canvas,
+        window=window,
+        lines=clip_lines(lines=layers.get('river', []), box=box),
+        stroke=(width, grey, None),
+    )
+    draw_extras(
+        canvas=canvas,
+        window=window,
+        layers=layers,
+        names=UNDER_ROADS,
+    )
+    for layer in ROAD_LAYERS:
+        width, grey = road_style(layer=layer, mpp=window.mpp)
         if width and layer in layers:
             stroke_all(
                 canvas=canvas,
@@ -278,7 +325,7 @@ def draw_roads(
 
 def draw_lines(*, canvas: Canvas, store: FeatureStore, window: Window) -> None:
     """
-    Stroke rivers, then roads by class, then transit in a fixed order.
+    Stroke rivers, paths and service roads, roads by class, then transit.
 
     Transit is drawn from whole lines, not clipped ones, so a dashed
     line's dashes start at the same place in every tile.

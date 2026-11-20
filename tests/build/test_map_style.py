@@ -17,7 +17,9 @@ from paperroute_transit.build.map_style import (
     STREET_REPEAT_PX,
     STREET_ZOOMS,
     SUBURB_FACE,
+    UNDER_ROADS,
     Stroke,
+    extra_strokes,
     named_roads,
     road_style,
     transit_style,
@@ -221,3 +223,31 @@ def test_transit_style_other_layers() -> None:
     assert transit_style(layer='rail', mpp=5)[0][0] == 5
     assert transit_style(layer='rail', mpp=14)[0][0] == 3
     assert transit_style(layer='other', mpp=14) == []
+
+
+@pytest.mark.parametrize(
+    ('layer', 'mpp', 'strokes'),
+    [
+        ('path', 3, [(1, INK, (2, 2))]),
+        ('path', 5, [(1, INK, (2, 2))]),
+        ('path', 8, []),
+        ('service', 3, [(1, LIGHT, None)]),
+        ('service', 5, [(1, LIGHT, None)]),
+        ('service', 8, []),
+        ('runway', 8, []),
+        ('runway', 14, [(3, PAPER, None)]),
+        ('runway', 25, [(2, PAPER, None)]),
+        ('runway', 45, [(1, PAPER, None)]),
+        ('taxiway', 14, [(1, PAPER, None)]),
+        ('taxiway', 25, []),
+        ('road_minor', 3, []),
+    ],
+)
+def test_extra_strokes(layer: str, mpp: int, strokes: list[Stroke]) -> None:
+    """Each extra line layer has its strokes at its own zooms only."""
+    assert extra_strokes(layer=layer, mpp=mpp) == strokes
+
+
+def test_under_roads_order() -> None:
+    """Service roads, paths, taxiways and runways are stroked in order."""
+    assert UNDER_ROADS == ('service', 'path', 'taxiway', 'runway')

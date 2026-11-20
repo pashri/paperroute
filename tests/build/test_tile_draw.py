@@ -707,6 +707,66 @@ def test_ticked_light_rail_crossing_a_tile_edge_is_seamless(
     np.testing.assert_array_equal(tiles, whole)
 
 
+def test_paths_and_service_roads_lie_under_roads(
+    empty: FeatureStore,
+) -> None:
+    """A dotted path and a light service road pass under a road."""
+    window = tile_window(mpp=SEAM_MPP)
+    x, y = float(window.left), float(window.top)
+    for layer, pixels in (
+        ('path', [(x + 20, y + 50.5), (x + 200, y + 50.5)]),
+        ('service', [(x + 20, y + 150.5), (x + 200, y + 150.5)]),
+        ('road_primary', [(x + 100.5, y + 10), (x + 100.5, y + 240)]),
+    ):
+        add_pixel_line(store=empty, layer=layer, pixels=pixels, mpp=SEAM_MPP)
+    tile = draw_window(store=empty, window=window)
+    assert (tile[50, 20:90] == INK).any()
+    assert (tile[50, 20:90] == PAPER).any()
+    assert (tile[150, 20:90] == LIGHT).all()
+    assert tile[50, 100] == DARK
+    assert tile[150, 100] == DARK
+
+
+def test_dotted_path_crossing_a_tile_edge_is_seamless(
+    empty: FeatureStore,
+) -> None:
+    """A sloping path's dots line up across a tile edge."""
+    left, _, _ = seam_windows(mpp=SEAM_MPP)
+    x, y = float(left.left), float(left.top)
+    add_pixel_line(
+        store=empty,
+        layer='path',
+        pixels=[(x - 101.0, y + 20.5), (x + 600.0, y + 230.5)],
+        mpp=SEAM_MPP,
+    )
+    tiles, whole = stitched(store=empty, mpp=SEAM_MPP)
+    assert (whole == INK).any()
+    np.testing.assert_array_equal(tiles, whole)
+
+
+def test_runway_is_paper_over_a_park_and_under_roads(
+    empty: FeatureStore,
+) -> None:
+    """At 14 m/px a runway clears a park to paper and a road crosses it."""
+    window = tile_window(mpp=14)
+    x, y = float(window.left), float(window.top)
+    add_pixel_area(
+        store=empty,
+        layer='park',
+        box=(x + 20, y + 20, x + 220, y + 220),
+        mpp=14,
+    )
+    for layer, pixels in (
+        ('runway', [(x + 40, y + 120.5), (x + 200, y + 120.5)]),
+        ('road_primary', [(x + 100.5, y + 30), (x + 100.5, y + 210)]),
+    ):
+        add_pixel_line(store=empty, layer=layer, pixels=pixels, mpp=14)
+    tile = draw_window(store=empty, window=window)
+    assert tile[60, 60] == LIGHT
+    assert (tile[119:122, 60] == PAPER).all()
+    assert tile[120, 100] == DARK
+
+
 def test_one_pixel_roads_land_on_exact_pixels(empty: FeatureStore) -> None:
     window = tile_window(mpp=14)
     x, y = float(window.left), float(window.top)

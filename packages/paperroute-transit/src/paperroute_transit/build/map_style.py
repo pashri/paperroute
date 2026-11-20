@@ -50,6 +50,18 @@ LIGHT_RAIL_TICKS: Final[dict[int, tuple[int, int]]] = {
     14: (5, 7),
     25: (4, 6),
 }  # tick length and spacing, pixels
+Stroke = tuple[float, int, tuple[float, float] | None]
+UNDER_ROADS: Final[tuple[str, ...]] = ('service', 'path', 'taxiway', 'runway')
+EXTRA_STROKES: Final[dict[str, dict[int, list[Stroke]]]] = {
+    'service': {3: [(1, LIGHT, None)], 5: [(1, LIGHT, None)]},
+    'path': {3: [(1, INK, (2, 2))], 5: [(1, INK, (2, 2))]},
+    'runway': {
+        14: [(3, PAPER, None)],
+        25: [(2, PAPER, None)],
+        45: [(1, PAPER, None)],
+    },
+    'taxiway': {14: [(1, PAPER, None)]},
+}
 RIVER_STYLE: Final[tuple[int, int]] = (2, DARK)
 
 STREET_ZOOMS: Final[frozenset[int]] = frozenset({3, 5, 8, 14})
@@ -59,8 +71,6 @@ STREET_REPEAT_PX: Final[int] = 384
 STREET_FACE: Final[Face] = Face(weight=700, px=12)
 SUBURB_FACE: Final[Face] = Face(weight=700, px=13)
 STATION_FACE: Final[Face] = Face(weight=800, px=14)
-
-Stroke = tuple[float, int, tuple[float, float] | None]
 
 
 def road_style(*, layer: str, mpp: int) -> tuple[int, int]:
@@ -160,6 +170,26 @@ def transit_style(*, layer: str, mpp: int) -> list[Stroke]:
             strokes.append((length, INK, (1, spacing - 1)))
         return strokes
     return []
+
+
+def extra_strokes(*, layer: str, mpp: int) -> list[Stroke]:
+    """
+    Give the strokes for a path, service road or airfield line.
+
+    Parameters
+    ----------
+    layer : str
+        Line layer name.
+    mpp : int
+        Metres per pixel.
+
+    Returns
+    -------
+    list[tuple[float, int, tuple[float, float] | None]]
+        Width, grey and dash pattern of each stroke. Layers and zooms
+        outside ``EXTRA_STROKES`` have none.
+    """
+    return list(EXTRA_STROKES.get(layer, {}).get(mpp, []))
 
 
 def named_roads(*, mpp: int) -> frozenset[str]:

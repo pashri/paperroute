@@ -1,4 +1,4 @@
-"""Write a tiny OSM file around Constitution Hill for build tests."""
+"""Write tiny OSM files around Constitution Hill for build tests."""
 
 from collections.abc import Mapping
 from pathlib import Path
@@ -136,3 +136,35 @@ def write_rail_osm(*, path: Path) -> None:
             writer.add_node(Node(id=node_id, location=location, tags=tags))
         for way_id, refs, tags in ways:
             writer.add_way(Way(id=way_id, nodes=list(refs), tags=tags))
+
+
+def write_extras_osm(*, path: Path) -> None:
+    """
+    Write an OSM file of paths, service roads and airfield lines.
+
+    It holds a footway, a closed footway loop, a roadside footway, a
+    service road, a driveway, a runway, a taxiway and a closed
+    aerodrome.
+
+    Parameters
+    ----------
+    path : Path
+        Destination ``.osm.pbf`` file; replaced if present.
+    """
+    ways: tuple[WayRow, ...] = (
+        (1, (1, 2), {'highway': 'footway'}),
+        (2, (1, 2, 4, 3, 1), {'highway': 'footway'}),
+        (3, (3, 4), {'highway': 'footway', 'footway': 'sidewalk'}),
+        (4, (5, 6), {'highway': 'service'}),
+        (5, (5, 6), {'highway': 'service', 'service': 'driveway'}),
+        (6, (7, 8), {'aeroway': 'runway'}),
+        (7, (3, 4), {'aeroway': 'taxiway'}),
+        (8, (5, 6, 8, 7, 5), {'aeroway': 'aerodrome'}),
+    )
+    header = osmium.io.Header()
+    header.set('osmosis_replication_timestamp', TIMESTAMP)
+    with osmium.SimpleWriter(path, header=header, overwrite=True) as writer:
+        for node_id, location in NODES.items():
+            writer.add_node(Node(id=node_id, location=location))
+        for way_id, nodes, tags in ways:
+            writer.add_way(Way(id=way_id, nodes=list(nodes), tags=tags))

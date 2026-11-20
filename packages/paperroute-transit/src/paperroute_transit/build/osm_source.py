@@ -42,6 +42,14 @@ RIVER_KINDS: Final[frozenset[str]] = frozenset({'river', 'canal'})
 PARK_KINDS: Final[frozenset[str]] = frozenset(
     {'park', 'nature_reserve', 'golf_course'},
 )
+PATH_KINDS: Final[frozenset[str]] = frozenset(
+    {'footway', 'path', 'cycleway', 'steps', 'bridleway'},
+)
+ROADSIDE_FOOTWAYS: Final[frozenset[str]] = frozenset({'sidewalk', 'crossing'})
+PRIVATE_SERVICES: Final[frozenset[str]] = frozenset(
+    {'driveway', 'parking_aisle', 'drive-through', 'emergency_access'},
+)
+AIRFIELD_LINES: Final[frozenset[str]] = frozenset({'runway', 'taxiway'})
 MINOR_STATIONS: Final[frozenset[str]] = frozenset({'halt', 'tram_stop'})
 FILTER_KEYS: Final[tuple[str, ...]] = (
     'highway',
@@ -53,6 +61,7 @@ FILTER_KEYS: Final[tuple[str, ...]] = (
     'boundary',
     'place',
     'amenity',
+    'aeroway',
 )
 
 
@@ -137,6 +146,32 @@ class OsmPlace:
     lat: float
 
 
+def extra_line_layer(*, tags: Mapping[str, str]) -> str | None:
+    """
+    Pick the path, service road or airfield layer for a way's tags.
+
+    Parameters
+    ----------
+    tags : Mapping[str, str]
+        The way's tags.
+
+    Returns
+    -------
+    str | None
+        ``path`` for a foot or cycle path that is not a roadside
+        footway, ``service`` for a service road that is not private,
+        ``runway`` or ``taxiway``, else None.
+    """
+    highway = tags.get('highway', '')
+    if highway in PATH_KINDS:
+        return None if tags.get('footway') in ROADSIDE_FOOTWAYS else 'path'
+    if highway == 'service':
+        private = tags.get('service') in PRIVATE_SERVICES
+        return None if private else 'service'
+    aeroway = tags.get('aeroway', '')
+    return aeroway if aeroway in AIRFIELD_LINES else None
+
+
 def line_layer(*, tags: Mapping[str, str]) -> str | None:
     """
     Pick the line layer for a way's tags.
@@ -164,7 +199,7 @@ def line_layer(*, tags: Mapping[str, str]) -> str | None:
         return 'coastline'
     if tags.get('waterway') in RIVER_KINDS:
         return 'river'
-    return None
+    return extra_line_layer(tags=tags)
 
 
 def area_layer(*, tags: Mapping[str, str]) -> str | None:

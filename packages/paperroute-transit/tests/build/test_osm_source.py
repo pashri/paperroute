@@ -11,6 +11,7 @@ from paperroute_testkit.build.osm_factory import (
     TIMESTAMP,
     TINY_BBOX,
     write_bare_osm,
+    write_extras_osm,
     write_tiny_osm,
 )
 from paperroute_transit.build.osm_source import (
@@ -80,12 +81,49 @@ def _features(tiny_osm: Path) -> list[OsmLine | OsmArea | OsmPlace]:
         ({'waterway': 'river'}, 'river'),
         ({'waterway': 'canal'}, 'river'),
         ({'natural': 'coastline'}, 'coastline'),
-        ({'highway': 'footway'}, None),
+        ({'highway': 'footway'}, 'path'),
     ],
 )
 def test_line_layer_rules(tags: Mapping[str, str], layer: str | None) -> None:
     """Each way's tags pick its line layer, or none."""
     assert line_layer(tags=tags) == layer
+
+
+@pytest.mark.parametrize(
+    ('tags', 'layer'),
+    [
+        ({'highway': 'path'}, 'path'),
+        ({'highway': 'cycleway'}, 'path'),
+        ({'highway': 'steps'}, 'path'),
+        ({'highway': 'bridleway'}, 'path'),
+        ({'highway': 'footway', 'bridge': 'yes'}, 'path'),
+        ({'highway': 'footway', 'footway': 'sidewalk'}, None),
+        ({'highway': 'footway', 'footway': 'crossing'}, None),
+        ({'highway': 'service'}, 'service'),
+        ({'highway': 'service', 'service': 'alley'}, 'service'),
+        ({'highway': 'service', 'service': 'driveway'}, None),
+        ({'highway': 'service', 'service': 'parking_aisle'}, None),
+        ({'highway': 'service', 'service': 'drive-through'}, None),
+        ({'highway': 'service', 'service': 'emergency_access'}, None),
+        ({'aeroway': 'runway'}, 'runway'),
+        ({'aeroway': 'taxiway'}, 'taxiway'),
+        ({'aeroway': 'aerodrome'}, None),
+    ],
+)
+def test_line_layer_extras(tags: Mapping[str, str], layer: str | None) -> None:
+    """Paths, service roads and airfield lines get their own layers."""
+    assert line_layer(tags=tags) == layer
+
+
+def test_read_osm_reads_extra_lines(tmp_path: Path) -> None:
+    """Paths, a footway loop, service roads and airfield lines are read."""
+    path = tmp_path / 'extras.osm.pbf'
+    write_extras_osm(path=path)
+    features = read_osm(path=path, bbox=TINY_BBOX, index='flex_mem')
+    lines = sorted(
+        item.layer for item in features if isinstance(item, OsmLine)
+    )
+    assert lines == ['path', 'path', 'runway', 'service', 'taxiway']
 
 
 @pytest.mark.parametrize(

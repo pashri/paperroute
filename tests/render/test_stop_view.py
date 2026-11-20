@@ -6,6 +6,7 @@ from typing import Final
 import numpy as np
 import pytest
 
+from paperroute_device.core.text import DOT
 from paperroute_device.render.canvas import (
     INK,
     PAPER,
@@ -17,9 +18,18 @@ from paperroute_device.render.frame import HEADER, finish
 from paperroute_testkit.render.factories import STOP_VIEW as BASE
 from paperroute_testkit.render.factories import stop_row as row
 from paperroute_transit.core.model import CarryOn
-from paperroute_transit.core.stop_view import Estimate, Pill, StopView
+from paperroute_transit.core.stop_under import NextCall, UnderNumber
+from paperroute_transit.core.stop_view import (
+    HORIZON_TEXT,
+    Estimate,
+    Pill,
+    Row,
+    StopView,
+)
 from paperroute_transit.render.chrome import (
     BANNER,
+    NAME_GAP,
+    NOTE_GAP,
     badge,
     badge_width,
     note_room,
@@ -31,6 +41,7 @@ from paperroute_transit.render.stop_view import (
     LIST_LEAVE_RIGHT,
     LIST_LEFT,
     LIST_PAIR_ROOM,
+    LIST_TOP,
     LIST_WIDTH,
     NOTE_PX,
     PILL_LEFT,
@@ -39,13 +50,13 @@ from paperroute_transit.render.stop_view import (
     TAGGED_WIDTH,
     WIDEST_COUNT,
     Scale,
-    board_right,
-    board_row,
     draw_stop_view,
-    faster_left,
-    faster_width,
     headline_width,
+    hero_under,
     list_row,
+    open_width,
+    small_parts,
+    small_text,
 )
 
 
@@ -148,68 +159,6 @@ def test_carry_on_tag_is_drawn_after_the_headsign() -> None:
     assert (full[band][:, 700:] == PAPER).all()
 
 
-def test_carry_on_tag_fits_on_the_board() -> None:
-    """On the full-width board the tag follows the headsign inside its width."""
-    long = CarryOn(route='T9', headsign='A very long headsign ' * 5)
-    view = replace(
-        BASE,
-        destination=None,
-        hero=None,
-        rows=(row(destination='Somewhere ' * 9, then=long),),
-    )
-    frame = draw_stop_view(view=view)
-    band = frame[HEADER:HEADER + 48, 120:]
-    assert (band[:, :460] == INK).any()
-    assert (band[:, 464:580] == PAPER).all()
-
-
-def test_no_destination_frame_draws_rows_under_the_header() -> None:
-    """The first row's badge sits just under the header, with no hero."""
-    view = replace(
-        BASE, destination=None, hero=None, rows=(row(), row(then=None)))
-    frame = draw_stop_view(view=view)
-    assert (frame[HEADER:HEADER + 12, 90:140] == PAPER).all()
-    assert (frame[HEADER + 12:HEADER + 40, 96:110] == INK).any()
-    assert (frame[HEADER:HEADER + 30, 0:90] == INK).any()
-    assert (frame[HEADER + 50 + 12:HEADER + 90, 96:110] == INK).any()
-    assert (frame[HEADER + 100:, 90:140] == PAPER).all()
-
-
-def test_no_destination_rows_draw_pills_and_live_countdowns() -> None:
-    """Board rows carry CANCELLED and FASTER; only live rows count down."""
-    rows = (
-        row(pill=Pill.CANCELLED),
-        row(pill=Pill.FASTER),
-        replace(row(), live=False),
-    )
-    frame = draw_stop_view(
-        view=replace(BASE, destination=None, hero=None, rows=rows))
-    top = HEADER
-    assert frame[top + 12:top + 36, 600:780].mean() < 128
-    assert (frame[top + 50 + 18:top + 50 + 31, 602:672] == INK).any()
-    assert (frame[top + 50 + 5:top + 50 + 38, 720:790] == INK).any()
-    assert (frame[top + 100 + 5:top + 100 + 38, 720:790] == PAPER).all()
-
-
-def test_board_timetable_row_shows_its_time_once() -> None:
-    """A board row without live data shows its time once, at the left."""
-    timetabled = replace(row(), live=False)
-    frame = draw_stop_view(
-        view=replace(BASE, destination=None, hero=None, rows=(timetabled,)))
-    top = HEADER
-    assert (frame[top + 5:top + 38, 720:790] == PAPER).all()
-    assert (frame[top + 5:top + 38, 18:80] == INK).any()
-
-
-def test_board_live_row_counts_down_past_100() -> None:
-    """A live board row 130 minutes away still fills its countdown slot."""
-    later = replace(row(), countdown='130')
-    frame = draw_stop_view(
-        view=replace(BASE, destination=None, hero=None, rows=(later,)))
-    top = HEADER
-    assert (frame[top + 5:top + 38, 680:790] == INK).any()
-
-
 def test_a_real_tag_is_not_cut_under_a_short_headsign() -> None:
     """A short headsign leaves the tag room for its whole text."""
     then = CarryOn(route='811', headsign='Parramatta Stn')
@@ -225,8 +174,8 @@ def test_a_real_tag_is_not_cut_under_a_short_headsign() -> None:
     assert ink.max() >= head + 8 + 22 + 4 + tag - 3
 
 
-def test_widest_count_clears_list_pairs_and_board_pills() -> None:
-    """'100 min' clears pairs, badges, the arrivals and the board pill."""
+def test_widest_count_clears_list_pairs() -> None:
+    """'100 min' clears pairs, badges and the arrivals."""
     wide = text_width(text=WIDEST_COUNT, face=Face(weight=800, px=28))
     large = text_width(text=WIDEST_COUNT, face=Face(weight=800, px=35))
     arrive = text_width(text='88:88', face=Face(weight=800, px=25))
@@ -235,8 +184,6 @@ def test_widest_count_clears_list_pairs_and_board_pills() -> None:
     assert LIST_LEFT + LIST_PAIR_ROOM + 8 <= LIST_LEAVE_RIGHT - large
     assert LIST_LEAVE_RIGHT + 16 <= min(FASTER_LEFT, 786 - arrive)
     assert LIST_LEFT + route + 8 < LIST_LEAVE_RIGHT - wide
-    for k, count in ((Scale(), wide), (Scale(large=True), large)):
-        assert faster_left(k=k) + faster_width(k=k) + 8 < 786 - count
 
 
 @pytest.mark.parametrize(
@@ -265,55 +212,6 @@ def test_list_widest_count_clears_a_long_pair(
     count = ink[(ink > room) & (ink < FASTER_LEFT)]
     assert count.min() - pair_right >= 8
     assert count.max() <= FASTER_LEFT - 16
-
-
-def test_faster_geometry_follows_the_text_size() -> None:
-    """The board's FASTER pill grows and moves left with larger text."""
-    normal, large = Scale(), Scale(large=True)
-    assert (faster_width(k=normal), faster_width(k=large)) == (74, 95)
-    assert (faster_left(k=normal), faster_left(k=large)) == (596, 549)
-    assert (board_right(k=normal), board_right(k=large)) == (576, 529)
-
-
-@pytest.mark.parametrize('large', [False, True], ids=['normal', 'large'])
-def test_faster_pill_clears_the_widest_count(large: bool) -> None:
-    """The FASTER pill ends clear of a '100 min' count, in real ink."""
-    k = Scale(large=large)
-    canvas = Canvas()
-    y = 100
-    board_row(
-        canvas,
-        row=replace(row(pill=Pill.FASTER), countdown='100', live=True),
-        y=y,
-        large=large,
-    )
-    frame = finish(canvas)
-    band = frame[y + k.y(17):y + k.y(32)]
-    ink = np.flatnonzero((band == INK).any(axis=0))
-    count = text_width(text=WIDEST_COUNT, face=k.face(weight=800, px=28))
-    pill_right = ink[ink < 786 - count - 4].max()
-    count_left = ink[ink > pill_right + 1].min()
-    assert count_left - pill_right >= 8
-
-
-@pytest.mark.parametrize('large', [False, True], ids=['normal', 'large'])
-def test_board_headsign_stops_before_the_pill(large: bool) -> None:
-    """A long headsign ends before the FASTER pill at both sizes."""
-    k = Scale(large=large)
-    canvas = Canvas()
-    y = 100
-    board_row(
-        canvas,
-        row=row(pill=Pill.FASTER, destination='Somewhere ' * 9),
-        y=y,
-        large=large,
-    )
-    frame = finish(canvas)
-    gap = frame[
-        y:y + k.y(49),
-        board_right(k=k) + 4:faster_left(k=k) - 2,
-    ]
-    assert (gap == PAPER).all()
 
 
 def test_live_hero_widest_count_fits_left_of_the_split() -> None:
@@ -392,15 +290,13 @@ def test_long_route_pair_fits_every_row_style() -> None:
     assert ink[-1] + 440 < min(PILL_LEFT, 640 - count)
     hero = draw_stop_view(view=replace(BASE, hero=long))
     assert (hero[HEADER + 40:HEADER + 60, 426:437] == PAPER).all()
-    board = draw_stop_view(
+    open_frame = draw_stop_view(
         view=replace(BASE, destination=None, hero=None, rows=(long,)),
     )
-    normal = Scale()
-    gap = np.s_[
-        HEADER:HEADER + 48,
-        board_right(k=normal) + 4:faster_left(k=normal) - 2,
-    ]
-    assert (board[gap] == PAPER).all()
+    top = HEADER + LIST_TOP
+    band = (slice(top + 6, top + 9), slice(440, 786))
+    ink = np.flatnonzero((open_frame[band] == INK).any(axis=0))
+    assert ink[-1] + 440 < 786 - count
 
 
 def test_carry_on_pill_follows_boarded_trip() -> None:
@@ -599,15 +495,16 @@ def test_certain_later_row_has_no_note() -> None:
     assert not changed(before=before, after=after).size
 
 
-def test_uncertain_board_row_says_so_under_its_countdown() -> None:
-    """With no destination, 'uncertain' sits under the countdown."""
+def test_an_uncertain_open_row_says_so_under_its_time() -> None:
+    """With no destination, 'uncertain' sits under the leave time."""
     board = replace(BASE, destination=None, hero=None, rows=(row(),))
     found = changed(
         before=board,
         after=replace(board, rows=(replace(row(), estimate=UNSURE),)),
     )
     assert found.size
-    assert found[:, 0].min() >= 40 + 33 and found[:, 0].max() <= 40 + 47
+    assert found[:, 0].min() >= HEADER + LIST_TOP + 33
+    assert found[:, 0].max() <= HEADER + LIST_TOP + 47
     assert found[:, 1].min() >= 786 - 60
 
 
@@ -651,15 +548,16 @@ def test_uncertain_wins_over_the_platform_note() -> None:
     ).size
 
 
-def test_a_board_row_notes_its_platform_under_its_countdown() -> None:
-    """With no destination, the note sits under the countdown."""
+def test_an_open_row_notes_its_platform_under_its_time() -> None:
+    """With no destination, the note sits under the leave time."""
     board = replace(BASE, destination=None, hero=None, rows=(row(),))
     found = changed(
         before=board,
         after=replace(board, rows=(replace(row(), note='platform 2B'),)),
     )
     assert found.size
-    assert found[:, 0].min() >= 40 + 33 and found[:, 0].max() <= 40 + 47
+    assert found[:, 0].min() >= HEADER + LIST_TOP + 33
+    assert found[:, 0].max() <= HEADER + LIST_TOP + 47
     assert found[:, 1].min() >= 786 - 62
 
 
@@ -675,3 +573,166 @@ def test_a_tagged_noted_headline_stops_short_of_the_note() -> None:
         LIST_LEAVE_RIGHT - LIST_LEFT - room
     )
     assert headline_width(row=replace(tagged, note=''), k=k) == TAGGED_WIDTH
+
+
+UNDER: Final[UnderNumber] = UnderNumber(
+    status='2 min late',
+    platform='stand B',
+    then=('8:06', '8:09'),
+    delay=120,
+    place='1 stop away, last seen at Mays Hill',
+    calls=(
+        NextCall(at='8:08', name='Harris Park'),
+        NextCall(at='8:11', name='Rosehill'),
+        NextCall(at='8:14', name='Parramatta'),
+    ),
+)
+OPEN: Final[StopView] = replace(BASE, destination=None, under=UNDER)
+OPEN_TOP: Final[int] = HEADER + LIST_TOP
+
+
+def open_rows(*, item: Row) -> StopView:
+    """An open view whose list holds one row."""
+    return replace(OPEN, rows=(item,))
+
+
+def test_small_parts_list_what_the_hero_has() -> None:
+    """Place, platform, then the next two; a fallback when none exist."""
+    hero = row()
+    assert small_parts(under=UNDER, row=hero) == (
+        '1 stop away, last seen at Mays Hill', 'stand B', 'then 8:06, 8:09',
+    )
+    bare = replace(UNDER, place='', platform='', then=())
+    assert small_parts(under=bare, row=hero) == (
+        f'no other {hero.route} to {hero.destination} in {HORIZON_TEXT}',
+    )
+
+
+def test_small_text_keeps_whole_parts() -> None:
+    """Only whole parts are joined, and the first always shows."""
+    face = Face(weight=400, px=15)
+    two = text_width(text=f'aaa{DOT}bbb', face=face)
+    parts = ('aaa', 'bbb', 'ccc')
+    assert small_text(parts=parts, face=face, width=two) == f'aaa{DOT}bbb'
+    assert small_text(parts=parts, face=face, width=999.0) == (
+        f'aaa{DOT}bbb{DOT}ccc'
+    )
+    assert small_text(parts=parts, face=face, width=1.0) == 'aaa'
+
+
+def test_under_the_number_fills_its_lines() -> None:
+    """Status, small line, heading and calls each hold ink."""
+    frame = draw_stop_view(view=OPEN)
+    for low, high in ((190, 222), (228, 244), (258, 272), (276, 342)):
+        band = frame[HEADER + low:HEADER + high, 18:418]
+        assert (band == INK).any(), (low, high)
+    assert (frame[HEADER + 348:, 0:SPLIT] == PAPER).all()
+
+
+def test_under_the_number_replaces_the_footer_and_due_line() -> None:
+    """The footer and due line never draw when `under` is given."""
+    assert OPEN.hero is not None
+    other = replace(
+        OPEN.hero, estimate=UNSURE, arrives_at='23:59', ride_minutes=99,
+    )
+    assert (
+        draw_stop_view(view=OPEN)
+        == draw_stop_view(view=replace(OPEN, hero=other))
+    ).all()
+
+
+def test_without_calls_there_is_no_calls_heading() -> None:
+    """With no calls, nothing is drawn below the small line."""
+    frame = draw_stop_view(view=replace(OPEN, under=replace(UNDER, calls=())))
+    assert (frame[HEADER + 256:, 0:SPLIT] == PAPER).all()
+
+
+def test_hero_under_draws_only_below_the_top() -> None:
+    """Drawing the block touches nothing above the rule."""
+    canvas = Canvas()
+    hero_under(canvas, under=UNDER, row=row(), top=100)
+    frame = finish(canvas)
+    assert (frame[:100 + 183] == PAPER).all()
+    assert (frame[100 + 184:100 + 186, 18:418] == INK).all()
+
+
+def test_an_open_list_heads_leaves_at_the_right() -> None:
+    """LEAVES heads the right edge, with no ARRIVES head beside it."""
+    frame = draw_stop_view(view=OPEN)
+    assert (frame[HEADER + 12:HEADER + 24, 740:786] == INK).any()
+    far = slice(LIST_LEAVE_RIGHT - 40, LIST_LEAVE_RIGHT)
+    assert (frame[HEADER + 12:HEADER + 24, far] == PAPER).all()
+
+
+def test_an_open_row_has_no_arrival_column() -> None:
+    """The arrival time is not drawn; the leave time is at the right."""
+    first = draw_stop_view(view=open_rows(item=row()))
+    other = draw_stop_view(
+        view=open_rows(item=replace(row(), arrives_at='23:59')),
+    )
+    assert (first == other).all()
+    y = OPEN_TOP
+    assert (first[y + 5:y + 31, 740:786] == INK).any()
+
+
+def test_an_open_row_has_no_run_on_tag() -> None:
+    """A run-on tag is not drawn on an open row."""
+    then = CarryOn(route='T9', headsign='Hornsby')
+    plain = draw_stop_view(view=open_rows(item=row()))
+    tagged = draw_stop_view(view=open_rows(item=row(then=then)))
+    assert (plain == tagged).all()
+
+
+def test_an_open_row_runs_its_name_to_the_edge() -> None:
+    """A long name has ink past where a list row's name would stop."""
+    long = row(destination='Drummer St Bus Station Bay 10')
+    frame = draw_stop_view(view=open_rows(item=replace(long, live=False)))
+    y = OPEN_TOP
+    assert (frame[y + 33:y + 47, 600:786] == INK).any()
+
+
+def test_an_open_row_name_stops_before_its_note() -> None:
+    """A long name ends a gap short of the note under the time."""
+    long = replace(
+        row(destination='Somewhere ' * 9), note='platform 2B',
+    )
+    room = note_room(face=Face(weight=700, px=NOTE_PX), text='platform 2B')
+    frame = draw_stop_view(view=open_rows(item=long))
+    y = OPEN_TOP
+    left = 786 - int(room)
+    assert (frame[y + 33:y + 47, left + 1:left + NOTE_GAP - 1] == PAPER).all()
+
+
+def test_an_open_cancelled_row_name_stops_before_the_block() -> None:
+    """A long name ends a gap short of the CANCELLED pill."""
+    long = row(destination='Somewhere ' * 9, pill=Pill.CANCELLED)
+    frame = draw_stop_view(view=open_rows(item=long))
+    y = OPEN_TOP
+    ink = np.flatnonzero(
+        (frame[y + 33:y + 47, LIST_LEFT:PILL_LEFT] == INK).any(axis=0),
+    )
+    assert ink.size
+    assert ink[-1] + LIST_LEFT <= PILL_LEFT - NAME_GAP
+
+
+def test_an_open_row_counts_down_past_100() -> None:
+    """A live open row 130 minutes away still fills its time slot."""
+    frame = draw_stop_view(
+        view=open_rows(item=replace(row(), countdown='130')),
+    )
+    y = OPEN_TOP
+    assert (frame[y + 5:y + 31, 680:786] == INK).any()
+
+
+def test_open_width_has_three_edges() -> None:
+    """A row's room ends at the pill, the note, or the right edge."""
+    k = Scale()
+    plain = row()
+    noted = replace(plain, note='platform 2B')
+    room = note_room(face=k.face(weight=700, px=NOTE_PX), text='platform 2B')
+    assert open_width(row=plain, k=k) == 786 - LIST_LEFT
+    assert open_width(row=noted, k=k) == 786 - room - LIST_LEFT
+    cancelled = row(pill=Pill.CANCELLED)
+    assert open_width(row=cancelled, k=k) == (
+        PILL_LEFT - NAME_GAP - LIST_LEFT
+    )

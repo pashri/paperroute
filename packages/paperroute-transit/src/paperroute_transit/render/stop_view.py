@@ -1,5 +1,6 @@
 """Draw the Stop view in the round 5 layout."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
@@ -16,7 +17,9 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER, finish
+from paperroute_transit.core.stop_under import NextCall, UnderNumber
 from paperroute_transit.core.stop_view import (
+    HORIZON_TEXT,
     UNCERTAIN,
     Pill,
     Row,
@@ -29,9 +32,9 @@ from paperroute_transit.render.chrome import (
     ARROW_WIDTH,
     BANNER,
     FASTER,
+    NAME_GAP,
     arrow,
     cancelled,
-    countdown_slot,
     leaves,
     note_room,
     pill,
@@ -55,9 +58,6 @@ WIDEST_COUNT: Final[str] = '100 min'  # widest live count, Ruling 2
 FASTER_LEFT: Final[int] = 712
 PILL_LEFT: Final[int] = 596
 TAGGED_WIDTH: Final[int] = FASTER_LEFT - LIST_LEFT - 16
-BOARD_BADGE_X: Final[int] = 96
-FASTER_WIDTH: Final[int] = 74
-FASTER_GAP: Final[int] = 10
 TAG_FACE: Final[Face] = Face(weight=700, px=12)
 TAG_GAP: Final[int] = 8
 TAG_FLOOR: Final[int] = 40
@@ -65,6 +65,19 @@ DUE_FACE: Final[Face] = Face(weight=700, px=15)
 DUE_DROP: Final[int] = 264  # due line baseline below the content top
 NOTE_DROP: Final[int] = 44  # 'uncertain' baseline below a row's top
 NOTE_PX: Final[int] = 11
+STATUS_FACE: Final[Face] = Face(weight=700, px=24)
+SMALL_FACE: Final[Face] = Face(weight=400, px=15)
+CALLS_HEAD: Final[str] = 'CALLS NEXT AT'
+CALLS_HEAD_FACE: Final[Face] = Face(weight=700, px=11)
+CALL_TIME_FACE: Final[Face] = Face(weight=700, px=15)
+UNDER_DROPS: Final[tuple[int, int]] = (216, 240)  # status, small line
+CALLS_HEAD_DROP: Final[int] = 270  # baseline below the content top
+CALLS_DROP: Final[int] = 290  # first call's baseline below the top
+CALL_STEP: Final[int] = 24  # between calls' baselines
+CALL_TIME_X: Final[int] = 46
+CALL_NAME_X: Final[int] = 96
+CALL_NAME_WIDTH: Final[int] = 320
+OPEN_RIGHT: Final[int] = 786  # right edge of an open row's times
 
 
 def hero_headline(canvas: Canvas, *, row: Row, top: int) -> None:
@@ -239,7 +252,148 @@ def headline_width(*, row: Row, k: Scale) -> float:
     return min(TAGGED_WIDTH, LIST_LEAVE_RIGHT - LIST_LEFT - room)
 
 
-def hero(canvas: Canvas, *, row: Row, top: int) -> None:
+def small_parts(*, under: UnderNumber, row: Row) -> tuple[str, ...]:
+    """
+    List the parts of the small line under the status.
+
+    Parameters
+    ----------
+    under : UnderNumber
+        The block under the number.
+    row : Row
+        The hero departure.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The place, platform and next departures, each when not empty;
+        else a line saying there are no other services.
+    """
+    parts = tuple(
+        part
+        for part in (
+            under.place,
+            under.platform,
+            f'then {", ".join(under.then)}' if under.then else '',
+        )
+        if part
+    )
+    if parts:
+        return parts
+    return (
+        f'no other {row.route} to {row.destination} in {HORIZON_TEXT}',
+    )
+
+
+def small_text(*, parts: Sequence[str], face: Face, width: float) -> str:
+    """
+    Join the most leading parts that fit, always keeping the first.
+
+    Parameters
+    ----------
+    parts : Sequence[str]
+        The parts, most important first.
+    face : Face
+        The face the line is drawn in.
+    width : float
+        Room for the line.
+
+    Returns
+    -------
+    str
+        The parts joined with a dot.
+    """
+    shown = parts[0]
+    for part in parts[1:]:
+        more = f'{shown}{DOT}{part}'
+        if text_width(text=more, face=face) > width:
+            break
+        shown = more
+    return shown
+
+
+def call_row(
+    canvas: Canvas, *, calls: Sequence[NextCall], index: int, top: int
+) -> None:
+    """
+    Draw one call: its dot, the link to the next call, time and name.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    calls : Sequence[NextCall]
+        All the calls.
+    index : int
+        Which call to draw.
+    top : int
+        Top of the content.
+    """
+    y = top + CALLS_DROP + index * CALL_STEP
+    canvas.ellipse(box=(25, y - 10, 35, y), grey=INK)
+    if index < len(calls) - 1:
+        canvas.rect(box=(29, y, 31, y + 18), grey=INK)
+    call = calls[index]
+    canvas.text(
+        at=(CALL_TIME_X, y), text=call.at, face=CALL_TIME_FACE, grey=INK)
+    canvas.text(
+        at=(CALL_NAME_X, y),
+        text=canvas.fit(
+            text=call.name, face=SMALL_FACE, width=CALL_NAME_WIDTH),
+        face=SMALL_FACE,
+        grey=INK,
+    )
+
+
+def hero_under(
+    canvas: Canvas, *, under: UnderNumber, row: Row, top: int
+) -> None:
+    """
+    Draw the block under the hero's number.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    under : UnderNumber
+        The block under the number.
+    row : Row
+        The hero departure.
+    top : int
+        Top of the content.
+    """
+    status, small = UNDER_DROPS
+    canvas.rect(box=(18, top + 184, 418, top + 186), grey=INK)
+    canvas.text(
+        at=(18, top + status),
+        text=canvas.fit(text=under.status, face=STATUS_FACE, width=400),
+        face=STATUS_FACE,
+        grey=INK,
+    )
+    line = small_text(
+        parts=small_parts(under=under, row=row), face=SMALL_FACE, width=400)
+    canvas.text(
+        at=(18, top + small),
+        text=canvas.fit(text=line, face=SMALL_FACE, width=400),
+        face=SMALL_FACE,
+        grey=INK,
+    )
+    if not under.calls:
+        return
+    canvas.text(
+        at=(18, top + CALLS_HEAD_DROP), text=CALLS_HEAD,
+        face=CALLS_HEAD_FACE, grey=INK)
+    for index in range(len(under.calls)):
+        call_row(canvas, calls=under.calls, index=index, top=top)
+
+
+def hero(
+    canvas: Canvas,
+    *,
+    row: Row,
+    top: int,
+    under: UnderNumber | None = None,
+) -> None:
     """
     Draw the next service large on the left.
 
@@ -251,9 +405,15 @@ def hero(canvas: Canvas, *, row: Row, top: int) -> None:
         Next service.
     top : int
         Top of the panel.
+    under : UnderNumber | None
+        The block to draw under the number, in place of the arrival
+        footer and due line.
     """
     hero_headline(canvas, row=row, top=top)
     hero_countdown(canvas, row=row, top=top)
+    if under is not None:
+        hero_under(canvas, under=under, row=row, top=top)
+        return
     hero_footer(canvas, row=row, top=top)
     hero_due(canvas, row=row, top=top)
 
@@ -416,62 +576,62 @@ class Scale:
         return round(size * LARGE_SCALE) if self.large else size
 
 
-def faster_width(*, k: Scale) -> int:
+def open_width(*, row: Row, k: Scale) -> float:
     """
-    Width of the board's FASTER pill.
+    Say how wide an open row's name may be, from `LIST_LEFT`.
 
     Parameters
     ----------
+    row : Row
+        Departure.
     k : Scale
         The row's scale.
 
     Returns
     -------
-    int
-        ``FASTER_WIDTH`` scaled with the row.
+    float
+        The room up to the cancelled pill, the note, or the right edge.
     """
-    return round(FASTER_WIDTH * k.y(100) / 100)
+    if row.pill is Pill.CANCELLED:
+        return PILL_LEFT - NAME_GAP - LIST_LEFT
+    text = note_text(row=row)
+    if not text:
+        return OPEN_RIGHT - LIST_LEFT
+    room = note_room(face=k.face(weight=700, px=NOTE_PX), text=text)
+    return OPEN_RIGHT - room - LIST_LEFT
 
 
-def faster_left(*, k: Scale) -> int:
+def open_times(canvas: Canvas, *, row: Row, y: int, k: Scale) -> None:
     """
-    Left edge of the board's FASTER pill.
-
-    The pill ends ``FASTER_GAP`` left of the widest live count.
+    Draw an open row's cancelled pill, or its leave time and note.
 
     Parameters
     ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Departure.
+    y : int
+        Row top.
     k : Scale
         The row's scale.
-
-    Returns
-    -------
-    int
-        The pill's left x.
     """
-    count = text_width(text=WIDEST_COUNT, face=k.face(weight=800, px=28))
-    return round(786 - count - FASTER_GAP - faster_width(k=k))
-
-
-def board_right(*, k: Scale) -> int:
-    """
-    Where a board row's headsign must end, 20 px before the FASTER pill.
-
-    Parameters
-    ----------
-    k : Scale
-        The row's scale.
-
-    Returns
-    -------
-    int
-        The headsign's right limit.
-    """
-    return faster_left(k=k) - 20
+    if row.pill is Pill.CANCELLED:
+        cancelled_pill(canvas, row=row, y=y, k=k)
+        return
+    canvas.text(
+        at=(OPEN_RIGHT, y + k.y(30)), text=leaves(row=row),
+        face=k.face(weight=800, px=28), grey=INK, anchor='rs')
+    row_note(canvas, row=row, right=OPEN_RIGHT, y=y, k=k)
 
 
 def list_row(
-    canvas: Canvas, *, row: Row, y: int, large: bool = False
+    canvas: Canvas,
+    *,
+    row: Row,
+    y: int,
+    large: bool = False,
+    arrives: bool = True,
 ) -> None:
     """
     Draw one list row.
@@ -486,6 +646,9 @@ def list_row(
         Row top.
     large : bool
         Whether to draw larger text in a taller row.
+    arrives : bool
+        False draws the open layout: no arrival column, no run-on tag,
+        and the name runs to the time.
     """
     k = Scale(large=large)
     route_pair(
@@ -497,15 +660,23 @@ def list_row(
         px=k.px(14),
         room=LIST_PAIR_ROOM,
     )
-    headline(
-        canvas,
-        row=row,
-        at=(LIST_LEFT, y + k.y(42)),
-        text=row.destination,
-        face=k.face(weight=400, px=13),
-        width=headline_width(row=row, k=k),
-    )
-    list_times(canvas, row=row, y=y, k=k)
+    face = k.face(weight=400, px=13)
+    at = (LIST_LEFT, y + k.y(42))
+    if arrives:
+        headline(
+            canvas, row=row, at=at, text=row.destination, face=face,
+            width=headline_width(row=row, k=k))
+        list_times(canvas, row=row, y=y, k=k)
+    else:
+        canvas.text(
+            at=at,
+            text=canvas.fit(
+                text=row.destination, face=face,
+                width=open_width(row=row, k=k)),
+            face=face,
+            grey=INK,
+        )
+        open_times(canvas, row=row, y=y, k=k)
     canvas.rect(box=(452, y + k.y(49), 786, y + k.y(50)), grey=INK)
 
 
@@ -566,80 +737,6 @@ def list_times(canvas: Canvas, *, row: Row, y: int, k: Scale) -> None:
         )
 
 
-def board_row(
-    canvas: Canvas, *, row: Row, y: int, large: bool = False
-) -> None:
-    """
-    Draw one full-width row of the board with no destination.
-
-    Parameters
-    ----------
-    canvas : Canvas
-        Target.
-    row : Row
-        Departure.
-    y : int
-        Row top.
-    large : bool
-        Whether to draw larger text in a taller row.
-    """
-    k = Scale(large=large)
-    canvas.text(
-        at=(18, y + k.y(33)), text=row.leaves_at,
-        face=k.face(weight=800, px=22), grey=INK)
-    width = route_pair(
-        canvas,
-        x=BOARD_BADGE_X,
-        y=y + k.y(25),
-        route=row.route,
-        onto=row.onto,
-        px=k.px(16),
-    )
-    left = BOARD_BADGE_X + width + 14
-    headline(
-        canvas,
-        row=row,
-        at=(left, y + k.y(31)),
-        text=f'to {row.destination}',
-        face=k.face(weight=400, px=17),
-        width=board_right(k=k) - left,
-    )
-    board_times(canvas, row=row, y=y, k=k)
-    canvas.rect(box=(0, y + k.y(49), WIDTH, y + k.y(50)), grey=INK)
-
-
-def board_times(canvas: Canvas, *, row: Row, y: int, k: Scale) -> None:
-    """
-    Draw a board row's countdown, or its cancelled pill.
-
-    Parameters
-    ----------
-    canvas : Canvas
-        Target.
-    row : Row
-        Departure.
-    y : int
-        Row top.
-    k : Scale
-        The row's scale.
-    """
-    if row.pill is Pill.CANCELLED:
-        cancelled_pill(canvas, row=row, y=y, k=k)
-    else:
-        canvas.text(
-            at=(786, y + k.y(33)), text=countdown_slot(row=row),
-            face=k.face(weight=800, px=28), grey=INK, anchor='rs')
-        row_note(canvas, row=row, right=786, y=y, k=k)
-    if row.pill is Pill.FASTER:
-        left = faster_left(k=k)
-        pill(
-            canvas,
-            box=(left, y + k.y(17), left + faster_width(k=k), y + k.y(32)),
-            text=FASTER,
-            px=k.px(11),
-        )
-
-
 def draw_stop_view(*, view: StopView) -> NDArray[np.uint8]:
     """
     Draw a Stop view as a 1-bit frame.
@@ -661,7 +758,7 @@ def draw_stop_view(*, view: StopView) -> NDArray[np.uint8]:
     if view.empty:
         empty_message(canvas, text=view.empty)
     if view.hero:
-        hero_split(canvas, row=view.hero, top=top)
+        hero_split(canvas, row=view.hero, top=top, under=view.under)
     return finish_view(canvas, view=view, top=top)
 
 
@@ -683,7 +780,9 @@ def empty_message(canvas: Canvas, *, text: str) -> None:
         anchor='mm')
 
 
-def hero_split(canvas: Canvas, *, row: Row, top: int) -> None:
+def hero_split(
+    canvas: Canvas, *, row: Row, top: int, under: UnderNumber | None
+) -> None:
     """
     Draw the hero, the rule beside it and the list's column heads.
 
@@ -695,20 +794,26 @@ def hero_split(canvas: Canvas, *, row: Row, top: int) -> None:
         The hero departure.
     top : int
         Top of the content below the header and any banner.
+    under : UnderNumber | None
+        The block under the hero's number; when given, the list is
+        headed LEAVES alone, at the right edge.
     """
-    hero(canvas, row=row, top=top)
+    hero(canvas, row=row, top=top, under=under)
     canvas.rect(box=(SPLIT, top, SPLIT + 3, HEIGHT), grey=INK)
+    head = Face(weight=700, px=11)
+    if under is not None:
+        canvas.text(
+            at=(OPEN_RIGHT, top + 22), text='LEAVES', face=head,
+            grey=INK, anchor='rs')
+        return
     canvas.text(
-        at=(LIST_LEFT, top + 22), text=LATER,
-        face=Face(weight=700, px=11), grey=INK,
-    )
+        at=(LIST_LEFT, top + 22), text=LATER, face=head, grey=INK)
     canvas.text(
-        at=(LIST_LEAVE_RIGHT, top + 22), text='LEAVES',
-        face=Face(weight=700, px=11),
+        at=(LIST_LEAVE_RIGHT, top + 22), text='LEAVES', face=head,
         grey=INK, anchor='rs')
     canvas.text(
-        at=(786, top + 22), text='ARRIVES',
-        face=Face(weight=700, px=11), grey=INK, anchor='rs')
+        at=(OPEN_RIGHT, top + 22), text='ARRIVES', face=head, grey=INK,
+        anchor='rs')
 
 
 def finish_view(
@@ -732,11 +837,15 @@ def finish_view(
         480 by 800 pixels, 0 or 255.
     """
     height = LARGE_ROW_H if view.large else ROW_H
-    board = view.destination is None
-    first = top if board else top + LIST_TOP
+    first = top + LIST_TOP
     for index, item in enumerate(view.rows[:(HEIGHT - first) // height]):
-        draw = board_row if board else list_row
-        draw(canvas, row=item, y=first + index * height, large=view.large)
+        list_row(
+            canvas,
+            row=item,
+            y=first + index * height,
+            large=view.large,
+            arrives=view.destination is not None,
+        )
     frame = finish(canvas)
     if not view.inverted:
         return frame

@@ -12,6 +12,7 @@ from paperroute_transit.core.alert_model import AlertBanner
 from paperroute_transit.core.city import City, Nouns
 from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.model import CarryOn, Departure
+from paperroute_transit.core.stop_under import UnderNumber
 
 VISIBLE_ROWS: Final[int] = 8
 ROWS_UNDER_BANNER: Final[int] = 7
@@ -226,6 +227,7 @@ def pin_tag(
 
 
 @dataclass(frozen=True)
+# pylint: disable-next=too-many-instance-attributes
 class StopView:
     """
     Everything the Stop view draws.
@@ -249,6 +251,9 @@ class StopView:
         Whether the departure rows use larger text.
     inverted : bool
         Whether the departure list is drawn white on black.
+    under : UnderNumber | None
+        The block under the hero's number, for a view with no
+        Destination.
     """
 
     origin: str
@@ -267,6 +272,7 @@ class StopView:
     inverted: bool = False
     more: int = 0
     planned: bool = False
+    under: UnderNumber | None = None
 
 
 @dataclass(frozen=True)

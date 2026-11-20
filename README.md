@@ -63,8 +63,8 @@ then build the tiles on the Mac:
     uv run python -m paperroute_sydney.build tiles --osm data/raw/nsw.osm.pbf \
       --timetable data/timetable.db --out data/tiles.db
 
-This builds all of NSW. It takes about 17 minutes on an Apple-silicon Mac,
-needs about 1.2 GB of RAM and makes about 490 MB. `--track-osm` defaults to
+This builds all of NSW. It takes about 35 minutes on an Apple-silicon Mac,
+needs about 1.9 GB of RAM and makes about 650 MB. `--track-osm` defaults to
 `--osm`. Add `--bbox` to build a
 smaller area for trying things out. Without `data/tiles.db` the Map shows
 "Map not installed". The app shows "Map not installed" when the tiles file
@@ -76,7 +76,7 @@ file but deploys anyway.
 `before-release` copies `data/tiles.db` to the Pi only when it has changed.
 The first upload takes about 12.5 minutes, and later deploys print "tiles
 unchanged". The Pi needs about twice the tiles file's size free, plus
-64 MB, while deploy installs it (about 1 GB), and deploy says so before
+64 MB, while deploy installs it (about 1.4 GB), and deploy says so before
 copying when it doesn't. On a Pi that is not provisioned yet, deploy prints
 "deploy: tiles not installed: run scripts/provision HOST sydney, then deploy
 again" and carries on; the tiles go in through `paperroute-sydney-install-tiles`
@@ -133,8 +133,8 @@ rail track is read from every `--track-osm` file:
       --timetable data/cambridge/timetable.db --out data/cambridge/tiles.db
     uv run python -m paperroute_cambridge.build check-tiles data/cambridge/tiles.db
 
-The merge makes a 172 MB file in 3.4 s. The tiles take 131 s with a peak of
-about 1,000 MB and make an 18 MB file with 4,131 tiles, 8,400 labels and a
+The merge makes a 172 MB file in 3.4 s. The tiles take 173 s with a peak of
+about 1,000 MB and make a 27 MB file with 4,131 tiles, 8,421 labels and a
 rail track of 108,445 nodes and 577 stations.
 
 Build in this order: the timetable, the tiles, then the timetable again with

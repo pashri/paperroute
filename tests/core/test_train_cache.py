@@ -6,10 +6,14 @@ from datetime import timedelta
 
 import pytest
 
+from paperroute_device.core.kit_events import Tick
+from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_testkit.core.factories import START, place
+from paperroute_testkit.core.kit_steps import step
 from paperroute_transit.core import strip_state
 from paperroute_transit.core.places import shown
 from paperroute_transit.core.reach import Reach
+from paperroute_transit.core.saved import Rate
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.strip_state import shown_reach
 from paperroute_transit.core.train_follow import train_strip
@@ -30,6 +34,8 @@ class Builds:
     ----------
     count : int
         Calls so far.
+    build : Callable[..., Reach]
+        The builder each call runs.
     """
 
     def __init__(self, *, build: Callable[..., Reach]) -> None:
@@ -56,6 +62,7 @@ class Builds:
 
 @pytest.fixture(name='builds')
 def _builds(monkeypatch: pytest.MonkeyPatch) -> Builds:
+    """Count the train Strip builds `shown_reach` makes."""
     counted = Builds(build=train_strip)
     monkeypatch.setattr(strip_state, 'train_strip', counted)
     return counted
@@ -198,6 +205,15 @@ CHANGES: dict[str, Callable[[State], State]] = {
     ),
     'destination': lambda s: with_destination(state=s, destination='G'),
     'reach': new_reach,
+    'stale_after': lambda s: replace(
+        s,
+        settings=replace(
+            s.settings,
+            board=replace(
+                s.settings.board, peak_rate=Rate.SLOW, offpeak_rate=Rate.SLOW,
+            ),
+        ),
+    ),
     'minute': lambda s: replace(s, now=s.now + timedelta(minutes=1)),
 }
 
@@ -230,3 +246,14 @@ def test_two_pins_alternate_correctly(builds: Builds) -> None:
     assert shown_reach(state=near) == one
     assert shown_reach(state=far) == two
     assert builds.count == before + 4
+
+
+def test_events_after_the_first_build_do_not_rebuild(builds: Builds) -> None:
+    """Turns that only scroll and Ticks in one minute build nothing."""
+    state = cold()
+    state, _ = step(state, Tick(now=state.now + timedelta(seconds=1)))
+    built = builds.count
+    state, _ = step(state, KnobTurned(knob=Knob.TOP, steps=1))
+    state, _ = step(state, Tick(now=state.now + timedelta(seconds=10)))
+    state, _ = step(state, Tick(now=state.now + timedelta(seconds=10)))
+    assert builds.count == built

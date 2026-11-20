@@ -32,6 +32,7 @@ from paperroute_transit.core.map_requests import (
     map_feeds,
     map_inputs,
     pin_ends,
+    pruned,
 )
 from paperroute_transit.core.map_state import area_box, area_frame
 from paperroute_transit.core.map_view import DEFAULT_ZOOM, MAP_WIDTH
@@ -591,6 +592,43 @@ def test_the_stop_view_drops_patterns_of_trips_it_no_longer_holds() -> None:
     state = replace(state, map=replace(state.map, patterns=held))
     state, _ = step(state, Tick(now=state.now + timedelta(seconds=1)))
     assert set(state.map.patterns) == {'trip-0803'}
+
+
+def held_state() -> State:
+    """
+    Make a state holding one pattern and the shape it follows.
+
+    Returns
+    -------
+    State
+        State whose Map holds pattern ``keep`` and shape ``s``.
+    """
+    state, _ = on_view(view=LiveView.STOP)
+    shape = make_shape(shape_id='s', points=[(0.0, 0.0), (1.0, 0.0)])
+    return replace(
+        state,
+        map=replace(
+            state.map,
+            patterns={'keep': pattern(trip_id='keep', shape_id='s')},
+            shapes={'s': shape},
+        ),
+    )
+
+
+def test_pruning_nothing_keeps_the_same_mappings() -> None:
+    """With nothing to drop, the pattern and shape mappings are the same."""
+    state = held_state()
+    result = pruned(state=state, wanted=frozenset({'keep'}), departures=())
+    assert result.map.patterns is state.map.patterns
+    assert result.map.shapes is state.map.shapes
+
+
+def test_pruning_drops_what_is_not_wanted() -> None:
+    """A pattern not wanted goes, with the shape only it used."""
+    state = held_state()
+    result = pruned(state=state, wanted=frozenset(), departures=())
+    assert not result.map.patterns
+    assert not result.map.shapes
 
 
 def test_a_destination_stop_view_keeps_its_patterns() -> None:

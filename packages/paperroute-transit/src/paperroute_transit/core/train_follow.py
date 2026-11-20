@@ -148,9 +148,8 @@ class StripStamp:
     """
     Everything a train Strip is laid out from, as the state holds it.
 
-    The first six fields are large objects the state replaces when they
-    change; they are compared by identity. The rest are compared by
-    value.
+    The large objects the state replaces when they change (`IDENTITY`)
+    are compared by identity. The rest (`VALUES`) are compared by value.
 
     Attributes
     ----------

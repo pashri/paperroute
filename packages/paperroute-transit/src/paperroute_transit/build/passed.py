@@ -211,7 +211,7 @@ def waypoints_of(
 
     Parameters
     ----------
-    runs : Iterable[tuple[Sequence[str], int]]
+    runs : Iterable[Run]
         Each run's station ids and weekday trains.
     calls : Iterable[Sequence[str]]
         Each run's stopping stations.

@@ -424,11 +424,14 @@ def pruned(
     State
         State keeping only the wanted patterns, and the shapes of those
         patterns and of the departures. Shape requests are trimmed to
-        match, so a dropped shape can be asked for again.
+        match, so a dropped shape can be asked for again. When nothing is
+        dropped it is the state given, with the same pattern and shape
+        mappings.
     """
+    held = state.map
     patterns = {
         trip_id: pattern
-        for trip_id, pattern in state.map.patterns.items()
+        for trip_id, pattern in held.patterns.items()
         if trip_id in wanted
     }
     kept = {
@@ -436,17 +439,27 @@ def pruned(
         for pattern in patterns.values()
         if pattern is not None and pattern.shape_id
     } | {dep.shape_id for dep in departures if dep.shape_id}
-    map_state = replace(
-        state.map,
-        patterns=patterns,
-        shapes={
-            shape_id: shape
-            for shape_id, shape in state.map.shapes.items()
-            if shape_id in kept
-        },
-        requested_shapes=state.map.requested_shapes & kept,
+    shapes = {
+        shape_id: shape
+        for shape_id, shape in held.shapes.items()
+        if shape_id in kept
+    }
+    requested = held.requested_shapes & kept
+    if (
+        len(patterns) == len(held.patterns)
+        and len(shapes) == len(held.shapes)
+        and requested == held.requested_shapes
+    ):
+        return state
+    return replace(
+        state,
+        map=replace(
+            held,
+            patterns=patterns,
+            shapes=shapes,
+            requested_shapes=requested,
+        ),
     )
-    return replace(state, map=map_state)
 
 
 def awaiting_fetch(

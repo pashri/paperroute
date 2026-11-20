@@ -36,7 +36,8 @@ class MapPlaces:
         The stations that are named: railway stations, minor stops (halts
         and tram stops) and ferry terminals.
     dropped : frozenset[str]
-        OSM place names that are never named, whatever their kind.
+        OSM place names that are never named, whatever their kind; the
+        stored extras are filtered by name too.
     """
 
     kinds: frozenset[str] = PLACE_KINDS

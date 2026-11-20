@@ -17,15 +17,14 @@ from paperroute_transit.core.map_view import (
     MapInputs,
     MapView,
     build_map_view,
-    screen_point,
+    input_point,
     visible,
 )
 from paperroute_transit.core.model import Departure, service_seconds
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.strip_times import from_call
-from paperroute_transit.core.tiles import ZOOMS
 
-RING_REACH: Final[float] = 150.0  # metres
+RING_DISTANCE: Final[float] = 151.0  # metres
 
 
 def map_line_key(*, departure: Departure) -> str:
@@ -113,8 +112,9 @@ def line_shape(
         departure's own; None when neither is loaded.
     """
     pattern = patterns.get(departure.trip_id)
-    if pattern is not None and pattern.shape_id in shapes:
-        return shapes[pattern.shape_id or '']
+    shape_id = None if pattern is None else pattern.shape_id
+    if shape_id is not None and shape_id in shapes:
+        return shapes[shape_id]
     return shapes.get(departure.shape_id or '')
 
 
@@ -267,6 +267,29 @@ def drawn_key(*, inputs: MapInputs, departure: Departure) -> str:
     return departure.trip_id if shape is None else shape.shape_id
 
 
+def unhidden(
+    *, departures: Sequence[Departure], hidden: frozenset[str],
+) -> tuple[Departure, ...]:
+    """
+    Leave out the departures of hidden kinds.
+
+    Parameters
+    ----------
+    departures : Sequence[Departure]
+        The departures.
+    hidden : frozenset[str]
+        The kinds to leave out.
+
+    Returns
+    -------
+    tuple[Departure, ...]
+        The departures of other kinds, in order.
+    """
+    return tuple(
+        found for found in departures if found.facts.kind not in hidden
+    )
+
+
 def drawn_lines(
     *, inputs: MapInputs, choice: LineChoice,
 ) -> tuple[tuple[Departure, ...], tuple[Departure, ...]]:
@@ -287,11 +310,7 @@ def drawn_lines(
         extras of other lines; with one, the first departure of each
         shape and no extras. Hidden kinds are left out.
     """
-    shown = tuple(
-        found
-        for found in inputs.departures
-        if found.facts.kind not in choice.hidden
-    )
+    shown = unhidden(departures=inputs.departures, hidden=choice.hidden)
     if inputs.stop_view.destination is not None:
         first = {
             drawn_key(inputs=inputs, departure=found): found
@@ -304,11 +323,9 @@ def drawn_lines(
         ), ()
     solid = first_per_line(departures=shown)
     keys = {map_line_key(departure=found) for found in solid}
+    others = unhidden(departures=choice.extras, hidden=choice.hidden)
     return solid, tuple(
-        found
-        for found in choice.extras
-        if found.facts.kind not in choice.hidden
-        and map_line_key(departure=found) not in keys
+        found for found in others if map_line_key(departure=found) not in keys
     )
 
 
@@ -334,27 +351,29 @@ def plain_lines(
     """
     solid, dashed = drawn_lines(inputs=inputs, choice=choice)
     lines: list[MapLine] = []
-    for found in (*solid, *dashed):
+    tagged = [(found, True) for found in solid]
+    tagged.extend((found, False) for found in dashed)
+    for found, ridden in tagged:
         shape = line_shape(
             departure=found, patterns=inputs.patterns, shapes=inputs.shapes,
         )
         if shape is None:
             continue
-        span = None if found in dashed else ride_span(
+        span = ride_span(
             departure=found,
             pattern=inputs.patterns.get(found.trip_id),
             shape=shape,
             station=choice.station,
             ends=inputs.ends,
             zone=inputs.zone,
-        )
+        ) if ridden else None
         lines.append(MapLine(shape_id=shape.shape_id, solid=span, shape=shape))
     return tuple(lines)
 
 
 def near_shape(*, shape: Shape, point: Point) -> bool:
     """
-    Tell whether a point lies within ring reach of a shape.
+    Tell whether a point lies within the ring distance of a shape.
 
     Parameters
     ----------
@@ -366,13 +385,13 @@ def near_shape(*, shape: Shape, point: Point) -> bool:
     Returns
     -------
     bool
-        True when the shape's nearest position is at most `RING_REACH`
+        True when the shape's nearest position is at most `RING_DISTANCE`
         metres from the point.
     """
     nearest = point_along(
         shape=shape, distance=nearest_along(shape=shape, point=point),
     )
-    return dist(point, nearest) <= RING_REACH
+    return dist(point, nearest) <= RING_DISTANCE
 
 
 def ringable(
@@ -395,19 +414,13 @@ def ringable(
     Returns
     -------
     bool
-        True when the point is on the map and within ring reach of the
+        True when the point is on the map and within `RING_DISTANCE` of the
         shape.
     """
     return (
         shape is not None
         and visible(
-            at=screen_point(
-                width=inputs.width,
-                projection=inputs.projection,
-                point=point,
-                mpp=ZOOMS[inputs.zoom],
-                centre=centre,
-            ),
+            at=input_point(inputs=inputs, centre=centre, point=point),
             width=inputs.width,
         )
         and near_shape(shape=shape, point=point)
@@ -437,7 +450,10 @@ def ring_points(
     tuple[tuple[Point, ...], tuple[Point, ...]]
         The rings on solid stretches, then those on dashes, each in
         first-seen order. A stop on both is solid only; passed stops and
-        stops off the map are left out.
+        stops off the map are left out. A call is ringed when its point
+        is on the map and at most `RING_DISTANCE` metres from the drawn
+        shape; it is solid when its metres along the shape fall within a
+        solid stretch, and an unmeasured pattern rings dashed.
     """
     centre = inputs.centre
     if centre is None:
@@ -451,11 +467,9 @@ def ring_points(
         drawn = line_shape(
             departure=found, patterns=inputs.patterns, shapes=inputs.shapes,
         )
-        matching = [
-            line
-            for line in lines
-            if drawn is not None and line.shape_id == drawn.shape_id
-        ]
+        if drawn is None:
+            continue
+        matching = [line for line in lines if line.shape_id == drawn.shape_id]
         if not matching:
             continue
         spans = [line.solid for line in matching if line.solid is not None]
@@ -499,10 +513,9 @@ def plain_map_view(
     solid, dashed = ring_points(
         inputs=inputs,
         lines=lines,
-        departures=tuple(
-            found
-            for found in (*inputs.departures, *choice.extras)
-            if found.facts.kind not in choice.hidden
+        departures=unhidden(
+            departures=(*inputs.departures, *choice.extras),
+            hidden=choice.hidden,
         ),
     )
     return replace(

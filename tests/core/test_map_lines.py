@@ -15,6 +15,7 @@ from paperroute_testkit.core.factories import (
 from paperroute_transit.core.geo import ALONG, Point, Shape, make_shape
 from paperroute_transit.core.map_line import MapLine
 from paperroute_transit.core.map_lines import (
+    RING_DISTANCE,
     LineChoice,
     first_per_line,
     map_line_key,
@@ -513,3 +514,30 @@ def test_a_repeat_build_at_a_busy_stop_measures_nothing_again() -> None:
     first = build()
     assert first == 300
     assert build() == first
+
+
+def test_rings_past_the_destination_are_dashed() -> None:
+    """Calls after the Destination ring dashed, never solid."""
+    solid, dashed = rings_of(ride=east_pattern(trip_id=RIDE.trip_id))
+    assert (4000.0, 0.0) in dashed
+    assert all(point[0] <= TO_POINT[0] for point in solid)
+
+
+def test_a_call_is_ringed_up_to_the_ring_distance() -> None:
+    """A call just inside RING_DISTANCE is ringed; just outside is not."""
+    assert RING_DISTANCE == 151.0
+    inside = (3000.0, RING_DISTANCE - 0.1)
+    outside = (3000.0, RING_DISTANCE + 0.1)
+    assert inside in ringed_with(index=3, point=inside)[0]
+    assert outside not in sum(ringed_with(index=3, point=outside), ())
+
+
+def test_a_line_over_moved_geometry_is_not_equal() -> None:
+    """The same id over a longer shape compares unequal."""
+    longer = make_shape(
+        shape_id='east', points=((0.0, 0.0), (6000.0, 0.0)),
+    )
+    moved = MapLine(shape_id='east', solid=RIDE_LINE.solid, shape=longer)
+    assert moved != RIDE_LINE
+    same = MapLine(shape_id='east', solid=RIDE_LINE.solid, shape=EAST)
+    assert same == RIDE_LINE

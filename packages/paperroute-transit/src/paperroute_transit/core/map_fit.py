@@ -17,6 +17,7 @@ from paperroute_transit.core.modes import ModeSpec, line_modes
 from paperroute_transit.core.partings import partings
 from paperroute_transit.core.ridden import stretch_stops
 from paperroute_transit.core.saved import MapFraming
+from paperroute_transit.core.stop_view import SIDEBAR_ROWS
 from paperroute_transit.core.tiles import ZOOMS
 
 CREDIT_ROOM: Final[int] = 28  # pixels kept clear above the map's bottom
@@ -543,13 +544,15 @@ def parted_beyond(
     Returns
     -------
     bool
-        True when a parting among the first five departures' solid lines
-        is off the frame's map and on it one zoom wider, same centre.
+        True when a parting among the first `SIDEBAR_ROWS` departures'
+        solid lines is off the frame's map and on it one zoom wider,
+        same centre.
     """
     if frame.centre is None:
         return False
+    sidebar = inputs.departures[:SIDEBAR_ROWS]
     lines = plain_lines(
-        inputs=replace(inputs, departures=inputs.departures[:5]),
+        inputs=replace(inputs, departures=sidebar),
         choice=replace(choice, extras=()),
     )
     found = partings(lines=lines)

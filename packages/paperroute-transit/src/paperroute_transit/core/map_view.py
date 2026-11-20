@@ -289,6 +289,35 @@ def screen_point(
     return x - left, y - top
 
 
+def input_point(
+    *, inputs: MapInputs, centre: Point, point: Point,
+) -> tuple[float, float]:
+    """
+    Convert metres to map pixels at the inputs' zoom and projection.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs.
+    centre : Point
+        The map centre in metres.
+    point : Point
+        The point in metres.
+
+    Returns
+    -------
+    tuple[float, float]
+        Pixels from the map's left and top edges.
+    """
+    return screen_point(
+        centre=centre,
+        mpp=ZOOMS[inputs.zoom],
+        point=point,
+        projection=inputs.projection,
+        width=inputs.width,
+    )
+
+
 def visible(*, at: tuple[float, float], width: int = MAP_WIDTH) -> bool:
     """
     Check whether a map pixel is on the map, with a small margin.
@@ -613,13 +642,7 @@ def live_marker(
     Marker
         A live marker with the vehicle's bearing.
     """
-    x, y = screen_point(
-        centre=centre,
-        mpp=ZOOMS[inputs.zoom],
-        point=vehicle.point,
-        projection=inputs.projection,
-        width=inputs.width,
-    )
+    x, y = input_point(inputs=inputs, centre=centre, point=vehicle.point)
     return Marker(
         route=vehicle.label,
         x=x,
@@ -670,13 +693,7 @@ def timetable_marker(
     )
     if point is None:
         return None
-    x, y = screen_point(
-        centre=centre,
-        mpp=ZOOMS[inputs.zoom],
-        point=point,
-        projection=inputs.projection,
-        width=inputs.width,
-    )
+    x, y = input_point(inputs=inputs, centre=centre, point=point)
     return Marker(
         route=pattern.route,
         x=x,
@@ -845,13 +862,7 @@ def markers_for(*, inputs: MapInputs, centre: Point) -> tuple[Marker, ...]:
         covered=frozenset(trip for trip, _ in drawn),
         pinned=pinned,
     )
-    middle = screen_point(
-        centre=centre,
-        mpp=ZOOMS[inputs.zoom],
-        point=centre,
-        projection=inputs.projection,
-        width=inputs.width,
-    )
+    middle = input_point(inputs=inputs, centre=centre, point=centre)
     shown = [
         marker
         for marker in (*(marker for _, marker in drawn), *pins)

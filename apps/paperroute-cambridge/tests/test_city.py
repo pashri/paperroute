@@ -175,3 +175,8 @@ def test_map_places_drop_localities_and_add_the_named_places() -> None:
         ('Darwin Green', 52.2251, 0.1006),
         ('Franklin Gardens', 52.2293, 0.1082),
     )
+
+
+def test_cambridge_fetches_no_extra_stop_view_positions() -> None:
+    """No Cambridge mode fetches its hero's positions on the Stop view."""
+    assert not any(spec.stop_positions for spec in CAMBRIDGE.modes)

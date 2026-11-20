@@ -24,7 +24,7 @@ from paperroute_testkit.core.strip_factories import (
     trains,
     turn,
 )
-from paperroute_transit.core.cycle import cycle_effects
+from paperroute_transit.core.cycle import cycle_effects, needed_feeds
 from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.geo import Point, make_shape
 from paperroute_transit.core.map_fit import BANNER_ROOM, CREDIT_ROOM, FrameKey
@@ -209,7 +209,10 @@ def test_positions_follow_rate() -> None:
     cycle = Cycle(started=noon, asked=frozenset(map_feeds(state=state)))
     for later, due in ((60, False), (119, False), (120, True)):
         now = noon + timedelta(seconds=later)
-        _, effects = cycle_effects(state=replace(state, now=now, cycle=cycle))
+        _, effects = cycle_effects(
+            state=replace(state, now=now, cycle=cycle),
+            stop_view=live_stop_view(state=state),
+        )
         positions = [
             effect
             for effect in effects
@@ -607,3 +610,147 @@ def test_a_destination_stop_view_keeps_its_patterns() -> None:
     assert set(state.map.patterns) == {'gone'}
     assert set(state.map.shapes) == {'s'}
     assert not [e for e in effects if isinstance(e, LoadPatterns)]
+
+
+BUSES: Final[str] = 'v1/gtfs/realtime/buses'
+BUS_POSITIONS: Final[str] = 'v1/gtfs/vehiclepos/buses'
+PARRAMATTA_LINE: Final[str] = 'v1/gtfs/vehiclepos/lightrail/parramatta'
+
+
+def hero_of(*, mode: str, source: str) -> tuple[Departure, ...]:
+    """
+    Make three departures of one mode and feed source.
+
+    Parameters
+    ----------
+    mode : str
+        Mode id.
+    source : str
+        Feed source.
+
+    Returns
+    -------
+    tuple[Departure, ...]
+        The departures, 3, 6 and 9 minutes after START.
+    """
+    return tuple(
+        departure(
+            departs=START + timedelta(minutes=minutes),
+            mode=source,
+            kind=mode,
+        )
+        for minutes in (3, 6, 9)
+    )
+
+
+def position_fetches(*, effects: Iterable[Effect]) -> set[str]:
+    """
+    Pick the positions feeds fetched.
+
+    Parameters
+    ----------
+    effects : Iterable[Effect]
+        Effects.
+
+    Returns
+    -------
+    set[str]
+        Feed paths.
+    """
+    return {
+        effect.feed
+        for effect in effects
+        if isinstance(effect, FetchFeed) and effect.kind is FeedKind.POSITIONS
+    }
+
+
+def stop_positions_after_a_tick(
+    *, pin: Pin, departures: tuple[Departure, ...],
+) -> tuple[State, set[str]]:
+    """
+    Open the Stop view and give the positions feeds fetched by a Tick.
+
+    Parameters
+    ----------
+    pin : Pin
+        The only pin.
+    departures : tuple[Departure, ...]
+        Departures loaded.
+
+    Returns
+    -------
+    tuple[State, set[str]]
+        The state after the Tick, and the positions feeds fetched
+        through it.
+    """
+    state, first = on_view(view=LiveView.STOP, pin=pin, departures=departures)
+    state, later = step(state, Tick(now=START + timedelta(seconds=30)))
+    return state, position_fetches(effects=(*first, *later))
+
+
+def test_the_stop_view_polls_its_heros_positions() -> None:
+    """With no Destination, a bus hero's positions join the poll."""
+    state, fetched = stop_positions_after_a_tick(
+        pin=OPEN, departures=hero_of(mode='bus', source='bus'),
+    )
+    assert fetched == {BUS_POSITIONS}
+    stop_view = live_stop_view(state=state)
+    assert needed_feeds(state=state, stop_view=stop_view) == (
+        BUSES, BUS_POSITIONS,
+    )
+
+
+def test_an_unflagged_mode_polls_no_positions_on_the_stop_view() -> None:
+    """A hero whose mode does not fetch positions adds no positions feed."""
+    state, _ = on_view(
+        view=LiveView.STOP,
+        pin=OPEN,
+        departures=hero_of(mode='bus', source='bus'),
+    )
+    modes = tuple(
+        replace(spec, stop_positions=False) for spec in state.city.modes
+    )
+    state = replace(state, city=replace(state.city, modes=modes))
+    state, effects = step(state, Tick(now=START + timedelta(seconds=30)))
+    assert not position_fetches(effects=effects)
+    stop_view = live_stop_view(state=state)
+    assert needed_feeds(state=state, stop_view=stop_view) == (BUSES,)
+
+
+def test_a_coach_hero_polls_its_sources_positions() -> None:
+    """A coach asks for its source's positions feed, if the source has one."""
+    pin = replace(OPEN, kind=SydneyMode.COACH)
+    _, regional = stop_positions_after_a_tick(
+        pin=pin, departures=hero_of(mode='coach', source='regional'),
+    )
+    _, own = stop_positions_after_a_tick(
+        pin=pin, departures=hero_of(mode='coach', source='coach'),
+    )
+    assert regional == {'v1/gtfs/vehiclepos/nswtrains'}
+    assert not own
+
+
+def test_a_light_rail_hero_polls_only_its_own_lines_positions() -> None:
+    """Light rail at a From inside one line's area asks for that line."""
+    pin = Pin(
+        origin=place('light', name='Westmead', point=CENTRE),
+        kind=SydneyMode.LIGHT_RAIL,
+    )
+    _, fetched = stop_positions_after_a_tick(
+        pin=pin, departures=hero_of(mode='light_rail', source='light_rail'),
+    )
+    assert fetched == {PARRAMATTA_LINE}
+
+
+def test_stop_view_positions_count_as_calls() -> None:
+    """Each positions fetch of the Stop view counts against the quota."""
+    state, _ = on_view(
+        view=LiveView.STOP,
+        pin=OPEN,
+        departures=hero_of(mode='bus', source='bus'),
+    )
+    before = state.quota.calls
+    state, effects = step(state, Tick(now=START + timedelta(seconds=30)))
+    sent = [effect for effect in effects if isinstance(effect, FetchFeed)]
+    assert position_fetches(effects=sent) == {BUS_POSITIONS}
+    assert state.quota.calls - before == len(sent)

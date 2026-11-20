@@ -13,7 +13,11 @@ from paperroute_transit.core.chooser_steps import (
     trip_feeds,
 )
 from paperroute_transit.core.feed_plan import FeedKind
-from paperroute_transit.core.map_requests import map_feeds, shows_vehicles
+from paperroute_transit.core.map_requests import (
+    map_feeds,
+    shows_vehicles,
+    stop_feeds,
+)
 from paperroute_transit.core.map_view import pin_trips
 from paperroute_transit.core.messages import Effect, Estimating, FetchFeed
 from paperroute_transit.core.rhythm import poll_every, stale_after
@@ -23,6 +27,7 @@ from paperroute_transit.core.state_model import (
     clock_waiting,
     elapsed,
 )
+from paperroute_transit.core.stop_view import StopView
 
 CYCLE_WAIT: Final[timedelta] = timedelta(seconds=8)
 
@@ -130,7 +135,9 @@ def alerts_due(*, cycle: Cycle, now: datetime) -> bool:
     return stale(last=cycle.alerts_at, now=now, every=ALERT_EVERY)
 
 
-def vehicle_feeds(*, state: State) -> tuple[str, ...]:
+def vehicle_feeds(
+    *, state: State, stop_view: StopView
+) -> tuple[str, ...]:
     """
     List the positions feeds the screen polls.
 
@@ -138,16 +145,20 @@ def vehicle_feeds(*, state: State) -> tuple[str, ...]:
     ----------
     state : State
         State.
+    stop_view : StopView
+        The state's Stop view.
 
     Returns
     -------
     tuple[str, ...]
-        The map's positions feeds on a screen that draws vehicles; none
-        on the Stop and Alerts views or while asleep.
+        None while asleep; the map's positions feeds on a screen that
+        draws vehicles; otherwise `stop_feeds`.
     """
-    if state.panel.asleep or not shows_vehicles(state=state):
+    if state.panel.asleep:
         return ()
-    return map_feeds(state=state)
+    if shows_vehicles(state=state):
+        return map_feeds(state=state)
+    return stop_feeds(state=state, stop_view=stop_view)
 
 
 def estimate_trips(*, state: State) -> frozenset[str]:
@@ -222,6 +233,7 @@ def estimating(*, state: State) -> dict[str, Estimating]:
 def positions_due(
     *,
     state: State,
+    stop_view: StopView,
     asked: frozenset[str],
     asks: Mapping[str, Estimating],
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -232,6 +244,8 @@ def positions_due(
     ----------
     state : State
         State.
+    stop_view : StopView
+        The state's Stop view.
     asked : frozenset[str]
         Feeds already asked for this cycle.
     asks : Mapping[str, Estimating]
@@ -244,7 +258,9 @@ def positions_due(
         each derived feed not yet asked, each once; and those derived
         feeds.
     """
-    positions = unasked(feeds=vehicle_feeds(state=state), asked=asked)
+    positions = unasked(
+        feeds=vehicle_feeds(state=state, stop_view=stop_view), asked=asked,
+    )
     derived = tuple(
         ask.feed for ask in asks.values() if ask.feed not in asked
     )
@@ -254,7 +270,9 @@ def positions_due(
     return tuple(dict.fromkeys((*positions, *sources))), derived
 
 
-def needed_feeds(*, state: State) -> tuple[str, ...]:
+def needed_feeds(
+    *, state: State, stop_view: StopView
+) -> tuple[str, ...]:
     """
     List every trip-updates and positions feed the screen polls.
 
@@ -262,6 +280,8 @@ def needed_feeds(*, state: State) -> tuple[str, ...]:
     ----------
     state : State
         State.
+    stop_view : StopView
+        The state's Stop view.
 
     Returns
     -------
@@ -274,7 +294,7 @@ def needed_feeds(*, state: State) -> tuple[str, ...]:
         dict.fromkeys(
             (
                 *fetched_trip_feeds(state=state),
-                *vehicle_feeds(state=state),
+                *vehicle_feeds(state=state, stop_view=stop_view),
                 *estimating(state=state),
             ),
         ),
@@ -440,7 +460,9 @@ def unasked(
     return tuple(feed for feed in feeds if feed not in asked)
 
 
-def cycle_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
+def cycle_effects(
+    *, state: State, stop_view: StopView
+) -> tuple[State, tuple[Effect, ...]]:
     """
     Fetch the feeds due: all together on a boundary, new ones at once.
 
@@ -451,6 +473,8 @@ def cycle_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     ----------
     state : State
         State.
+    stop_view : StopView
+        The state's Stop view.
 
     Returns
     -------
@@ -467,7 +491,9 @@ def cycle_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     full = due and alerts_due(cycle=cycle, now=now)
     asks = estimating(state=state)
     trips = unasked(feeds=fetched_trip_feeds(state=state), asked=asked)
-    positions, derived = positions_due(state=state, asked=asked, asks=asks)
+    positions, derived = positions_due(
+        state=state, stop_view=stop_view, asked=asked, asks=asks,
+    )
     alerts = alerts_sent(state=state, full=full)
     if not (trips or positions or alerts):
         return state, ()

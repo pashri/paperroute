@@ -57,6 +57,9 @@ class ModeSpec:
         line.
     platform_notes : bool
         True when later rows note their platform.
+    stop_positions : bool
+        True when the Stop view fetches its hero's positions for a pin
+        with no Destination.
     """
 
     id: str
@@ -76,6 +79,7 @@ class ModeSpec:
     named_lines: bool = False
     destination_first: bool = False
     platform_notes: bool = False
+    stop_positions: bool = False
 
 
 @dataclass(frozen=True)

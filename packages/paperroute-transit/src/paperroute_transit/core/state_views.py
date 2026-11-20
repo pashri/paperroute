@@ -597,7 +597,7 @@ def settled(
         state=clamped(state=state, banner=banner),
     )
     state, requests, ask = map_effects(state=state, stop_view=stop_view)
-    state, fetches = cycle_effects(state=state)
+    state, fetches = cycle_effects(state=state, stop_view=stop_view)
     state, loads = pattern_effects(state=state, ask=ask)
     state = scrolled(state=state, stop_view=stop_view, draw=draw)
     if not draw:

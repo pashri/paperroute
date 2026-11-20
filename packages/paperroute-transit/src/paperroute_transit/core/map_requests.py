@@ -10,7 +10,7 @@ from paperroute_transit.core.connection_map import (
     connection_inputs,
     panes_inputs,
 )
-from paperroute_transit.core.geo import Point
+from paperroute_transit.core.geo import MetreBox, Point
 from paperroute_transit.core.map_fit import (
     FrameKey,
     frame_key,
@@ -49,6 +49,7 @@ from paperroute_transit.core.strip_state import (
 )
 from paperroute_transit.core.tiles import ZOOMS
 
+STOP_BOX: Final[float] = 1.0  # metres across, round the From
 MAP_VIEWS: Final[frozenset[LiveView]] = frozenset(
     {LiveView.MAP, LiveView.STRIP_MAP}
 )
@@ -835,6 +836,49 @@ def stop_effects(
     )
     ask = PatternAsk(wanted=wanted, drawn=stop_view.head_departures[:1])
     return state, (), ask
+
+
+def stop_feeds(
+    *, state: State, stop_view: StopView
+) -> tuple[str, ...]:
+    """
+    List the positions feed the Stop view polls for its hero.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    stop_view : StopView
+        The state's Stop view.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The positions feeds of the hero's feed source, a light rail
+        source's only the line near the From (every line when the From has
+        no point); none unless the view is Stop with the chooser closed,
+        the pin has no Destination and the hero's mode fetches
+        positions.
+    """
+    hero = hero_departure(view=stop_view)
+    pin = shown(state=state)
+    point = pin.origin.point
+    if (
+        state.view is not LiveView.STOP
+        or state.chooser is not None
+        or pin.destination is not None
+        or hero is None
+    ):
+        return ()
+    spec = state.city.mode(mode_id=hero.facts.kind)
+    if spec is None or not spec.stop_positions:
+        return ()
+    box: MetreBox | None = None
+    if point is not None:
+        x, y = point
+        half = STOP_BOX / 2
+        box = (x - half, y - half, x + half, y + half)
+    return state.city.feeds.position_feeds(sources=(hero.source,), box=box)
 
 
 def map_effects(

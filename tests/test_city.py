@@ -299,3 +299,9 @@ def test_one_noun_override() -> None:
             vehicle='train', bay='platform', connection='train',
         ),
     }
+
+
+def test_sydney_fetches_stop_view_positions_for_every_mode() -> None:
+    """Every Sydney mode fetches its hero's positions on the Stop view."""
+    assert all(spec.stop_positions for spec in SYDNEY_MODES)
+    assert {spec.id for spec in SYDNEY_MODES} == MODE_IDS

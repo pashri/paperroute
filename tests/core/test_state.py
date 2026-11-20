@@ -801,7 +801,7 @@ def test_map_polls_positions_with_trip_updates() -> None:
 
 
 def test_stop_view_never_polls_positions() -> None:
-    """The Stop view fetches trip updates only."""
+    """With a Destination, the Stop view fetches trip updates only."""
     state = loaded(state=fresh(centre=CENTRE))
     for seconds in (30, 60, 90):
         now = START + timedelta(seconds=seconds)
@@ -810,7 +810,9 @@ def test_stop_view_never_polls_positions() -> None:
         assert [
             each for each in fetched if each.kind != FeedKind.ALERTS
         ] == [FetchFeed(feed=BUSES)]
-    assert needed_feeds(state=state) == (BUSES,)
+    assert needed_feeds(
+        state=state, stop_view=live_stop_view(state=state),
+    ) == (BUSES,)
 
 
 def test_map_polls_positions_for_a_ferry_pin() -> None:
@@ -837,7 +839,9 @@ def test_empty_area_modes_fall_back_to_every_mode() -> None:
     box = area_box(centre=CENTRE, mpp=8)
     empty = ModesLoaded(mpp=8, box=box, modes=frozenset())
     state, _ = step(state, empty)
-    assert needed_feeds(state=state) == (
+    assert needed_feeds(
+        state=state, stop_view=live_stop_view(state=state),
+    ) == (
         BUSES,
         *SYDNEY.feeds.position_feeds(
             sources=ALL_SOURCES, box=box,
@@ -845,7 +849,9 @@ def test_empty_area_modes_fall_back_to_every_mode() -> None:
     )
     ferry = ModesLoaded(mpp=8, box=box, modes=frozenset({SydneyFeed.FERRY}))
     state, _ = step(state, ferry)
-    assert needed_feeds(state=state) == (BUSES, FERRY_POSITIONS)
+    assert needed_feeds(
+        state=state, stop_view=live_stop_view(state=state),
+    ) == (BUSES, FERRY_POSITIONS)
 
 
 def test_modes_requested_once_per_zoom() -> None:
@@ -1873,7 +1879,12 @@ def check_map_requests(
             if not isinstance(request, (LoadShapes, LoadPatterns))
         ]
     if not shows_vehicles(state=after):
-        assert not requests
+        on_stop = after.view is LiveView.STOP and after.chooser is None
+        assert not [
+            request
+            for request in requests
+            if not (on_stop and isinstance(request, (FetchFeed, LoadPatterns)))
+        ]
     if after.view is LiveView.STRIP or after.chooser is not None:
         assert all(
             isinstance(request, (LoadPatterns, FetchFeed))
@@ -1983,7 +1994,9 @@ def check_fetch(
     needed = (
         alert_feeds(state=after)
         if effect.kind is FeedKind.ALERTS
-        else needed_feeds(state=after)
+        else needed_feeds(
+            state=after, stop_view=live_stop_view(state=after),
+        )
     )
     assert effect.feed in needed
     assert effect.feed in after.cycle.asked

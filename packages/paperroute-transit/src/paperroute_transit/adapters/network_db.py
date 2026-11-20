@@ -90,7 +90,10 @@ ORDER BY s.run_id, s.pos
 """
 PLACES: Final[str] = """
 SELECT stop_id, name, lon, lat FROM stops
-WHERE stop_id IN (SELECT value FROM json_each(?))
+WHERE stop_id IN (SELECT value FROM json_each(:ids))
+UNION ALL
+SELECT station_id, name, lon, lat FROM track_places
+WHERE station_id IN (SELECT value FROM json_each(:ids))
 """
 CHILDREN: Final[str] = """
 SELECT stop_id, COALESCE(NULLIF(parent_station, ''), stop_id) FROM stops
@@ -771,7 +774,10 @@ class SqliteNetworkRepository:
         dict[str, StopPlace]
             Places by ID; unknown IDs are absent.
         """
-        rows = self.fetch(sql=PLACES, params=(json.dumps(list(stations)),))
+        rows = self.fetch(
+            sql=PLACES,
+            params={'ids': json.dumps(list(stations))},
+        )
         return {
             str(stop_id): StopPlace(
                 stop_id=str(stop_id), name=str(name),

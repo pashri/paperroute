@@ -58,6 +58,7 @@ def build_attempt(
         window=Window(start=attempt.start, days=attempt.days),
         out=record.out,
         city_ref=city_ref,
+        tiles=Path(record.tiles) if record.tiles else None,
         handoff=Handoff(path=path, tail=replace(
             tail,
             fetched=attempt.fetched,

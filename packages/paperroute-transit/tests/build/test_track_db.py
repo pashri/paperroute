@@ -16,7 +16,10 @@ TRACK = RailTrack(
     xs=array('d', [0.0, 10.5, 20.0]),
     ys=array('d', [0.0, 1.5, -3.0]),
     edges=array('q', [0, 1, 1, 2]),
-    stations=(TrackStation(7, 'Halt One', -33.5, 151.25, 10.5, 1.5),),
+    stations=(
+        TrackStation(7, 'Halt One', -33.5, 151.25, 10.5, 1.5),
+        TrackStation(3, 'Halt Two', -33.75, 151.5, 20.0, -3.0),
+    ),
 )
 
 

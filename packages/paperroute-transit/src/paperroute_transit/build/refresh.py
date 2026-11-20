@@ -566,6 +566,7 @@ def build_and_check(
         city_ref=city_ref,
         out=out,
         handoff=handoff,
+        tiles=layout.tiles,
     )
     check_timetable(path=out, optional=attempt.fetched.optional)
     return out

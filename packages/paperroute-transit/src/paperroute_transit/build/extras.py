@@ -11,9 +11,12 @@ from pathlib import Path
 
 from paperroute_device.rss import peak_rss_mb
 from paperroute_transit.build.catalogue import CATALOGUE_SCHEMA, load_catalogue
+from paperroute_transit.build.passed import write_passed
 from paperroute_transit.build.runs import RUN_SCHEMA, load_runs
 from paperroute_transit.build.swap import land
+from paperroute_transit.build.track_db import read_track_db
 from paperroute_transit.core.city import City
+from paperroute_transit.core.modes import end_point_modes
 
 
 def timed(*, phase: str, step: Callable[[], object]) -> None:
@@ -63,7 +66,32 @@ def city_named(*, ref: str) -> City:
     return city
 
 
-def run_extras(*, path: Path, city: City) -> None:
+def run_passed(
+    *, conn: sqlite3.Connection, city: City, tiles: Path | None,
+) -> None:
+    """
+    Write the passed-station tables from the track in a tiles file.
+
+    The track is read inside this function and dropped when it returns.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable with the run tables.
+    city : City
+        The city the timetable is for.
+    tiles : Path | None
+        Tiles file; None builds with no track.
+    """
+    write_passed(
+        conn=conn,
+        track=None if tiles is None else read_track_db(path=tiles),
+        kinds=end_point_modes(modes=city.modes),
+        projection=city.projection,
+    )
+
+
+def run_extras(*, path: Path, city: City, tiles: Path | None) -> None:
     """
     Add the run and chooser tables to a timetable and print the peak memory.
 
@@ -73,6 +101,8 @@ def run_extras(*, path: Path, city: City) -> None:
         Timetable file.
     city : City
         The city the timetable is for.
+    tiles : Path | None
+        Tiles file holding the rail track; None for no track.
     """
     with closing(sqlite3.connect(path)) as conn:
         conn.execute('PRAGMA cache_size = -2000')
@@ -85,6 +115,10 @@ def run_extras(*, path: Path, city: City) -> None:
                 classify=city.classify,
                 rail_types=city.catalogue.rail_types,
             ),
+        )
+        timed(
+            phase='passed',
+            step=lambda: run_passed(conn=conn, city=city, tiles=tiles),
         )
         timed(
             phase='catalogue',
@@ -102,7 +136,9 @@ def run_extras(*, path: Path, city: City) -> None:
     print(f'progress extras peak {peak_rss_mb():.0f}MB', flush=True)
 
 
-def build_extras(*, path: Path, city_ref: str) -> None:
+def build_extras(
+    *, path: Path, city_ref: str, tiles: Path | None = None,
+) -> None:
     """
     Run run_extras in a fresh interpreter that loads only what it needs.
 
@@ -112,6 +148,8 @@ def build_extras(*, path: Path, city_ref: str) -> None:
         Timetable file.
     city_ref : str
         The city's reference, see `city_named`.
+    tiles : Path | None
+        Tiles file holding the rail track; None for no track.
 
     Raises
     ------
@@ -121,7 +159,7 @@ def build_extras(*, path: Path, city_ref: str) -> None:
     done = subprocess.run(
         [
             sys.executable, '-m', 'paperroute_transit.build.extras', city_ref,
-            str(path),
+            str(path), '' if tiles is None else str(tiles),
         ],
         check=False,
     )
@@ -133,13 +171,13 @@ def build_extras(*, path: Path, city_ref: str) -> None:
 
 def main(*, argv: Sequence[str]) -> int:
     """
-    Run as a child (scratch only) or after a hand over (scratch, handoff).
+    Run as a child (no handoff) or after a hand over (with a handoff).
 
     Parameters
     ----------
     argv : Sequence[str]
-        The city's reference (see `city_named`), the scratch file, then
-        the handoff file if any.
+        The city's reference (see `city_named`), the scratch file, the
+        tiles file (empty for none), then the handoff file if any.
 
     Returns
     -------
@@ -148,12 +186,13 @@ def main(*, argv: Sequence[str]) -> int:
     """
     city = city_named(ref=argv[0])
     scratch = Path(argv[1])
-    if len(argv) == 2:
-        run_extras(path=scratch, city=city)
+    tiles = Path(argv[2]) if argv[2] else None
+    if len(argv) == 3:
+        run_extras(path=scratch, city=city, tiles=tiles)
         return 0
     return land(
-        scratch=scratch, path=Path(argv[2]),
-        build=lambda path: run_extras(path=path, city=city),
+        scratch=scratch, path=Path(argv[3]),
+        build=lambda path: run_extras(path=path, city=city, tiles=tiles),
         city_ref=argv[0],
     )
 

@@ -19,7 +19,7 @@ BLACKTOWN: Final[str] = '214810'
 
 def has_runs(*, path: Path) -> bool:
     """
-    Say whether a timetable file exists and holds the run tables.
+    Say whether a timetable file exists with the run and track tables.
 
     Parameters
     ----------
@@ -29,15 +29,16 @@ def has_runs(*, path: Path) -> bool:
     Returns
     -------
     bool
-        True when the runs table is there.
+        True when the runs and track_places tables are there.
     """
     if not path.exists():
         return False
     with closing(sqlite3.connect(f'file:{path}?mode=ro', uri=True)) as conn:
         found = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE name = 'runs'",
+            "SELECT name FROM sqlite_master"
+            " WHERE name IN ('runs', 'track_places')",
         ).fetchall()
-    return bool(found)
+    return len(found) == 2
 
 
 def train_reach(*, station: str) -> tuple[Reach, set[str]]:

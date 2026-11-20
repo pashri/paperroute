@@ -48,7 +48,10 @@ def test_retry_hands_the_next_attempt_over(
     network_feed(path=data_dir / 'sources' / 'metro.zip')
     first = attempt_in(data_dir=data_dir)
     second = replace(first, sources=())
-    record = refresh_record(data_dir=data_dir, lock_fd=lock_fd)
+    record = replace(
+        refresh_record(data_dir=data_dir, lock_fd=lock_fd),
+        tiles=str(data_dir / 'tiles.db'),
+    )
     assert record.tail is not None
     tail = replace(record.tail, fallbacks=(first, second))
     path = data_dir / 'work' / 'handoff.json'
@@ -74,6 +77,7 @@ def test_retry_hands_the_next_attempt_over(
         del exe
         seen['argv'] = argv[1:4]
         seen['tail'] = read_handoff(path=Path(argv[-1])).tail
+        seen['tiles'] = argv[-2]
         raise Execed
 
     monkeypatch.setattr(os, 'execv', execv)
@@ -82,6 +86,7 @@ def test_retry_hands_the_next_attempt_over(
     assert seen['argv'] == [
         '-m', 'paperroute_transit.build.extras', SYDNEY_REF,
     ]
+    assert seen['tiles'] == str(data_dir / 'tiles.db')
     assert seen['tail'] == replace(
         tail, fetched=first.fetched, fallbacks=(second,),
     )

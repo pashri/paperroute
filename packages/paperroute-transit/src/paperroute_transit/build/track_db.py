@@ -12,7 +12,7 @@ TRACK_SCHEMA: Final[str] = """
 CREATE TABLE track_nodes (node INTEGER PRIMARY KEY, x REAL NOT NULL,
   y REAL NOT NULL);
 CREATE TABLE track_edges (a INTEGER NOT NULL, b INTEGER NOT NULL);
-CREATE TABLE track_stations (osm_id INTEGER PRIMARY KEY,
+CREATE TABLE track_stations (osm_id INTEGER NOT NULL,
   name TEXT NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL,
   x REAL NOT NULL, y REAL NOT NULL);
 """
@@ -129,7 +129,7 @@ def read_track_db(*, path: Path) -> RailTrack | None:
             ).fetchall()
             stations = conn.execute(
                 'SELECT osm_id, name, lat, lon, x, y FROM track_stations'
-                ' ORDER BY osm_id',
+                ' ORDER BY rowid',
             ).fetchall()
     except sqlite3.Error:
         return None

@@ -842,8 +842,8 @@ def merged(
 
 
 def build_timetable(*, sources: list[Source], window: Window, out: Path,
-                    city_ref: str,
-                    handoff: Handoff | None = None) -> MergeReport:
+                    city_ref: str, handoff: Handoff | None = None,
+                    tiles: Path | None = None) -> MergeReport:
     """
     Build a timetable file from sources, replacing out only on success.
 
@@ -866,6 +866,9 @@ def build_timetable(*, sources: list[Source], window: Window, out: Path,
         When set, write the handoff file and exec into the extras program
         instead of returning, so the load and the extras never share
         memory; the extras program finishes the job.
+    tiles : Path | None
+        The tiles file holding the rail track; None, or a file with no
+        track, builds with no passed stations.
 
     Returns
     -------
@@ -889,8 +892,9 @@ def build_timetable(*, sources: list[Source], window: Window, out: Path,
             scratch=scratch, out=out, dropped=report.dropped,
             partial=report.partial, overnight=report.overnight,
             peak_mb=max_rss_mb(), tail=handoff.tail,
+            tiles='' if tiles is None else str(tiles),
         ), city_ref=city_ref)
-    build_extras(path=scratch, city_ref=city_ref)
+    build_extras(path=scratch, city_ref=city_ref, tiles=tiles)
     os.replace(scratch, out)
     return report
 

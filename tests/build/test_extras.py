@@ -1,10 +1,12 @@
 """Tests for building the run tables in a child process."""
 
 import dataclasses
+import os
 import shutil
 import sqlite3
 import subprocess
 import sys
+from array import array
 from contextlib import closing
 from datetime import date
 from pathlib import Path
@@ -16,13 +18,21 @@ from paperroute_sydney.city import SYDNEY, SYDNEY_REF
 from paperroute_transit.build import extras, timetable
 from paperroute_transit.build.extras import build_extras
 from paperroute_transit.build.gtfs_files import Source
-from paperroute_transit.build.handoff import HandoffRecord, write_handoff
+from paperroute_transit.build.handoff import (
+    Handoff,
+    HandoffRecord,
+    hand_over,
+    write_handoff,
+)
 from paperroute_transit.build.timetable import Window, build_timetable
-from tests.build.network_feed import network_feed
+from paperroute_transit.build.track_db import RailTrack, write_track
+from paperroute_transit.core.geo import to_metres
+from tests.build.network_feed import LAT, LON, STEP_LON, network_feed
 
 RUN_TABLES: Final[set[str]] = {
     'runs', 'run_stops', 'run_calls', 'trip_runs', 'trip_next',
     'trip_joins', 'route_patterns', 'chooser_routes', 'chooser_towards',
+    'rail_hops', 'track_places',
 }
 IMPORTS_ONLY: Final[str] = (
     'import paperroute_transit.build.extras, sys; '
@@ -64,7 +74,7 @@ def network_build(*, folder: Path) -> Path:
     return out
 
 
-def skip_extras(*, path: Path, city_ref: str) -> None:
+def skip_extras(*, path: Path, city_ref: str, tiles: Path | None) -> None:
     """
     Stand in for build_extras and build nothing.
 
@@ -74,8 +84,10 @@ def skip_extras(*, path: Path, city_ref: str) -> None:
         Timetable file, ignored.
     city_ref : str
         The city's reference, ignored.
+    tiles : Path | None
+        The tiles file, ignored.
     """
-    del path, city_ref
+    del path, city_ref, tiles
 
 
 def tables_of(*, db: Path) -> set[str]:
@@ -110,13 +122,15 @@ def test_run_extras_prints_each_phase(
     db = network_build(folder=tmp_path)
     assert not RUN_TABLES & tables_of(db=db)
     capsys.readouterr()
-    assert extras.main(argv=[SYDNEY_REF, str(db)]) == 0
+    assert extras.main(argv=[SYDNEY_REF, str(db), '']) == 0
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == 'progress runs'
     assert lines[1].startswith('progress runs done ')
     assert lines[1].endswith('s')
-    assert lines[2] == 'progress catalogue'
-    assert lines[3].startswith('progress catalogue done ')
+    assert lines[2] == 'progress passed'
+    assert lines[3].startswith('progress passed done ')
+    assert lines[4] == 'progress catalogue'
+    assert lines[5].startswith('progress catalogue done ')
     assert lines[-1].startswith('progress extras peak ')
     assert lines[-1].endswith('MB')
     assert RUN_TABLES <= tables_of(db=db)
@@ -149,7 +163,7 @@ def free_pages_after_extras(*, db: Path, compact: bool) -> int:
         SYDNEY,
         timetable=dataclasses.replace(SYDNEY.timetable, compact=compact),
     )
-    extras.run_extras(path=db, city=city)
+    extras.run_extras(path=db, city=city, tiles=None)
     with closing(sqlite3.connect(db)) as conn:
         return int(conn.execute('PRAGMA freelist_count').fetchone()[0])
 
@@ -180,7 +194,7 @@ def test_extras_run_in_a_child(
     junk = tmp_path / 'junk.db'
     junk.write_bytes(b'not a timetable')
     with pytest.raises(RuntimeError, match='exit code'):
-        build_extras(path=junk, city_ref=SYDNEY_REF)
+        build_extras(path=junk, city_ref=SYDNEY_REF, tiles=None)
 
 
 def test_extras_never_import_numpy(
@@ -203,8 +217,8 @@ def test_extras_never_import_numpy(
     shutil.copy(db, record.scratch)
     write_handoff(path=handed / 'handoff.json', record=record)
     for argv in (
-        [SYDNEY_REF, str(db)],
-        [SYDNEY_REF, str(record.scratch), str(handed / 'handoff.json')],
+        [SYDNEY_REF, str(db), ''],
+        [SYDNEY_REF, str(record.scratch), '', str(handed / 'handoff.json')],
     ):
         child = subprocess.run(
             [sys.executable, '-c', CHILD_RUN, *argv],
@@ -220,3 +234,78 @@ def test_city_named_imports_the_city() -> None:
     assert extras.city_named(ref=SYDNEY_REF) is SYDNEY
     with pytest.raises(ValueError, match='names no city'):
         extras.city_named(ref='paperroute_sydney.city:SYDNEY_ZONE')
+
+
+class Execed(Exception):
+    """Raised by the stand-in for os.execv."""
+
+
+def write_line_track(*, path: Path) -> None:
+    """
+    Store a track along the network feed's east-west line.
+
+    Parameters
+    ----------
+    path : Path
+        Tiles file to create.
+    """
+    xs, ys = zip(
+        *(
+            to_metres(
+                lon=LON + STEP_LON * step / 10,
+                lat=LAT,
+                projection=SYDNEY.projection,
+            )
+            for step in range(60)
+        ),
+        strict=True,
+    )
+    edges = [node for i in range(59) for node in (i, i + 1)]
+    with closing(sqlite3.connect(path)) as conn:
+        write_track(
+            conn=conn,
+            track=RailTrack(
+                xs=array('d', xs),
+                ys=array('d', ys),
+                edges=array('q', edges),
+                stations=(),
+            ),
+        )
+        conn.commit()
+
+
+def test_a_handed_over_build_reads_the_tiles(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The tiles path goes through the exec to the hops the child writes."""
+    monkeypatch.setattr(timetable, 'build_extras', skip_extras)
+    db = network_build(folder=tmp_path)
+    tiles = tmp_path / 'tiles.db'
+    write_line_track(path=tiles)
+    record = HandoffRecord(
+        scratch=tmp_path / 'timetable.new', out=tmp_path / 'built.db',
+        dropped=0, partial=0, overnight=0, peak_mb=1.0, tail=None,
+        tiles=str(tiles),
+    )
+    shutil.copy(db, record.scratch)
+    seen: list[list[str]] = []
+
+    def execv(exe: str, argv: list[str]) -> None:
+        del exe
+        seen.append(argv)
+        raise Execed
+
+    monkeypatch.setattr(os, 'execv', execv)
+    with pytest.raises(Execed):
+        hand_over(
+            handoff=Handoff(path=tmp_path / 'handoff.json'),
+            record=record,
+            city_ref=SYDNEY_REF,
+        )
+    assert seen[0][-3:-1] == [str(record.scratch), str(tiles)]
+    assert extras.main(argv=seen[0][3:]) == 0
+    with closing(sqlite3.connect(record.out)) as conn:
+        inside = conn.execute(
+            "SELECT inside FROM rail_hops WHERE a = 'E2' AND b = 'E1'",
+        ).fetchone()
+    assert inside == (1,)

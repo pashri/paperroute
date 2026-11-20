@@ -70,6 +70,7 @@ def add_gtfs(
         default=yesterday(zone=city.zone),
     )
     gtfs.add_argument('--days', type=int, default=14)
+    gtfs.add_argument('--tiles', type=Path)
 
 
 def add_refresh(*, command: argparse.ArgumentParser) -> None:
@@ -256,6 +257,7 @@ def run_gtfs(*, args: argparse.Namespace, parts: BuildParts) -> None:
         handoff=Handoff(
             path=args.out.with_name(f'{args.out.stem}.handoff.json'),
         ),
+        tiles=args.tiles,
     )
 
 

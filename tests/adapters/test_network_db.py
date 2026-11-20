@@ -57,7 +57,7 @@ type RouteInsert = tuple[str, str, str, int, str, int, str, str, str]
 
 def has_runs(*, path: Path) -> bool:
     """
-    Say whether a timetable file exists and holds the run tables.
+    Say whether a timetable file exists with the run and track tables.
 
     Parameters
     ----------
@@ -67,15 +67,16 @@ def has_runs(*, path: Path) -> bool:
     Returns
     -------
     bool
-        True when the runs table is there.
+        True when the runs and track_places tables are there.
     """
     if not path.exists():
         return False
     with closing(sqlite3.connect(f'file:{path}?mode=ro', uri=True)) as conn:
         found = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE name = 'runs'",
+            "SELECT name FROM sqlite_master"
+            " WHERE name IN ('runs', 'track_places')",
         ).fetchall()
-    return bool(found)
+    return len(found) == 2
 
 
 def place(*, stop_id: str) -> StopPlace:
@@ -293,6 +294,21 @@ def set_runs(*, path: Path, runs: Sequence[tuple[str, int]]) -> None:
                 [(station, run_id, pos) for pos, station in enumerate(calls)],
             )
         conn.commit()
+
+
+def test_places_include_the_track_places(copy: Path) -> None:
+    """A station that exists only in track_places has a place."""
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute(
+            "INSERT INTO track_places VALUES ('osm:5', 'Halt', -33.9, 151.1)",
+        )
+        conn.commit()
+    with closing(SqliteNetworkRepository(
+        path=copy, city=LINE_CITY,
+    )) as repo:
+        found = repo.places(stations=['osm:5', 'C', 'nowhere'])
+    assert set(found) == {'osm:5', 'C'}
+    assert found['osm:5'].name == 'Halt'
 
 
 def tails_from(

@@ -59,6 +59,18 @@ class Layout:
         return self.data_dir / 'timetable.db'
 
     @property
+    def tiles(self) -> Path:
+        """
+        Map tiles and rail track.
+
+        Returns
+        -------
+        Path
+            The tiles.db file under data_dir.
+        """
+        return self.data_dir / 'tiles.db'
+
+    @property
     def lock(self) -> Path:
         """
         Lock file held for the whole refresh.

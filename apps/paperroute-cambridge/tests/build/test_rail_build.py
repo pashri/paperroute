@@ -892,6 +892,7 @@ class Refusing:
     def __call__(
         self, *, sources: list[Source], window: Window, out: Path,
         city_ref: str, handoff: Handoff | None = None,
+        tiles: Path | None = None,
     ) -> MergeReport:
         """
         Count the build, then refuse it or run the real one.
@@ -907,6 +908,8 @@ class Refusing:
         city_ref : str
             The city's reference.
         handoff : Handoff | None
+            Passed on.
+        tiles : Path | None
             Passed on.
 
         Returns
@@ -924,7 +927,7 @@ class Refusing:
             raise ValueError('the build refused a source')
         return build_timetable(
             sources=sources, window=window, out=out, city_ref=city_ref,
-            handoff=handoff,
+            handoff=handoff, tiles=tiles,
         )
 
 

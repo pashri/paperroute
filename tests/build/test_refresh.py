@@ -933,7 +933,8 @@ def test_refresh_hands_over_after_the_load(
     work = data_dir / 'work'
     assert seen['argv'] == [
         seen['path'], '-m', 'paperroute_transit.build.extras', SYDNEY_REF,
-        str(work / 'timetable.new'), str(work / 'handoff.json'),
+        str(work / 'timetable.new'), str(data_dir / 'tiles.db'),
+        str(work / 'handoff.json'),
     ]
     assert seen['inheritable'] is True
     record = seen['record']
@@ -943,6 +944,28 @@ def test_refresh_hands_over_after_the_load(
     assert record.tail.fallbacks == ()
     assert record.out == work / 'timetable.db'
     assert not (data_dir / 'timetable.db').exists()
+
+
+def test_refresh_hands_the_tiles_to_the_build(
+    server: FeedServer,
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every build attempt is given the data dir's tiles file."""
+    seen: list[object] = []
+
+    def build(**kwargs: object) -> None:
+        seen.append(kwargs['tiles'])
+        raise Execed
+
+    monkeypatch.setattr(refresh_module, 'build_timetable', build)
+    with pytest.raises(Execed):
+        refresh(
+            data_dir=data_dir, city=SYDNEY, parts=parts_for(server=server),
+            days=DAYS, error_log=data_dir / 'log' / 'errors.jsonl',
+        )
+    assert seen
+    assert set(seen) == {data_dir / 'tiles.db'}
 
 
 EXTRA: Final[str] = '/v2/gtfs/schedule/extra'
@@ -1405,6 +1428,7 @@ def test_a_fallback_build_starts_after_the_failure_is_handled(
     def build(
         *, sources: list[Source], window: Window, out: Path,
         city_ref: str, handoff: Handoff | None = None,
+        tiles: Path | None = None,
     ) -> MergeReport:
         """
         Note the exception being handled, then refuse the extra source.
@@ -1420,6 +1444,8 @@ def test_a_fallback_build_starts_after_the_failure_is_handled(
         city_ref : str
             The city's reference.
         handoff : Handoff | None
+            Passed on.
+        tiles : Path | None
             Passed on.
 
         Returns
@@ -1437,7 +1463,7 @@ def test_a_fallback_build_starts_after_the_failure_is_handled(
             raise ValueError('extra rejected')
         return real(
             sources=sources, window=window, out=out, city_ref=city_ref,
-            handoff=handoff,
+            handoff=handoff, tiles=tiles,
         )
 
     monkeypatch.setattr(refresh_module, 'build_timetable', build)

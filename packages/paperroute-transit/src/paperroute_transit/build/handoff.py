@@ -117,6 +117,8 @@ class HandoffRecord:
         Peak memory of the load, before the exec.
     tail : RefreshTail | None
         The refresh to finish; None for a plain build.
+    tiles : str
+        The tiles file holding the rail track; empty for none.
     """
 
     scratch: Path
@@ -126,6 +128,7 @@ class HandoffRecord:
     overnight: int
     peak_mb: float
     tail: RefreshTail | None
+    tiles: str = ''
 
 
 def attempt_text(*, attempt: Attempt, data_dir: Path) -> str:
@@ -499,6 +502,7 @@ def record_json(*, record: HandoffRecord) -> dict[str, object]:
         'partial': record.partial,
         'overnight': record.overnight,
         'peak_mb': record.peak_mb,
+        'tiles': record.tiles,
         'tail': None if record.tail is None else tail_json(tail=record.tail),
     }
 
@@ -525,6 +529,11 @@ def record_of(*, raw: dict[str, object]) -> HandoffRecord:
         partial=field_of(raw=raw, key='partial', kind=int),
         overnight=field_of(raw=raw, key='overnight', kind=int),
         peak_mb=field_of(raw=raw, key='peak_mb', kind=float),
+        tiles=(
+            field_of(raw=raw, key='tiles', kind=str)
+            if 'tiles' in raw
+            else ''
+        ),
         tail=(
             None
             if tail is None
@@ -593,6 +602,8 @@ def check_record(*, record: HandoffRecord, path: Path) -> None:
         for source in attempt.sources
     ):
         raise HandoffError('handoff fallback archives must be in the data dir')
+    if record.tiles and not inside(path=Path(record.tiles), folder=data):
+        raise HandoffError('handoff tiles must be inside the data dir')
 
 
 def write_handoff(*, path: Path, record: HandoffRecord) -> None:
@@ -680,7 +691,7 @@ def hand_over(
     exec_python(
         args=[
             '-m', EXTRAS_MODULE, city_ref, str(record.scratch),
-            str(handoff.path),
+            record.tiles, str(handoff.path),
         ],
         keep=() if record.tail is None else (record.tail.lock_fd,),
     )

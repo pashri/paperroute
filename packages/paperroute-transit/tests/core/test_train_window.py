@@ -10,6 +10,7 @@ from paperroute_transit.core.strip_model import (
     ROW_H,
     STRIP_TOP,
     Marks,
+    StripInputs,
     StripRow,
     Window,
 )
@@ -365,3 +366,83 @@ def test_an_end_point_strip_applies_the_window() -> None:
     assert rows[0].kind is RowKind.DASHED
     assert rows[-1].station == 'R21'
     assert rows[-2].kind is RowKind.DASHED
+
+
+def end_point_inputs(
+    *, reach: Reach, destination: str | None, scroll: int,
+) -> StripInputs:
+    """
+    Make end-point Strip inputs on a reach at a scroll.
+
+    Parameters
+    ----------
+    reach : Reach
+        The reach.
+    destination : str | None
+        The Destination station ID.
+    scroll : int
+        The Strip's scroll.
+
+    Returns
+    -------
+    StripInputs
+        The inputs.
+    """
+    return replace(
+        inputs_of(reach=reach, destination=destination),
+        end_points=True,
+        scroll=scroll,
+    )
+
+
+def test_a_short_run_leaves_the_window_at_home() -> None:
+    """The window is not pulled up to fill itself; every turn moves it."""
+    reach = reach_of(kinds=[EARLIER] * 8 + line_of(extra=[MAIN] * 5))
+    low, high = scroll_range(
+        reach=reach, destination='R13', banner=True, end_points=True,
+    )
+    assert (low, high) == (-6, 0)
+    rest, _ = strip_rows(
+        inputs=end_point_inputs(reach=reach, destination='R13', scroll=0),
+        reach=reach,
+    )
+    assert [row.kind for row in rest] == [
+        RowKind.DASHED, EARLIER, ORIGIN, *[MAIN] * 5,
+    ]
+    assert rest[1].station == 'R7'
+    tops = []
+    for scroll in range(0, low - 1, -1):
+        shown, _ = strip_rows(
+            inputs=end_point_inputs(
+                reach=reach, destination='R13', scroll=scroll,
+            ),
+            reach=reach,
+        )
+        tops.append((shown[0].kind, shown[0].station))
+    assert len(set(tops)) == len(tops)
+    assert tops[-1] == (EARLIER, 'R0')
+
+
+def test_two_sides_with_a_short_lower_side_keep_the_from_sixth() -> None:
+    """The From stays in the sixth slot with few rows below it."""
+    reach = reach_of(kinds=[MAIN] * 8 + line_of(extra=[MAIN] * 2))
+    rows, _ = strip_rows(
+        inputs=end_point_inputs(reach=reach, destination=None, scroll=0),
+        reach=reach,
+    )
+    assert rows[5].station == 'R8'
+    assert rows[0].station == 'R3'
+
+
+def test_no_tail_while_the_from_is_below_the_window() -> None:
+    """The bottom band takes the last slot; no stub or pinned end."""
+    reach = reach_of(kinds=[EARLIER] * 20 + line_of(extra=[MAIN] * 20))
+    rows, band = strip_rows(
+        inputs=end_point_inputs(reach=reach, destination='R40', scroll=-12),
+        reach=reach,
+    )
+    assert band is not None and not band.top
+    assert RowKind.DASHED not in {row.kind for row in rows}
+    assert all(row.kind is EARLIER for row in rows)
+    ids = [int(row.station[1:]) for row in rows]
+    assert ids == list(range(ids[0], ids[0] + len(ids)))

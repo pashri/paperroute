@@ -326,6 +326,23 @@ def folded_reach(*, state: State, key: StripKey | None,
     return folded(reach=reach, opened=state.strip.opened, keep=keep)
 
 
+def on_end_points(*, state: State) -> bool:
+    """
+    Say whether the shown place's kind is chosen by end points.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    bool
+        True for a pin of an end-point kind.
+    """
+    return shown(state=state).kind in end_point_modes(modes=state.city.modes)
+
+
 def destination_id(*, state: State) -> str | None:
     """
     Give the shown place's Destination ID.
@@ -465,8 +482,10 @@ def scroll_range(
         reach=reach, destination=destination, rows=rows, end_points=end_points,
     )
     low, high = min(0, -shift), len(reach.rows) - rows - shift
-    if end_points and shows_dash(reach=reach, first=shift):
-        low, high = min(-1, -shift), max(0, high)
+    if end_points:
+        high = max(0, high)
+        if shows_dash(reach=reach, first=shift):
+            low = min(-1, -shift)
     return low, max(low, high)
 
 
@@ -489,9 +508,7 @@ def clamped(*, state: State, banner: bool) -> State:
         while there is no reach.
     """
     reach = shown_reach(state=state)
-    end_points = shown(state=state).kind in end_point_modes(
-        modes=state.city.modes,
-    )
+    end_points = on_end_points(state=state)
     low, high = scroll_range(
         reach=reach,
         destination=destination_id(state=state),

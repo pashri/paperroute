@@ -931,10 +931,28 @@ def test_a_train_strip_notes_where_the_train_runs_on() -> None:
     ride, shaped = train_trip(
         trip_id='a', stations=('C', 'D', 'F'), at=5,
     )
-    ride = replace(ride, facts=replace(
-        ride.facts, then=CarryOn(route='T2', headsign='Leppington', trip_id='b'),
-    ))
+    then = CarryOn(route='T2', headsign='Leppington', trip_id='b')
+    ride = replace(ride, facts=replace(ride.facts, then=then))
     state = train_state(trips=[(ride, shaped)], destination='F')
     assert isinstance(state.last_view, StripView)
     noted = [row for row in state.last_view.rows if row.note is not None]
     assert [row.station for row in noted] == ['F']
+
+
+def test_a_pick_replaces_only_its_own_side() -> None:
+    """Picking a southbound train leaves the northbound rows alone."""
+    trips = [
+        train_trip(trip_id='north', stations=('C', 'N1', 'N2'), at=5),
+        train_trip(trip_id='south', stations=('C', 'S1', 'S2'), at=6),
+        train_trip(trip_id='later', stations=('C', 'S1', 'S3'), at=12),
+    ]
+    before = train_state(trips=trips, network=TWO_WAYS)
+    after = train_state(
+        trips=trips, network=TWO_WAYS, selected=('later', START.date()),
+    )
+    assert shown_ids(state=before) == ['N2', 'N1', 'C', 'S1', 'S2']
+    assert shown_ids(state=after)[:4] == ['N2', 'N1', 'C', 'S1']
+    assert 'S3' in shown_ids(state=after)
+    picked = shown_reach(state=after)
+    assert picked is not None
+    assert (picked.trip, picked.above_trip) == ('later', 'north')

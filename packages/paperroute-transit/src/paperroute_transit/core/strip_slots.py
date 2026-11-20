@@ -239,7 +239,13 @@ def home_of(
 
 
 def first_row(
-    *, scroll: int, cursor: int | None, total: int, home: int, rows: int,
+    *,
+    scroll: int,
+    cursor: int | None,
+    total: int,
+    home: int,
+    rows: int,
+    end_points: bool = False,
 ) -> int:
     """
     Choose the row in the Strip's top slot.
@@ -256,12 +262,17 @@ def first_row(
         The unscrolled top row, from `home_of`.
     rows : int
         Row slots on the strip.
+    end_points : bool
+        Whether the pin's kind is chosen by end points.
 
     Returns
     -------
     int
         The home row moved by the scroll, then moved to keep any cursor
-        `CURSOR_MARGIN` rows from the edges, clamped to the rows.
+        `CURSOR_MARGIN` rows from the edges, clamped to the rows. For an
+        end-point kind the window never rises above home to fill itself:
+        the lowest limit of the clamp is the larger of home and the row
+        that puts the last row in the last slot.
     """
     start = home + scroll
     if cursor is not None:
@@ -269,7 +280,8 @@ def first_row(
             max(start, cursor + CURSOR_MARGIN + 1 - rows),
             cursor - CURSOR_MARGIN,
         )
-    return max(0, min(start, total - rows))
+    last = max(home, total - rows) if end_points else total - rows
+    return max(0, min(start, last))
 
 
 def stops_away(*, reach: Reach, origin: int, near: int) -> int:

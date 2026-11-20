@@ -453,14 +453,13 @@ def strip_rows(*, inputs: StripInputs, reach: Reach
         total=len(reach.rows),
         home=home,
         rows=window.rows,
+        end_points=inputs.end_points,
     )
     band = band_of(reach=reach, first=first, window=window)
-    rows = slot_rows(
-        inputs=inputs,
-        reach=reach,
-        first=first,
-        marks=marks_of(inputs=inputs, reach=reach),
-    )
+    marks = marks_of(inputs=inputs, reach=reach)
+    if band is not None and not band.top:
+        marks = replace(marks, target=None)
+    rows = slot_rows(inputs=inputs, reach=reach, first=first, marks=marks)
     if band is not None:
         rows = rows[1:] if band.top else rows[:-1]
     return tuple(rows), band

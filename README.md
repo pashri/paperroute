@@ -87,6 +87,8 @@ the bus was last heard 4 minutes ago.
 
 With no Destination, the Stop view shows how the next departure is running, where its vehicle was last seen when its position is reported, and its next three calls. For this, Sydney fetches the next vehicle's positions while the Stop view shows.
 
+A train's Strip follows the next train, lists the stations it passes without calling, and names the other ways trains leave it.
+
 ## Cambridge
 
 The Cambridge app shows buses and coaches from the Bus Open Data Service

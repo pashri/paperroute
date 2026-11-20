@@ -428,10 +428,10 @@ def test_tiles_writes_the_track(inputs: Path, tmp_path: Path) -> None:
     build_tiles(config=config)
     track = read_track_db(path=config.out)
     assert track is not None
-    assert len(track.xs) == 3
+    assert len(track.xs) == 21
     assert [s.name for s in track.stations] == ['Halt One']
     meta = read_rows(
         path=config.out,
         sql="SELECT value FROM meta WHERE key = 'track_nodes'",
     )
-    assert meta == [('3',)]
+    assert meta == [('21',)]

@@ -1,5 +1,6 @@
 """Tests for reading the rail track from OSM files."""
 
+import math
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -9,7 +10,12 @@ from osmium.osm.mutable import Node, Way
 
 from paperroute_testkit.build.osm_factory import write_rail_osm
 from paperroute_testkit.fake_city import TEST_PROJECTION
+from paperroute_transit.build.track_db import RailTrack
 from paperroute_transit.build.track_osm import (
+    EDGE_LIMIT,
+    TrackParts,
+    build_track,
+    largest_part,
     rail_station,
     read_track,
     running_line,
@@ -41,34 +47,28 @@ def _rail_osm(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def test_the_track_keeps_running_lines_of_the_largest_part(
     rail_osm: Path,
 ) -> None:
-    """The siding and the separate line are left out."""
+    """The siding and the separate line are left out.
+
+    The two fixture edges are 600 m or more, so each is split into seven.
+    """
     track = read_track(paths=[rail_osm], projection=TEST_PROJECTION)
-    assert len(track.xs) == 3
-    assert len(track.edges) == 4
-    assert len(track.ys) == 3
+    assert len(track.xs) == 15
+    assert len(track.edges) == 28
+    assert len(track.ys) == 15
 
 
 def test_edges_index_nodes_at_the_fixture_points(rail_osm: Path) -> None:
-    """Every edge value indexes a node; the edges are A-B and B-C."""
+    """Every edge value indexes a node; the first three are A, B and C."""
     track = read_track(paths=[rail_osm], projection=TEST_PROJECTION)
     assert all(0 <= node < len(track.xs) for node in track.edges)
     a, b, c = (
         to_metres(lon=lon, lat=-33.800, projection=TEST_PROJECTION)
         for lon in (151.000, 151.010, 151.020)
     )
-    edges = [
-        [
-            (track.xs[node], track.ys[node])
-            for node in track.edges[2 * i : 2 * i + 2]
-        ]
-        for i in range(len(track.edges) // 2)
-    ]
-    for edge, expected in zip(
-        sorted(edges),
-        sorted([[a, b], [b, c]]),
-        strict=True,
-    ):
-        assert sorted(edge) == pytest.approx(sorted(expected))
+    nodes = [(track.xs[i], track.ys[i]) for i in range(3)]
+    assert nodes == pytest.approx([a, b, c])
+    assert track.edges[0] == 0
+    assert track.edges[-1] == 2
 
 
 def test_a_station_is_read_from_its_node(rail_osm: Path) -> None:
@@ -183,3 +183,81 @@ def test_a_filtered_way_keeps_its_untagged_nodes_located(
     ]
     assert [len(way) for way in located] == [3, 2, 2]
     assert all(all(way) for way in located)
+
+
+def long_edge_track(*, metres: float) -> RailTrack:
+    """
+    Build a track of one straight edge along the x axis.
+
+    Parameters
+    ----------
+    metres : float
+        Length of the edge.
+
+    Returns
+    -------
+    RailTrack
+        The track built from one way of two nodes.
+    """
+    west, _ = to_metres(lon=151.0, lat=-33.8, projection=TEST_PROJECTION)
+    east, _ = to_metres(lon=152.0, lat=-33.8, projection=TEST_PROJECTION)
+    parts = TrackParts(
+        spots={1: (151.0, -33.8), 2: (151.0 + metres / (east - west), -33.8)},
+        ways={1: (1, 2)},
+    )
+    return build_track(parts=parts, projection=TEST_PROJECTION)
+
+
+def edge_lengths(*, track: RailTrack) -> list[float]:
+    """
+    Measure every edge of a track.
+
+    Parameters
+    ----------
+    track : RailTrack
+        The track.
+
+    Returns
+    -------
+    list[float]
+        Edge lengths in metres.
+    """
+    return [
+        math.hypot(
+            track.xs[a] - track.xs[b],
+            track.ys[a] - track.ys[b],
+        )
+        for a, b in zip(track.edges[::2], track.edges[1::2], strict=True)
+    ]
+
+
+def test_a_long_edge_is_split_into_equal_pieces() -> None:
+    """A 250 m edge becomes three pieces on the straight line."""
+    track = long_edge_track(metres=250)
+    lengths = edge_lengths(track=track)
+    assert len(track.xs) == 4
+    assert len(lengths) == 3
+    assert lengths == pytest.approx([lengths[0]] * 3)
+    assert lengths[0] < EDGE_LIMIT
+    x0, y0 = track.xs[0], track.ys[0]
+    x1, y1 = track.xs[1], track.ys[1]
+    assert (x1 - x0) * (track.ys[3] - y0) == pytest.approx(
+        (y1 - y0) * (track.xs[3] - x0), abs=1e-6,
+    )
+
+
+def test_an_edge_of_the_limit_is_not_split() -> None:
+    """An edge no longer than the limit keeps two nodes."""
+    track = long_edge_track(metres=EDGE_LIMIT)
+    assert len(track.xs) == 2
+    assert len(track.edges) == 2
+
+
+def test_every_edge_is_short_and_the_track_stays_one_part(
+    rail_osm: Path,
+) -> None:
+    """Splitting leaves no long edge and no gap."""
+    track = read_track(paths=[rail_osm], projection=TEST_PROJECTION)
+    assert max(edge_lengths(track=track)) <= EDGE_LIMIT + 1e-6
+    links = list(zip(track.edges[::2], track.edges[1::2], strict=True))
+    assert len(largest_part(ways=links)) == len(track.xs)

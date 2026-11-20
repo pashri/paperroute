@@ -1,5 +1,6 @@
 """Read running rail lines and stations from OSM extracts."""
 
+import math
 from array import array
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -18,6 +19,7 @@ NOT_RAIL: Final[frozenset[str]] = frozenset(
 STATION_KINDS: Final[frozenset[str]] = frozenset({'station', 'halt'})
 INDEX: Final[str] = 'flex_mem'
 TRACK_KEYS: Final[tuple[str, ...]] = ('railway',)
+EDGE_LIMIT: Final[float] = 100.0  # m
 
 Spot = tuple[float, float]
 
@@ -209,6 +211,41 @@ def largest_part(*, ways: Sequence[tuple[int, ...]]) -> set[int]:
     return max(parts.values(), key=len, default=set())
 
 
+def split_edge(
+    *,
+    xs: array[float],
+    ys: array[float],
+    edges: array[int],
+    ends: tuple[int, int],
+) -> None:
+    """
+    Add an edge, as equal pieces no longer than the edge limit.
+
+    Parameters
+    ----------
+    xs : array[float]
+        Node x coordinates; new nodes are appended.
+    ys : array[float]
+        Node y coordinates; new nodes are appended.
+    edges : array[int]
+        Flattened node pairs; the pieces are appended.
+    ends : tuple[int, int]
+        Node ids of the edge's two ends.
+    """
+    a, b = ends
+    pieces = max(1, math.ceil(
+        math.hypot(xs[b] - xs[a], ys[b] - ys[a]) / EDGE_LIMIT - 1e-9,
+    ))
+    previous = a
+    for step in range(1, pieces):
+        share = step / pieces
+        xs.append(xs[a] + (xs[b] - xs[a]) * share)
+        ys.append(ys[a] + (ys[b] - ys[a]) * share)
+        edges.extend((previous, len(xs) - 1))
+        previous = len(xs) - 1
+    edges.extend((previous, b))
+
+
 def build_track(
     *,
     parts: TrackParts,
@@ -227,7 +264,8 @@ def build_track(
     Returns
     -------
     RailTrack
-        Dense node ids, in order of first use along the ways.
+        Dense node ids, in order of first use along the ways, with
+        nodes added so that no edge is longer than the edge limit.
     """
     keep = largest_part(ways=list(parts.ways.values()))
     ids: dict[int, int] = {}
@@ -237,14 +275,19 @@ def build_track(
     for refs in parts.ways.values():
         for ref in refs:
             if ref in keep and ref not in ids:
-                ids[ref] = len(ids)
+                ids[ref] = len(xs)
                 lon, lat = parts.spots[ref]
                 x, y = to_metres(lon=lon, lat=lat, projection=projection)
                 xs.append(x)
                 ys.append(y)
         for a, b in zip(refs, refs[1:]):
             if a in keep and a != b:
-                edges.extend((ids[a], ids[b]))
+                split_edge(
+                    xs=xs,
+                    ys=ys,
+                    edges=edges,
+                    ends=(ids[a], ids[b]),
+                )
     return RailTrack(
         xs=xs,
         ys=ys,

@@ -276,6 +276,21 @@ def test_a_knob_train_pin_has_no_routes() -> None:
     )
 
 
+def test_a_knob_train_pin_without_a_destination_stores_the_from() -> None:
+    """Pressing the From's own row stores no Destination and no routes."""
+    chooser = opened_at_kind(kind=SydneyMode.TRAIN)
+    chooser, _ = fed(chooser, ColumnRequest(path=TRAIN), TRAIN_STATIONS)
+    chooser, _ = pressed(chooser=chooser, reach=None)
+    chooser, _ = turned(chooser=chooser, steps=1, reach=None)
+    chooser, request = knob_pressed(chooser=chooser, reach=None)
+    chooser, _ = fed(chooser, request, TRAIN_TO)
+    _, pin = knob_pressed(chooser=chooser, reach=None)
+    assert isinstance(pin, Pin)
+    assert pin.origin == T1_PLACES['E2']
+    assert pin.destination is None
+    assert pin.routes == ()
+
+
 def test_replacement_route_commits_replacement_kind() -> None:
     chooser, _ = pressed(chooser=at_replacement_towards(), reach=None)
     chooser = with_line(chooser=chooser, towards=11, line=LINE)

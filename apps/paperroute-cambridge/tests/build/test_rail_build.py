@@ -48,7 +48,17 @@ from paperroute_transit.build.sources import (
     file_sha256,
 )
 from paperroute_transit.build.timetable import Window, build_timetable
-from paperroute_transit.core.chooser import Level
+from paperroute_transit.core.chooser import (
+    ChooserRequest,
+    ChooserState,
+    ColumnRequest,
+    Level,
+    opened,
+    pressed,
+    turned,
+    with_column,
+)
+from paperroute_transit.core.chooser_station import knob_pressed
 from paperroute_transit.core.city import MergeReport
 from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.modes import Classifier
@@ -463,6 +473,100 @@ def test_the_train_chooser_lists_lines_by_where_they_go(
     assert {'rail:CBG', 'rail:ELY', 'rail:NRW'} <= {
         c.key for c in stations.items
     }
+
+
+def fed_from(
+    *,
+    chooser: ChooserState,
+    request: ChooserRequest | Pin | None,
+    network: SqliteNetworkRepository,
+) -> ChooserState:
+    """
+    Answer a column request from the repository.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser waiting for a column.
+    request : ChooserRequest | Pin | None
+        Its request; must be a ColumnRequest.
+    network : SqliteNetworkRepository
+        Where the column comes from.
+
+    Returns
+    -------
+    ChooserState
+        The chooser with the column.
+    """
+    assert isinstance(request, ColumnRequest)
+    column = network.choices(path=request.path)
+    return with_column(chooser=chooser, path=request.path, column=column)[0]
+
+
+def turned_to_key(
+    *,
+    chooser: ChooserState,
+    key: str,
+    network: SqliteNetworkRepository,
+) -> ChooserState:
+    """
+    Turn the focused column's cursor onto a key and load its preview.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser in the LISTS stage.
+    key : str
+        The row's key.
+    network : SqliteNetworkRepository
+        Where a preview column comes from.
+
+    Returns
+    -------
+    ChooserState
+        The chooser with the cursor on the row.
+    """
+    keys = [c.key for c in chooser.columns[chooser.focus].items]
+    steps = keys.index(key) - chooser.cursors[chooser.focus]
+    chooser, request = turned(chooser=chooser, steps=steps, reach=None)
+    if request is None:
+        return chooser
+    return fed_from(chooser=chooser, request=request, network=network)
+
+
+def test_the_train_chooser_walks_kind_station_to(
+    norwich_built: Path,
+) -> None:
+    """Cambridge's train opens stations, then the To; no line step."""
+    with closing(
+        SqliteNetworkRepository(city=CAMBRIDGE, path=norwich_built),
+    ) as network:
+        chooser, request = opened(
+            shown=Pin(origin=StopPlace(stop_id='x', name='x', point=None)),
+            modes=CAMBRIDGE.modes,
+        )
+        chooser = fed_from(chooser=chooser, request=request, network=network)
+        chooser = turned_to_key(
+            chooser=chooser, key='train', network=network,
+        )
+        chooser, _ = pressed(chooser=chooser, reach=None)
+        chooser = turned_to_key(
+            chooser=chooser, key='rail:CBG', network=network,
+        )
+        chooser, asked = knob_pressed(chooser=chooser, reach=None)
+        chooser = fed_from(chooser=chooser, request=asked, network=network)
+        chooser = turned_to_key(
+            chooser=chooser, key='rail:ELY', network=network,
+        )
+        _, pin = knob_pressed(chooser=chooser, reach=None)
+    assert [column.level for column in chooser.columns] == [
+        Level.KIND, Level.STATION, Level.TO,
+    ]
+    assert isinstance(pin, Pin)
+    assert pin.origin.stop_id == 'rail:CBG'
+    assert pin.destination is not None
+    assert pin.destination.stop_id == 'rail:ELY'
+    assert pin.routes == ()
 
 
 def test_each_train_line_has_its_own_stations(norwich_built: Path) -> None:

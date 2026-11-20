@@ -150,6 +150,16 @@ def test_leg_line_cuts_between_stops() -> None:
     assert line == tuple((float(x), 0.0) for x in range(200, 701, 100))
 
 
+def test_leg_line_boards_on_the_way_out() -> None:
+    """A boarding stop a decimetre nearer the way back still draws its leg."""
+    shape = make_shape(
+        shape_id='out-and-back',
+        points=((0.0, 0.0), (1000.0, 0.0), (1000.0, 10.0), (0.0, 10.0)),
+    )
+    line = leg_line(shape=shape, start=(300.0, 5.05), end=(800.0, 2.0))
+    assert line == ((300.0, 0.0), (800.0, 0.0))
+
+
 def test_cut_leg_drops_a_reversed_leg() -> None:
     """Stops that project backwards along the shape cut no line."""
     ride = rides_of(chain=SHAPED[0], pin=WORK)[1]

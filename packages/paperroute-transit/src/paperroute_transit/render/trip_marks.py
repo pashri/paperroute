@@ -3,12 +3,17 @@
 from collections.abc import Sequence
 from typing import Final
 
-from paperroute_device.render.canvas import INK, PAPER, Canvas
+from paperroute_device.render.canvas import INK, PAPER, Canvas, Face
 from paperroute_device.render.frame import HEADER
 from paperroute_transit.core.geo import Point
 from paperroute_transit.core.map_view import MapBase, screen_point
 from paperroute_transit.core.tiles import to_pixels
-from paperroute_transit.render.map_marks import SOLID_WIDTH, Window, draw_stop
+from paperroute_transit.render.map_marks import (
+    SOLID_WIDTH,
+    Window,
+    draw_stop,
+    mark_scale,
+)
 
 CASING: Final[int] = 4  # extra paper width under leg 2
 LEG_DASH: Final[tuple[float, float]] = (12.0, 7.0)
@@ -19,6 +24,9 @@ SQUARE: Final[int] = 8  # half the change square's side
 SQUARE_EDGE: Final[int] = 3  # paper round the square
 END_DISC: Final[int] = 12
 END_EDGE: Final[int] = 3  # paper round the To's disc
+LETTER_FACE: Final[Face] = Face(weight=800, px=14)
+LETTER_DISC: Final[float] = 12.0
+LETTER_EDGE: Final[float] = 14.0
 
 
 def on_map(
@@ -67,9 +75,12 @@ def draw_change(canvas: Canvas, *, at: Point) -> None:
     )
 
 
-def draw_end(canvas: Canvas, *, at: Point) -> None:
+def draw_end(
+    canvas: Canvas, *, at: Point, letter: str | None = None,
+    scale: float = 1.0,
+) -> None:
     """
-    Draw the To as an ink disc edged with paper.
+    Draw the To as an ink disc edged with paper, lettered or plain.
 
     Parameters
     ----------
@@ -77,13 +88,59 @@ def draw_end(canvas: Canvas, *, at: Point) -> None:
         Target.
     at : Point
         Its centre in map pixels.
+    letter : str | None
+        The letter to read in paper on the disc, or None for a plain disc.
+    scale : float
+        Size of the disc, 1 for full size.
+    """
+    with canvas.scaled(at=at, factor=scale):
+        if letter is None:
+            draw_disc(canvas, at=at, radii=(END_DISC, END_DISC + END_EDGE))
+        else:
+            draw_lettered(canvas, at=at, letter=letter)
+
+
+def draw_disc(
+    canvas: Canvas, *, at: Point, radii: tuple[float, float],
+) -> None:
+    """
+    Draw an ink disc edged with paper.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    at : Point
+        Its centre.
+    radii : tuple[float, float]
+        The ink disc's radius and the paper edge's.
     """
     x, y = at
-    edge = END_DISC + END_EDGE
+    disc, edge = radii
     canvas.ellipse(box=(x - edge, y - edge, x + edge, y + edge), grey=PAPER)
-    canvas.ellipse(
-        box=(x - END_DISC, y - END_DISC, x + END_DISC, y + END_DISC),
-        grey=INK,
+    canvas.ellipse(box=(x - disc, y - disc, x + disc, y + disc), grey=INK)
+
+
+def draw_lettered(canvas: Canvas, *, at: Point, letter: str) -> None:
+    """
+    Draw a disc with a letter in paper.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    at : Point
+        Its centre.
+    letter : str
+        The letter.
+    """
+    draw_disc(canvas, at=at, radii=(LETTER_DISC, LETTER_EDGE))
+    canvas.text(
+        at=(at[0], at[1] + 1),
+        text=letter,
+        face=LETTER_FACE,
+        grey=PAPER,
+        anchor='mm',
     )
 
 
@@ -175,7 +232,12 @@ def draw_trip_ends(canvas: Canvas, *, base: MapBase, window: Window) -> None:
         draw_change(canvas, at=change)
     if trip.end is not None:
         (end,) = on_map(points=(trip.end,), base=base, window=window)
-        draw_end(canvas, at=end)
+        draw_end(
+            canvas,
+            at=end,
+            letter='B' if trip.lettered else None,
+            scale=mark_scale(mpp=base.mpp),
+        )
 
 
 def draw_trip_lines(canvas: Canvas, *, base: MapBase, window: Window) -> None:
@@ -216,4 +278,9 @@ def draw_trip_points(canvas: Canvas, *, base: MapBase) -> None:
         projection=base.projection,
         width=base.width,
     )
-    draw_stop(canvas, at=(x, y + HEADER))
+    scale = mark_scale(mpp=base.mpp)
+    if trip.lettered:
+        with canvas.scaled(at=(x, y + HEADER), factor=scale):
+            draw_lettered(canvas, at=(x, y + HEADER), letter='A')
+    else:
+        draw_stop(canvas, at=(x, y + HEADER), scale=scale)

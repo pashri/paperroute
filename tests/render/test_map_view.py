@@ -6,6 +6,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
+import pytest
 from numpy.typing import NDArray
 
 from paperroute_device.render.canvas import (
@@ -73,6 +74,7 @@ from paperroute_transit.render.markers import (
 )
 from paperroute_transit.render.stop_view import WIDEST_COUNT
 from paperroute_transit.render.tile_codec import GREYS, pack_bits, pack_grey
+from tests.render.test_map_base import base
 
 MPP = 8
 CENTRE: Point = to_metres(
@@ -902,3 +904,18 @@ def test_uncertain_sidebar_row_says_so_under_its_time() -> None:
         assert found[:, 0].max() <= top + ARRIVES_DROP + 3
         assert found[:, 1].min() >= limit - 60
         assert found[:, 1].max() < limit
+
+
+def test_end_boxes_shrink_with_the_marks() -> None:
+    """The box markers keep clear of shrinks with the mark."""
+    def end_width(mpp: int) -> float:
+        marks = TripMarks(
+            origin=CENTRE, second=(), walk=None, change=None, end=CENTRE,
+            lettered=True,
+        )
+        left, _, right, _ = end_boxes(
+            base=replace(base(mpp=mpp), trip=marks),
+        )[0]
+        return right - left
+
+    assert end_width(45) == pytest.approx(end_width(14) * 0.75)

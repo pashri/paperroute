@@ -39,6 +39,7 @@ from paperroute_transit.render.map_marks import (
     Window,
     draw_ridden_stops,
     draw_stop,
+    mark_scale,
 )
 from paperroute_transit.render.tile_codec import THRESHOLD, diffuse, quantise4
 from paperroute_transit.render.trip_marks import draw_trip_ends, draw_trip_legs
@@ -506,6 +507,7 @@ def draw_marks(
                 projection=base.projection,
                 width=base.width,
             ),
+            scale=mark_scale(mpp=base.mpp),
         )
     draw_boxed_scale(canvas, mpp=base.mpp)
     draw_boxed_credit(

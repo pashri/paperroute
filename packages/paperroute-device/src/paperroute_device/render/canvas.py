@@ -425,6 +425,33 @@ class Canvas:
             self.canvas.restore()
 
     @contextmanager
+    def scaled(self, *, at: Point, factor: float) -> Iterator[None]:
+        """
+        Scale drawing about a point.
+
+        Parameters
+        ----------
+        at : Point
+            Fixed point.
+        factor : float
+            Scale; 1 changes nothing.
+
+        Yields
+        ------
+        None
+            Drawing inside the block is scaled.
+        """
+        self.canvas.save()
+        if factor != 1.0:
+            self.canvas.translate(*at)
+            self.canvas.scale(factor, factor)
+            self.canvas.translate(-at[0], -at[1])
+        try:
+            yield
+        finally:
+            self.canvas.restore()
+
+    @contextmanager
     def clipped(self, *, box: Box) -> Iterator[None]:
         """
         Restrict drawing to a box.

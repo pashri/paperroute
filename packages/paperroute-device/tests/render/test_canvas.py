@@ -128,6 +128,14 @@ def test_text_halo_paints_paper_around_ink() -> None:
     assert (results[1] == PAPER).any()
 
 
+def test_scaled_draws_smaller_about_a_point() -> None:
+    """A disc drawn scaled by a half about its centre is half as wide."""
+    canvas = Canvas(width=100, height=100)
+    with canvas.scaled(at=(50.0, 50.0), factor=0.5):
+        canvas.ellipse(box=(30.0, 30.0, 70.0, 70.0), grey=INK)
+    assert np.count_nonzero(canvas.grey()[50] == INK) == 20
+
+
 def test_rotated_text_is_taller_than_wide() -> None:
     """Text turned 90 degrees stands upright."""
     canvas = Canvas()

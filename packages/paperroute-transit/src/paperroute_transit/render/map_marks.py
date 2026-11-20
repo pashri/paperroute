@@ -33,9 +33,27 @@ STOP_DISC: Final[float] = 16.0
 STOP_RING: Final[float] = 12.0
 STOP_RING_WIDTH: Final[float] = 4.0
 STOP_DOT: Final[float] = 5.0
+MARK_SCALE: Final[dict[int, float]] = {25: 0.85, 45: 0.75}
 
 
-def draw_stop(canvas: Canvas, *, at: Point) -> None:
+def mark_scale(*, mpp: int) -> float:
+    """
+    Give the size of the map's marks.
+
+    Parameters
+    ----------
+    mpp : int
+        Metres per pixel.
+
+    Returns
+    -------
+    float
+        1 to 14 m/px, 0.85 at 25 and 0.75 at 45.
+    """
+    return MARK_SCALE.get(mpp, 1.0)
+
+
+def draw_stop(canvas: Canvas, *, at: Point, scale: float = 1.0) -> None:
     """
     Draw the From stop marker: a paper disc, an ink ring and an ink dot.
 
@@ -45,6 +63,23 @@ def draw_stop(canvas: Canvas, *, at: Point) -> None:
         Target.
     at : Point
         The stop's centre on the canvas.
+    scale : float
+        Size of the marker, 1 for full size.
+    """
+    with canvas.scaled(at=at, factor=scale):
+        draw_bullseye(canvas, at=at)
+
+
+def draw_bullseye(canvas: Canvas, *, at: Point) -> None:
+    """
+    Draw a paper disc, an ink ring and an ink dot.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    at : Point
+        The centre on the canvas.
     """
     x, y = at
     canvas.ellipse(

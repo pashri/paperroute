@@ -47,6 +47,8 @@ class TripMarks:
     others : tuple[tuple[Point, Point], ...]
         Each later change's walk, drawn like the first with its own
         change mark at the midpoint.
+    lettered : bool
+        True when the From and the To are drawn as the A and B discs.
     """
 
     origin: Point | None
@@ -55,6 +57,7 @@ class TripMarks:
     change: Point | None
     end: Point | None
     others: tuple[tuple[Point, Point], ...] = ()
+    lettered: bool = False
 
 
 @dataclass(frozen=True)
@@ -954,10 +957,17 @@ def plain_marks(*, inputs: MapInputs) -> TripMarks | None:
     Returns
     -------
     TripMarks | None
-        The From as the origin and the To as the end; None with no From
-        point.
+        The From as the origin and the To as the end, lettered when there
+        is a To; None with no From point.
     """
     origin, end = inputs.ends
     if origin is None:
         return None
-    return TripMarks(origin=origin, second=(), walk=None, change=None, end=end)
+    return TripMarks(
+        origin=origin,
+        second=(),
+        walk=None,
+        change=None,
+        end=end,
+        lettered=end is not None,
+    )

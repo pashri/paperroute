@@ -49,6 +49,7 @@ from paperroute_transit.render.map_base import HALO
 from paperroute_transit.render.map_marks import (
     STOP_DISC,
     draw_stop,
+    mark_scale,
     ring_radius,
 )
 from paperroute_transit.render.markers import (
@@ -237,7 +238,10 @@ def end_boxes(*, base: MapBase) -> list[Box]:
         square's when there are trip marks.
     """
     stop = stop_at(base=base)
-    boxes = [] if stop is None else [square(at=stop, half=STOP_HALF)]
+    scale = mark_scale(mpp=base.mpp)
+    boxes = (
+        [] if stop is None else [square(at=stop, half=STOP_HALF * scale)]
+    )
     trip = base.trip
     if trip is None:
         return boxes
@@ -249,7 +253,7 @@ def end_boxes(*, base: MapBase) -> list[Box]:
     return [
         *boxes,
         *(
-            square(at=end, half=END_HALF)
+            square(at=end, half=END_HALF * scale)
             for end in map_pixels(base=base, points=ends)
         ),
         *(
@@ -342,7 +346,11 @@ def draw_overlay(
         if view.base.trip is not None:
             draw_trip_points(canvas, base=view.base)
         elif stop is not None:
-            draw_stop(canvas, at=(stop[0], stop[1] + HEADER))
+            draw_stop(
+                canvas,
+                at=(stop[0], stop[1] + HEADER),
+                scale=mark_scale(mpp=view.base.mpp),
+            )
 
 
 def row_time(canvas: Canvas, *, row: Row, y: int) -> None:

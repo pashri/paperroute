@@ -4,8 +4,11 @@ from dataclasses import replace
 from typing import Final
 
 import numpy as np
+import pytest
+from numpy.typing import NDArray
 
 from paperroute_device.render.canvas import INK, PAPER, Canvas
+from paperroute_device.render.frame import HEADER
 from paperroute_sydney.city import SYDNEY_PROJECTION
 from paperroute_transit.adapters.tiles_db import NullTiles
 from paperroute_transit.core.geo import Point
@@ -14,15 +17,19 @@ from paperroute_transit.core.map_view import (
     MAP_WIDTH,
     MapBase,
     TripMarks,
+    screen_point,
 )
 from paperroute_transit.core.tiles import TileVariant
-from paperroute_transit.render.map_base import draw_map_base
+from paperroute_transit.render.map_base import draw_map_base, window_of
+from paperroute_transit.render.map_marks import draw_stop, mark_scale
 from paperroute_transit.render.trip_marks import (
     draw_trip_ends,
     draw_trip_legs,
     draw_trip_lines,
     draw_trip_points,
 )
+from tests.render.test_map_base import CENTRE as STOP
+from tests.render.test_map_base import base as base_of
 
 MPP: Final[int] = 8
 CENTRE: Final[Point] = (0.0, 0.0)
@@ -177,3 +184,79 @@ def test_a_leg_line_of_one_point_is_skipped() -> None:
         window=(0, 0),
     )
     assert np.all(canvas.grey() == PAPER)
+
+
+
+
+def ink_extent(*, values: NDArray[np.uint8]) -> int:
+    """Pixels from the first to the last ink in a column."""
+    ink = np.flatnonzero(values == INK)
+    return int(ink[-1] - ink[0] + 1)
+
+
+def mark_crop(
+    *, lettered: bool, end: bool, mpp: int = MPP,
+) -> NDArray[np.uint8]:
+    """The 29 by 29 pixels round the From's or the end's mark."""
+    far = (STOP[0] + 100.0 * mpp, STOP[1])
+    marks = TripMarks(
+        origin=STOP, second=(), walk=None, change=None, end=far,
+        lettered=lettered,
+    )
+    plain = replace(base_of(mpp=mpp), trip=marks)
+    canvas = Canvas(width=MAP_WIDTH, height=MAP_HEIGHT + HEADER)
+    point = far if end else STOP
+    x, y = screen_point(
+        centre=STOP, mpp=mpp, point=point, projection=SYDNEY_PROJECTION,
+    )
+    if end:
+        draw_trip_ends(canvas, base=plain, window=window_of(base=plain))
+    else:
+        draw_trip_points(canvas, base=plain)
+        y += HEADER
+    grey = canvas.grey()
+    return grey[round(y) - 14 : round(y) + 15, round(x) - 14 : round(x) + 15]
+
+
+def test_lettered_marks_read_a_and_b() -> None:
+    """A pin with a Destination marks its ends with A and B discs."""
+    a = mark_crop(lettered=True, end=False)
+    b = mark_crop(lettered=True, end=True)
+    assert ink_extent(values=a[:, 14]) in {24, 25}
+    assert np.count_nonzero(a[8:21, 8:21] == PAPER) > 0
+    assert not np.array_equal(a, b)
+
+
+def test_no_destination_keeps_the_bullseye() -> None:
+    """With no Destination the From is today's bullseye."""
+    canvas = Canvas(width=MAP_WIDTH, height=MAP_HEIGHT + HEADER)
+    x, y = screen_point(
+        centre=STOP, mpp=MPP, point=STOP, projection=SYDNEY_PROJECTION,
+    )
+    draw_stop(canvas, at=(x, y + HEADER))
+    row, col = round(y + HEADER), round(x)
+    assert np.array_equal(
+        mark_crop(lettered=False, end=False),
+        canvas.grey()[row - 14 : row + 15, col - 14 : col + 15],
+    )
+
+
+@pytest.mark.parametrize(
+    ('mpp', 'scale'),
+    [(3, 1.0), (5, 1.0), (8, 1.0), (14, 1.0), (25, 0.85), (45, 0.75)],
+)
+def test_marks_shrink_at_the_two_widest_steps(
+    mpp: int, scale: float,
+) -> None:
+    """Marks are full size to 14 m/px, 85% at 25 and 75% at 45."""
+    crop = mark_crop(lettered=True, end=True, mpp=mpp)
+    assert abs(ink_extent(values=crop[:, 14]) - 24 * scale) <= 1
+
+
+@pytest.mark.parametrize(
+    ('mpp', 'scale'),
+    [(3, 1.0), (5, 1.0), (8, 1.0), (14, 1.0), (25, 0.85), (45, 0.75)],
+)
+def test_mark_scale_at_every_zoom(mpp: int, scale: float) -> None:
+    """Marks are full size to 14 m/px, 0.85 at 25 and 0.75 at 45."""
+    assert mark_scale(mpp=mpp) == scale

@@ -30,6 +30,7 @@ from paperroute_transit.core.map_view import (
     needed_patterns,
     pin_trips,
     pinned_routes,
+    plain_marks,
     position_age,
     route_lines,
     screen_point,
@@ -617,7 +618,12 @@ def test_plain_base_marks_from_and_to() -> None:
         inputs=replace(inputs(), ends=(CENTRE, (900.0, 0.0))),
     )
     assert view.base.trip == TripMarks(
-        origin=CENTRE, second=(), walk=None, change=None, end=(900.0, 0.0),
+        origin=CENTRE,
+        second=(),
+        walk=None,
+        change=None,
+        end=(900.0, 0.0),
+        lettered=True,
     )
     bare = build_map_view(inputs=inputs())
     assert bare.base.trip is None
@@ -649,3 +655,15 @@ def test_base_lists_ridden_stops() -> None:
         ),
     )
     assert windowed.base.stops == ((0.0, 0.0), (500.0, 0.0))
+
+
+def test_plain_marks_letter_a_pin_with_a_destination() -> None:
+    """The marks are lettered only when the pin has a Destination."""
+    to = replace(inputs(), ends=(CENTRE, CENTRE))
+    no_to = replace(inputs(), ends=(CENTRE, None))
+    lettered = plain_marks(inputs=to)
+    bullseye = plain_marks(inputs=no_to)
+    assert lettered is not None
+    assert bullseye is not None
+    assert lettered.lettered is True
+    assert bullseye.lettered is False

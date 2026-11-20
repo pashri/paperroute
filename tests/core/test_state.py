@@ -1851,7 +1851,8 @@ def check_map_requests(
     while the map shows the same place in the same spot.
 
     Asleep, positions are never fetched, and the sleep screen's map asks
-    for its shapes and patterns whatever the view.
+    for its shapes and patterns whatever the view. The Stop view of a pin
+    with no Destination asks for positions as well as the Map.
 
     Parameters
     ----------

@@ -287,7 +287,8 @@ def needed_feeds(
     -------
     tuple[str, ...]
         The fetched trip-updates feeds, then the positions feeds of a
-        screen that draws vehicles, then the positions feeds that
+        screen that draws vehicles or of the Stop view of a pin with no
+        Destination, then the positions feeds that
         estimates are worked out from, each once.
     """
     return tuple(

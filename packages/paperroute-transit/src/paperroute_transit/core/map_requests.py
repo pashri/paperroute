@@ -823,9 +823,7 @@ def stop_effects(
     -------
     tuple[State, tuple[Effect, ...], PatternAsk | None]
         State keeping only the hero's pattern and the board's own trips'
-        patterns, no effects, and the patterns wanted. The hero is
-        marked drawn so its pattern is not held back while its positions
-        fetch is in flight.
+        patterns, no effects, and the patterns wanted.
     """
     wanted = stop_patterns(stop_view=stop_view)
     departures = state.board.departures

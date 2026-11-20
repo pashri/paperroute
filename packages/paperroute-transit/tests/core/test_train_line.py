@@ -22,7 +22,7 @@ from paperroute_transit.core.train_line import (
     main_departure,
     train_reach,
 )
-from paperroute_transit.core.train_network import Hop, TrainNetwork
+from paperroute_transit.core.train_network import Hop, TrainNetwork, WeekdayRun
 
 
 def trip_of(*, stations: tuple[str, ...], trip_id: str = 'a') -> TripPattern:
@@ -462,3 +462,156 @@ def test_with_no_main_the_above_train_is_still_drawn() -> None:
     )
     assert names(reach=reach) == ['N', 'C']
     assert reach.trip == 'b'
+
+
+def exits_reach(
+    *,
+    runs: dict[str, int],
+    below: tuple[str, ...] = ('C', 'E', 'F'),
+    above: tuple[str, ...] | None = None,
+    hops: dict[tuple[str, str], Hop] | None = None,
+    destination: str | None = None,
+) -> Reach:
+    """
+    Lay out a Strip whose network has weekday runs.
+
+    Parameters
+    ----------
+    runs : dict[str, int]
+        Weekday trains by space-separated stations, each through C.
+    below : tuple[str, ...]
+        Stations of the train below, calling at C.
+    above : tuple[str, ...] | None
+        Stations of the train above; None for no train above.
+    hops : dict[tuple[str, str], Hop] | None
+        Hops by their two stations.
+    destination : str | None
+        The Destination.
+
+    Returns
+    -------
+    Reach
+        The Reach; C is at the origin, N1 and N2 lie north, E south.
+    """
+    patterns: dict[str, TripPattern | None] = {
+        'a': trip_of(stations=below, trip_id='a'),
+    }
+    if above is not None:
+        patterns['b'] = trip_of(stations=above, trip_id='b')
+    trips = trips_of(patterns=patterns, ids=tuple(patterns))
+    points = {
+        'C': (0, 0),
+        'N1': (0, 900),
+        'E': (0, -900),
+        'Z': (0, -1800),
+    }
+    data = ReachInput(
+        origin=StopPlace(stop_id='C', name='C', point=(0, 0)),
+        tails=(),
+        places={
+            name: StopPlace(stop_id=name, name=name.lower(), point=point)
+            for name, point in points.items()
+        },
+        station_of={},
+        network=TrainNetwork(
+            hops=hops or {},
+            runs=tuple(
+                WeekdayRun(
+                    route='X', stations=tuple(stations.split()), trains=count,
+                )
+                for stations, count in runs.items()
+            ),
+        ),
+    )
+    return train_reach(
+        data=data,
+        trips=trips,
+        main=trips.departures[0],
+        destination=destination,
+        above=trips.departures[1] if above is not None else None,
+        loop_name='City Circle',
+    )
+
+
+MAIN_RUN = {'C E F': 40}
+
+
+def test_an_exit_row_follows_its_main_junction_row() -> None:
+    """The exit hangs after E, and the row after it keeps its parent."""
+    reach = exits_reach(runs={**MAIN_RUN, 'C E Z': 8})
+    assert names(reach=reach) == ['C', 'E', 'Z', 'F']
+    exit_row = reach.rows[2]
+    assert exit_row.kind is RowKind.EXIT
+    assert (exit_row.parent, exit_row.trips, exit_row.names) == (1, 8, ('z',))
+    assert (exit_row.depth, exit_row.above, exit_row.lines) == (
+        0, False, (),
+    )
+    assert reach.rows[3].parent == 1
+    assert reach.stations == 2
+
+
+def test_an_exit_row_follows_a_passed_junction_row() -> None:
+    """A junction that is passed takes its exit after the passed row."""
+    reach = exits_reach(
+        runs={'C E F': 40, 'C G H': 9},
+        hops={
+            ('C', 'E'): Hop(passed=('D',), inside=True),
+            ('C', 'G'): Hop(passed=('D',), inside=True),
+        },
+    )
+    assert names(reach=reach) == ['C', 'D', 'G', 'E', 'F']
+    assert reach.rows[1].kind is RowKind.PASSED
+    assert reach.rows[2].kind is RowKind.EXIT
+    assert [row.parent for row in reach.rows] == [None, 0, 1, 1, 3]
+
+
+def test_an_exit_at_the_from_hangs_just_below_it() -> None:
+    """With the From as junction the exit is the first row below it."""
+    reach = exits_reach(runs={**MAIN_RUN, 'C Z': 8})
+    assert names(reach=reach) == ['C', 'Z', 'E', 'F']
+    assert reach.rows[1].kind is RowKind.EXIT
+    assert [row.parent for row in reach.rows] == [None, 0, 0, 2]
+
+
+def test_exits_at_one_junction_go_busiest_first() -> None:
+    """The exit with more trains is the nearer row."""
+    reach = exits_reach(runs={**MAIN_RUN, 'C E Y': 7, 'C E Z': 9})
+    assert names(reach=reach) == ['C', 'E', 'Z', 'Y', 'F']
+    assert [row.parent for row in reach.rows[2:4]] == [1, 1]
+
+
+def test_exits_before_and_beyond_the_destination_are_kept() -> None:
+    """Rows after the Destination and before it both carry exits."""
+    reach = exits_reach(
+        runs={**MAIN_RUN, 'C E Y': 7, 'C E F Z': 9},
+        destination='E',
+    )
+    assert names(reach=reach) == ['C', 'E', 'Y', 'F', 'Z']
+
+
+def test_the_above_train_has_exits_after_its_junction() -> None:
+    """An exit above hangs outward of its junction, parented to it."""
+    reach = exits_reach(
+        runs={**MAIN_RUN, 'C N1 N2': 40, 'C N1 W': 8, 'C E Z': 8},
+        above=('C', 'N1', 'N2'),
+    )
+    assert names(reach=reach) == ['N2', 'W', 'N1', 'C', 'E', 'Z', 'F']
+    assert [row.parent for row in reach.rows] == [2, 2, 3, None, 3, 4, 4]
+    assert [row.above for row in reach.rows] == [
+        True, True, True, False, False, False, False,
+    ]
+    assert reach.rows[1].kind is RowKind.EXIT
+
+
+def test_a_circle_exit_is_named_by_the_city() -> None:
+    """A tail that comes back to the From carries the loop's name."""
+    reach = exits_reach(runs={**MAIN_RUN, 'C E T C': 12})
+    assert reach.rows[2].names == ('City Circle',)
+
+
+def test_a_network_with_no_runs_adds_no_exit_rows() -> None:
+    """Rows are unchanged when no run leaves the line."""
+    reach = exits_reach(runs=MAIN_RUN)
+    assert [row.kind for row in reach.rows] == [
+        RowKind.ORIGIN, RowKind.MAIN, RowKind.MAIN,
+    ]

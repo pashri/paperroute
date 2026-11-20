@@ -235,6 +235,9 @@ class ReachRow:
         other row.
     inside : bool
         False when the hop arriving at the row is outside the track.
+    names : tuple[str, ...]
+        Places a train Strip's exit row names, in walk order; empty for
+        any other row.
     """
 
     place: StopPlace
@@ -246,6 +249,7 @@ class ReachRow:
     folded: int = 0
     lines: tuple[str, ...] = ()
     inside: bool = True
+    names: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

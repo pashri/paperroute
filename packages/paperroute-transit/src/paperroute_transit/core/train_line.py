@@ -1,6 +1,7 @@
 """The main line of a train Strip with a Destination."""
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
+from dataclasses import replace
 
 from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.model import StopPlace
@@ -12,7 +13,9 @@ from paperroute_transit.core.strip_times import (
     started_pattern,
     stops_after,
 )
+from paperroute_transit.core.train_exits import TrainExit, train_exits
 from paperroute_transit.core.train_network import hop_of
+from paperroute_transit.core.train_sides import first_station, north_hops
 
 
 def main_departure(
@@ -191,6 +194,7 @@ def train_reach(
     main: LiveDeparture | None,
     destination: str | None,
     above: LiveDeparture | None = None,
+    loop_name: str = '',
 ) -> Reach:
     """
     Lay out a Strip along the followed train.
@@ -209,13 +213,17 @@ def train_reach(
         The train read upward above the From. When given, each train is
         cut where it calls at the From again, and no earlier calls are
         listed.
+    loop_name : str
+        The name of a train that returns to the From; empty drops them.
 
     Returns
     -------
     Reach
         Earlier calls, the From, then the calls and passed stations to
         the trip's end. A station is listed once, at its first place:
-        the train below claims its stations before the one above.
+        the train below claims its stations before the one above. Each
+        train's exit rows follow their junction rows. The work grows
+        with the runs through the From and their tail stations.
     """
     origin = ReachRow(
         place=data.origin, kind=RowKind.ORIGIN, depth=0, above=False,
@@ -246,8 +254,31 @@ def train_reach(
             data=data, trips=trips, item=above, seen=seen, cut=True,
         )
     )
+    sides = (
+        None
+        if data.network is None
+        else north_hops(
+            network=data.network,
+            origin=data.origin.stop_id,
+            places={data.origin.stop_id: data.origin, **data.places},
+        )
+    )
     return stacked(
-        data=data, main=lead, before=before, origin=origin, ahead=ahead,
+        data=data,
+        main=lead,
+        before=(
+            before
+            if above is None
+            else with_exits(
+                data=data, trips=trips, item=above, rows=before,
+                hops=(sides, 0), loop_name=loop_name,
+            )
+        ),
+        origin=origin,
+        ahead=with_exits(
+            data=data, trips=trips, item=main, rows=ahead,
+            hops=(sides, 1), loop_name=loop_name,
+        ),
     )
 
 
@@ -335,6 +366,157 @@ def earlier_rows(
     return before
 
 
+def with_exits(
+    *,
+    data: ReachInput,
+    trips: TripInputs,
+    item: LiveDeparture | None,
+    rows: list[ReachRow],
+    hops: tuple[tuple[frozenset[str], frozenset[str]] | None, int],
+    loop_name: str,
+) -> list[ReachRow]:
+    """
+    Hang a train's exit rows after their junction rows.
+
+    Parameters
+    ----------
+    data : ReachInput
+        The From and the kind's network.
+    trips : TripInputs
+        The strip's loaded patterns and station map.
+    item : LiveDeparture | None
+        The train whose rows these are.
+    rows : list[ReachRow]
+        The train's rows after the From, parented from the From at
+        index 0.
+    hops : tuple[tuple[frozenset[str], frozenset[str]] | None, int]
+        The first stations above and below, from `north_hops`, or None
+        with no network; and which side to take, 0 above and 1 below.
+    loop_name : str
+        The name of a train that returns to the From.
+
+    Returns
+    -------
+    list[ReachRow]
+        The rows with exit rows added, parents moved to match; the rows
+        unchanged when there is no network or train.
+    """
+    sides, side = hops
+    if data.network is None or sides is None or item is None:
+        return rows
+    origin = data.origin.stop_id
+    first = first_station(
+        item=item, trips=trips, origin=origin, network=data.network,
+    )
+    found = train_exits(
+        network=data.network,
+        origin=origin,
+        line=[origin, *(row.place.stop_id for row in rows)],
+        first_hops=(
+            frozenset() if first is None else side_of_first(
+                sides=sides[side], first=first,
+            )
+        ),
+        loop_name=loop_name,
+    )
+    return hung(rows=rows, exits=found, data=data)
+
+
+def side_of_first(*, sides: frozenset[str], first: str) -> frozenset[str]:
+    """
+    Take the first stations a train's exits may start with.
+
+    Parameters
+    ----------
+    sides : frozenset[str]
+        First stations on the train's side.
+    first : str
+        The train's own first station.
+
+    Returns
+    -------
+    frozenset[str]
+        The side's first stations, or just the train's own when it is
+        not among them.
+    """
+    return sides if first in sides else frozenset({first})
+
+
+def hung(
+    *, rows: list[ReachRow], exits: Iterable[TrainExit], data: ReachInput,
+) -> list[ReachRow]:
+    """
+    Put each exit's row after the row of its junction.
+
+    Parameters
+    ----------
+    rows : list[ReachRow]
+        Rows after the From, parented from the From at index 0.
+    exits : Iterable[TrainExit]
+        The exits, busiest first.
+    data : ReachInput
+        The From and its places.
+
+    Returns
+    -------
+    list[ReachRow]
+        The rows with each exit row after its junction's, and the other
+        rows' parents moved to follow. An exit at the From comes first.
+    """
+    at: dict[str, list[TrainExit]] = {}
+    for each in exits:
+        at.setdefault(each.junction, []).append(each)
+    out = exit_rows(exits=at.get(data.origin.stop_id, ()), parent=0, data=data)
+    moved = {0: 0}
+    for old, row in enumerate(rows, start=1):
+        out.append(replace(row, parent=moved[row.parent or 0]))
+        moved[old] = len(out)
+        out.extend(exit_rows(
+            exits=at.get(row.place.stop_id, ()), parent=len(out), data=data,
+        ))
+    return out
+
+
+def exit_rows(
+    *, exits: Sequence[TrainExit], parent: int, data: ReachInput,
+) -> list[ReachRow]:
+    """
+    Make the exit rows of one junction.
+
+    Parameters
+    ----------
+    exits : Sequence[TrainExit]
+        The exits at the junction.
+    parent : int
+        Index of the junction's row.
+    data : ReachInput
+        The places, for names.
+
+    Returns
+    -------
+    list[ReachRow]
+        One EXIT row per exit at the junction's depth, 0, carrying the
+        weekday trains in `trips` and the places named in `names`.
+    """
+    return [
+        ReachRow(
+            place=data.places.get(each.first) or StopPlace(
+                stop_id=each.first, name=each.first, point=None,
+            ),
+            kind=RowKind.EXIT,
+            depth=0,
+            above=False,
+            parent=parent,
+            trips=each.trains,
+            names=tuple(
+                data.places[name].name if name in data.places else name
+                for name in each.names
+            ),
+        )
+        for each in exits
+    ]
+
+
 def stacked(
     *,
     data: ReachInput,
@@ -366,17 +548,19 @@ def stacked(
     """
     top = len(before)
     above = [
-        ReachRow(
-            place=row.place, kind=row.kind, depth=0, above=True,
-            parent=index + 1, inside=row.inside,
+        replace(
+            row,
+            above=True,
+            parent=(
+                index + 1
+                if row.kind is RowKind.EARLIER
+                else top - (row.parent or 0)
+            ),
         )
         for index, row in enumerate(reversed(before))
     ]
     below = [
-        ReachRow(
-            place=row.place, kind=row.kind, depth=0, above=False,
-            parent=top + (row.parent or 0), inside=row.inside,
-        )
+        replace(row, above=False, parent=top + (row.parent or 0))
         for row in ahead
     ]
     return Reach(

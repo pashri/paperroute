@@ -631,6 +631,66 @@ def test_pruning_drops_what_is_not_wanted() -> None:
     assert not result.map.shapes
 
 
+def with_extra_shape(*, state: State) -> State:
+    """
+    Add a shape no pattern uses, and a request for it, to a held state.
+
+    Parameters
+    ----------
+    state : State
+        State from ``held_state``.
+
+    Returns
+    -------
+    State
+        State whose Map also holds, and has asked for, shape ``x``.
+    """
+    shape = make_shape(shape_id='x', points=[(0.0, 0.0), (2.0, 0.0)])
+    return replace(
+        state,
+        map=replace(
+            state.map,
+            shapes={**state.map.shapes, 'x': shape},
+            requested_shapes=frozenset({'s', 'x'}),
+        ),
+    )
+
+
+def test_pruning_a_pattern_keeps_the_shape_a_departure_follows() -> None:
+    """A pattern not wanted goes while a shown departure keeps its shape."""
+    state = with_extra_shape(state=held_state())
+    shown = replace(departure(departs=START), shape_id='s')
+    result = pruned(state=state, wanted=frozenset(), departures=(shown,))
+    assert not result.map.patterns
+    assert set(result.map.shapes) == {'s'}
+    assert result.map.requested_shapes == {'s'}
+
+
+def test_pruning_a_shape_keeps_the_wanted_patterns() -> None:
+    """A shape nothing uses goes while the wanted pattern stays."""
+    state = with_extra_shape(state=held_state())
+    result = pruned(state=state, wanted=frozenset({'keep'}), departures=())
+    assert result.map.patterns == state.map.patterns
+    assert set(result.map.shapes) == {'s'}
+    assert result.map.requested_shapes == {'s'}
+
+
+def test_pruning_only_a_shape_request_trims_the_request() -> None:
+    """A request for a shape no longer held changes the state alone."""
+    state = held_state()
+    state = replace(
+        state,
+        map=replace(
+            state.map, requested_shapes=frozenset({'s', 'gone'}),
+        ),
+    )
+    result = pruned(state=state, wanted=frozenset({'keep'}), departures=())
+    assert result is not state
+    assert result.map.requested_shapes == {'s'}
+    assert result.map.patterns == state.map.patterns
+    assert result.map.shapes == state.map.shapes
+
+
 def test_a_destination_stop_view_keeps_its_patterns() -> None:
     """A Stop view with a Destination prunes and asks for nothing."""
     state, _ = on_view(view=LiveView.STOP)

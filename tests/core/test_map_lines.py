@@ -12,12 +12,7 @@ from paperroute_testkit.core.factories import (
     departure,
     pattern,
 )
-from paperroute_transit.core.geo import (
-    Point,
-    Shape,
-    make_shape,
-    nearest_along,
-)
+from paperroute_transit.core.geo import Point, Shape, make_shape, nearest_along
 from paperroute_transit.core.map_line import MapLine
 from paperroute_transit.core.map_lines import (
     LineChoice,
@@ -26,8 +21,8 @@ from paperroute_transit.core.map_lines import (
     plain_lines,
     plain_map_view,
     ride_span,
-    ringable,
     ring_points,
+    ringable,
 )
 from paperroute_transit.core.map_view import MapInputs
 from paperroute_transit.core.model import Departure, TripFacts

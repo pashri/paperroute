@@ -30,7 +30,6 @@ from paperroute_transit.core.map_view import (
     needed_patterns,
     pin_trips,
     pinned_routes,
-    plain_map_view,
     position_age,
     route_lines,
     screen_point,
@@ -650,22 +649,3 @@ def test_base_lists_ridden_stops() -> None:
         ),
     )
     assert windowed.base.stops == ((0.0, 0.0), (500.0, 0.0))
-
-
-def test_plain_map_view_draws_the_stretch_as_stop_dots() -> None:
-    """A plain map's dots are its stretch, before the stop as well as after."""
-    line = pattern(
-        stops=calls(
-            stations='ABC',
-            start=EIGHT - 360,
-            step=360,
-            points={'A': (-900.0, 0.0), 'B': (0.0, 0.0), 'C': (900.0, 0.0)},
-        ),
-    )
-    shown = replace(inputs(departures=(pin(),)), patterns={'t1': line})
-    view = plain_map_view(inputs=shown)
-    built = build_map_view(inputs=shown)
-    assert view.base.stops == ((-900.0, 0.0), (0.0, 0.0))
-    assert view == replace(
-        built, base=replace(built.base, stops=view.base.stops),
-    )

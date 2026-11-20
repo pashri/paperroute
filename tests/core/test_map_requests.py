@@ -20,6 +20,7 @@ from paperroute_testkit.core.factories import (
 from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.strip_factories import (
     CENTRE,
+    PIN,
     on_view,
     trains,
     turn,
@@ -28,6 +29,7 @@ from paperroute_transit.core.cycle import cycle_effects, needed_feeds
 from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.geo import Point, make_shape
 from paperroute_transit.core.map_fit import BANNER_ROOM, CREDIT_ROOM, FrameKey
+from paperroute_transit.core.map_lines import first_per_line
 from paperroute_transit.core.map_requests import (
     map_feeds,
     map_inputs,
@@ -51,7 +53,9 @@ from paperroute_transit.core.model import Departure, Pin
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.saved import LiveView, MapFraming
 from paperroute_transit.core.state_model import Cycle, State
-from paperroute_transit.core.state_views import live_stop_view
+from paperroute_transit.core.state_views import live_stop_view, live_view
+from paperroute_transit.core.strip_model import StripMapView
+from paperroute_transit.core.strip_state import strip_window
 from paperroute_transit.core.tiles import ZOOMS
 from tests.core.test_connection_screens import legs_loaded, started
 
@@ -852,3 +856,41 @@ def test_stop_view_positions_count_as_calls() -> None:
     sent = [effect for effect in effects if isinstance(effect, FetchFeed)]
     assert position_fetches(effects=sent) == {BUS_POSITIONS}
     assert state.quota.calls - before == len(sent)
+
+
+def test_strip_map_lines_are_the_strips_trips() -> None:
+    """On Strip + map with no To, the solid lines are the strip's trips."""
+    state, _ = on_view(
+        view=LiveView.STRIP_MAP,
+        pin=replace(PIN, destination=None),
+        departures=tuple(
+            replace(found, route=route, shape_id=shape)
+            for found, route, shape in zip(
+                trains(count=4), ('T1', 'T2', 'T1', 'T3'), 'abac',
+                strict=True,
+            )
+        ),
+    )
+    state = replace(
+        state,
+        map=replace(
+            state.map,
+            shapes={
+                name: make_shape(
+                    shape_id=name, points=[CENTRE, (CENTRE[0], 5000.0)],
+                )
+                for name in 'abc'
+            },
+        ),
+    )
+    window = strip_window(state=state)
+    shown = live_view(state=state, stop_view=live_stop_view(state=state))
+    assert isinstance(shown, StripMapView)
+    solid = [
+        line.shape_id
+        for line in shown.map.base.lines
+        if line.solid is not None
+    ]
+    assert solid == [
+        found.shape_id for found in first_per_line(departures=window)
+    ]

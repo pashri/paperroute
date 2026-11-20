@@ -3,9 +3,10 @@
 from paperroute_device.core.sleep import SLEEP_BAND
 from paperroute_transit.core.connection import live_chains
 from paperroute_transit.core.connection_screens import connection_map
+from paperroute_transit.core.map_lines import plain_map_view
 from paperroute_transit.core.map_requests import map_inputs
 from paperroute_transit.core.map_state import awaiting
-from paperroute_transit.core.map_view import MapView, plain_map_view
+from paperroute_transit.core.map_view import MapView
 from paperroute_transit.core.model import is_connection
 from paperroute_transit.core.panel_views import SleepView, sleep_map
 from paperroute_transit.core.places import shown

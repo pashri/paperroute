@@ -16,13 +16,14 @@ from paperroute_transit.core.chooser_steps import chooser_view
 from paperroute_transit.core.connection_screens import connection_screen
 from paperroute_transit.core.cycle import cycle_effects, cycle_held
 from paperroute_transit.core.live import LiveDeparture, live_since, resolved
+from paperroute_transit.core.map_lines import plain_map_view
 from paperroute_transit.core.map_requests import (
     map_effects,
     map_inputs,
     pattern_effects,
     polled_positions,
 )
-from paperroute_transit.core.map_view import STRIP_MAP_WIDTH, plain_map_view
+from paperroute_transit.core.map_view import STRIP_MAP_WIDTH
 from paperroute_transit.core.messages import Effect, ScreenView
 from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.places import shown, shown_index

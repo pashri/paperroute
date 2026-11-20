@@ -1076,7 +1076,7 @@ def test_loaded_shapes_and_positions_are_drawn() -> None:
     renders = effects_of(effects=effects, kind=Render)
     assert len(renders) == 1
     assert isinstance(state.last_view, MapView)
-    assert state.last_view.base.route == (line.points,)
+    assert [x.shape_id for x in state.last_view.base.lines] == ['b:0']
     assert [marker.live for marker in state.last_view.markers] == [True]
 
 

@@ -12,7 +12,12 @@ from paperroute_testkit.core.factories import (
     departure,
     pattern,
 )
-from paperroute_transit.core.geo import Point, Shape, make_shape
+from paperroute_transit.core.geo import (
+    Point,
+    Shape,
+    make_shape,
+    nearest_along,
+)
 from paperroute_transit.core.map_line import MapLine
 from paperroute_transit.core.map_lines import (
     LineChoice,
@@ -21,6 +26,7 @@ from paperroute_transit.core.map_lines import (
     plain_lines,
     plain_map_view,
     ride_span,
+    ringable,
     ring_points,
 )
 from paperroute_transit.core.map_view import MapInputs
@@ -470,3 +476,14 @@ def test_a_call_beyond_a_truncated_shape_is_not_ringed() -> None:
     near, far = (5100.0, 0.0), (5200.0, 0.0)
     assert near in sum(ringed_with(index=4, point=near), ())
     assert far not in sum(ringed_with(index=4, point=far), ())
+
+
+def test_a_call_off_the_map_is_not_measured_against_the_shape() -> None:
+    """A call off the map adds no `nearest_along` cache miss."""
+    inputs = lines_inputs(departures=(RIDE,))
+    far = (FROM_POINT[0] + 300 * 25.0, 0.0)
+    nearest_along.cache_clear()
+    assert not ringable(
+        inputs=inputs, centre=FROM_POINT, shape=EAST, point=far,
+    )
+    assert nearest_along.cache_info().misses == 0

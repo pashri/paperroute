@@ -400,7 +400,6 @@ def ringable(
     """
     return (
         shape is not None
-        and near_shape(shape=shape, point=point)
         and visible(
             at=screen_point(
                 width=inputs.width,
@@ -411,6 +410,7 @@ def ringable(
             ),
             width=inputs.width,
         )
+        and near_shape(shape=shape, point=point)
     )
 
 

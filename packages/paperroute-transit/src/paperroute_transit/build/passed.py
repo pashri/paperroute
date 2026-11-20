@@ -39,6 +39,18 @@ CREATE TABLE track_places (station_id TEXT PRIMARY KEY,
 RUNS: Final[str] = """
 SELECT stations FROM runs WHERE kind IN (SELECT value FROM json_each(?))
 """
+CALLS: Final[str] = """
+SELECT DISTINCT c.stops FROM run_calls c JOIN runs r USING (run_id)
+WHERE r.kind IN (SELECT value FROM json_each(?))
+"""
+PATTERNS: Final[str] = """
+SELECT DISTINCT p.stations FROM route_patterns p
+JOIN routes r USING (route_id)
+WHERE EXISTS (
+  SELECT 1 FROM runs ru WHERE ru.route = r.short_name
+    AND ru.kind IN (SELECT value FROM json_each(?))
+)
+"""
 PLACES: Final[str] = """
 SELECT stop_id, lon, lat FROM stops
 WHERE stop_id IN (SELECT value FROM json_each(?))
@@ -135,45 +147,51 @@ def never_passed(
     *, conn: sqlite3.Connection, kinds: Collection[str],
 ) -> frozenset[str]:
     """
-    Find the stations that are never an interior call of a run.
+    Find the stations that no trip of the kinds calls at mid-trip.
 
     Parameters
     ----------
     conn : sqlite3.Connection
-        A timetable with the runs table.
+        A timetable with the route patterns.
     kinds : Collection[str]
         Run kinds to read.
 
     Returns
     -------
     frozenset[str]
-        Stations of the runs that only ever start or end one.
+        Stations that every such trip starts or ends at.
     """
-    return never_of(runs=run_stations(conn=conn, kinds=kinds))
-
-
-def never_of(*, runs: Iterable[Sequence[str]]) -> frozenset[str]:
-    """
-    Find the stations that are never an interior call of a run.
-
-    Parameters
-    ----------
-    runs : Iterable[Sequence[str]]
-        Each run's station ids.
-
-    Returns
-    -------
-    frozenset[str]
-        Stations that only ever start or end a run.
-    """
-    runs = list(runs)
-    every = {station for stations in runs for station in stations}
-    inner = {station for stations in runs for station in stations[1:-1]}
+    rows = conn.execute(PATTERNS, (json.dumps(sorted(kinds)),))
+    patterns = [json.loads(stations) for stations, in rows]
+    every = {station for stations in patterns for station in stations}
+    inner = {station for stations in patterns for station in stations[1:-1]}
     return frozenset(every - inner)
 
 
+def stop_calls(
+    *, conn: sqlite3.Connection, kinds: Collection[str],
+) -> list[list[str]]:
+    """
+    Read the stopping calls of every run of the kinds.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        A timetable with the run tables.
+    kinds : Collection[str]
+        Run kinds to read.
+
+    Returns
+    -------
+    list[list[str]]
+        Each distinct list of stations a run stops at, in order.
+    """
+    rows = conn.execute(CALLS, (json.dumps(sorted(kinds)),))
+    return [json.loads(stops) for stops, in rows]
+
+
 def waypoints_of(
-    *, runs: Iterable[Sequence[str]],
+    *, runs: Iterable[Sequence[str]], calls: Iterable[Sequence[str]] = (),
 ) -> dict[Hop, set[str]]:
     """
     Find each hop and the stations runs call at between its ends.
@@ -181,20 +199,25 @@ def waypoints_of(
     A run counts for a hop only from a call at ``a`` to its next call at
     ``b`` with no other call at ``a`` or ``b`` between.
 
+    Hops are the consecutive pairs of the runs' stations and of their
+    stopping calls.
+
     Parameters
     ----------
     runs : Iterable[Sequence[str]]
         Each run's station ids.
+    calls : Iterable[Sequence[str]]
+        Each run's stopping stations.
 
     Returns
     -------
     dict[tuple[str, str], set[str]]
-        Stations called between, by consecutive call pair.
+        Stations called between, by hop.
     """
     runs = list(runs)
     found: dict[Hop, set[str]] = {
         (a, b): set()
-        for stations in runs
+        for stations in (*runs, *calls)
         for a, b in pairwise(stations)
         if a != b
     }
@@ -512,9 +535,15 @@ def write_passed(
     """
     conn.executescript(PASSED_SCHEMA)
     runs = run_stations(conn=conn, kinds=kinds)
-    found = waypoints_of(runs=runs)
+    found = waypoints_of(
+        runs=runs, calls=stop_calls(conn=conn, kinds=kinds),
+    )
     network = network_of(
-        conn=conn, track=track, runs=runs, projection=projection,
+        conn=conn,
+        track=track,
+        runs=runs,
+        kinds=kinds,
+        projection=projection,
     )
     routes = routes_of(network=network, found=found)
     write_hops(conn=conn, network=network, routes=routes)
@@ -528,6 +557,7 @@ def network_of(
     conn: sqlite3.Connection,
     track: RailTrack | None,
     runs: Sequence[Sequence[str]],
+    kinds: Collection[str],
     projection: Projection,
 ) -> Network | None:
     """
@@ -541,6 +571,8 @@ def network_of(
         The rail track.
     runs : Sequence[Sequence[str]]
         Each run's station ids.
+    kinds : Collection[str]
+        Run kinds whose hops are worked out.
     projection : Projection
         The timetable's projection.
 
@@ -557,7 +589,7 @@ def network_of(
         graph=graph_of(track=track),
         stations=stations,
         points={**stations, **osm_points(track=track, stations=stations)},
-        never=never_of(runs=runs),
+        never=never_passed(conn=conn, kinds=kinds),
     )
 
 

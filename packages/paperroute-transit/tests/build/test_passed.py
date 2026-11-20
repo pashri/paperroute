@@ -4,7 +4,6 @@ import json
 import math
 import sqlite3
 from array import array
-from collections.abc import Iterator
 from contextlib import closing
 from typing import Final
 
@@ -71,7 +70,10 @@ def osm_station(*, osm_id: int, x: float) -> TrackStation:
 
 
 def timetable_of(
-    *, runs: list[tuple[str, str]],
+    *,
+    runs: list[tuple[str, str]],
+    stops: dict[int, str] | None = None,
+    patterns: list[str] | None = None,
 ) -> sqlite3.Connection:
     """
     Build a timetable with runs and the stations they name.
@@ -80,11 +82,17 @@ def timetable_of(
     ----------
     runs : list[tuple[str, str]]
         Kind and space-separated station ids of each run.
+    stops : dict[int, str] | None
+        Stopping calls by run position (1-based) where they differ from
+        the run's stations.
+    patterns : list[str] | None
+        Trip patterns; one per run when None.
 
     Returns
     -------
     sqlite3.Connection
-        An in-memory database with ``runs`` and ``stops``.
+        An in-memory database with the run, call, pattern and stop
+        tables.
     """
     conn = sqlite3.connect(':memory:')
     conn.execute(
@@ -95,11 +103,38 @@ def timetable_of(
         'CREATE TABLE stops (stop_id TEXT PRIMARY KEY, name TEXT,'
         ' parent_station TEXT, lat REAL, lon REAL, platform TEXT)',
     )
-    for kind, stations in runs:
+    conn.execute(
+        'CREATE TABLE run_calls (run_id INTEGER, stops TEXT,'
+        ' no_board TEXT, no_alight TEXT)',
+    )
+    conn.execute(
+        'CREATE TABLE route_patterns (route_id TEXT, headsign TEXT,'
+        ' stations TEXT, trips INTEGER)',
+    )
+    conn.execute(
+        'CREATE TABLE routes (route_id TEXT PRIMARY KEY,'
+        ' short_name TEXT)',
+    )
+    conn.execute("INSERT INTO routes VALUES ('r1', 'r')")
+    for number, (kind, stations) in enumerate(runs, start=1):
         conn.execute(
             'INSERT INTO runs (kind, route, stations, trips)'
             ' VALUES (?, ?, ?, ?)',
             (kind, 'r', json.dumps(stations.split()), 1),
+        )
+        conn.execute(
+            'INSERT INTO run_calls VALUES (?, ?, ?, ?)',
+            (
+                number,
+                json.dumps((stops or {}).get(number, stations).split()),
+                '[]',
+                '[]',
+            ),
+        )
+    for pattern in patterns or [stations for _, stations in runs]:
+        conn.execute(
+            "INSERT INTO route_patterns VALUES ('r1', 'h', ?, 1)",
+            (json.dumps(pattern.split()),),
         )
     for stop_id, point in SITES.items():
         lon, lat = to_lonlat(point=point, projection=PROJECTION)
@@ -139,6 +174,7 @@ def run_passed(
     runs: list[tuple[str, str]],
     stations: tuple[TrackStation, ...] = (),
     track: bool = True,
+    stops: dict[int, str] | None = None,
 ) -> tuple[
     sqlite3.Connection,
     PassedReport,
@@ -154,13 +190,15 @@ def run_passed(
         OSM stations on the line.
     track : bool
         False to build with no track.
+    stops : dict[int, str] | None
+        Stopping calls by run position, see ``timetable_of``.
 
     Returns
     -------
     tuple[sqlite3.Connection, PassedReport]
         The timetable and the report.
     """
-    conn = timetable_of(runs=runs)
+    conn = timetable_of(runs=runs, stops=stops)
     report = write_passed(
         conn=conn,
         track=(
@@ -176,20 +214,6 @@ def run_passed(
     return conn, report
 
 
-@pytest.fixture(name='conn')
-def fixture_conn() -> Iterator[sqlite3.Connection]:
-    """
-    Provide a timetable that is closed after the test.
-
-    Yields
-    ------
-    sqlite3.Connection
-        A timetable with a station at A, D and the others in SITES.
-    """
-    with closing(timetable_of(runs=[])) as conn:
-        yield conn
-
-
 def test_a_fast_train_lists_the_stations_it_runs_through() -> None:
     """A non-stop A to D lists B and C, which other trains call at."""
     conn, report = run_passed(runs=[
@@ -202,13 +226,44 @@ def test_a_fast_train_lists_the_stations_it_runs_through() -> None:
 
 
 def test_a_waypoint_comes_in_track_order() -> None:
-    """A station the hop is run through, B, comes before C."""
+    """Waypoints follow the track, not their ids: T comes before C."""
     conn, _ = run_passed(runs=[
-        ('train', 'A D'), ('train', 'A B D'), ('train', 'N C M'),
+        ('train', 'A D'), ('train', 'A C D'), ('train', 'A T D'),
     ])
     with closing(conn):
         passed, inside, _ = passed_by_hop(conn=conn)[('A', 'D')]
-    assert (passed, inside) == (['B', 'C'], 1)
+    assert (passed, inside) == (['T', 'C'], 1)
+
+
+def test_a_waypoint_too_far_off_the_line_is_ignored() -> None:
+    """A station called between A and D far off the line is no waypoint."""
+    conn, _ = run_passed(runs=[('train', 'A D'), ('train', 'A Q D')])
+    with closing(conn):
+        passed, inside, _ = passed_by_hop(conn=conn)[('A', 'D')]
+    assert (passed, inside) == ([], 1)
+
+
+def test_a_feed_marked_pass_has_hops_by_calls_and_by_stations() -> None:
+    """A run A, B, D that passes B has A-D, A-B and B-D rows."""
+    conn, _ = run_passed(
+        runs=[('train', 'A B D')], stops={1: 'A D'},
+    )
+    with closing(conn):
+        rows = passed_by_hop(conn=conn)
+    assert set(rows) == {('A', 'D'), ('A', 'B'), ('B', 'D')}
+    assert rows[('A', 'D')][:2] == (['B'], 1)
+    assert rows[('A', 'B')][:2] == ([], 1)
+
+
+def test_a_terminus_chained_into_a_run_is_never_passed() -> None:
+    """A station every trip starts or ends at stays in the never set."""
+    runs = [('train', 'A B C')]
+    with closing(timetable_of(runs=runs, patterns=['A B', 'B C'])) as conn:
+        assert never_passed(conn=conn, kinds=KINDS) == {'A', 'B', 'C'}
+    with closing(
+        timetable_of(runs=runs, patterns=['A B', 'B C', 'A B C']),
+    ) as conn:
+        assert never_passed(conn=conn, kinds=KINDS) == {'A', 'C'}
 
 
 def test_a_waypoint_from_a_later_trip_is_ignored() -> None:

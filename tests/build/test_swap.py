@@ -204,7 +204,10 @@ def test_handoff_without_tiles_reads_as_none(data_dir: Path) -> None:
     """A record written before the tiles key existed has no tiles."""
     record = refresh_record(data_dir=data_dir, lock_fd=7)
     path = data_dir / 'work' / 'handoff.json'
-    write_handoff(path=path, record=replace(record, tiles=str(data_dir / 'tiles.db')))
+    write_handoff(
+        path=path,
+        record=replace(record, tiles=str(data_dir / 'tiles.db')),
+    )
     raw = json.loads(path.read_text(encoding='utf-8'))
     del raw['tiles']
     path.write_text(json.dumps(raw), encoding='utf-8')

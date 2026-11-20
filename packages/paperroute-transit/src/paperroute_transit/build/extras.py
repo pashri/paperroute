@@ -84,11 +84,16 @@ def run_passed(
     tiles : Path | None
         Tiles file; None builds with no track.
     """
-    write_passed(
+    report = write_passed(
         conn=conn,
         track=None if tiles is None else read_track_db(path=tiles),
         kinds=end_point_modes(modes=city.modes),
         projection=city.projection,
+    )
+    print(
+        f'progress passed hops={report.hops} inside={report.inside}'
+        f' added={report.added}',
+        flush=True,
     )
 
 

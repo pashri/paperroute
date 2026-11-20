@@ -15,6 +15,10 @@ from paperroute_device.adapters.sqlite_ro import (
 from paperroute_transit.adapters.departure_rows import STOP_STATION
 from paperroute_transit.adapters.network_lines import LineTables, Row
 from paperroute_transit.adapters.timetable_db import DEFAULT_PATH, to_point
+from paperroute_transit.adapters.train_network_db import (
+    HOP_TABLES,
+    load_train_network,
+)
 from paperroute_transit.core.chooser import (
     Choice,
     ChooserPath,
@@ -24,7 +28,12 @@ from paperroute_transit.core.chooser import (
 )
 from paperroute_transit.core.city import City, LineGroup
 from paperroute_transit.core.model import StopPlace, until_revisit
-from paperroute_transit.core.modes import ModeSpec, line_modes, line_value
+from paperroute_transit.core.modes import (
+    ModeSpec,
+    end_point_modes,
+    line_modes,
+    line_value,
+)
 from paperroute_transit.core.reach import (
     ReachInput,
     RunTail,
@@ -33,6 +42,7 @@ from paperroute_transit.core.reach import (
     every_route,
     merge_tails,
 )
+from paperroute_transit.core.train_network import TrainNetwork
 
 NETWORK_TABLES: Final[tuple[str, ...]] = (
     'runs', 'run_stops', 'chooser_routes', 'chooser_towards',
@@ -868,8 +878,13 @@ class SqliteNetworkRepository:
         )
         if line:
             tails = cut_to_line(tails=tails, line=line)
+        network = self.train_network(key=key, station=station)
         named = {station, *(each.off for each in exits)}.union(
             *(tail.before + tail.after for tail in tails),
+            *(
+                hop.passed
+                for hop in (network.hops.values() if network else ())
+            ),
         )
         places = self.places(stations=named)
         return ReachInput(
@@ -882,6 +897,37 @@ class SqliteNetworkRepository:
             places=places,
             station_of=self.station_of(stations=places),
             exits=exits,
+            network=network,
+        )
+
+    def train_network(
+        self, *, key: StripKey, station: str,
+    ) -> TrainNetwork | None:
+        """
+        Load the hops and weekday runs of an end-point kind.
+
+        Parameters
+        ----------
+        key : StripKey
+            The From and its kind.
+        station : str
+            The From station ID.
+
+        Returns
+        -------
+        TrainNetwork | None
+            None for a kind without end points; empty for a file with
+            no hop tables.
+        """
+        if key.kind not in end_point_modes(modes=self.city.modes):
+            return None
+        if not self._has_tables(tables=HOP_TABLES):
+            return TrainNetwork(hops={}, runs=())
+        return load_train_network(
+            fetch=self.fetch,
+            kind=str(key.kind),
+            station=station,
+            with_calls=self._has_tables(tables=('run_calls',)),
         )
 
     def close(self) -> None:

@@ -9,6 +9,7 @@ from itertools import takewhile
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.reach_layout import Entry, LineExit, lay_out
 from paperroute_transit.core.reach_track import FROM_KEY, place_of
+from paperroute_transit.core.train_network import TrainNetwork
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,9 @@ class ReachInput:
     exits : tuple[LineExit, ...]
         Ways trips leave the strip's line; their off stations are in the
         places.
+    network : TrainNetwork | None
+        The hops and weekday runs of an end-point kind; None for any
+        other kind.
     """
 
     origin: StopPlace
@@ -57,6 +61,7 @@ class ReachInput:
     places: Mapping[str, StopPlace]
     station_of: Mapping[str, str]
     exits: tuple[LineExit, ...] = ()
+    network: TrainNetwork | None = None
 
 
 @dataclass(frozen=True)

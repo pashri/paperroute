@@ -429,4 +429,5 @@ SYDNEY: Final[City] = City(
     source_nouns=SOURCE_NOUNS,
     noun_overrides=NOUN_OVERRIDES,
     feeds=SydneyFeeds(projection=SYDNEY_PROJECTION),
+    loop_name='City Circle',
 )

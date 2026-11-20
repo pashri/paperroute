@@ -227,6 +227,7 @@ class Nouns:
 
 
 @dataclass(frozen=True)
+# pylint: disable-next=too-many-instance-attributes
 class City:
     """
     One city's settings.
@@ -269,6 +270,8 @@ class City:
         its route; its positions reader labels it '' unless the feed
         named it. The fallback resolves routes through
         ``alerts.route_prefixes``.
+    loop_name : str
+        The name of the city's circular line, or '' for none.
     """
 
     name: str
@@ -287,6 +290,7 @@ class City:
     feeds: FeedPlan
     parked_age: ParkedAge = ParkedAge.OFF
     route_fallback: bool = False
+    loop_name: str = ''
 
     def mode(self, *, mode_id: str | None) -> ModeSpec | None:
         """

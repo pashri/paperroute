@@ -164,6 +164,17 @@ def test_lateness_carries_into_the_joined_trip_less_its_slack() -> None:
     assert carried.heard_at == found.trips['t1'].heard_at
 
 
+def test_a_carried_delay_stops_at_twenty_minutes() -> None:
+    """Over 20 minutes still to carry, the next trip starts 20 min late."""
+    capped = made(bus(x=500.0, seconds=2100), fetched=2100)
+    assert delay(trip=capped.trips['t1']) == 1800
+    assert delay(trip=capped.trips['t2']) == 1200
+    edge = made(bus(x=500.0, seconds=1680), fetched=1680)
+    assert delay(trip=edge.trips['t2']) == 1200
+    under = made(bus(x=500.0, seconds=1620), fetched=1620)
+    assert delay(trip=under.trips['t2']) == 1140
+
+
 def test_a_layover_that_absorbs_the_lateness_carries_nothing() -> None:
     """3 min late into a 5 min layover leaves the next trip to its time."""
     assert 't2' not in made(bus(x=500.0, seconds=480), fetched=480).trips

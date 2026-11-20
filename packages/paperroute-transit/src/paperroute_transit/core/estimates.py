@@ -30,6 +30,7 @@ UNCERTAIN_LATE: Final[timedelta] = timedelta(minutes=10)
 UNCERTAIN_EARLY: Final[timedelta] = timedelta(minutes=10)
 NEAR_END: Final[float] = 150.0  # metres from the trip's first or last stop
 TURNAROUND: Final[timedelta] = timedelta(minutes=2)
+CARRY_LIMIT: Final[timedelta] = timedelta(minutes=20)
 BLANK_OFF: Final[timedelta] = timedelta(hours=3)  # a blank-date day's limit
 
 
@@ -262,7 +263,8 @@ def carried(
     -------
     TripRealtime | None
         The next trip, always uncertain, late by what the layover less
-        the turnaround does not absorb; None when it absorbs it all.
+        the turnaround does not absorb, at most `CARRY_LIMIT`; None when
+        it absorbs it all.
     """
     late = trip.updates[0].departure_delay or 0
     layover = joined.stops[0].departs - pattern.stops[-1].arrives
@@ -273,7 +275,9 @@ def carried(
         sequence=EVERY_STOP,
         stop_id=None,
         arrival_delay=None,
-        departure_delay=round(left),
+        departure_delay=round(
+            min(left, CARRY_LIMIT.total_seconds()),
+        ),
         arrival_time=None,
         departure_time=None,
     )

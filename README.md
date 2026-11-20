@@ -116,19 +116,30 @@ about 80 MB and made a 30 MB file with 66 routes and 7,276 trips: 5,735 bus
 and coach trips and 1,541 train trips.
 
 Download Geofabrik's `cambridgeshire`, `bedfordshire`, `hertfordshire`,
-`essex` and `suffolk` extracts
+`essex`, `suffolk`, `greater-london` and `norfolk` extracts
 (`https://download.geofabrik.de/europe/united-kingdom/england/<name>-latest.osm.pbf`)
-into `data/cambridge/raw/`, merge them and build the tiles:
+into `data/cambridge/raw/`, merge the first five and build the tiles. The
+rail track is read from every `--track-osm` file:
 
     osmium merge data/cambridge/raw/{cambridgeshire,bedfordshire,hertfordshire,essex,suffolk}-latest.osm.pbf \
       -o data/cambridge/raw/cambridge-area.osm.pbf
     uv run python -m paperroute_cambridge.build tiles \
       --osm data/cambridge/raw/cambridge-area.osm.pbf \
+      --track-osm data/cambridge/raw/cambridge-area.osm.pbf \
+      --track-osm data/cambridge/raw/greater-london-latest.osm.pbf \
+      --track-osm data/cambridge/raw/norfolk-latest.osm.pbf \
       --timetable data/cambridge/timetable.db --out data/cambridge/tiles.db
     uv run python -m paperroute_cambridge.build check-tiles data/cambridge/tiles.db
 
-The merge makes a 172 MB file in 3.4 s. The tiles take 122 s with a peak of
-684 MB and make a 14 MB file with 4,011 tiles and 8,765 labels.
+The merge makes a 172 MB file in 3.4 s. The tiles take 131 s with a peak of
+about 1,000 MB and make an 18 MB file with 4,131 tiles, 8,400 labels and a
+rail track of 108,445 nodes and 577 stations.
+
+Build in this order: the timetable, the tiles, then the timetable again with
+`--tiles data/cambridge/tiles.db`, which writes the stations each train passes
+between its calls. On the Mac that last build took about 25 s with a peak of
+about 74 MB, against 44 MB without the tiles: 406 hops between stations, 296
+of them on the track.
 
 Run the board live:
 

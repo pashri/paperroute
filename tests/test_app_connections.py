@@ -64,6 +64,22 @@ class RecordingTimetable(EmptyPlacedTimetable):
             return []
         return [departure(departs=start, trip_id=f'call-{len(self.reads)}')]
 
+    def station_for(self, *, stop_id: str) -> str:
+        """
+        Give stop 'a' the station 'Ga' and every other stop itself.
+
+        Parameters
+        ----------
+        stop_id : str
+            Stop ID.
+
+        Returns
+        -------
+        str
+            The stop's station.
+        """
+        return 'Ga' if stop_id == 'a' else stop_id
+
     def alert_places(
         self,
         *,
@@ -358,9 +374,9 @@ def test_connection_second_read_cached() -> None:
 
 
 def test_a_read_carries_the_froms_station() -> None:
-    """A pin with no Destination reads its From's station; others do not."""
+    """Every pin's read carries its From's station."""
     timetable = RecordingTimetable()
     plain = LoadDepartures(pin=pin_of('a', None), start=START, end=END)
-    assert departures_read(timetable=timetable, effect=plain).station == 'a'
+    assert departures_read(timetable=timetable, effect=plain).station == 'Ga'
     way = LoadDepartures(pin=pin_of('a', 'b'), start=START, end=END)
-    assert departures_read(timetable=timetable, effect=way).station == ''
+    assert departures_read(timetable=timetable, effect=way).station == 'Ga'

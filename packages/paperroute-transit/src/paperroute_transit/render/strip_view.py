@@ -12,6 +12,7 @@ from paperroute_device.render.canvas import (
     WIDTH,
     Canvas,
     Face,
+    text_width,
 )
 from paperroute_device.render.frame import HEADER, finish, wrap
 from paperroute_transit.core.stop_view import (
@@ -31,8 +32,10 @@ from paperroute_transit.core.strip_model import (
 from paperroute_transit.render.chrome import (
     ARROW_WIDTH,
     BANNER,
+    NAME_GAP,
     arrow,
     badge,
+    badge_width,
     countdown_slot,
     note_room,
     pill,
@@ -81,7 +84,9 @@ BADGE_PX: Final[int] = 14
 CARRY_ROOM: Final[int] = 72  # kept free after a destination for a carry-on
 CARRY_GAP: Final[int] = 10  # pixels between the arrival and a carry-on
 BADGE_DROP: Final[int] = 34  # badge centre below the row's rule
-COUNTDOWN_ROOM: Final[int] = 84  # pixels kept for the countdown
+NAME_DROP: Final[int] = 40  # one-line baseline below the rule
+TWO_LINE_DROPS: Final[tuple[int, int]] = (27, 43)  # baselines below the rule
+TWO_LINE_BADGE_DROP: Final[int] = 30  # badge centre beside two lines
 CANCELLED_LEFT: Final[int] = 684
 CANCELLED_TEXT: Final[str] = 'CANCELLED'
 EMPTY_FACE: Final[Face] = Face(weight=700, px=15)
@@ -131,6 +136,57 @@ def row_note(canvas: Canvas, *, row: Row, top: int) -> None:
         )
 
 
+def name_room(*, row: Row, left: float) -> float:
+    """
+    Measure the width a destination has, from its left edge.
+
+    Parameters
+    ----------
+    row : Row
+        Departure.
+    left : float
+        Where the name starts.
+
+    Returns
+    -------
+    float
+        The width to the cancelled block or the countdown, each less a
+        gap, or to the text edge when the row has neither.
+    """
+    if row.pill is Pill.CANCELLED:
+        return CANCELLED_LEFT - NAME_GAP - left
+    slot = countdown_slot(row=row)
+    if slot:
+        count = text_width(text=slot, face=COUNTDOWN_FACE)
+        return TEXT_RIGHT - count - NAME_GAP - left
+    return TEXT_RIGHT - left
+
+
+def name_lines(*, text: str, width: float) -> tuple[str, ...]:
+    """
+    Split a destination into at most two lines.
+
+    Parameters
+    ----------
+    text : str
+        Destination.
+    width : float
+        Room for each line.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The text alone when it fits, else its first wrapped line and
+        the rest joined as the second.
+    """
+    if text_width(text=text, face=HEADSIGN_FACE) <= width:
+        return (text,)
+    lines = wrap(text=text, face=HEADSIGN_FACE, width=width)
+    if len(lines) <= len(TWO_LINE_DROPS):
+        return lines
+    return lines[0], ' '.join(lines[1:])
+
+
 def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> int:
     """
     Draw a departure's route badge and headsign, and its arrival if any.
@@ -158,19 +214,25 @@ def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> int:
     """
     if whole and row.onto is not None:
         return continuing_middle(canvas, row=row, top=top)
-    x = MIDDLE_X + badge(
-        canvas, x=MIDDLE_X, y=top + BADGE_DROP, route=row.route, px=BADGE_PX,
-    ) + 8
-    canvas.text(
-        at=(x, top + 40),
-        text=canvas.fit(
-            text=row.destination,
-            face=HEADSIGN_FACE,
-            width=TEXT_RIGHT - COUNTDOWN_ROOM - x,
-        ),
-        face=HEADSIGN_FACE,
-        grey=INK,
+    x = MIDDLE_X + badge_width(px=BADGE_PX) + 8
+    room = name_room(row=row, left=x)
+    lines = name_lines(text=row.destination, width=room)
+    two = len(lines) == len(TWO_LINE_DROPS)
+    badge(
+        canvas,
+        x=MIDDLE_X,
+        y=top + (TWO_LINE_BADGE_DROP if two else BADGE_DROP),
+        route=row.route,
+        px=BADGE_PX,
     )
+    drops = TWO_LINE_DROPS if two else (NAME_DROP,)
+    for line, drop in zip(lines, drops):
+        canvas.text(
+            at=(x, top + drop),
+            text=canvas.fit(text=line, face=HEADSIGN_FACE, width=room),
+            face=HEADSIGN_FACE,
+            grey=INK,
+        )
     if whole:
         return MIDDLE_X
     arrival = canvas.text(

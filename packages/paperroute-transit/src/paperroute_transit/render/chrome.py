@@ -29,6 +29,7 @@ BANNER: Final[int] = 34
 WARNING_SIDE: Final[int] = 18  # warning triangle side, in pixels
 FASTER: Final[str] = 'FASTER'
 TAG_GAP: Final[int] = 8
+NAME_GAP: Final[int] = 8  # pixels between a name and what ends it
 TABS: Final[tuple[str, ...]] = ('Stop', 'Map', 'Strip', 'Strip + map')
 ALERT_TABS: Final[tuple[str, ...]] = (*TABS, 'Alerts')
 ONE_TITLE_PICKS: Final[frozenset[str]] = frozenset({PICK_FROM})

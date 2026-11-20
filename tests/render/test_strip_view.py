@@ -51,6 +51,7 @@ from paperroute_transit.core.strip_view import build_strip_view
 from paperroute_transit.render.chrome import (
     ARROW_WIDTH,
     BANNER,
+    NAME_GAP,
     NOTE_GAP,
     badge,
     note_room,
@@ -59,16 +60,22 @@ from paperroute_transit.render.chrome import (
 from paperroute_transit.render.markers import badge_box
 from paperroute_transit.render.stop_view import TAG_FACE, WIDEST_COUNT
 from paperroute_transit.render.strip_view import (
+    CANCELLED_LEFT,
     CARRY_GAP,
+    COUNTDOWN_FACE,
+    HEADSIGN_FACE,
     HINT_BOX,
     HINT_FACE,
     HINT_PAD,
     NAME_X,
     PANE_NAME_X,
+    RULE_RIGHT,
     TEXT_RIGHT,
     TIME_DROP,
     draw_strip_map_view,
     draw_strip_view,
+    name_lines,
+    name_room,
     paint_strip_view,
 )
 from paperroute_transit.render.strip_view import panel_row as paint_panel_row
@@ -778,3 +785,81 @@ def test_uncertain_carry_on_gives_way_to_the_note() -> None:
     start = TEXT_RIGHT - int(note_room(face=TAG_FACE))
     gap = painted(row=row)[SECOND_LINE, start : start + NOTE_GAP - 1]
     assert (gap == PAPER).all()
+
+
+LONGEST = (
+    'Our Lady Of Mercy College Via Old Windsor Rd And Every Other Street'
+)
+
+
+def test_name_lines_keeps_a_name_that_fits() -> None:
+    """A name that fits stays whole on one line, an empty one too."""
+    assert name_lines(text='Emu Plains', width=200.0) == ('Emu Plains',)
+    assert name_lines(text='', width=200.0) == ('',)
+
+
+def test_name_lines_wraps_at_the_last_space_that_fits() -> None:
+    """The first line takes all the words that fit; the rest go second."""
+    width = text_width(text='London Kings', face=HEADSIGN_FACE) + 1
+    assert name_lines(text='London Kings Cross', width=width) == (
+        'London Kings', 'Cross',
+    )
+    first = text_width(text='Mount Victoria', face=HEADSIGN_FACE) + 1
+    assert name_lines(
+        text='Mount Victoria Via Parramatta And Penrith', width=first,
+    ) == ('Mount Victoria', 'Via Parramatta And Penrith')
+
+
+def test_name_room_ends_at_the_countdowns_left_edge() -> None:
+    """Room runs to the count less the gap, to the block, or to the edge."""
+    count = text_width(text='6 min', face=COUNTDOWN_FACE)
+    assert name_room(row=panel_row(), left=600.0) == (
+        TEXT_RIGHT - count - NAME_GAP - 600
+    )
+    timetabled = replace(panel_row(), live=False)
+    assert name_room(row=timetabled, left=600.0) == TEXT_RIGHT - 600
+    cancelled = panel_row(pill=Pill.CANCELLED)
+    assert name_room(row=cancelled, left=600.0) == (
+        CANCELLED_LEFT - NAME_GAP - 600
+    )
+
+
+def test_a_long_name_takes_the_room_a_timetable_row_leaves() -> None:
+    """With no countdown a name runs on past the old limit."""
+    row = replace(
+        panel_row(), live=False, destination='London Liverpool Street',
+    )
+    frame = panel_frame(panel=WHOLE, row=row)
+    assert (frame[PANEL_TOP + 28:PANEL_TOP + 44, 702:784] == INK).any()
+    assert (frame[PANEL_TOP + 45:PANEL_TOP + 68, 556:784] == PAPER).all()
+
+
+def test_a_name_too_long_for_the_room_wraps_beside_a_centred_badge() -> None:
+    """Two lines sit beside a badge 4 px higher than a one-line badge."""
+    row = replace(panel_row(), destination='London Liverpool Street')
+    two = panel_frame(panel=PANEL, row=row)
+    one = panel_frame(panel=PANEL, row=panel_row())
+    assert (two[PANEL_TOP + 22:PANEL_TOP + 38, 557] == INK).all()
+    assert (two[PANEL_TOP + 41:PANEL_TOP + 44, 557] == PAPER).all()
+    assert (one[PANEL_TOP + 26:PANEL_TOP + 43, 557] == INK).all()
+    assert (two[SECOND_LINE, MIDDLE] == one[SECOND_LINE, MIDDLE]).all()
+
+
+def test_a_two_line_name_ends_before_the_countdown() -> None:
+    """Both lines stop a gap short of the count's left edge."""
+    row = replace(panel_row(), destination=LONGEST)
+    frame = panel_frame(panel=PANEL, row=row)
+    count = text_width(text='6 min', face=COUNTDOWN_FACE)
+    edge = int(TEXT_RIGHT - count)
+    band = frame[PANEL_TOP + 14:PANEL_TOP + 46, edge - NAME_GAP + 2:edge - 1]
+    assert (band == PAPER).all()
+
+
+def test_a_name_still_too_long_never_takes_a_third_line() -> None:
+    """Past two lines the name is cut, and the pill slot stays clear."""
+    row = replace(panel_row(), destination=LONGEST)
+    whole = panel_frame(panel=WHOLE, row=row)
+    assert (whole[PANEL_TOP + 48:PANEL_TOP + 68, 556:784] == PAPER).all()
+    frame = panel_frame(panel=PANEL, row=row)
+    slot = frame[PANEL_TOP + 47:PANEL_TOP + 68, RULE_RIGHT - 74:RULE_RIGHT]
+    assert (slot == PAPER).all()

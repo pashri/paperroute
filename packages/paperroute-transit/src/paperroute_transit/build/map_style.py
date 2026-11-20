@@ -131,13 +131,13 @@ def road_grey(*, layer: str, mpp: int) -> int:
     Returns
     -------
     int
-        Grey level: dark for busways from 14 m/px out; otherwise at
-        the city zoom, dark for trunk roads and
-        motorways and light for the rest; at 25 m/px, light for minor
-        and tertiary roads and dark for the rest. Below that, minor
-        roads are light from 14 m/px and tertiary roads dark from 14
-        m/px; other roads are ink, or dark when at least
-        ``MAIN_ROAD_PX`` wide.
+        Grey level. Busways are dark from 14 m/px out. For other
+        roads: at the city zoom, dark for trunk roads and motorways
+        and light for the rest; at 25 m/px, light for minor and
+        tertiary roads and dark for the rest. Below that, minor roads
+        are light from 14 m/px and tertiary roads dark from 14 m/px;
+        other roads are ink, or dark when at least ``MAIN_ROAD_PX``
+        wide.
     """
     if layer == 'road_busway' and mpp >= 14:
         return DARK

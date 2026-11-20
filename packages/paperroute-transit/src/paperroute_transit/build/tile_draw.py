@@ -289,7 +289,7 @@ def draw_roads(
     layers: dict[str, list[Line]],
 ) -> None:
     """
-    Stroke rivers, paths and service roads, then roads.
+    Stroke rivers, then paths, service roads and airfields, then roads.
 
     Roads run from minor to motorway.
 

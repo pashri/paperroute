@@ -93,6 +93,7 @@ def ahead_rows(
     trips: TripInputs,
     main: LiveDeparture,
     seen: set[str],
+    cut: bool = False,
 ) -> list[ReachRow]:
     """
     Lay out the calls and passed stations after the From.
@@ -107,17 +108,21 @@ def ahead_rows(
         The followed departure.
     seen : set[str]
         Station IDs already listed; each station laid out is added.
+    cut : bool
+        Stop where the train calls at the From again.
 
     Returns
     -------
     list[ReachRow]
-        Rows below the From, parented from the From at index 0 on.
+        Rows away from the From, parented from the From at index 0 on.
     """
     rows: list[ReachRow] = []
     last = data.origin.stop_id
     for station, stop, _ in stops_after(
         item=main, trips=trips, origin=last,
     ):
+        if cut and station == data.origin.stop_id:
+            break
         previous, last = last, station
         if station in seen:
             continue
@@ -185,6 +190,7 @@ def train_reach(
     trips: TripInputs,
     main: LiveDeparture | None,
     destination: str | None,
+    above: LiveDeparture | None = None,
 ) -> Reach:
     """
     Lay out a Strip along the followed train.
@@ -199,28 +205,119 @@ def train_reach(
         The followed departure; None for the From alone.
     destination : str | None
         The Destination station ID.
+    above : LiveDeparture | None
+        The train read upward above the From. When given, each train is
+        cut where it calls at the From again, and no earlier calls are
+        listed.
 
     Returns
     -------
     Reach
         Earlier calls, the From, then the calls and passed stations to
-        the trip's end. A station is listed once, at its first place.
+        the trip's end. A station is listed once, at its first place:
+        the train below claims its stations before the one above.
     """
     origin = ReachRow(
         place=data.origin, kind=RowKind.ORIGIN, depth=0, above=False,
         parent=None,
     )
-    started = (
-        None if main is None else started_pattern(
-            item=main, trips=trips, origin=data.origin.stop_id,
-        )
+    lead = next(
+        (
+            item
+            for item in (main, above)
+            if item is not None and started_pattern(
+                item=item, trips=trips, origin=data.origin.stop_id,
+            )
+        ),
+        None,
     )
-    if main is None or started is None:
+    if lead is None:
         return Reach(rows=(origin,), stations=0, station_of=data.station_of)
     seen = {data.origin.stop_id}
-    ahead = ahead_rows(data=data, trips=trips, main=main, seen=seen)
+    ahead = side_rows(
+        data=data, trips=trips, item=main, seen=seen, cut=above is not None,
+    )
+    before = (
+        earlier_rows(
+            data=data, trips=trips, main=lead, drop=seen | {destination or ''},
+        )
+        if above is None
+        else side_rows(
+            data=data, trips=trips, item=above, seen=seen, cut=True,
+        )
+    )
+    return stacked(
+        data=data, main=lead, before=before, origin=origin, ahead=ahead,
+    )
+
+
+def side_rows(
+    *,
+    data: ReachInput,
+    trips: TripInputs,
+    item: LiveDeparture | None,
+    seen: set[str],
+    cut: bool,
+) -> list[ReachRow]:
+    """
+    Lay out one train's rows after the From.
+
+    Parameters
+    ----------
+    data : ReachInput
+        The From and its network.
+    trips : TripInputs
+        The strip's loaded patterns and station map.
+    item : LiveDeparture | None
+        The departure; None gives no rows.
+    seen : set[str]
+        Station IDs already listed; each station laid out is added.
+    cut : bool
+        Stop where the train calls at the From again.
+
+    Returns
+    -------
+    list[ReachRow]
+        The rows, parented from the From at index 0 on; none when the
+        pattern isn't loaded.
+    """
+    if item is None:
+        return []
+    return ahead_rows(data=data, trips=trips, main=item, seen=seen, cut=cut)
+
+
+def earlier_rows(
+    *,
+    data: ReachInput,
+    trips: TripInputs,
+    main: LiveDeparture,
+    drop: set[str],
+) -> list[ReachRow]:
+    """
+    Lay out the calls the followed train made before the From.
+
+    Parameters
+    ----------
+    data : ReachInput
+        The From and its station map.
+    trips : TripInputs
+        The strip's loaded patterns and station map.
+    main : LiveDeparture
+        The followed departure.
+    drop : set[str]
+        Station IDs not to list; each station laid out is added.
+
+    Returns
+    -------
+    list[ReachRow]
+        Earlier rows, nearest first, with the From as parent.
+    """
+    started = started_pattern(
+        item=main, trips=trips, origin=data.origin.stop_id,
+    )
+    if started is None:
+        return []
     pattern, call, _ = started
-    drop = seen | {destination or ''}
     before: list[ReachRow] = []
     for stop in earlier(
         pattern=pattern, call=call, origin=data.origin.stop_id,
@@ -235,9 +332,7 @@ def train_reach(
                 kind=RowKind.EARLIER,
                 parent=0,
             ))
-    return stacked(
-        data=data, main=main, before=before, origin=origin, ahead=ahead,
-    )
+    return before
 
 
 def stacked(
@@ -258,7 +353,7 @@ def stacked(
     main : LiveDeparture
         The followed departure.
     before : list[ReachRow]
-        Earlier rows, nearest first, with placeholder parents.
+        Rows above the From, nearest first; their parents are reset.
     origin : ReachRow
         The From row.
     ahead : list[ReachRow]
@@ -273,7 +368,7 @@ def stacked(
     above = [
         ReachRow(
             place=row.place, kind=row.kind, depth=0, above=True,
-            parent=index + 1,
+            parent=index + 1, inside=row.inside,
         )
         for index, row in enumerate(reversed(before))
     ]

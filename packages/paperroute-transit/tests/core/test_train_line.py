@@ -354,3 +354,111 @@ def test_a_call_at_a_passed_station_moves_the_next_hop_on() -> None:
     assert names(reach=reach) == ['C', 'D', 'E', 'Y', 'F']
     assert reach.rows[1].kind is RowKind.PASSED
     assert reach.rows[-1].inside
+
+
+def two_ways(
+    *,
+    below: tuple[str, ...],
+    above: tuple[str, ...],
+    hops: dict[tuple[str, str], Hop] | None = None,
+) -> Reach:
+    """
+    Lay out a Strip with a train each way and no Destination.
+
+    Parameters
+    ----------
+    below : tuple[str, ...]
+        Stations of the train below, calling at C.
+    above : tuple[str, ...]
+        Stations of the train above, calling at C.
+    hops : dict[tuple[str, str], Hop] | None
+        Hops by their two stations.
+
+    Returns
+    -------
+    Reach
+        The Reach with both trains.
+    """
+    trips = trips_of(
+        patterns={
+            'a': trip_of(stations=below, trip_id='a'),
+            'b': trip_of(stations=above, trip_id='b'),
+        },
+        ids=('a', 'b'),
+    )
+    return train_reach(
+        data=input_of(hops=hops or {}),
+        trips=trips,
+        main=trips.departures[0],
+        destination=None,
+        above=trips.departures[1],
+    )
+
+
+def test_a_train_each_way_reads_up_and_down_from_the_from() -> None:
+    """The above train's rows run upward with the From in the middle."""
+    reach = two_ways(below=('C', 'E', 'F'), above=('C', 'N', 'M'))
+    assert names(reach=reach) == ['M', 'N', 'C', 'E', 'F']
+    assert [row.above for row in reach.rows] == [
+        True, True, False, False, False,
+    ]
+    assert [row.parent for row in reach.rows] == [1, 2, None, 2, 3]
+    assert reach.trip == 'a'
+    assert reach.stations == 2
+
+
+def test_the_above_train_keeps_hops_from_a_repeated_call() -> None:
+    """A hop is looked up from the previous call even when not listed."""
+    reach = two_ways(
+        below=('C', 'E'),
+        above=('C', 'N', 'E', 'M'),
+        hops={
+            ('C', 'N'): Hop(passed=(), inside=True),
+            ('N', 'E'): Hop(passed=(), inside=True),
+            ('C', 'E'): Hop(passed=(), inside=True),
+            ('E', 'M'): Hop(passed=('P',), inside=False),
+        },
+    )
+    assert names(reach=reach) == ['M', 'P', 'N', 'C', 'E']
+    assert [row.inside for row in reach.rows] == [
+        False, True, True, True, True,
+    ]
+
+
+def test_a_train_calling_at_the_from_again_is_cut() -> None:
+    """Neither train lists a station after it calls at the From again."""
+    reach = two_ways(
+        below=('C', 'E', 'C', 'F'), above=('C', 'N', 'C', 'M'),
+    )
+    assert names(reach=reach) == ['N', 'C', 'E']
+
+
+def test_a_station_both_trains_reach_is_listed_once_below() -> None:
+    """Two trains round a loop share a station: only the below one lists it."""
+    reach = two_ways(below=('C', 'E', 'L'), above=('C', 'N', 'L', 'M'))
+    assert names(reach=reach) == ['M', 'N', 'C', 'E', 'L']
+    assert reach.rows[-1].above is False
+    assert len(set(names(reach=reach))) == len(reach.rows)
+
+
+def test_an_above_train_gives_no_earlier_rows() -> None:
+    """With a train each way the earlier calls are left out."""
+    reach = two_ways(below=('Y', 'C', 'E'), above=('X', 'C', 'N'))
+    assert names(reach=reach) == ['N', 'C', 'E']
+
+
+def test_with_no_main_the_above_train_is_still_drawn() -> None:
+    """A side with no train leaves its half of the Strip empty."""
+    trips = trips_of(
+        patterns={'b': trip_of(stations=('C', 'N'), trip_id='b')},
+        ids=('b',),
+    )
+    reach = train_reach(
+        data=input_of(hops={}),
+        trips=trips,
+        main=None,
+        destination=None,
+        above=trips.departures[0],
+    )
+    assert names(reach=reach) == ['N', 'C']
+    assert reach.trip == 'b'

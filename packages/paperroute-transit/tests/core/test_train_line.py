@@ -212,7 +212,7 @@ def test_the_followed_pass_is_the_listed_one() -> None:
         main=trips.departures[0],
         destination=None,
     )
-    assert names(reach=reach) == ['Z', 'C', 'D', 'F']
+    assert names(reach=reach) == ['Z', 'C', 'D']
     assert reach.rows[0].kind is RowKind.EARLIER
 
 
@@ -335,7 +335,7 @@ def test_a_repeated_call_still_moves_the_next_hop_on() -> None:
             ('D', 'C'): Hop(passed=(), inside=True),
             ('C', 'F'): Hop(passed=('X',), inside=True),
         },
-        destination=None,
+        destination='F',
     )
     assert names(reach=reach) == ['C', 'D', 'X', 'F']
     assert [row.inside for row in reach.rows] == [True] * 4
@@ -615,3 +615,19 @@ def test_a_network_with_no_runs_adds_no_exit_rows() -> None:
     assert [row.kind for row in reach.rows] == [
         RowKind.ORIGIN, RowKind.MAIN, RowKind.MAIN,
     ]
+
+
+def test_a_terminus_pin_cuts_a_train_at_its_return() -> None:
+    """With no Destination and no train above the line stops at the From."""
+    reach = reach_of(
+        stations=('C', 'E', 'C', 'F'), hops={}, destination=None,
+    )
+    assert names(reach=reach) == ['C', 'E']
+
+
+def test_a_destination_beyond_the_return_is_not_cut() -> None:
+    """With a Destination the train's whole route is listed."""
+    reach = reach_of(
+        stations=('C', 'E', 'C', 'F'), hops={}, destination='F',
+    )
+    assert names(reach=reach) == ['C', 'E', 'F']

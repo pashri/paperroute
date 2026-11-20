@@ -127,6 +127,18 @@ def test_the_side_heading_north_goes_above() -> None:
     assert found == (NORTH, SOUTH)
 
 
+def test_a_tie_in_the_north_sum_puts_the_busiest_side_below() -> None:
+    """Hops due east and due west: the busier one is below."""
+    found = hops_of(
+        runs=(
+            run_of(stations=('C', 'W'), trains=3),
+            run_of(stations=('C', 'E'), trains=9),
+        ),
+        points={'E': (1000.0, 0.0), 'W': (-1000.0, 0.0)},
+    )
+    assert found == (frozenset({'W'}), frozenset({'E'}))
+
+
 def test_a_terminus_has_one_side_below() -> None:
     """With hops on one side only, nothing is above."""
     found = hops_of(

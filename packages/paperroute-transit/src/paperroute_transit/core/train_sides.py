@@ -131,9 +131,9 @@ def north_hops(
         and on the other when negative. The side whose trains head
         further north, by the sum of ``trains * dy / |v|``, is above; a
         tie puts the axis side below. With one side, that side is below
-        and nothing is above. A hop with no point, or at right angles to
-        the axis, is on neither side. With no axis every first station
-        is below.
+        and nothing is above. With an axis, a hop with no point, or at
+        right angles to it, is on neither side. With no axis, every
+        first station is below, hops with no point included.
     """
     hops = first_hops(network=network, origin=origin)
     found = headings(hops=hops, origin=origin, places=places)
@@ -144,7 +144,7 @@ def north_hops(
     other = [head for head in found if dot(head.vector, axis) < 0]
     if not other:
         return frozenset(), frozenset(head.station for head in same)
-    if heads_north(heads=other) > heads_north(heads=same):
+    if heads_north(heads=other) >= heads_north(heads=same):
         return stations_of(heads=other), stations_of(heads=same)
     return stations_of(heads=same), stations_of(heads=other)
 

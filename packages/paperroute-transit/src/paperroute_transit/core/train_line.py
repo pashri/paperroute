@@ -208,11 +208,11 @@ def train_reach(
     main : LiveDeparture | None
         The followed departure; None for the From alone.
     destination : str | None
-        The Destination station ID.
+        The Destination station ID. With none, each train is cut where
+        it calls at the From again; with one, trains are never cut.
     above : LiveDeparture | None
-        The train read upward above the From. When given, each train is
-        cut where it calls at the From again, and no earlier calls are
-        listed.
+        The train read upward above the From. When given, no earlier
+        calls are listed.
     loop_name : str
         The name of a train that returns to the From; empty drops them.
 
@@ -242,8 +242,9 @@ def train_reach(
     if lead is None:
         return Reach(rows=(origin,), stations=0, station_of=data.station_of)
     seen = {data.origin.stop_id}
+    cut = destination is None
     ahead = side_rows(
-        data=data, trips=trips, item=main, seen=seen, cut=above is not None,
+        data=data, trips=trips, item=main, seen=seen, cut=cut,
     )
     before = (
         earlier_rows(
@@ -251,7 +252,7 @@ def train_reach(
         )
         if above is None
         else side_rows(
-            data=data, trips=trips, item=above, seen=seen, cut=True,
+            data=data, trips=trips, item=above, seen=seen, cut=cut,
         )
     )
     sides = (

@@ -654,16 +654,27 @@ async def test_editor_offers_valid_choices(editor: Client) -> None:
     assert '<legend>Mode</legend>' in text
 
 
-async def test_editor_line_select_is_labelled_line(
+async def test_editor_line_without_a_to_says_it_sets_the_strip(
     editor: Client,
 ) -> None:
-    """The line select is labelled Line with or without a To."""
-    for query in ('route=T1', 'route=T1&to=J'):
-        text = await (
-            await editor.get(f'/pins/edit?stop=C&kind=metro&{query}')
-        ).text()
-        assert '>Line<' in text
-        assert 'pin-route-hint' not in text
+    """With no To the line select is labelled as the Strip's, not a filter."""
+    plain = await (
+        await editor.get('/pins/edit?stop=C&kind=metro&route=T1')
+    ).text()
+    assert '>Strip line<' in plain
+    assert 'aria-describedby="pin-route-hint"' in plain
+    assert 'the stop lists every route' in plain
+
+
+async def test_editor_line_with_a_to_is_labelled_line(
+    editor: Client,
+) -> None:
+    """With a To the line select is plainly the Line, with no hint."""
+    text = await (
+        await editor.get('/pins/edit?stop=C&kind=metro&route=T1&to=J')
+    ).text()
+    assert '>Line<' in text
+    assert 'pin-route-hint' not in text
 
 
 async def test_editor_without_line_has_no_save(editor: Client) -> None:
@@ -1210,6 +1221,19 @@ def test_sydney_metro_editor_keeps_line_then_to() -> None:
     )
     assert text.index('name="route"') < text.index('name="to"')
     assert text.index('Pick a line') < text.index('name="to"')
+
+
+def test_the_editor_heading_escapes_the_from() -> None:
+    """A From with markup characters is escaped in the heading."""
+    found = edited(
+        options=_options(), draft=PinDraft(stop='C', kind='metro'),
+        modes=SYDNEY.modes,
+    )
+    text = editor_form(
+        editor=found, origin='A & <B>', windows='', modes=SYDNEY.modes,
+    )
+    assert '<h3>A &amp; &lt;B&gt;</h3>' in text
+    assert '<B>' not in text
 
 
 @pytest.fixture(name='bus_editor')

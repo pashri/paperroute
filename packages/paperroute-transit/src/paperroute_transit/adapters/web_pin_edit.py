@@ -25,6 +25,10 @@ NO_MATCH: Final[str] = 'No stop or station matches “{text}”.'
 MISFIT: Final[str] = "Those choices don't fit together. Pick again."
 NO_TO: Final[str] = 'None: every departure'
 FILTER_HINT: Final[str] = 'Leave all unticked to show every route.'
+STRIP_HINT: Final[str] = (
+    'With no Destination the stop lists every route; this sets the Strip'
+    ' and the Destinations offered.'
+)
 SEARCH_FORM: Final[str] = """<search>
     <form class="search" method="get" action="/pins/new">
       <label for="pin-search">Search a stop or station</label>
@@ -273,6 +277,9 @@ def line_field(*, editor: PinEditor, modes: Sequence[ModeSpec]) -> str:
     """
     Draw the Line or Route select.
 
+    With no To the stop lists every route, so the select is labelled as
+    the Strip's and says so.
+
     Parameters
     ----------
     editor : PinEditor
@@ -289,6 +296,7 @@ def line_field(*, editor: PinEditor, modes: Sequence[ModeSpec]) -> str:
         return ''
     spec = spec_of(modes=modes, mode=editor.draft.kind)
     label = 'Line' if spec is not None and spec.by_line else 'Route'
+    open_ended = not editor.draft.to
     chosen = editor.draft.route
     options = option(value='', label=f'Pick a {label.lower()}', chosen=chosen)
     options += ''.join(
@@ -305,8 +313,9 @@ def line_field(*, editor: PinEditor, modes: Sequence[ModeSpec]) -> str:
     )
     return select_field(
         name='route',
-        label=label,
+        label=f'Strip {label.lower()}' if open_ended else label,
         options=options,
+        hint=STRIP_HINT if open_ended else None,
     )
 
 
@@ -324,7 +333,8 @@ def to_field(*, editor: PinEditor, end_point: bool) -> str:
     Returns
     -------
     str
-        A select, or an empty string before a line is chosen.
+        A select, or an empty string for a kind chosen by line until a
+        line is chosen.
     """
     if not (end_point or editor.draft.route):
         return ''

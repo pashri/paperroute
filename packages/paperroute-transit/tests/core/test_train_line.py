@@ -140,7 +140,7 @@ def reach_of(
     )
     trips = trips_of(patterns={'a': shaped}, ids=('a',))
     return train_reach(
-        input=input_of(hops=hops),
+        data=input_of(hops=hops),
         trips=trips,
         main=trips.departures[0],
         destination=destination,
@@ -207,7 +207,7 @@ def test_the_followed_pass_is_the_listed_one() -> None:
     ))
     trips = trips_of(patterns={'a': shaped}, ids=('a',))
     reach = train_reach(
-        input=input_of(hops={}),
+        data=input_of(hops={}),
         trips=trips,
         main=trips.departures[0],
         destination=None,
@@ -282,7 +282,7 @@ def test_no_main_gives_the_from_alone() -> None:
     """With no train followed the Reach is the From."""
     trips = trips_of(patterns={}, ids=())
     reach = train_reach(
-        input=input_of(hops={}), trips=trips, main=None, destination='E',
+        data=input_of(hops={}), trips=trips, main=None, destination='E',
     )
     assert names(reach=reach) == ['C']
     assert reach.trip is None

@@ -180,7 +180,7 @@ def row_of(
 
 def train_reach(
     *,
-    input: ReachInput,  # pylint: disable=redefined-builtin
+    data: ReachInput,
     trips: TripInputs,
     main: LiveDeparture | None,
     destination: str | None,
@@ -190,7 +190,7 @@ def train_reach(
 
     Parameters
     ----------
-    input : ReachInput
+    data : ReachInput
         The From and the kind's network.
     trips : TripInputs
         The strip's loaded patterns and station map.
@@ -206,36 +206,36 @@ def train_reach(
         the trip's end. A station is listed once, at its first place.
     """
     origin = ReachRow(
-        place=input.origin, kind=RowKind.ORIGIN, depth=0, above=False,
+        place=data.origin, kind=RowKind.ORIGIN, depth=0, above=False,
         parent=None,
     )
     started = (
         None if main is None else started_pattern(
-            item=main, trips=trips, origin=input.origin.stop_id,
+            item=main, trips=trips, origin=data.origin.stop_id,
         )
     )
     if main is None or started is None:
-        return Reach(rows=(origin,), stations=0, station_of=input.station_of)
-    seen = {input.origin.stop_id}
-    ahead = ahead_rows(data=input, trips=trips, main=main, seen=seen)
+        return Reach(rows=(origin,), stations=0, station_of=data.station_of)
+    seen = {data.origin.stop_id}
+    ahead = ahead_rows(data=data, trips=trips, main=main, seen=seen)
     pattern, call, _ = started
     drop = seen | {destination or ''}
     before: list[ReachRow] = []
     for stop in earlier(
-        pattern=pattern, call=call, origin=input.origin.stop_id,
+        pattern=pattern, call=call, origin=data.origin.stop_id,
     ):
         station = trips.station_of.get(stop.station, stop.station)
         if station not in drop:
             drop.add(station)
             before.append(row_of(
                 place=place_for(
-                    station=station, stop=stop, places=input.places,
+                    station=station, stop=stop, places=data.places,
                 ),
                 kind=RowKind.EARLIER,
                 parent=0,
             ))
     return stacked(
-        data=input, main=main, before=before, origin=origin, ahead=ahead,
+        data=data, main=main, before=before, origin=origin, ahead=ahead,
     )
 
 

@@ -36,8 +36,11 @@ CREATE TABLE rail_hops (a TEXT NOT NULL, b TEXT NOT NULL,
 CREATE TABLE track_places (station_id TEXT PRIMARY KEY,
   name TEXT NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL);
 """
+WAYPOINT_TRAINS: Final[int] = 6  # trains a weekday
 RUNS: Final[str] = """
-SELECT stations FROM runs WHERE kind IN (SELECT value FROM json_each(?))
+SELECT r.stations, COALESCE(w.trains, 0) FROM runs r
+LEFT JOIN weekday_runs w USING (run_id)
+WHERE r.kind IN (SELECT value FROM json_each(?))
 """
 CALLS: Final[str] = """
 SELECT DISTINCT c.stops FROM run_calls c JOIN runs r USING (run_id)
@@ -59,6 +62,7 @@ WHERE stop_id IN (SELECT value FROM json_each(?))
 OSM_APART: Final[float] = 250.0  # m
 
 type Hop = tuple[str, str]
+type Run = tuple[list[str], int]
 
 
 @dataclass(frozen=True)
@@ -123,24 +127,25 @@ class Network:
 
 def run_stations(
     *, conn: sqlite3.Connection, kinds: Collection[str],
-) -> list[list[str]]:
+) -> list[Run]:
     """
-    Read the stations of every run of the kinds.
+    Read the stations and regular weekday trains of every run.
 
     Parameters
     ----------
     conn : sqlite3.Connection
-        A timetable with the runs table.
+        A timetable with the runs and weekday_runs tables.
     kinds : Collection[str]
         Run kinds to read.
 
     Returns
     -------
-    list[list[str]]
-        Each run's station ids, in order.
+    list[tuple[list[str], int]]
+        Each run's station ids in order, and its weekday trains; a run
+        with no ``weekday_runs`` row has none.
     """
     rows = conn.execute(RUNS, (json.dumps(sorted(kinds)),))
-    return [json.loads(stations) for stations, in rows]
+    return [(json.loads(stations), trains) for stations, trains in rows]
 
 
 def never_passed(
@@ -191,56 +196,74 @@ def stop_calls(
 
 
 def waypoints_of(
-    *, runs: Iterable[Sequence[str]], calls: Iterable[Sequence[str]] = (),
+    *, runs: Iterable[Run], calls: Iterable[Sequence[str]] = (),
 ) -> dict[Hop, set[str]]:
     """
-    Find each hop and the stations runs call at between its ends.
+    Find each hop and the stations that steer it.
 
     A run counts for a hop only from a call at ``a`` to its next call at
-    ``b`` with no other call at ``a`` or ``b`` between.
+    ``b`` with no other call at ``a`` or ``b`` between. A station
+    between steers the hop only when the runs that call at it there
+    carry ``WAYPOINT_TRAINS`` weekday trains in total.
 
     Hops are the consecutive pairs of the runs' stations and of their
     stopping calls.
 
     Parameters
     ----------
-    runs : Iterable[Sequence[str]]
-        Each run's station ids.
+    runs : Iterable[tuple[Sequence[str], int]]
+        Each run's station ids and weekday trains.
     calls : Iterable[Sequence[str]]
         Each run's stopping stations.
 
     Returns
     -------
     dict[tuple[str, str], set[str]]
-        Stations called between, by hop.
+        Stations that steer, by hop.
     """
     runs = list(runs)
-    found: dict[Hop, set[str]] = {
-        (a, b): set()
-        for stations in (*runs, *calls)
+    found: dict[Hop, dict[str, set[int]]] = {
+        (a, b): {}
+        for stations in (*(stations for stations, _ in runs), *calls)
         for a, b in pairwise(stations)
         if a != b
     }
-    for stations in runs:
+    for number, (stations, _) in enumerate(runs):
         for i, a in enumerate(stations):
-            record_between(found=found, stations=stations, start=i)
-    return found
+            record_between(
+                found=found, stations=stations, start=i, run=number,
+            )
+    trains = [count for _, count in runs]
+    return {
+        hop: {
+            station
+            for station, numbers in between.items()
+            if sum(trains[number] for number in numbers) >= WAYPOINT_TRAINS
+        }
+        for hop, between in found.items()
+    }
 
 
 def record_between(
-    *, found: dict[Hop, set[str]], stations: Sequence[str], start: int,
+    *,
+    found: dict[Hop, dict[str, set[int]]],
+    stations: Sequence[str],
+    start: int,
+    run: int,
 ) -> None:
     """
     Add the calls between one call and each station that follows it.
 
     Parameters
     ----------
-    found : dict[tuple[str, str], set[str]]
-        Stations between, by hop; updated.
+    found : dict[tuple[str, str], dict[str, set[int]]]
+        Run numbers that call at each station between, by hop; updated.
     stations : Sequence[str]
         One run's station ids.
     start : int
         Position of the call at ``a``.
+    run : int
+        The run's number.
     """
     a, seen = stations[start], set()
     for j in range(start + 1, len(stations)):
@@ -248,7 +271,8 @@ def record_between(
         if b == a:
             return
         if b not in seen and (a, b) in found:
-            found[(a, b)].update(stations[start + 1:j])
+            for station in stations[start + 1:j]:
+                found[(a, b)].setdefault(station, set()).add(run)
         seen.add(b)
 
 
@@ -541,7 +565,7 @@ def write_passed(
     network = network_of(
         conn=conn,
         track=track,
-        runs=runs,
+        runs=[stations for stations, _ in runs],
         kinds=kinds,
         projection=projection,
     )

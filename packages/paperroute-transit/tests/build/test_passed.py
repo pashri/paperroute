@@ -74,6 +74,7 @@ def timetable_of(
     runs: list[tuple[str, str]],
     stops: dict[int, str] | None = None,
     patterns: list[str] | None = None,
+    trains: dict[int, int] | None = None,
 ) -> sqlite3.Connection:
     """
     Build a timetable with runs and the stations they name.
@@ -87,12 +88,15 @@ def timetable_of(
         the run's stations.
     patterns : list[str] | None
         Trip patterns; one per run when None.
+    trains : dict[int, int] | None
+        Regular weekday trains by run position (1-based); a run not
+        listed has no ``weekday_runs`` row.
 
     Returns
     -------
     sqlite3.Connection
-        An in-memory database with the run, call, pattern and stop
-        tables.
+        An in-memory database with the run, call, pattern, weekday and
+        stop tables.
     """
     conn = sqlite3.connect(':memory:')
     conn.execute(
@@ -115,7 +119,14 @@ def timetable_of(
         'CREATE TABLE routes (route_id TEXT PRIMARY KEY,'
         ' short_name TEXT)',
     )
+    conn.execute(
+        'CREATE TABLE weekday_runs (run_id INTEGER PRIMARY KEY,'
+        ' trains INTEGER NOT NULL)',
+    )
     conn.execute("INSERT INTO routes VALUES ('r1', 'r')")
+    conn.executemany(
+        'INSERT INTO weekday_runs VALUES (?, ?)', (trains or {}).items(),
+    )
     for number, (kind, stations) in enumerate(runs, start=1):
         conn.execute(
             'INSERT INTO runs (kind, route, stations, trips)'
@@ -175,6 +186,7 @@ def run_passed(
     stations: tuple[TrackStation, ...] = (),
     track: bool = True,
     stops: dict[int, str] | None = None,
+    trains: dict[int, int] | None = None,
 ) -> tuple[
     sqlite3.Connection,
     PassedReport,
@@ -192,13 +204,15 @@ def run_passed(
         False to build with no track.
     stops : dict[int, str] | None
         Stopping calls by run position, see ``timetable_of``.
+    trains : dict[int, int] | None
+        Weekday trains by run position, see ``timetable_of``.
 
     Returns
     -------
     tuple[sqlite3.Connection, PassedReport]
         The timetable and the report.
     """
-    conn = timetable_of(runs=runs, stops=stops)
+    conn = timetable_of(runs=runs, stops=stops, trains=trains)
     report = write_passed(
         conn=conn,
         track=(
@@ -229,7 +243,7 @@ def test_a_waypoint_comes_in_track_order() -> None:
     """Waypoints follow the track, not their ids: T comes before C."""
     conn, _ = run_passed(runs=[
         ('train', 'A D'), ('train', 'A C D'), ('train', 'A T D'),
-    ])
+    ], trains={2: 6, 3: 6})
     with closing(conn):
         passed, inside, _ = passed_by_hop(conn=conn)[('A', 'D')]
     assert (passed, inside) == (['T', 'C'], 1)
@@ -237,7 +251,9 @@ def test_a_waypoint_comes_in_track_order() -> None:
 
 def test_a_waypoint_too_far_off_the_line_is_ignored() -> None:
     """A station called between A and D far off the line is no waypoint."""
-    conn, _ = run_passed(runs=[('train', 'A D'), ('train', 'A Q D')])
+    conn, _ = run_passed(
+        runs=[('train', 'A D'), ('train', 'A Q D')], trains={2: 6},
+    )
     with closing(conn):
         passed, inside, _ = passed_by_hop(conn=conn)[('A', 'D')]
     assert (passed, inside) == ([], 1)
@@ -246,7 +262,7 @@ def test_a_waypoint_too_far_off_the_line_is_ignored() -> None:
 def test_a_feed_marked_pass_has_hops_by_calls_and_by_stations() -> None:
     """A run A, B, D that passes B has A-D, A-B and B-D rows."""
     conn, _ = run_passed(
-        runs=[('train', 'A B D')], stops={1: 'A D'},
+        runs=[('train', 'A B D')], stops={1: 'A D'}, trains={1: 6},
     )
     with closing(conn):
         rows = passed_by_hop(conn=conn)
@@ -270,7 +286,7 @@ def test_a_waypoint_from_a_later_trip_is_ignored() -> None:
     """A run that calls at A again before B gives the A-B hop no waypoints."""
     conn, _ = run_passed(runs=[
         ('train', 'A X Y A B'), ('train', 'A B'),
-    ])
+    ], trains={1: 6})
     with closing(conn):
         passed, inside, _ = passed_by_hop(conn=conn)[('A', 'B')]
     assert (passed, inside) == ([], 1)
@@ -342,3 +358,27 @@ def test_no_track_builds_with_no_passed_stations() -> None:
     assert all(row == ([], 0, None) for row in rows.values())
     assert places == []
     assert report == PassedReport(hops=4, inside=0, added=0)
+
+
+@pytest.mark.parametrize(
+    ('runs', 'trains', 'inside'),
+    [
+        ([('train', 'A D'), ('train', 'A X D')], {2: 5}, 1),
+        ([('train', 'A D'), ('train', 'A X D')], {2: 6}, 0),
+        (
+            [('train', 'A D'), ('train', 'A X D'), ('train', 'A X D')],
+            {2: 3, 3: 3},
+            0,
+        ),
+        ([('train', 'A D'), ('train', 'A X D')], {}, 1),
+    ],
+    ids=['five', 'six', 'three and three', 'no row'],
+)
+def test_a_waypoint_needs_six_weekday_trains(
+    runs: list[tuple[str, str]], trains: dict[int, int], inside: int,
+) -> None:
+    """X, off the track, steers A to D only with six trains' support."""
+    conn, _ = run_passed(runs=runs, trains=trains)
+    with closing(conn):
+        passed, flag, _ = passed_by_hop(conn=conn)[('A', 'D')]
+    assert (passed, flag) == ([], inside)

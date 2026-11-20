@@ -123,14 +123,14 @@ def run_extras(*, path: Path, city: City, tiles: Path | None) -> None:
             ),
         )
         timed(
-            phase='passed',
-            step=lambda: run_passed(conn=conn, city=city, tiles=tiles),
-        )
-        timed(
             phase='weekday',
             step=lambda: write_weekday_runs(
                 conn=conn, kinds=end_point_modes(modes=city.modes),
             ),
+        )
+        timed(
+            phase='passed',
+            step=lambda: run_passed(conn=conn, city=city, tiles=tiles),
         )
         timed(
             phase='catalogue',

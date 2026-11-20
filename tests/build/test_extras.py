@@ -127,12 +127,12 @@ def test_run_extras_prints_each_phase(
     assert lines[0] == 'progress runs'
     assert lines[1].startswith('progress runs done ')
     assert lines[1].endswith('s')
-    assert lines[2] == 'progress passed'
-    assert lines[3].startswith('progress passed hops=')
-    assert ' inside=' in lines[3] and ' added=' in lines[3]
-    assert lines[4].startswith('progress passed done ')
-    assert lines[5] == 'progress weekday'
-    assert lines[6].startswith('progress weekday done ')
+    assert lines[2] == 'progress weekday'
+    assert lines[3].startswith('progress weekday done ')
+    assert lines[4] == 'progress passed'
+    assert lines[5].startswith('progress passed hops=')
+    assert ' inside=' in lines[5] and ' added=' in lines[5]
+    assert lines[6].startswith('progress passed done ')
     assert lines[7] == 'progress catalogue'
     assert lines[8].startswith('progress catalogue done ')
     assert lines[-1].startswith('progress extras peak ')

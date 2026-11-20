@@ -467,7 +467,11 @@ def route_of(
             )
             if key not in skip
         )
-        passed.extend(station for station in ends[1:] if station != hop[1])
+        passed.extend(
+            station
+            for station in ends[1:]
+            if station != hop[1] and station not in network.never
+        )
         nodes.extend(leg)
     return Route(passed=tuple(dict.fromkeys(passed)), nodes=tuple(nodes))
 

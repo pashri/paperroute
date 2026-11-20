@@ -185,6 +185,7 @@ def run_passed(
     runs: list[tuple[str, str]],
     stations: tuple[TrackStation, ...] = (),
     track: bool = True,
+    patterns: list[str] | None = None,
     stops: dict[int, str] | None = None,
     trains: dict[int, int] | None = None,
 ) -> tuple[
@@ -202,6 +203,8 @@ def run_passed(
         OSM stations on the line.
     track : bool
         False to build with no track.
+    patterns : list[str] | None
+        Trip patterns, see ``timetable_of``.
     stops : dict[int, str] | None
         Stopping calls by run position, see ``timetable_of``.
     trains : dict[int, int] | None
@@ -212,7 +215,9 @@ def run_passed(
     tuple[sqlite3.Connection, PassedReport]
         The timetable and the report.
     """
-    conn = timetable_of(runs=runs, stops=stops, trains=trains)
+    conn = timetable_of(
+        runs=runs, stops=stops, trains=trains, patterns=patterns,
+    )
     report = write_passed(
         conn=conn,
         track=(
@@ -280,6 +285,18 @@ def test_a_terminus_chained_into_a_run_is_never_passed() -> None:
         timetable_of(runs=runs, patterns=['A B', 'B C', 'A B C']),
     ) as conn:
         assert never_passed(conn=conn, kinds=KINDS) == {'A', 'C'}
+
+
+def test_a_terminus_waypoint_is_never_passed() -> None:
+    """A waypoint that every trip starts or ends at is not listed."""
+    conn, _ = run_passed(
+        runs=[('train', 'A D'), ('train', 'A C D')],
+        patterns=['A D', 'A C', 'C D'],
+        trains={2: 6},
+    )
+    with closing(conn):
+        passed, inside, _ = passed_by_hop(conn=conn)[('A', 'D')]
+    assert (passed, inside) == ([], 1)
 
 
 def test_a_waypoint_from_a_later_trip_is_ignored() -> None:

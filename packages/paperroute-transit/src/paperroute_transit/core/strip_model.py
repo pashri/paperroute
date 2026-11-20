@@ -29,7 +29,8 @@ PANE_FROM_ROW: Final[int] = 2
 PANEL_ROWS: Final[int] = 5
 BANNER_ROWS: Final[int] = 1  # row slots the live data banner covers
 CURSOR_MARGIN: Final[int] = 2
-type TripDay = tuple[str, date]  # a trip ID and its service day
+type TripDay = tuple[str, date, int]  # trip ID, service day, origin_seq
+type Followed = tuple[str, date, int | None]  # None: any pass
 
 LOADING: Final[str] = 'Loading the line…'
 NO_STRIP: Final[str] = 'No strip for this stop'
@@ -405,7 +406,9 @@ class Marks:
 
 def trip_day(*, departure: Departure) -> TripDay:
     """
-    Name a departure by its trip and service day.
+    Name a departure by its trip, day and boarding sequence.
+
+    The boarding sequence tells apart two passes of a loop trip.
 
     Parameters
     ----------
@@ -415,9 +418,9 @@ def trip_day(*, departure: Departure) -> TripDay:
     Returns
     -------
     TripDay
-        Its trip ID and service day.
+        Its trip ID, service day and origin sequence.
     """
-    return departure.trip_id, departure.service_day
+    return departure.trip_id, departure.service_day, departure.origin_seq
 
 
 def selected_index(

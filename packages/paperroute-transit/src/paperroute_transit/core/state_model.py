@@ -19,7 +19,7 @@ from paperroute_transit.core.reach import Reach, StripKey
 from paperroute_transit.core.realtime import RealtimeSnapshot
 from paperroute_transit.core.saved import LiveView, Quota, Settings
 from paperroute_transit.core.stop_view import HORIZON
-from paperroute_transit.core.strip_model import TripDay
+from paperroute_transit.core.strip_model import Followed, TripDay
 
 POLL_EVERY: Final[timedelta] = timedelta(seconds=30)
 RELOAD_BEFORE: Final[timedelta] = timedelta(minutes=30)
@@ -243,7 +243,7 @@ class StripState:
         The trip ID and service day of the panel train picked on the
         Strip, whose times the rows below the From show; None for the
         next train.
-    followed : TripDay | None
+    followed : Followed | None
         The train a train Strip was last laid out along, whose change
         sends the scroll home; None before any.
     """
@@ -257,7 +257,7 @@ class StripState:
     opened: frozenset[str] = frozenset()
     context: FoldContext | None = None
     selected: TripDay | None = None
-    followed: TripDay | None = None
+    followed: Followed | None = None
 
 
 @dataclass(frozen=True)

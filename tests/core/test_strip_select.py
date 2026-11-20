@@ -40,6 +40,7 @@ from tests.core.test_strip_follow import (
     row_times,
 )
 
+ORIGIN_SEQ: Final[int] = 5  # the factories' boarding sequence
 UP: Final[KnobHeldTurned] = KnobHeldTurned(knob=Knob.BOTTOM, steps=-1)
 DOWN: Final[KnobHeldTurned] = KnobHeldTurned(knob=Knob.BOTTOM, steps=1)
 KINDS: Final[tuple[str, ...]] = (
@@ -64,7 +65,7 @@ def picked(*, inputs: StripInputs, trip_id: str) -> StripInputs:
         The inputs with that train picked.
     """
     day = inputs.departures[0].departure.service_day
-    return replace(inputs, selected=(trip_id, day))
+    return replace(inputs, selected=(trip_id, day, ORIGIN_SEQ))
 
 
 def selected_trip(*, state: State) -> str | None:
@@ -351,3 +352,62 @@ def test_the_from_shows_the_picked_trains_departure() -> None:
         origin = origin_of(reach=reach)
         assert origin is not None
         assert marks_of(inputs=laid, reach=reach).times[origin] == time
+
+
+def loop_state() -> State:
+    """
+    Make a Strip state whose first train calls at the From twice.
+
+    Returns
+    -------
+    State
+        State on the Strip whose panel lists trip 'train-0' at 8:05 and
+        again at 8:07, boarded at a later stop sequence, then 'train-1'.
+    """
+    state = line_state(scroll=0)
+    first, *rest = state.board.departures
+    again = replace(
+        first,
+        departs=first.departs + timedelta(minutes=2),
+        origin_seq=first.origin_seq + 4,
+    )
+    board = replace(state.board, departures=(first, again, *rest))
+    state = replace(state, board=board)
+    state, _ = step(state, Tick(now=START))
+    return state
+
+
+def picked_seq(*, state: State) -> int | None:
+    """
+    Read the picked departure's origin sequence.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    int | None
+        The sequence, or None when nothing is picked.
+    """
+    selected = state.strip.selected
+    return None if selected is None else selected[2]
+
+
+def test_a_loop_trains_second_pass_can_be_picked() -> None:
+    """The pick moves between the two passes of one trip and back."""
+    state = stepped(state=loop_state(), events=[DOWN])
+    assert (selected_trip(state=state), picked_seq(state=state)) == (
+        'train-0', ORIGIN_SEQ,
+    )
+    state = stepped(state=state, events=[DOWN])
+    assert (selected_trip(state=state), picked_seq(state=state)) == (
+        'train-0', ORIGIN_SEQ + 4,
+    )
+    view = state.last_view
+    assert isinstance(view, StripView) and view.panel.selected == 1
+    state = stepped(state=state, events=[UP])
+    view = state.last_view
+    assert picked_seq(state=state) == ORIGIN_SEQ
+    assert isinstance(view, StripView) and view.panel.selected == 0

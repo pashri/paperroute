@@ -678,7 +678,7 @@ def train_state(
     trips: list[tuple[Departure, TripPattern]],
     destination: str | None = None,
     network: TrainNetwork | None = NO_TRACK,
-    selected: tuple[str, date] | None = None,
+    selected: tuple[str, date, int] | None = None,
 ) -> State:
     """
     Show a train Strip on a loaded reach, with some trains' patterns.
@@ -691,7 +691,7 @@ def train_state(
         The Destination station ID, or None.
     network : TrainNetwork | None
         The reach's hops and runs; None builds the reach with none.
-    selected : tuple[str, date] | None
+    selected : tuple[str, date, int] | None
         The picked train.
 
     Returns
@@ -804,9 +804,31 @@ def test_a_picked_train_is_the_main_line() -> None:
             train_trip(trip_id='b', stations=('C', 'X', 'F'), at=15),
         ],
         destination='F',
-        selected=('b', START.date()),
+        selected=('b', START.date(), 5),
     )
     assert shown_ids(state=state) == ['C', 'X', 'F']
+
+
+def test_a_picked_loop_pass_is_the_one_followed() -> None:
+    """Of a trip listed twice, the pass picked is the pass followed."""
+    line = ('C', 'D', 'F')
+    first, pattern = train_trip(trip_id='a', stations=line, at=5)
+    second = replace(
+        first,
+        departs=first.departs + timedelta(minutes=9),
+        origin_seq=first.origin_seq + 4,
+    )
+    seen = {}
+    for seq in (first.origin_seq, second.origin_seq):
+        state = train_state(
+            trips=[(first, pattern), (second, pattern)],
+            destination='F',
+            selected=('a', START.date(), seq),
+        )
+        reach = shown_reach(state=state)
+        assert reach is not None
+        seen[seq] = reach.seq
+    assert seen == {5: 5, 9: 9}
 
 
 def test_with_no_destination_a_train_runs_each_way() -> None:
@@ -948,7 +970,7 @@ def test_a_pick_replaces_only_its_own_side() -> None:
     ]
     before = train_state(trips=trips, network=TWO_WAYS)
     after = train_state(
-        trips=trips, network=TWO_WAYS, selected=('later', START.date()),
+        trips=trips, network=TWO_WAYS, selected=('later', START.date(), 5),
     )
     assert shown_ids(state=before) == ['N2', 'N1', 'C', 'S1', 'S2']
     assert shown_ids(state=after)[:4] == ['N2', 'N1', 'C', 'S1']

@@ -32,8 +32,8 @@ from paperroute_transit.core.strip_folds import folded
 from paperroute_transit.core.strip_follow import followed_reach
 from paperroute_transit.core.strip_model import (
     NEEDS_UPDATE,
+    Followed,
     StripInputs,
-    TripDay,
 )
 from paperroute_transit.core.strip_slots import (
     destination_station,
@@ -574,8 +574,8 @@ def clamped(*, state: State, banner: bool) -> State:
     ))
 
 
-def followed_of(*, reach: Reach | None, before: TripDay | None
-                ) -> TripDay | None:
+def followed_of(*, reach: Reach | None, before: Followed | None
+                ) -> Followed | None:
     """
     Name the train a reach is laid out along.
 
@@ -583,17 +583,17 @@ def followed_of(*, reach: Reach | None, before: TripDay | None
     ----------
     reach : Reach | None
         The shown reach, or None.
-    before : TripDay | None
+    before : Followed | None
         The train followed so far.
 
     Returns
     -------
-    TripDay | None
-        The reach's trip and day when it has one, else `before`.
+    Followed | None
+        The reach's trip, day and pass when it has one, else `before`.
     """
     if reach is None or reach.trip is None or reach.day is None:
         return before
-    return reach.trip, reach.day
+    return reach.trip, reach.day, reach.seq
 
 
 def strip_window(*, state: State) -> tuple[Departure, ...]:

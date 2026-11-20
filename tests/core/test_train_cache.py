@@ -201,7 +201,7 @@ CHANGES: dict[str, Callable[[State], State]] = {
     ),
     'snapshots': lambda s: replace(s, snapshots=dict(s.snapshots)),
     'selected': lambda s: replace(
-        s, strip=replace(s.strip, selected=('b', START.date())),
+        s, strip=replace(s.strip, selected=('b', START.date(), 5)),
     ),
     'destination': lambda s: with_destination(state=s, destination='G'),
     'reach': new_reach,
@@ -222,6 +222,21 @@ CHANGES: dict[str, Callable[[State], State]] = {
 def test_each_changed_input_rebuilds(name: str, builds: Builds) -> None:
     """Changing any one keyed input builds the Strip again."""
     assert rebuilt_by(change=CHANGES[name], builds=builds)
+
+
+def test_moving_the_pick_to_the_other_pass_of_a_trip_rebuilds(
+    builds: Builds,
+) -> None:
+    """The same trip on the same day, boarded at another stop, is new."""
+    state = fresh()
+    first = replace(
+        state.strip, selected=('a', START.date(), 5),
+    )
+    shown_reach(state=replace(state, strip=first))
+    before = builds.count
+    later = replace(first, selected=('a', START.date(), 9))
+    shown_reach(state=replace(state, strip=later))
+    assert builds.count == before + 1
 
 
 def test_a_cached_strip_equals_a_fresh_one(builds: Builds) -> None:

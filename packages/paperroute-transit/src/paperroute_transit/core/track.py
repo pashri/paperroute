@@ -1,8 +1,9 @@
 """A train pattern's shape redrawn along the stored rail track."""
 
+from array import array
 from collections.abc import Iterator, Mapping
 from hashlib import blake2b
-from itertools import pairwise
+from itertools import chain, pairwise
 from math import dist
 from typing import Final
 
@@ -130,9 +131,11 @@ def tracked_shape(
     if not used:
         return None
     digest = blake2b(digest_size=ID_BYTES)
-    parts = (version or '', pattern.shape_id or '', *used, *pieces)
-    for part in parts:
+    for part in (version or '', pattern.shape_id or '', *used):
         digest.update(repr(part).encode())
+    for piece in pieces:
+        digest.update(array('q', [len(piece)]).tobytes())
+        digest.update(array('d', chain.from_iterable(piece)).tobytes())
     return make_shape(
         shape_id=f'track:{digest.hexdigest()}',
         points=joined(pieces=pieces),

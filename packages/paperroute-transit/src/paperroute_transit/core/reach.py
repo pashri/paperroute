@@ -258,7 +258,8 @@ class Reach:
     rows : tuple[ReachRow, ...]
         Rows, top to bottom, with exactly one From row.
     stations : int
-        Rows that are neither the From, an approach nor an exit.
+        The listed stations, not counting the From, its approaches, its
+        exits or the stations a train runs through.
     station_of : Mapping[str, str]
         The station ID of each stop under a station on the strip.
     trip : str | None

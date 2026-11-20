@@ -260,7 +260,7 @@ def test_a_hop_outside_the_track_has_no_passed_rows() -> None:
 def test_a_destination_that_is_passed_is_a_passed_row() -> None:
     """A Destination the train runs through is listed as passed."""
     reach = reach_of(stations=('C', 'E', 'F'), hops=CDEF, destination='D')
-    assert [row.kind for row in reach.rows][1] is RowKind.PASSED
+    assert reach.rows[1].kind is RowKind.PASSED
     assert names(reach=reach) == ['C', 'D', 'E', 'F']
 
 
@@ -324,3 +324,33 @@ def test_a_picked_item_is_returned_as_it_is() -> None:
     assert main_departure(
         items=items, trips=trips, origin='C', picked=5,
     ) is None
+
+
+def test_a_repeated_call_still_moves_the_next_hop_on() -> None:
+    """A hop is looked up from the previous call, listed or not."""
+    reach = reach_of(
+        stations=('C', 'D', 'C', 'F'),
+        hops={
+            ('C', 'D'): Hop(passed=(), inside=True),
+            ('D', 'C'): Hop(passed=(), inside=True),
+            ('C', 'F'): Hop(passed=('X',), inside=True),
+        },
+        destination=None,
+    )
+    assert names(reach=reach) == ['C', 'D', 'X', 'F']
+    assert [row.inside for row in reach.rows] == [True] * 4
+
+
+def test_a_call_at_a_passed_station_moves_the_next_hop_on() -> None:
+    """After a call at a station already passed, the hop starts there."""
+    reach = reach_of(
+        stations=('C', 'E', 'D', 'F'),
+        hops={
+            ('C', 'E'): Hop(passed=('D',), inside=True),
+            ('D', 'F'): Hop(passed=('Y',), inside=True),
+        },
+        destination=None,
+    )
+    assert names(reach=reach) == ['C', 'D', 'E', 'Y', 'F']
+    assert reach.rows[1].kind is RowKind.PASSED
+    assert reach.rows[-1].inside

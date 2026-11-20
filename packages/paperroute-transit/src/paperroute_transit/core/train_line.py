@@ -41,8 +41,8 @@ def main_departure(
     LiveDeparture | None
         The picked item as it is, even when cancelled. Otherwise the
         first item that is not cancelled and whose pattern is loaded and
-        calls at the From; None when there is none or the index is out
-        of range.
+        calls at the From; the same scan runs when the index is out of
+        range. None when there is no such item.
     """
     if picked is not None and 0 <= picked < len(items):
         return items[picked]
@@ -118,14 +118,16 @@ def ahead_rows(
     for station, stop, _ in stops_after(
         item=main, trips=trips, origin=last,
     ):
+        previous, last = last, station
         if station in seen:
             continue
         hop = (
-            hop_of(network=data.network, a=last, b=station)
+            hop_of(network=data.network, a=previous, b=station)
             if data.network
             else None
         )
-        for passed in () if hop is None else hop.passed:
+        crossed = () if hop is None else hop.passed
+        for passed in crossed:
             if passed not in seen:
                 seen.add(passed)
                 rows.append(row_of(
@@ -142,7 +144,6 @@ def ahead_rows(
             parent=len(rows),
             inside=hop is None or hop.inside,
         ))
-        last = station
     return rows
 
 

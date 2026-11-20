@@ -703,9 +703,7 @@ class WaysPages:
         """
         if not started and base is not None and base.destination:
             return base
-        return draft_pin(
-            options=options, draft=draft, base=base, modes=self.modes,
-        )
+        return draft_pin(options=options, draft=draft, base=base)
 
     async def _save(self, request: web.Request) -> web.Response:
         """
@@ -735,7 +733,7 @@ class WaysPages:
         draft = ways_draft(query=fields)
         pin = draft_pin(
             options=self.options, draft=draft,
-            base=self._base(ref=draft.ref), modes=self.modes,
+            base=self._base(ref=draft.ref),
         )
         windows = windows_of(rows=rows_of(fields=fields))
         if pin is None or isinstance(windows, str):

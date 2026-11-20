@@ -21,7 +21,6 @@ from paperroute_transit.core.model import (
     Way,
     way_key,
 )
-from paperroute_transit.core.modes import ModeSpec, end_point_modes
 from paperroute_transit.ports import PinOptions
 
 CHANGE_SEP: Final[str] = '|'  # between the changes of an encoded way
@@ -319,7 +318,6 @@ def draft_pin(
     options: PinOptions,
     draft: WaysDraft,
     base: Pin | None,
-    modes: Sequence[ModeSpec] = (),
 ) -> Pin | None:
     """
     Make the pin a ways draft stands for.
@@ -332,8 +330,6 @@ def draft_pin(
         The choices made.
     base : Pin | None
         The saved pin being edited, or None.
-    modes : Sequence[ModeSpec]
-        The city's modes; a pin of an end-point kind keeps no routes.
 
     Returns
     -------
@@ -345,14 +341,9 @@ def draft_pin(
     destination = options.place(stop_id=draft.destination)
     if origin is None or destination is None:
         return None
-    start = base or Pin(origin=origin)
     pin = replace(
-        start,
-        origin=origin, destination=destination, only=(),
-        routes=(
-            () if start.kind in end_point_modes(modes=modes)
-            else start.routes
-        ),
+        base or Pin(origin=origin),
+        origin=origin, destination=destination, only=(), routes=(),
         ways=draft_ways(options=options, draft=draft),
         never=draft.never, nickname=draft.nickname,
     )

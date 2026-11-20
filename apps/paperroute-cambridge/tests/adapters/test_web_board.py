@@ -295,10 +295,10 @@ async def test_a_ways_save_clears_an_old_train_pins_routes(
         assert saved_routes(posted=posted) == ()
 
 
-async def test_a_ways_save_keeps_a_bus_pins_route(
+async def test_a_ways_save_leaves_a_bus_pin_without_routes(
     client: Client, posted: list[Event], saved: list[Pin],
 ) -> None:
-    """A bus pin keeps its route after a ways save."""
+    """A bus pin storing a route ends with none after a ways save."""
     pin = Pin(
         origin=StopPlace(
             stop_id='0500CCITY227', name='Drummer St', point=None,
@@ -312,7 +312,7 @@ async def test_a_ways_save_keeps_a_bus_pins_route(
     saved.append(pin)
     response = await ways_save(client, pin=pin, to='0500SCOTO007')
     assert response.status == HTTPStatus.SEE_OTHER
-    assert saved_routes(posted=posted) == ('4',)
+    assert saved_routes(posted=posted) == ()
 
 
 async def test_the_destination_ids_used_by_the_ways_tests_exist(

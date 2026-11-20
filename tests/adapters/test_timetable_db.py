@@ -2110,6 +2110,59 @@ def test_a_loop_pass_is_dropped_when_its_later_pass_is_past_the_window(
         ) == [('x', at(hour=8, minute=0))]
 
 
+def test_consecutive_from_calls_are_one_visit(tmp_path: Path) -> None:
+    """A trip From, From, X, Destination is listed once, never dropped."""
+    trips = [(
+        'c', 'Q',
+        [('P_1', '08:00:00'), ('P_2', '08:05:00'), ('Z', '08:10:00'),
+         ('Q', '08:20:00')],
+    )]
+    with closing(platform_repo(tmp_path=tmp_path, trips=trips)) as repo:
+        assert loop_departures(
+            repo=repo,
+            kind=SydneyMode.TRAIN,
+            end=at(hour=9, minute=0),
+        ) == [('c', at(hour=8, minute=5))]
+
+
+def test_a_visit_ending_without_pickup_is_listed_once(
+    tmp_path: Path,
+) -> None:
+    """A last call that takes no one on leaves the visit's first call."""
+    trips = [(
+        'c', 'Q',
+        [('P_1', '08:00:00'), ('P_2', '08:05:00'), ('Z', '08:10:00'),
+         ('Q', '08:20:00')],
+    )]
+    with closing(platform_repo(tmp_path=tmp_path, trips=trips)) as repo:
+        with closing(sqlite3.connect(tmp_path / 'timetable.db')) as conn:
+            conn.execute(
+                "UPDATE stop_times SET pickup = 1 "
+                "WHERE trip_id = 'c' AND stop_id = 'P_2'",
+            )
+            conn.commit()
+        assert loop_departures(
+            repo=repo,
+            kind=SydneyMode.TRAIN,
+            end=at(hour=9, minute=0),
+        ) == [('c', at(hour=8, minute=0))]
+
+
+def test_a_true_loop_still_drops_the_first_pass(tmp_path: Path) -> None:
+    """A trip From, X, From, Destination lists only its second pass."""
+    trips = [(
+        'c', 'Q',
+        [('P_1', '08:00:00'), ('Z', '08:10:00'), ('P_2', '08:20:00'),
+         ('Q', '08:30:00')],
+    )]
+    with closing(platform_repo(tmp_path=tmp_path, trips=trips)) as repo:
+        assert loop_departures(
+            repo=repo,
+            kind=SydneyMode.TRAIN,
+            end=at(hour=9, minute=0),
+        ) == [('c', at(hour=8, minute=20))]
+
+
 def empty_running_repo(*, tmp_path: Path) -> SqliteTimetableRepository:
     """
     Build P to Q with one revenue trip and one out-of-service trip.

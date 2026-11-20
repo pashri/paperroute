@@ -103,12 +103,19 @@ OLD_NEXT_COLUMNS: Final[str] = 'n.route, n.headsign, NULL'
 SERVICE_ONLY: Final[str] = 'AND t.service = 1'
 NEXT_JOIN: Final[str] = 'LEFT JOIN trip_next n ON n.trip_id = t.trip_id'
 FROM_CALLS: Final[str] = """
-SELECT trip_id, seq FROM stop_times
-WHERE trip_id IN ({marks})
-  AND stop_id IN (SELECT stop_id FROM stops
-                  WHERE stop_id = ? OR parent_station = ?)
-  AND NOT (pickup = 1 AND dropoff = 1)
-ORDER BY trip_id, seq
+SELECT c.trip_id, c.seq FROM stop_times c
+WHERE c.trip_id IN ({marks})
+  AND c.stop_id IN (SELECT stop_id FROM stops
+                    WHERE stop_id = ? OR parent_station = ?)
+  AND NOT (c.pickup = 1 AND c.dropoff = 1)
+  AND NOT EXISTS (
+    SELECT 1 FROM stop_times p
+    WHERE p.trip_id = c.trip_id
+      AND p.seq = (SELECT MAX(q.seq) FROM stop_times q
+                   WHERE q.trip_id = c.trip_id AND q.seq < c.seq)
+      AND p.stop_id IN (SELECT stop_id FROM stops
+                        WHERE stop_id = ? OR parent_station = ?))
+ORDER BY c.trip_id, c.seq
 """
 NO_NEXT: Final[str] = 'NULL, NULL, NULL'
 NAMED_NEAR: Final[str] = """
@@ -1077,12 +1084,16 @@ class SqliteTimetableRepository:
         Returns
         -------
         dict[str, tuple[int, ...]]
-            Each trip's call sequences at the From, in order, counting
-            only calls where passengers get on or off.
+            Each trip's visits to the From, in order, as the sequence of
+            each visit's first call; calls where no one gets on or off
+            do not count, and a call straight after another at the From
+            is part of that visit.
         """
         found: dict[str, list[int]] = {}
         for trip, seq in self.fetch_in(
-            sql=FROM_CALLS, ids=trip_ids, tail=(origin, origin),
+            sql=FROM_CALLS,
+            ids=trip_ids,
+            tail=(origin, origin, origin, origin),
         ):
             found.setdefault(str(trip), []).append(int(cast(int, seq)))
         return {trip: tuple(seqs) for trip, seqs in found.items()}

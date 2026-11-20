@@ -19,6 +19,7 @@ STAGES = (
     'shapes and patterns',
     'tick',
     'framing',
+    'view cold',
     'view',
     'base',
     'frame',
@@ -97,7 +98,11 @@ def test_bench_prints_each_stage(
     assert load_script().main(argv=small_args(files=files)) == 0
     out = capsys.readouterr().out
     for name in STAGES:
-        assert re.search(rf'^{name}: [\d.]+ ms, [\d.]+ ms$', out, re.M)
+        assert re.search(
+            rf'^{name}: [\d.]+ ms, [\d.]+ ms \(budget \d+ ms\)$',
+            out,
+            re.M,
+        )
     assert re.search(r'^lines \d+, rings \d+$', out, re.M)
 
 
@@ -145,3 +150,36 @@ def test_next_weekday_evening_skips_the_weekend() -> None:
         now=datetime(2026, 10, 30, 18, 0, tzinfo=zone),
     )
     assert (found.day, found.hour, found.minute) == (2, 17, 30)
+
+
+def test_bench_exits_2_when_a_median_is_over_its_budget(
+    files: tuple[Path, Path], capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A tiny budget scale puts every stage over, and the exit is 2."""
+    status = load_script().main(
+        argv=[*small_args(files=files), '--budget-scale', '0.000001'],
+    )
+    assert status == 2
+    assert re.search(r'^lines \d+, rings \d+$', capsys.readouterr().out, re.M)
+
+
+def test_bench_budgets_are_named_per_stage() -> None:
+    """Each stage has a budget; a busy stop's day lines get more."""
+    module = load_script()
+    assert set(module.BUDGETS) == set(STAGES)
+    assert module.BUDGETS['view cold'] == 40
+    assert module.day_budget(lines=31) == 300
+    assert module.day_budget(lines=30) == 150
+
+
+def test_bench_no_departures_without_at_names_the_default(
+    files: tuple[Path, Path], capsys: pytest.CaptureFixture[str],
+) -> None:
+    """With no `--at`, the message gives the default start and the fix."""
+    args = small_args(files=files)
+    start = args.index('--at')
+    status = load_script().main(argv=args[:start] + args[start + 2:])
+    assert status == 1
+    err = capsys.readouterr().err
+    assert 'next weekday at 17:30' in err
+    assert '--at' in err

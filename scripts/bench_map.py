@@ -6,7 +6,7 @@ import sys
 import time
 from collections.abc import Callable, Sequence
 from contextlib import closing
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Final
@@ -19,7 +19,7 @@ from paperroute_transit.app_effects import map_data
 from paperroute_transit.app_lines import loaded_day_lines
 from paperroute_transit.app_render import MapRenderer
 from paperroute_transit.core.city import City
-from paperroute_transit.core.geo import Point
+from paperroute_transit.core.geo import Point, nearest_along
 from paperroute_transit.core.map_fit import (
     FrameKey,
     approach_points,
@@ -44,7 +44,8 @@ from paperroute_transit.core.messages import (
     ShapesLoaded,
 )
 from paperroute_transit.core.model import Departure, Pin
-from paperroute_transit.core.saved import MapFraming
+from paperroute_transit.core.partings import found_partings
+from paperroute_transit.core.saved import BoardSettings, MapFraming
 from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.core.strip_model import EMPTY_STOP_VIEW
 from paperroute_transit.core.tiles import TileVariant
@@ -67,6 +68,19 @@ WINDOW: Final[timedelta] = timedelta(hours=3)
 HEAD: Final[int] = 5  # departures drawn
 TICK_BUILDS: Final[int] = 3
 STALE_AFTER: Final[timedelta] = timedelta(minutes=2)
+BUDGETS: Final[dict[str, int]] = {
+    'day lines': 150,
+    'shapes and patterns': 250,
+    'tick': 15,
+    'framing': 15,
+    'view cold': 40,
+    'view': 15,
+    'base': 150,
+    'frame': 25,
+}  # milliseconds
+BUSY_DAY_LINES: Final[int] = 300  # milliseconds
+BUSY_LINES: Final[int] = 30  # lines a stop has before it is busy
+OVER_BUDGET: Final[int] = 2  # exit status
 
 
 def next_weekday_start(*, now: datetime) -> datetime:
@@ -116,20 +130,65 @@ def timed(*, action: Callable[[], object], repeat: int) -> list[float]:
     return millis
 
 
-def report(*, name: str, millis: list[float]) -> None:
+def day_budget(*, lines: int) -> int:
     """
-    Print a stage's median and maximum.
+    Give the day lines' budget at a stop.
 
     Parameters
     ----------
-    name : str
-        The stage.
-    millis : list[float]
-        Each run's milliseconds.
+    lines : int
+        The lines the stop has today.
+
+    Returns
+    -------
+    int
+        Milliseconds; more at a stop with more than `BUSY_LINES` lines.
     """
-    print(
-        f'{name}: {statistics.median(millis):.1f} ms, {max(millis):.1f} ms',
-    )
+    return BUSY_DAY_LINES if lines > BUSY_LINES else BUDGETS['day lines']
+
+
+@dataclass
+class Timing:
+    """
+    Prints each stage against its budget and keeps the ones over it.
+
+    Parameters
+    ----------
+    repeat : int
+        Number of runs of each stage.
+    scale : float
+        Multiplies every budget.
+    over : list[str]
+        The stages whose median was over, in the order they ran.
+    """
+
+    repeat: int
+    scale: float = 1.0
+    over: list[str] = field(default_factory=list)
+
+    def report(
+        self, *, name: str, millis: list[float], budget: int | None = None,
+    ) -> None:
+        """
+        Print a stage's median and maximum beside its budget.
+
+        Parameters
+        ----------
+        name : str
+            The stage.
+        millis : list[float]
+            Each run's milliseconds.
+        budget : int | None
+            Milliseconds before scaling; the stage's own when None.
+        """
+        limit = BUDGETS[name] if budget is None else budget
+        median = statistics.median(millis)
+        print(
+            f'{name}: {median:.1f} ms, {max(millis):.1f} ms '
+            f'(budget {limit} ms)',
+        )
+        if median > limit * self.scale:
+            self.over.append(name)
 
 
 def stop_view_of(*, pin: Pin, drawn: tuple[Departure, ...]) -> StopView:
@@ -175,6 +234,8 @@ def shapes_and_patterns(
     -------
     tuple[ShapesLoaded, PatternsLoaded]
         The shapes, and the patterns with the rail ones on the track.
+        Each call uses a fresh `StopMeasures`, so the time is a pin's
+        first load.
     """
     shapes = map_data(
         timetable=repo,
@@ -241,6 +302,27 @@ def framed(
     )
 
 
+def cold_view(*, inputs: MapInputs, choice: LineChoice) -> MapView:
+    """
+    Build a plain map's view with the placement and parting caches empty.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The framed inputs.
+    choice : LineChoice
+        The day's other lines.
+
+    Returns
+    -------
+    MapView
+        The view.
+    """
+    nearest_along.cache_clear()
+    found_partings.cache_clear()
+    return plain_map_view(inputs=inputs, choice=choice)
+
+
 def moved(*, view: MapView, step: int) -> MapView:
     """
     Move a vehicle marker over the map.
@@ -299,7 +381,7 @@ def loading_stages(
     pin: Pin,
     drawn: tuple[Departure, ...],
     at: datetime,
-    repeat: int,
+    timing: Timing,
 ) -> tuple[LineChoice, MapInputs]:
     """
     Time and print the stages that read the timetable.
@@ -316,8 +398,8 @@ def loading_stages(
         The first departures, which the map draws solid; not empty.
     at : datetime
         The moment the map is drawn at.
-    repeat : int
-        Number of runs of each stage.
+    timing : Timing
+        Prints each stage against its budget.
 
     Returns
     -------
@@ -326,21 +408,24 @@ def loading_stages(
         shapes loaded, centred on the From.
     """
     request = LoadDayLines(
-        pin=pin, day=at.date(), timetable=repo.version(), skip_school=False,
+        pin=pin,
+        day=at.date(),
+        timetable=repo.version(),
+        skip_school=BoardSettings().skip_school_buses,
     )
     days: list[DayLinesLoaded] = []
-    report(
-        name='day lines',
-        millis=timed(
-            action=lambda: days.append(
-                loaded_day_lines(timetable=repo, effect=request),
-            ),
-            repeat=repeat,
+    millis = timed(
+        action=lambda: days.append(
+            loaded_day_lines(timetable=repo, effect=request),
         ),
+        repeat=timing.repeat,
     )
     extras = days[-1].departures
+    timing.report(
+        name='day lines', millis=millis, budget=day_budget(lines=len(extras)),
+    )
     loads: list[tuple[ShapesLoaded, PatternsLoaded]] = []
-    report(
+    timing.report(
         name='shapes and patterns',
         millis=timed(
             action=lambda: loads.append(
@@ -348,7 +433,7 @@ def loading_stages(
                     repo=repo, departures=(*drawn, *extras), day=at,
                 ),
             ),
-            repeat=repeat,
+            repeat=timing.repeat,
         ),
     )
     shapes, patterns = loads[-1]
@@ -378,7 +463,7 @@ def drawing_stages(
     city: City,
     choice: LineChoice,
     inputs: MapInputs,
-    repeat: int,
+    timing: Timing,
 ) -> tuple[int, int]:
     """
     Time and print the stages that build and draw the map.
@@ -393,8 +478,8 @@ def drawing_stages(
         The day's other lines.
     inputs : MapInputs
         Inputs with the patterns and shapes loaded.
-    repeat : int
-        Number of runs of each stage.
+    timing : Timing
+        Prints each stage against its budget.
 
     Returns
     -------
@@ -403,14 +488,14 @@ def drawing_stages(
     """
     kind = inputs.departures[0].facts.kind
     bare = replace(inputs, patterns={})
-    report(
+    timing.report(
         name='tick',
         millis=timed(
             action=lambda: [
                 plain_lines(inputs=bare, choice=choice)
                 for _ in range(TICK_BUILDS)
             ],
-            repeat=repeat,
+            repeat=timing.repeat,
         ),
     )
     fit = framed(inputs=inputs, kind=kind, city=city, choice=choice)
@@ -421,7 +506,7 @@ def drawing_stages(
         points=approach_points(inputs=inputs),
         choice=choice,
     )
-    report(
+    timing.report(
         name='framing',
         millis=timed(
             action=lambda: framed(
@@ -432,39 +517,48 @@ def drawing_stages(
                 held=held,
                 key=key,
             ),
-            repeat=repeat,
+            repeat=timing.repeat,
         ),
     )
     views: list[MapView] = []
-    report(
+    timing.report(
+        name='view cold',
+        millis=timed(
+            action=lambda: views.append(
+                cold_view(inputs=fit, choice=choice),
+            ),
+            repeat=timing.repeat,
+        ),
+    )
+    timing.report(
         name='view',
         millis=timed(
             action=lambda: views.append(
                 plain_map_view(inputs=fit, choice=choice),
             ),
-            repeat=repeat,
+            repeat=timing.repeat,
         ),
     )
     view = views[-1]
-    report(
+    timing.report(
         name='base',
         millis=timed(
             action=lambda: draw_map_base(
                 base=view.base, tiles=tiles, variant=TileVariant.GREY,
             ),
-            repeat=repeat,
+            repeat=timing.repeat,
         ),
     )
     renderer = MapRenderer(tiles=tiles)
     renderer.frame(view=view)
-    moves = iter(range(repeat))
-    report(
+    moves = iter(range(timing.repeat))
+    timing.report(
         name='frame',
         millis=timed(
             action=lambda: renderer.frame(
                 view=moved(view=view, step=next(moves)),
             ),
-            repeat=repeat,
+            repeat=timing.repeat,
         ),
     )
     rings = len(view.base.stops) + len(view.base.dashed_stops)
@@ -515,6 +609,45 @@ def start_time(*, at: datetime | None, city: City) -> datetime:
     return at if at.tzinfo else at.replace(tzinfo=city.zone)
 
 
+def no_departures(
+    *,
+    repo: SqliteTimetableRepository,
+    stop: str,
+    start: datetime,
+    asked: bool,
+) -> str:
+    """
+    Explain why a stop has no departures at the start.
+
+    Parameters
+    ----------
+    repo : SqliteTimetableRepository
+        Timetable.
+    stop : str
+        The stop ID.
+    start : datetime
+        The moment looked at.
+    asked : bool
+        Whether `--at` gave the moment.
+
+    Returns
+    -------
+    str
+        The message; with no `--at` it names the default start and says
+        to pass one inside the timetable's dates.
+    """
+    message = f'no departures from {stop} at {start}'
+    if asked:
+        return message
+    last = repo.last_day()
+    span = f' (the timetable runs to {last})' if last else ''
+    return (
+        f'{message}; with no --at the start is the next weekday at '
+        f'{EVENING[0]}:{EVENING[1]:02d}, so pass --at inside the '
+        f"timetable's dates{span}"
+    )
+
+
 def parser() -> argparse.ArgumentParser:
     """
     Build the command-line parser.
@@ -533,6 +666,12 @@ def parser() -> argparse.ArgumentParser:
         '--at', type=datetime.fromisoformat, help='ISO time of the map',
     )
     result.add_argument('--repeat', type=int, default=DEFAULT_REPEAT)
+    result.add_argument(
+        '--budget-scale',
+        type=float,
+        default=1.0,
+        help='multiplies every budget',
+    )
     return result
 
 
@@ -548,8 +687,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     Returns
     -------
     int
-        0 when every stage was timed; 1 when a file is missing, the stop
-        is unknown or it has no departures then.
+        0 when every stage's median is inside its budget; 1 when a file
+        is missing, the stop is unknown or it has no departures then; 2
+        when a median is over its budget.
     """
     args = parser().parse_args(argv)
     city = CITIES[args.city]
@@ -560,6 +700,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(problem, file=sys.stderr)
         return 1
     start = start_time(at=args.at, city=city)
+    timing = Timing(repeat=args.repeat, scale=args.budget_scale)
     with closing(
         SqliteTimetableRepository(path=db, city=city),
     ) as repo, closing(SqliteTileRepository(path=tiles_path)) as tiles:
@@ -572,7 +713,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         drawn = first_departures(repo=repo, pin=pin, at=start)
         if not drawn:
             print(
-                f'no departures from {args.stop} at {start}', file=sys.stderr,
+                no_departures(
+                    repo=repo,
+                    stop=args.stop,
+                    start=start,
+                    asked=bool(args.at),
+                ),
+                file=sys.stderr,
             )
             return 1
         pin = replace(pin, kind=drawn[0].facts.kind)
@@ -582,17 +729,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             pin=pin,
             drawn=drawn,
             at=start,
-            repeat=args.repeat,
+            timing=timing,
         )
         counts = drawing_stages(
             tiles=tiles,
             city=city,
             choice=choice,
             inputs=inputs,
-            repeat=args.repeat,
+            timing=timing,
         )
     print(f'lines {counts[0]}, rings {counts[1]}')
-    return 0
+    return OVER_BUDGET if timing.over else 0
 
 
 if __name__ == '__main__':

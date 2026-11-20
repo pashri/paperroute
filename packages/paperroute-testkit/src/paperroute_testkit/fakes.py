@@ -341,6 +341,30 @@ class BrokenTimetable:
         """
         return {}
 
+    def rail_hops(
+        self, *, pairs: Collection[tuple[str, str]],
+    ) -> dict[tuple[str, str], tuple[Point, ...]]:
+        """
+        Fail like a damaged database file.
+
+        Parameters
+        ----------
+        pairs : Collection[tuple[str, str]]
+            Ignored.
+
+        Returns
+        -------
+        dict[tuple[str, str], tuple[Point, ...]]
+            Never returns.
+
+        Raises
+        ------
+        sqlite3.DatabaseError
+            Always.
+        """
+        self.calls += 1
+        raise sqlite3.DatabaseError('file is not a database')
+
     def patterns(
         self, *, trip_ids: Collection[str], around: date
     ) -> dict[str, TripPattern]:
@@ -593,6 +617,24 @@ class EmptyPlacedTimetable(PlacedTimetable):
             Nothing.
         """
         return []
+
+    def rail_hops(
+        self, *, pairs: Collection[tuple[str, str]],
+    ) -> dict[tuple[str, str], tuple[Point, ...]]:
+        """
+        Find no track.
+
+        Parameters
+        ----------
+        pairs : Collection[tuple[str, str]]
+            Ignored.
+
+        Returns
+        -------
+        dict[tuple[str, str], tuple[Point, ...]]
+            Nothing.
+        """
+        return {}
 
 
 @dataclass

@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Final
 
 from paperroute_transit.app_connections import between_read
-from paperroute_transit.app_lines import loaded_day_lines
+from paperroute_transit.app_lines import loaded_day_lines, tracked_patterns
 from paperroute_transit.core.alert_model import (
     AlertPlaces,
     AlertsFetched,
@@ -889,8 +889,12 @@ def map_data(
         case LoadShapes(shape_ids=shape_ids):
             return ShapesLoaded(shapes=timetable.shapes(shape_ids=shape_ids))
         case LoadPatterns():
-            return loaded_patterns(
-                timetable=timetable, effect=effect, measures=measures,
+            return tracked_patterns(
+                timetable=timetable,
+                loaded=loaded_patterns(
+                    timetable=timetable, effect=effect, measures=measures,
+                ),
+                measures=measures,
             )
         case LoadModes(mpp=mpp, box=box):
             modes = timetable.modes_near(box=box)

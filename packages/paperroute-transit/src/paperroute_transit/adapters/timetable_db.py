@@ -96,7 +96,9 @@ SELECT
   (SELECT COUNT(*) FROM pragma_table_info('trips')
    WHERE name = 'service'),
   (SELECT COUNT(*) FROM sqlite_master
-   WHERE type = 'table' AND name = 'trip_joins')
+   WHERE type = 'table' AND name = 'trip_joins'),
+  (SELECT COUNT(*) FROM sqlite_master
+   WHERE type = 'table' AND name = 'rail_hops')
 """
 NEXT_COLUMNS: Final[str] = 'n.route, n.headsign, n.next_trip'
 OLD_NEXT_COLUMNS: Final[str] = 'n.route, n.headsign, NULL'
@@ -144,6 +146,10 @@ ORDER BY a.alias_id, t.trip_id
 SHAPES_BY_ID: Final[str] = (
     'SELECT shape_id, points FROM shapes WHERE shape_id IN ({marks})'
 )
+RAIL_HOPS_FROM: Final[str] = '''
+SELECT a, b, path FROM rail_hops
+WHERE inside = 1 AND path IS NOT NULL AND a IN ({marks})
+'''
 MODES_NEAR: Final[str] = """
 SELECT DISTINCT mode FROM shapes
 WHERE west <= :east AND east >= :west
@@ -170,6 +176,8 @@ class Features:
         Whether trips has the service column.
     joins : bool
         Whether the trip_joins table exists.
+    hops : bool
+        Whether the rail_hops table exists.
     """
 
     shape_column: bool = False
@@ -178,6 +186,7 @@ class Features:
     next_trips: bool = False
     service: bool = False
     joins: bool = False
+    hops: bool = False
 
     @property
     def next_columns(self) -> str:
@@ -336,7 +345,7 @@ class SqliteTimetableRepository:
         self.fetch(sql='SELECT 1', params=())
         if known is None or known[0] != self.identity:
             rows = self.fetch(sql=SCHEMA_CHECK, params=())
-            found = rows[0] if rows else (0, 0, 0, 0, 0, 0)
+            found = rows[0] if rows else (0, 0, 0, 0, 0, 0, 0)
             known = (
                 self.identity,
                 Features(
@@ -346,6 +355,7 @@ class SqliteTimetableRepository:
                     next_trips=bool(found[3]),
                     service=bool(found[4]),
                     joins=bool(found[5]),
+                    hops=bool(found[6]),
                 ),
             )
             self.schema = known
@@ -673,6 +683,43 @@ class SqliteTimetableRepository:
             )
             for shape_id, blob in rows
         }
+
+    def rail_hops(
+        self, *, pairs: Collection[tuple[str, str]],
+    ) -> dict[tuple[str, str], tuple[Point, ...]]:
+        """
+        Track paths between pairs of stations.
+
+        Parameters
+        ----------
+        pairs : Collection[tuple[str, str]]
+            Station IDs, in running order.
+
+        Returns
+        -------
+        dict[tuple[str, str], tuple[Point, ...]]
+            The path of each pair held inside the track, from the first
+            station to the second; a hop stored the other way round comes
+            back reversed. Empty for a file with no rail_hops table.
+        """
+        if not pairs or not self.features().hops:
+            return {}
+        stations = {station for pair in pairs for station in pair}
+        found: dict[tuple[str, str], tuple[Point, ...]] = {}
+        for start, end, blob in self.fetch_in(
+            sql=RAIL_HOPS_FROM, ids=stations,
+        ):
+            key = (str(start), str(end))
+            points = (
+                unpack_shape(shape_id='', blob=cast(bytes, blob)).points
+                if key in pairs or key[::-1] in pairs
+                else ()
+            )
+            if key in pairs:
+                found[key] = points
+            if key[::-1] in pairs:
+                found.setdefault(key[::-1], tuple(reversed(points)))
+        return found
 
     def modes_near(self, *, box: MetreBox) -> frozenset[str]:
         """

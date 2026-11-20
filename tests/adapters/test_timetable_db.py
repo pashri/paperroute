@@ -33,8 +33,9 @@ from paperroute_transit.adapters.timetable_db import (
 )
 from paperroute_transit.app_effects import VersionWatch
 from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.passed import PASSED_SCHEMA
 from paperroute_transit.build.timetable import Window, build_timetable
-from paperroute_transit.core.geo import to_metres
+from paperroute_transit.core.geo import make_shape, pack_shape, to_metres
 from paperroute_transit.core.model import (
     CarryOn,
     Departure,
@@ -2483,3 +2484,71 @@ def test_station_for_names_the_parent_station(
 ) -> None:
     """A stand or platform gives its parent; other IDs give themselves."""
     assert repo.station_for(stop_id=stop_id) == station
+
+
+PATH: Final[tuple[tuple[float, float], ...]] = (
+    (0.0, 0.0), (1000.0, 300.0), (2000.0, 0.0),
+)
+
+
+@pytest.fixture(name='hops_repo')
+def _hops_repo(
+    repo: SqliteTimetableRepository, tmp_path: Path,
+) -> Iterator[SqliteTimetableRepository]:
+    """
+    A copy of the fixture timetable with two rail hops.
+
+    Parameters
+    ----------
+    repo : SqliteTimetableRepository
+        The fixture timetable.
+    tmp_path : Path
+        Working directory.
+
+    Yields
+    ------
+    SqliteTimetableRepository
+        Repository over the copy, closed after the test.
+    """
+    assert repo.db.path is not None
+    copy = tmp_path / 'hops.db'
+    shutil.copy(repo.db.path, copy)
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.executescript(
+            'DROP TABLE IF EXISTS rail_hops;' + PASSED_SCHEMA,
+        )
+        conn.executemany(
+            "INSERT INTO rail_hops VALUES (?, ?, '[]', ?, ?)",
+            [
+                ('A', 'B', 1, pack_shape(
+                    shape=make_shape(shape_id='', points=PATH),
+                )),
+                ('B', 'C', 0, None),
+            ],
+        )
+        conn.commit()
+    with closing(SqliteTimetableRepository(
+        path=copy, city=SYDNEY,
+    )) as hops:
+        yield hops
+
+
+def test_rail_hops_read_both_directions(
+    hops_repo: SqliteTimetableRepository,
+) -> None:
+    """A hop stored one way is given back either way."""
+    found = hops_repo.rail_hops(pairs={('A', 'B'), ('B', 'A'), ('B', 'C')})
+    assert found[('A', 'B')] == PATH
+    assert found[('B', 'A')] == tuple(reversed(PATH))
+    assert ('B', 'C') not in found
+
+
+def test_rail_hops_without_a_track_table_are_empty(
+    hops_repo: SqliteTimetableRepository,
+) -> None:
+    """A timetable with no rail_hops table gives no hops."""
+    assert hops_repo.db.path is not None
+    with closing(sqlite3.connect(hops_repo.db.path)) as conn:
+        conn.execute('DROP TABLE rail_hops')
+        conn.commit()
+    assert hops_repo.rail_hops(pairs={('A', 'B')}) == {}

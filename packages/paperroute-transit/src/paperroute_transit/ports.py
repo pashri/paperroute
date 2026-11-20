@@ -1,6 +1,6 @@
 """Interfaces the core and app depend on; adapters implement them."""
 
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from datetime import date, datetime
 from typing import Protocol
 
@@ -11,7 +11,7 @@ from paperroute_device.ports import DeviceObserver
 from paperroute_transit.core.alert_model import AlertPlaces
 from paperroute_transit.core.chooser import Choice, ChooserPath, Column
 from paperroute_transit.core.city import City
-from paperroute_transit.core.geo import MetreBox, Shape
+from paperroute_transit.core.geo import MetreBox, Point, Shape
 from paperroute_transit.core.model import (
     Departure,
     Pin,
@@ -206,6 +206,24 @@ class TimetableRepository(DayTimetable, Protocol):
         -------
         dict[str, Shape]
             The shapes found; unknown IDs are absent.
+        """
+
+    def rail_hops(
+        self, *, pairs: Collection[tuple[str, str]],
+    ) -> Mapping[tuple[str, str], tuple[Point, ...]]:
+        """
+        Track paths between pairs of stations.
+
+        Parameters
+        ----------
+        pairs : Collection[tuple[str, str]]
+            Station IDs, in running order.
+
+        Returns
+        -------
+        Mapping[tuple[str, str], tuple[Point, ...]]
+            The path of each pair held inside the track, from the first
+            station to the second; empty without any.
         """
 
     def patterns(

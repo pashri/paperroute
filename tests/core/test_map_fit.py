@@ -4,6 +4,8 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Any, Final
 
+import pytest
+
 from paperroute_sydney.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute_testkit.core.factories import (
     EIGHT,
@@ -15,20 +17,23 @@ from paperroute_testkit.core.factories import (
     snapshot,
     vehicle,
 )
-from paperroute_transit.core.geo import Point
+from paperroute_transit.core.geo import Point, make_shape
 from paperroute_transit.core.map_fit import (
     BANNER_ROOM,
     CREDIT_ROOM,
     KEEP_IN,
+    LINE_ZOOM,
     FrameKey,
     approach_frame,
     centred_frame,
     fitted,
     frame_key,
     framed_map,
+    line_frame,
     resting_zoom,
     steady_frame,
 )
+from paperroute_transit.core.map_lines import LineChoice
 from paperroute_transit.core.map_view import (
     DEFAULT_ZOOM,
     MAP_HEIGHT,
@@ -665,3 +670,53 @@ def test_approach_frame_asleep_ignores_the_banner_it_hides() -> None:
     assert approach_frame(inputs=bannered) == replace(
         approach_frame(inputs=asleep), stop_view=bannered.stop_view,
     )
+
+
+def fork_inputs(*, split: float) -> MapInputs:
+    """Two buses east from FROM, no patterns, one turning north."""
+    east = make_shape(
+        shape_id='east', points=(FROM, (FROM[0] + 20_000.0, FROM[1])),
+    )
+    turn = make_shape(
+        shape_id='turn',
+        points=(
+            FROM,
+            (FROM[0] + split, FROM[1]),
+            (FROM[0] + split, FROM[1] + 20_000.0),
+        ),
+    )
+    buses = (
+        replace(departure(departs=START, trip_id='e'), shape_id='east'),
+        replace(
+            departure(departs=START, route='610', trip_id='t'),
+            shape_id='turn',
+        ),
+    )
+    return replace(
+        plain(departures=buses, ends=(FROM, None)),
+        stop_view=stop_view(destination=None),
+        shapes={'east': east, 'turn': turn},
+    )
+
+
+@pytest.mark.parametrize(
+    ('split', 'zoom'), [(1000.0, 8), (3000.0, 14), (5000.0, 8)],
+)
+def test_parting_just_beyond_the_edge_opens_one_step_wider(
+    split: float, zoom: int,
+) -> None:
+    """Only a parting off the map but on the next step widens it."""
+    framed = approach_frame(
+        inputs=fork_inputs(split=split), choice=LineChoice(station='P'),
+    )
+    assert ZOOMS[framed.zoom] == zoom
+    assert framed.centre == FROM
+
+
+def test_line_frame_is_centred_at_25_m_per_px() -> None:
+    """Every other mode opens centred on the pin at 25 m/px."""
+    framed = line_frame(inputs=plain())
+    assert (framed.centre, ZOOMS[framed.zoom]) == (FROM, 25)
+    stepped_in = line_frame(inputs=replace(plain(), step=-1))
+    assert ZOOMS[stepped_in.zoom] == 14
+    assert LINE_ZOOM == 4

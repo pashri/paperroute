@@ -10,13 +10,17 @@ from paperroute_transit.core.connection_map import (
     connection_inputs,
     panes_inputs,
 )
-from paperroute_transit.core.day_lines import day_extras, request_day_lines
+from paperroute_transit.core.day_lines import (
+    day_extras,
+    plain_frame,
+    request_day_lines,
+)
 from paperroute_transit.core.geo import MetreBox, Point
 from paperroute_transit.core.map_fit import (
     FrameKey,
     frame_key,
+    line_framed,
     resting_zoom,
-    steady_frame,
     stepped,
 )
 from paperroute_transit.core.map_state import area_box, area_frame
@@ -278,12 +282,7 @@ def map_inputs(
     )
     pin = shown(state=state)
     if not is_connection(pin=pin):
-        return steady_frame(
-            inputs=inputs,
-            framing=state.settings.board.map_framing,
-            held=state.map.frame,
-            key=state.map.frame_key,
-        )
+        return plain_frame(state=state, stop_view=stop_view, inputs=inputs)
     chains = live_chains(state=state)
     mode = state.settings.board.connection_map
     return panes_inputs(
@@ -665,7 +664,10 @@ def settled_key(*, state: State, inputs: MapInputs) -> FrameKey | None:
         `frame_key` at the state's step, so the next draw matches it;
         None for a connection pin.
     """
-    if is_connection(pin=shown(state=state)):
+    pin = shown(state=state)
+    if is_connection(pin=pin) or line_framed(
+        kind=pin.kind, modes=state.city.modes,
+    ):
         return None
     return frame_key(
         inputs=replace(inputs, step=state.map.step),

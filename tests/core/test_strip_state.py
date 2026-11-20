@@ -31,8 +31,9 @@ from paperroute_testkit.core.strip_factories import (
     turn,
 )
 from paperroute_transit.core.feed_plan import FeedKind
+from paperroute_transit.core.map_fit import LINE_ZOOM
 from paperroute_transit.core.map_state import area_frame
-from paperroute_transit.core.map_view import DEFAULT_ZOOM, MapView
+from paperroute_transit.core.map_view import MapView
 from paperroute_transit.core.messages import (
     DeparturesLoaded,
     Effect,
@@ -315,11 +316,11 @@ def test_strip_map_zooms_on_bottom_turn() -> None:
     state, _ = on_view(view=LiveView.STRIP_MAP)
     state, _ = step(state, StripLoaded(key=KEY, reach=long_reach()))
     state, effects = step(state, turn(steps=-1))
-    assert area_frame(map_state=state.map)[1] == DEFAULT_ZOOM + 1
+    assert area_frame(map_state=state.map)[1] == LINE_ZOOM + 1
     assert state.strip.scroll == 0
     [render] = kinds(effects=effects, kind=Render)
     assert isinstance(render.view, StripMapView)
-    assert render.view.map.zoom == DEFAULT_ZOOM + 1
+    assert render.view.map.zoom == LINE_ZOOM + 1
     assert render.view.map.base.width == 480
     assert render.view.pane.rows[2].name == 'C'
 

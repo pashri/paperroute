@@ -7,11 +7,14 @@ from typing import Final
 
 from paperroute_device.core.panel_views import SLEEP_BAND
 from paperroute_transit.core.geo import Point
+from paperroute_transit.core.map_lines import LineChoice
 from paperroute_transit.core.map_view import (
     DEFAULT_ZOOM,
     MAP_HEIGHT,
     MapInputs,
 )
+from paperroute_transit.core.modes import ModeSpec, line_modes
+from paperroute_transit.core.partings import parted_beyond
 from paperroute_transit.core.ridden import stretch_stops
 from paperroute_transit.core.saved import MapFraming
 from paperroute_transit.core.tiles import ZOOMS
@@ -20,6 +23,7 @@ CREDIT_ROOM: Final[int] = 28  # pixels kept clear above the map's bottom
 BANNER_ROOM: Final[int] = 34  # pixels a banner covers at the map's top
 KEEP_IN: Final[int] = 24  # pixels the From is kept inside the map
 SLEEP_ROOM: Final[int] = SLEEP_BAND  # pixels the sleep band covers
+LINE_ZOOM: Final[int] = 4  # the `ZOOMS` index a line mode opens at
 
 
 @dataclass(frozen=True)
@@ -401,11 +405,11 @@ def approach_points(*, inputs: MapInputs) -> tuple[Point, ...]:
     )
 
 
-def approach_frame(
+def fitted_frame(
     *, inputs: MapInputs, points: Sequence[Point] | None = None,
 ) -> MapInputs:
     """
-    Frame a plain pin's map on the approach to its stop.
+    Fit a plain pin's map to the approach to its stop.
 
     Parameters
     ----------
@@ -417,9 +421,9 @@ def approach_frame(
     Returns
     -------
     MapInputs
-        Fitted to the approach stops and the From, with the From kept
-        inside; the From at the resting zoom with fewer than two
-        points; unchanged with no From point.
+        Fitted to the approach stops and the From at the knob's step,
+        with the From kept inside; the From at the resting zoom with
+        fewer than two points; unchanged with no From point.
     """
     origin = inputs.ends[0]
     if origin is None:
@@ -440,6 +444,50 @@ def approach_frame(
         ends=(origin,),
     ) or (origin, inputs.zoom)
     return replace(inputs, centre=centre, zoom=zoom)
+
+
+def approach_frame(
+    *,
+    inputs: MapInputs,
+    points: Sequence[Point] | None = None,
+    choice: LineChoice = LineChoice(),
+) -> MapInputs:
+    """
+    Frame a plain pin's map on the approach to its stop.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs, centred on the From.
+    points : Sequence[Point] | None
+        `approach_points` of the inputs, when already found.
+    choice : LineChoice
+        The kinds left out of the lines compared for partings.
+
+    Returns
+    -------
+    MapInputs
+        Fitted to the approach stops and the From, with the From kept
+        inside; the From at the resting zoom with fewer than two
+        points; one zoom wider on the same centre when a parting of the
+        solid lines lies just beyond the edge; unchanged with no From
+        point.
+    """
+    origin = inputs.ends[0]
+    if origin is None:
+        return inputs
+    frame = fitted_frame(inputs=replace(inputs, step=0), points=points)
+    if parted_beyond(
+        inputs=inputs,
+        choice=choice,
+        centre=frame.centre or origin,
+        zoom=frame.zoom,
+    ):
+        zoom = stepped(zoom=frame.zoom, step=1 + inputs.step)
+        return replace(frame, zoom=zoom)
+    if inputs.step == 0:
+        return frame
+    return fitted_frame(inputs=inputs, points=points)
 
 
 def centred_frame(*, inputs: MapInputs) -> MapInputs:
@@ -465,11 +513,56 @@ def centred_frame(*, inputs: MapInputs) -> MapInputs:
     )
 
 
+def line_frame(*, inputs: MapInputs) -> MapInputs:
+    """
+    Centre a line mode's map on its stop at `LINE_ZOOM`.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs.
+
+    Returns
+    -------
+    MapInputs
+        Centred on the From at `LINE_ZOOM` moved by the knob; unchanged
+        with no From point.
+    """
+    origin = inputs.ends[0]
+    if origin is None:
+        return inputs
+    return replace(
+        inputs,
+        centre=origin,
+        zoom=stepped(zoom=LINE_ZOOM, step=inputs.step),
+    )
+
+
+def line_framed(*, kind: str | None, modes: Sequence[ModeSpec]) -> bool:
+    """
+    Tell whether a pin's kind opens its map with `line_frame`.
+
+    Parameters
+    ----------
+    kind : str | None
+        The pin's kind.
+    modes : Sequence[ModeSpec]
+        The city's modes.
+
+    Returns
+    -------
+    bool
+        True for a kind chosen by line; False for any other and for None.
+    """
+    return kind is not None and kind in line_modes(modes=modes)
+
+
 def framed_map(
     *,
     inputs: MapInputs,
     framing: MapFraming,
     points: Sequence[Point] | None = None,
+    choice: LineChoice = LineChoice(),
 ) -> MapInputs:
     """
     Frame a plain pin's map by the map framing setting.
@@ -482,6 +575,8 @@ def framed_map(
         The map framing setting.
     points : Sequence[Point] | None
         `approach_points` of the inputs, when already found.
+    choice : LineChoice
+        The kinds left out of the lines compared for partings.
 
     Returns
     -------
@@ -490,7 +585,7 @@ def framed_map(
     """
     if framing is MapFraming.CENTRED:
         return centred_frame(inputs=inputs)
-    return approach_frame(inputs=inputs, points=points)
+    return approach_frame(inputs=inputs, points=points, choice=choice)
 
 
 def frame_key(
@@ -617,6 +712,7 @@ def steady_frame(
     framing: MapFraming,
     held: tuple[Point, int] | None,
     key: FrameKey | None,
+    choice: LineChoice = LineChoice(),
 ) -> MapInputs:
     """
     Frame a plain pin's map, keeping a settled Approach frame while it fits.
@@ -632,6 +728,8 @@ def steady_frame(
     key : FrameKey | None
         What the held frame was fitted for; None when it is not a
         settled Approach frame.
+    choice : LineChoice
+        The kinds left out of the lines compared for partings.
 
     Returns
     -------
@@ -642,7 +740,7 @@ def steady_frame(
     if framing is MapFraming.CENTRED:
         return centred_frame(inputs=inputs)
     points = approach_points(inputs=inputs)
-    fit = approach_frame(inputs=inputs, points=points)
+    fit = approach_frame(inputs=inputs, points=points, choice=choice)
     if held is None or key is None:
         return fit
     own = frame_key(inputs=inputs, framing=framing, points=points)

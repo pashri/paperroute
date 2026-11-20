@@ -32,6 +32,7 @@ WHERE a IN (SELECT value FROM json_each(:ids))
   AND b IN (SELECT value FROM json_each(:ids))
 """
 
+
 def pairs_of(*, rows: list[Row]) -> set[tuple[str, str]]:
     """
     Take the consecutive station pairs of some JSON station lists.

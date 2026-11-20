@@ -1455,3 +1455,50 @@ def test_reach_input_without_track_tables_has_an_empty_network(
         )
     found = reach_for(path=copy, kind=SydneyMode.TRAIN)
     assert found.network == TrainNetwork(hops={}, runs=())
+
+
+def drop_track_tables(*, path: Path) -> None:
+    """
+    Drop the tables a file built before the Strip's train kinds lacks.
+
+    Parameters
+    ----------
+    path : Path
+        Timetable file, changed in place.
+    """
+    with closing(sqlite3.connect(path)) as conn:
+        for table in ('track_places', 'rail_hops', 'weekday_runs'):
+            conn.execute(f'DROP TABLE {table}')
+        conn.commit()
+
+
+def test_reach_input_for_train_reads_an_older_file(copy: Path) -> None:
+    """A file without the track tables gives an empty train network."""
+    drop_track_tables(path=copy)
+    with closing(SqliteNetworkRepository(
+        path=copy, city=SYDNEY,
+    )) as repo:
+        found = repo.reach_input(
+            key=StripKey(station='C', kind=SydneyMode.TRAIN, routes=()),
+            origin=place(stop_id='C'),
+        )
+    assert found is not None
+    assert found.network == TrainNetwork(hops={}, runs=())
+    assert found.tails
+
+
+def test_reach_input_for_bus_reads_an_older_file(copy: Path) -> None:
+    """A bus pin gives the same input with or without the track tables."""
+    key = StripKey(
+        station='B2', kind=SydneyMode.BUS, routes=('811',),
+    )
+    with closing(SqliteNetworkRepository(
+        path=copy, city=LINE_CITY,
+    )) as repo:
+        before = repo.reach_input(key=key, origin=place(stop_id='B2'))
+    drop_track_tables(path=copy)
+    with closing(SqliteNetworkRepository(
+        path=copy, city=LINE_CITY,
+    )) as repo:
+        after = repo.reach_input(key=key, origin=place(stop_id='B2'))
+    assert after == before

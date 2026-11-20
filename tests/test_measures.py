@@ -142,3 +142,28 @@ def test_unmeasurable_trips_pass_through() -> None:
     assert measures.measure(pattern=plain, shape=None) is plain
     gap = trip(trip_id='b', points=((0.0, 0.0), None))
     assert measures.measure(pattern=gap, shape=LINE).along is None
+
+
+def test_a_busy_stops_shapes_are_all_held() -> None:
+    """Forty trips on a feed shape and a track shape each are not redone."""
+    measures = StopMeasures()
+    shapes = [
+        make_shape(
+            shape_id=f'{kind}{index}',
+            points=[(0.0, float(index)), (300.0, float(index))],
+        )
+        for kind in ('feed', 'track')
+        for index in range(40)
+    ]
+    patterns = [trip(trip_id=shape.shape_id, points=STOPS) for shape in shapes]
+    first = [
+        measures.measure(pattern=pattern, shape=shape).along
+        for pattern, shape in zip(patterns, shapes, strict=True)
+    ]
+    second = [
+        measures.measure(pattern=pattern, shape=shape).along
+        for pattern, shape in zip(patterns, shapes, strict=True)
+    ]
+    assert all(
+        again is before for again, before in zip(second, first, strict=True)
+    )

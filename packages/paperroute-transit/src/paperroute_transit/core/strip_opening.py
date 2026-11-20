@@ -13,6 +13,7 @@ from paperroute_transit.core.saved import LiveView
 from paperroute_transit.core.state_model import FoldContext, State
 from paperroute_transit.core.strip_follow import origin_of
 from paperroute_transit.core.strip_model import PANE_FROM_ROW, PANE_ROWS
+from paperroute_transit.core.strip_slots import first_row, home_of, window_of
 from paperroute_transit.core.strip_state import (
     STRIP_VIEWS,
     destination_id,
@@ -20,7 +21,6 @@ from paperroute_transit.core.strip_state import (
     shown_key,
     shown_reach,
 )
-from paperroute_transit.core.strip_view import first_row, home_of, window_of
 
 type Opener = Callable[[State, bool], State | None]
 

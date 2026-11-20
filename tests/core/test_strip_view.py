@@ -63,12 +63,11 @@ from paperroute_transit.core.strip_model import (
     StripRow,
     hook_straight,
 )
+from paperroute_transit.core.strip_slots import first_row, home_of
 from paperroute_transit.core.strip_times import strip_trips
 from paperroute_transit.core.strip_view import (
     build_strip_pane,
     build_strip_view,
-    first_row,
-    home_of,
     line_reach,
 )
 

@@ -45,11 +45,8 @@ from paperroute_transit.core.strip_model import (
     StripMapView,
     StripView,
 )
-from paperroute_transit.core.strip_view import (
-    build_strip_view,
-    home_of,
-    window_of,
-)
+from paperroute_transit.core.strip_slots import home_of, window_of
+from paperroute_transit.core.strip_view import build_strip_view
 from tests.core.chooser_walks import CHOSEN_KEY, DOWN, TO_STAGE, at_to
 from tests.core.real_reach import (
     BLACKTOWN,

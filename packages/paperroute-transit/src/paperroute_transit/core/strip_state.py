@@ -31,6 +31,7 @@ from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.core.strip_folds import folded
 from paperroute_transit.core.strip_follow import followed_reach
 from paperroute_transit.core.strip_model import NEEDS_UPDATE, StripInputs
+from paperroute_transit.core.strip_slots import home_of, window_of
 from paperroute_transit.core.strip_times import (
     TripInputs,
     joined_ids,
@@ -38,7 +39,6 @@ from paperroute_transit.core.strip_times import (
     trip_ids,
     window_departures,
 )
-from paperroute_transit.core.strip_view import home_of, window_of
 
 STRIP_VIEWS: Final[frozenset[LiveView]] = frozenset(
     {LiveView.STRIP, LiveView.STRIP_MAP}

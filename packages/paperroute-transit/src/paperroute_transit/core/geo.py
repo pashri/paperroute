@@ -263,6 +263,7 @@ def project_onto_segment(
 
 
 SKIP_SLACK: Final[float] = 1e-6  # metres
+ALONG_CACHE: Final[int] = 1024  # placements held
 
 
 def nearest_from(
@@ -308,7 +309,7 @@ def nearest_from(
     return best[1], best[2]
 
 
-@lru_cache(maxsize=256)
+@lru_cache(maxsize=ALONG_CACHE)
 def nearest_along(*, shape: Shape, point: Point) -> float:
     """Measure where a point projects onto a shape.
 

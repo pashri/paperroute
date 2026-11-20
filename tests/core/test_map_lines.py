@@ -487,3 +487,34 @@ def test_a_call_off_the_map_is_not_measured_against_the_shape() -> None:
         inputs=inputs, centre=FROM_POINT, shape=EAST, point=far,
     )
     assert nearest_along.cache_info().misses == 0
+
+
+def test_a_repeat_build_at_a_busy_stop_measures_nothing_again() -> None:
+    """Rings built twice over 300 candidates miss the cache once each."""
+    names = [f's{index}' for index in range(300)]
+    points = {
+        name: (FROM_POINT[0] + 5.0 * index, 0.0)
+        for index, name in enumerate(names)
+    }
+    busy = replace(
+        pattern(
+            trip_id=RIDE.trip_id, shape_id='east',
+            stops=calls(stations=names, points=points),
+        ),
+        along=tuple(1000.0 + 5.0 * index for index in range(300)),
+    )
+
+    def build() -> int:
+        ring_points(
+            inputs=lines_inputs(
+                departures=(RIDE,), patterns={RIDE.trip_id: busy},
+            ),
+            lines=(RIDE_LINE,),
+            departures=(RIDE,),
+        )
+        return nearest_along.cache_info().misses
+
+    nearest_along.cache_clear()
+    first = build()
+    assert first == 300
+    assert build() == first

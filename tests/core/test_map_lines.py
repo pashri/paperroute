@@ -330,7 +330,7 @@ def test_a_hidden_school_run_keeps_its_vehicle() -> None:
     )
     hidden = replace(CHOICE, hidden=frozenset({'school'}))
     view = plain_map_view(inputs=inputs, choice=hidden)
-    assert view.base.lines == ()
+    assert not view.base.lines
     assert view.base.stops == view.base.dashed_stops == ()
     assert view.markers
     assert view.markers == plain_map_view(

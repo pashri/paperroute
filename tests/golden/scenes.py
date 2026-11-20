@@ -1,7 +1,7 @@
 """Fixed states, one for each kind of screen, and how they are drawn."""
 
 import os
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -67,7 +67,7 @@ from paperroute_testkit.core.strip_factories import (
 from paperroute_transit.app_render import MapRenderer
 from paperroute_transit.core.chains import Legs, leg_key
 from paperroute_transit.core.connection_model import way_legs
-from paperroute_transit.core.geo import make_shape
+from paperroute_transit.core.geo import Shape, make_shape, nearest_along
 from paperroute_transit.core.messages import (
     DeparturesLoaded,
     FeedFetched,
@@ -610,11 +610,15 @@ def strip_scene(*, view: LiveView) -> State:
         view=view, pin=replace(PIN, destination=None), departures=departures,
     )
     state, _ = step(state, StripLoaded(key=KEY, reach=example_reach()))
+    line = make_shape(shape_id='strip', points=list(APPROACH.values()))
     patterns: dict[str, TripPattern | None] = {
-        trip: line_pattern(trip_id=trip, stations=line, minutes=minutes)
-        for trip, (line, minutes) in STRIP_TRIPS.items()
+        trip: measured(
+            made=line_pattern(trip_id=trip, stations=stations, minutes=minutes),
+            line=line,
+        )
+        for trip, (stations, minutes) in STRIP_TRIPS.items()
     }
-    return patterns_loaded(state=state, patterns=patterns)
+    return patterns_loaded(state=state, patterns=patterns, shapes=[line])
 
 
 def train_strip_scene(*, destination: str) -> State:
@@ -651,8 +655,39 @@ def train_strip_scene(*, destination: str) -> State:
     )
 
 
+def measured(*, made: TripPattern, line: Shape) -> TripPattern:
+    """
+    Put a pattern on a shape, measuring each call along it.
+
+    Parameters
+    ----------
+    made : TripPattern
+        The pattern.
+    line : Shape
+        The shape it runs along.
+
+    Returns
+    -------
+    TripPattern
+        The pattern naming the shape, with metres along at each call.
+    """
+    return replace(
+        made,
+        shape_id=line.shape_id,
+        along=tuple(
+            0.0
+            if stop.point is None
+            else nearest_along(shape=line, point=stop.point)
+            for stop in made.stops
+        ),
+    )
+
+
 def patterns_loaded(
-    *, state: State, patterns: dict[str, TripPattern | None],
+    *,
+    state: State,
+    patterns: dict[str, TripPattern | None],
+    shapes: Sequence[Shape] = (),
 ) -> State:
     """
     Load some trips' patterns.
@@ -663,6 +698,8 @@ def patterns_loaded(
         State.
     patterns : dict[str, TripPattern | None]
         Patterns by trip ID.
+    shapes : Sequence[Shape]
+        Shapes loaded with them.
 
     Returns
     -------
@@ -670,7 +707,8 @@ def patterns_loaded(
         State after the load.
     """
     state, _ = step(state, PatternsLoaded(
-        trip_ids=frozenset(patterns), patterns=patterns, shapes={},
+        trip_ids=frozenset(patterns), patterns=patterns,
+        shapes={line.shape_id: line for line in shapes},
     ))
     return state
 

@@ -41,10 +41,14 @@ class DayLines:
         The load asked for.
     departures : tuple[Departure, ...] | None
         The first departure of each line, or None while loading.
+    previous : tuple[Departure, ...]
+        The departures held for the same pin before this request, drawn
+        while it loads.
     """
 
     request: LoadDayLines
     departures: tuple[Departure, ...] | None = None
+    previous: tuple[Departure, ...] = ()
 
 
 @dataclass(frozen=True)

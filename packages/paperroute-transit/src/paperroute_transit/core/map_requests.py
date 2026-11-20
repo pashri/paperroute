@@ -13,17 +13,16 @@ from paperroute_transit.core.connection_map import (
 from paperroute_transit.core.day_lines import (
     day_extras,
     line_choice,
-    plain_frame,
     request_day_lines,
 )
 from paperroute_transit.core.geo import MetreBox, Point
 from paperroute_transit.core.map_fit import (
     FrameKey,
     frame_key,
-    line_framed,
     resting_zoom,
     stepped,
 )
+from paperroute_transit.core.map_opening import opens_by_line, plain_frame
 from paperroute_transit.core.map_state import area_box, area_frame
 from paperroute_transit.core.map_view import (
     MAP_WIDTH,
@@ -666,9 +665,7 @@ def settled_key(*, state: State, inputs: MapInputs) -> FrameKey | None:
         None for a connection pin.
     """
     pin = shown(state=state)
-    if is_connection(pin=pin) or line_framed(
-        kind=pin.kind, modes=state.city.modes,
-    ):
+    if is_connection(pin=pin) or opens_by_line(state=state):
         return None
     return frame_key(
         inputs=replace(inputs, step=state.map.step),

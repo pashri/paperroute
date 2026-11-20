@@ -8,7 +8,12 @@ from paperroute_sydney.city import SydneyMode
 from paperroute_testkit.core.factories import START, departure
 from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.strip_factories import CENTRE, PIN, on_view
-from paperroute_transit.core.day_lines import day_extras, line_choice
+from paperroute_transit.core.day_lines import (
+    day_extras,
+    day_request,
+    line_choice,
+    request_day_lines,
+)
 from paperroute_transit.core.geo import make_shape
 from paperroute_transit.core.map_requests import map_effects
 from paperroute_transit.core.messages import (
@@ -148,14 +153,28 @@ def test_day_lines_are_not_asked_without_a_map() -> None:
 
 def test_day_lines_follow_the_service_day_in_view() -> None:
     """After midnight the list's service day is the one asked for."""
+    after = START.replace(day=17, hour=0, minute=30)
     late = replace(
-        departure(departs=START + timedelta(minutes=3)),
-        service_day=date(2026, 10, 15),
+        departure(departs=after + timedelta(minutes=10)),
+        service_day=date(2026, 10, 16),
     )
-    load = pending(state=plain_on_map(departures=(late,)))
-    assert load.day == date(2026, 10, 15)
-    load = pending(state=plain_on_map(departures=bus_pin()))
-    assert load.day == START.date()
+    state = replace(plain_on_map(departures=(late,)), now=after)
+    stop_view = live_stop_view(state=state)
+    request = day_request(state=state, stop_view=stop_view)
+    assert request is not None
+    assert state.now.date() == date(2026, 10, 17)
+    assert request.day == date(2026, 10, 16)
+
+
+def test_day_lines_fall_back_to_the_local_date_with_nothing_listed() -> None:
+    """With no departure listed the day asked for is today's local date."""
+    state = plain_on_map(departures=())
+    now = START.replace(day=17, hour=0, minute=30)
+    request = day_request(
+        state=replace(state, now=now), stop_view=live_stop_view(state=state),
+    )
+    assert request is not None
+    assert request.day == date(2026, 10, 17)
 
 
 def test_extra_lines_ask_for_their_shapes_and_patterns() -> None:
@@ -369,3 +388,21 @@ def test_old_pins_extras_are_not_drawn_for_a_new_pin() -> None:
     assert day_extras(
         state=other, stop_view=live_stop_view(state=other),
     ) == ()
+
+
+def test_previous_extras_are_drawn_while_a_new_request_loads() -> None:
+    """A new request for the same pin keeps the held departures drawn."""
+    state = plain_on_map(departures=bus_pin())
+    state, _ = step(
+        state,
+        DayLinesLoaded(
+            request=pending(state=state), departures=(extra_line(),),
+        ),
+    )
+    state = replace(state, saving=replace(state.saving, timetable='v2'))
+    stop_view = live_stop_view(state=state)
+    state, effects = request_day_lines(state=state, stop_view=stop_view)
+    assert any(isinstance(e, LoadDayLines) for e in effects)
+    held = state.map.day_lines
+    assert held is not None and held.departures is None
+    assert day_extras(state=state, stop_view=stop_view) == (extra_line(),)

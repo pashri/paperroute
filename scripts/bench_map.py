@@ -152,7 +152,7 @@ class Timing:
     """
     Prints each stage against its budget and keeps the ones over it.
 
-    Parameters
+    Attributes
     ----------
     repeat : int
         Number of runs of each stage.

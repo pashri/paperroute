@@ -1,10 +1,10 @@
 """What a pin's editor accepts."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from paperroute_transit.core.chooser import Choice, kind_specs, pin_value
+from paperroute_transit.core.chooser import Choice, kind_specs
 from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.modes import ModeSpec
 
@@ -156,29 +156,3 @@ def clean_nickname(*, text: str) -> str | None:
         `NICKNAME_MAX` characters; None when nothing is left.
     """
     return ' '.join(text.split())[:NICKNAME_MAX].strip() or None
-
-
-def busiest_line(
-    *, lines: Sequence[Choice], trips: Mapping[str, int],
-) -> Choice | None:
-    """
-    Pick the line with the most trips.
-
-    Parameters
-    ----------
-    lines : Sequence[Choice]
-        The lines, in chooser order.
-    trips : Mapping[str, int]
-        Trips by line value.
-
-    Returns
-    -------
-    Choice | None
-        The line with the most trips, the first listed on a tie or when
-        none has a trip; None without lines.
-    """
-    return max(
-        lines,
-        key=lambda line: trips.get(pin_value(choice=line), 0),
-        default=None,
-    )

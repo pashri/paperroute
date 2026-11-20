@@ -597,31 +597,6 @@ class PinOptions(Protocol):
             Route numbers, in chooser order.
         """
 
-    def line_trips(
-        self,
-        *,
-        origin: StopPlace,
-        destination: StopPlace | None,
-        kind: str,
-    ) -> dict[str, int]:
-        """
-        Count the trip-days of each line of a kind between two places.
-
-        Parameters
-        ----------
-        origin : StopPlace
-            Place boarded at.
-        destination : StopPlace | None
-            Place reached later in the trip; None for any trip.
-        kind : str
-            Mode id of the lines to count.
-
-        Returns
-        -------
-        dict[str, int]
-            Trip-days over the timetable's window, by line value.
-        """
-
     def route_colours(
         self, *, names: Collection[str],
     ) -> dict[str, RouteColour]:

@@ -29,12 +29,7 @@ from paperroute_transit.core.chooser import (
 )
 from paperroute_transit.core.geo import Projection, to_lonlat
 from paperroute_transit.core.model import StopPlace
-from paperroute_transit.core.modes import (
-    line_key,
-    line_value,
-    named_line_modes,
-    skippable_modes,
-)
+from paperroute_transit.core.modes import skippable_modes
 from paperroute_transit.core.pin_choices import (
     ChangeStop,
     StopMatch,
@@ -107,27 +102,6 @@ COLOURS: Final[str] = """
 SELECT short_name, color, text_color, COUNT(*) FROM routes
 WHERE short_name IN (SELECT value FROM json_each(:names))
 GROUP BY short_name, color, text_color
-"""
-LINE_TRIPS: Final[str] = """
-SELECT r.short_name, r.long_name, r.type, r.agency_id,
-  SUM(
-    (SELECT COUNT(*) FROM services v WHERE v.service_id = t.service_id)
-    - (SELECT COUNT(*) FROM trip_skip k JOIN services w
-       ON w.service_id = t.service_id AND w.date = k.date
-       WHERE k.trip_id = t.trip_id)
-  )
-FROM trips t JOIN routes r ON r.route_id = t.route_id
-WHERE t.trip_id IN (
-  SELECT o.trip_id FROM stop_times o
-  WHERE o.stop_id IN (SELECT stop_id FROM stops
-                      WHERE stop_id = :origin OR parent_station = :origin)
-    AND o.pickup <> 1
-    AND (:dest IS NULL OR EXISTS (
-      SELECT 1 FROM stop_times d
-      WHERE d.trip_id = o.trip_id AND d.seq > o.seq AND d.dropoff <> 1
-        AND d.stop_id IN (SELECT stop_id FROM stops
-                          WHERE stop_id = :dest OR parent_station = :dest))))
-GROUP BY r.route_id
 """
 CLOSE: Final[str] = """
 SELECT stop_id, name, lon, lat FROM stops
@@ -720,58 +694,6 @@ class SqlitePinOptions:
             'kind': kind,
         })
         return tuple(self.placed(row=row) for row in rows)
-
-    def line_trips(
-        self,
-        *,
-        origin: StopPlace,
-        destination: StopPlace | None,
-        kind: str,
-    ) -> dict[str, int]:
-        """
-        Count the trip-days of each line of a kind between two places.
-
-        Parameters
-        ----------
-        origin : StopPlace
-            Place boarded at.
-        destination : StopPlace | None
-            Place reached later in the trip; None for any trip.
-        kind : str
-            Mode id of the lines to count.
-
-        Returns
-        -------
-        dict[str, int]
-            Trip-days over the timetable's window, by line value.
-        """
-        if not self.network.has_network():
-            return {}
-        rows = self.network.fetch(sql=LINE_TRIPS, params={
-            'origin': self.network.station_for(stop_id=origin.stop_id),
-            'dest': (
-                None if destination is None
-                else self.network.station_for(stop_id=destination.stop_id)
-            ),
-        })
-        city = self.network.city
-        named = named_line_modes(modes=city.modes)
-        totals: dict[str, int] = {}
-        for short, long_name, route_type, agency, days in rows:
-            found = city.classify(
-                route_type=int(str(route_type)),
-                agency_id=str(agency) if agency else None,
-                short_name=str(short),
-            )
-            if found.kind == kind:
-                value = line_value(key=line_key(
-                    kind=kind,
-                    number=str(short),
-                    long_name=str(long_name),
-                    named=named,
-                ), kind=kind)
-                totals[value] = totals.get(value, 0) + int(str(days or 0))
-        return totals
 
     def routes_between(
         self, *, origin: StopPlace, destination: StopPlace,

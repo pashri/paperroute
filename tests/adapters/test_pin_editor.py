@@ -199,7 +199,6 @@ def routed_options() -> KindedOptions:
     return KindedOptions(
         places={'S': StopPlace(stop_id='S', name='Sta', point=None)},
         lines={('S', SydneyMode.TRAIN): (BRIGHTON, LIVERPOOL, KINGS_LYNN)},
-        trips={('S', SydneyMode.TRAIN): {'TL:B': 3, 'GA:L': 2}},
         reached_by={'S': (D1, D2)},
         only={('S', SydneyMode.TRAIN): ('X1', 'X2')},
     )

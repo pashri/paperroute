@@ -43,8 +43,6 @@ class FakePinOptions:
         What `reached_from` gives, by stop ID.
     between : tuple[str, ...]
         What `routes_between` gives.
-    trips : dict[tuple[str, str], dict[str, int]]
-        What `line_trips` gives, by From stop ID and kind.
     parents : dict[str, str]
         Station IDs by Trip Planner stop ID, for `trip_stop`.
     """
@@ -68,9 +66,6 @@ class FakePinOptions:
         default_factory=dict,
     )
     between: tuple[str, ...] = ()
-    trips: dict[tuple[str, str], dict[str, int]] = field(
-        default_factory=dict,
-    )
     parents: dict[str, str] = field(default_factory=dict)
     skipped: list[bool] = field(default_factory=list)
 
@@ -242,33 +237,6 @@ class FakePinOptions:
             The change stops.
         """
         return self.changes
-
-    def line_trips(
-        self,
-        *,
-        origin: StopPlace,
-        destination: StopPlace | None,
-        kind: str,
-    ) -> dict[str, int]:
-        """
-        Give the fixed trip counts.
-
-        Parameters
-        ----------
-        origin : StopPlace
-            Where the ride starts.
-        destination : StopPlace | None
-            Ignored.
-        kind : str
-            The kind counted.
-
-        Returns
-        -------
-        dict[str, int]
-            The counts for the origin's stop ID and kind, else empty.
-        """
-        del destination
-        return dict(self.trips.get((origin.stop_id, kind), {}))
 
     def reached_from(
         self, *, place: StopPlace, kind: str | None = None,

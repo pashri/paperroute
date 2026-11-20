@@ -12,6 +12,7 @@ from paperroute_transit.build.track_osm import (
     read_track,
     running_line,
 )
+from paperroute_transit.core.geo import to_metres
 
 
 @pytest.fixture(name='rail_osm', scope='module')
@@ -44,12 +45,43 @@ def test_the_track_keeps_running_lines_of_the_largest_part(
     assert len(track.ys) == 3
 
 
+def test_edges_index_nodes_at_the_fixture_points(rail_osm: Path) -> None:
+    """Every edge value indexes a node; the edges are A-B and B-C."""
+    track = read_track(paths=[rail_osm], projection=TEST_PROJECTION)
+    assert all(0 <= node < len(track.xs) for node in track.edges)
+    a, b, c = (
+        to_metres(lon=lon, lat=-33.800, projection=TEST_PROJECTION)
+        for lon in (151.000, 151.010, 151.020)
+    )
+    edges = [
+        [
+            (track.xs[node], track.ys[node])
+            for node in track.edges[2 * i : 2 * i + 2]
+        ]
+        for i in range(len(track.edges) // 2)
+    ]
+    for edge, expected in zip(
+        sorted(edges),
+        sorted([[a, b], [b, c]]),
+        strict=True,
+    ):
+        assert sorted(edge) == pytest.approx(sorted(expected))
+
+
 def test_a_station_is_read_from_its_node(rail_osm: Path) -> None:
     """Only the named halt is a station, at its projected place."""
     track = read_track(paths=[rail_osm], projection=TEST_PROJECTION)
     (station,) = track.stations
     assert (station.osm_id, station.name) == (2, 'Halt One')
+    x, y = to_metres(
+        lon=151.010,
+        lat=-33.800,
+        projection=TEST_PROJECTION,
+    )
     assert station.lon == pytest.approx(151.010)
+    assert station.lat == pytest.approx(-33.800)
+    assert station.x == pytest.approx(x)
+    assert station.y == pytest.approx(y)
 
 
 def test_a_subway_station_is_not_a_rail_station(rail_osm: Path) -> None:

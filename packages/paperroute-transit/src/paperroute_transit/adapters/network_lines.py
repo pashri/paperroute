@@ -7,6 +7,7 @@ from itertools import groupby
 from operator import itemgetter
 from typing import Final, Protocol
 
+from paperroute_transit.adapters.change_rows import REACHED
 from paperroute_transit.adapters.timetable_db import to_point
 from paperroute_transit.core.chooser import Choice, Column, Level
 from paperroute_transit.core.geo import Projection
@@ -18,6 +19,7 @@ from paperroute_transit.core.reach_exits import (
     grouped_exits,
 )
 from paperroute_transit.core.reach_layout import LineExit
+from paperroute_transit.core.strip_model import ALL_TAG
 
 LINE_TABLES: Final[tuple[str, ...]] = ('line_stations', 'line_aliases')
 EXIT_TABLES: Final[tuple[str, ...]] = ('line_exits',)
@@ -72,6 +74,18 @@ WHERE s.station_id IN (SELECT value FROM json_each(:stations))
 """
 HAS_ONE_WAY: Final[str] = (
     "SELECT 1 FROM pragma_table_info('run_calls') WHERE name = 'no_board'"
+)
+KIND_STATIONS: Final[str] = """
+SELECT stop_id, name, lon, lat FROM stops
+WHERE stop_id IN (
+  SELECT j.value
+  FROM runs r JOIN run_calls c ON c.run_id = r.run_id,
+    json_each(c.stops) j
+  WHERE r.kind = ?)
+ORDER BY name, stop_id
+"""
+STATION_ROW: Final[str] = (
+    'SELECT stop_id, name, lon, lat FROM stops WHERE stop_id = ?'
 )
 FROM_TAG: Final[str] = 'ALL'
 type Row = tuple[object, ...]
@@ -347,6 +361,85 @@ class LineTables:
         return Column(
             level=Level.STATION,
             items=station_choices(rows=rows, projection=self.projection),
+        )
+
+    def kind_station_column(self, *, kind: str) -> Column:
+        """
+        The STATION column of a kind chosen by end points.
+
+        Parameters
+        ----------
+        kind : str
+            The kind's id.
+
+        Returns
+        -------
+        Column
+            Every station a run of the kind calls at, by name; empty for
+            a file without run_calls.
+        """
+        if not self.has_tables(tables=('run_calls',)):
+            return Column(level=Level.STATION, items=())
+        return Column(
+            level=Level.STATION,
+            items=self.place_choices(
+                rows=self.fetch(sql=KIND_STATIONS, params=(kind,)),
+            ),
+        )
+
+    def kind_to_column(self, *, kind: str, station: str) -> Column:
+        """
+        The TO column of a kind chosen by end points.
+
+        Parameters
+        ----------
+        kind : str
+            The kind's id.
+        station : str
+            The From station ID.
+
+        Returns
+        -------
+        Column
+            The From tagged ALL, then every station a run of the kind
+            reaches after it, by name.
+        """
+        first = tuple(
+            replace(choice, tag=ALL_TAG)
+            for choice in self.place_choices(
+                rows=self.fetch(sql=STATION_ROW, params=(station,)),
+            )
+        )
+        reached = self.place_choices(rows=self.fetch(
+            sql=REACHED, params={'station': station, 'kind': kind},
+        ))
+        return Column(level=Level.TO, items=(*first, *reached))
+
+    def place_choices(self, *, rows: Sequence[Row]) -> tuple[Choice, ...]:
+        """
+        Turn stop rows into station rows.
+
+        Parameters
+        ----------
+        rows : Sequence[Row]
+            Stop ID, name, longitude and latitude.
+
+        Returns
+        -------
+        tuple[Choice, ...]
+            One row per stop, with its place.
+        """
+        return tuple(
+            Choice(
+                key=str(stop_id), label=short_name(name=name),
+                place=StopPlace(
+                    stop_id=str(stop_id), name=str(name),
+                    point=to_point(
+                        lon=lon, lat=lat, projection=self.projection,
+                    ),
+                ),
+            )
+            for stop_id, name, lon, lat in rows
         )
 
     def to_column(

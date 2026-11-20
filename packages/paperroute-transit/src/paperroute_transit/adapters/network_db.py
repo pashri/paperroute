@@ -444,6 +444,9 @@ class SqliteNetworkRepository:
         spec = kind_of(path=path, modes=self.city.modes)
         if spec is None:
             return None
+        level, key = path[-1]
+        if spec.end_points and level is Level.STATION:
+            return self.lines.kind_to_column(kind=spec.id, station=key)
         return self._level_next(path=path, spec=spec)
 
     def _level_next(
@@ -520,9 +523,12 @@ class SqliteNetworkRepository:
         Returns
         -------
         Column
-            Groups for a mode whose route numbers are tagged, lines for
-            one chosen by line and routes for any other.
+            Stations for a mode chosen by end points, groups for a mode
+            whose route numbers are tagged, lines for one chosen by line
+            and routes for any other.
         """
+        if spec.end_points:
+            return self.lines.kind_station_column(kind=spec.id)
         if spec.tagged:
             return self.group_column(kind=spec.id)
         if spec.by_line:

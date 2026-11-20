@@ -6,6 +6,7 @@ import pytest
 
 from paperroute_sydney.city import SYDNEY, SydneyMode
 from paperroute_testkit.core.factories import place
+from paperroute_transit.adapters.pin_editor import pin_of
 from paperroute_transit.core.chooser import (
     Choice,
     Column,
@@ -28,6 +29,7 @@ from paperroute_transit.core.chooser import (
 from paperroute_transit.core.chooser_station import knob_pressed
 from paperroute_transit.core.chooser_view import build_chooser_view
 from paperroute_transit.core.model import Pin
+from paperroute_transit.core.pin_choices import PinDraft
 from paperroute_transit.core.reach import RowKind, StripKey
 from tests.core.chooser_walks import (
     BUS_606,
@@ -41,7 +43,10 @@ from tests.core.chooser_walks import (
     T1_STATIONS,
     T1_TO,
     TOWARDS,
+    TRAIN,
     TRAIN_LINES,
+    TRAIN_STATIONS,
+    TRAIN_TO,
     at_from,
     at_replacement_towards,
     at_stations,
@@ -230,6 +235,44 @@ def test_station_first_walk_commits_line_kind() -> None:
     _, pin = knob_pressed(chooser=chooser, reach=None)
     assert pin == Pin(
         origin=T1_PLACES['E2'], kind=SydneyMode.TRAIN, routes=('T1',),
+    )
+
+
+def test_the_train_walk_skips_the_line_step() -> None:
+    """A train walk has no line step and commits a pin with no routes."""
+    chooser = opened_at_kind(kind=SydneyMode.TRAIN)
+    chooser, _ = fed(chooser, ColumnRequest(path=TRAIN), TRAIN_STATIONS)
+    chooser, request = pressed(chooser=chooser, reach=None)
+    assert request is None
+    chooser, request = turned(chooser=chooser, steps=1, reach=None)
+    chooser, request = knob_pressed(chooser=chooser, reach=None)
+    assert request == ColumnRequest(path=(*TRAIN, (Level.STATION, 'E2')))
+    chooser, _ = fed(chooser, request, TRAIN_TO)
+    assert [column.level for column in chooser.columns] == [
+        Level.KIND, Level.STATION, Level.TO,
+    ]
+    _, pin = knob_pressed(chooser=chooser, reach=None)
+    assert pin == Pin(origin=T1_PLACES['E2'], kind=SydneyMode.TRAIN)
+
+
+def test_a_knob_train_pin_has_no_routes() -> None:
+    """The knobs make the same pin as the phone editor does."""
+    chooser = opened_at_kind(kind=SydneyMode.TRAIN)
+    chooser, _ = fed(chooser, ColumnRequest(path=TRAIN), TRAIN_STATIONS)
+    chooser, _ = pressed(chooser=chooser, reach=None)
+    chooser, _ = turned(chooser=chooser, steps=1, reach=None)
+    chooser, request = knob_pressed(chooser=chooser, reach=None)
+    chooser, _ = fed(chooser, request, TRAIN_TO)
+    chooser, _ = turned(chooser=chooser, steps=1, reach=None)
+    _, pin = knob_pressed(chooser=chooser, reach=None)
+    assert isinstance(pin, Pin)
+    assert pin.routes == ()
+    assert pin == pin_of(
+        draft=PinDraft(kind=SydneyMode.TRAIN),
+        origin=T1_PLACES['E2'],
+        destination=T1_PLACES['R1'],
+        line=None,
+        end_point=True,
     )
 
 

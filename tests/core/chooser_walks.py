@@ -175,6 +175,24 @@ T1_TO_END: Final[Column] = Column(
     ),
 )  # from Emu Plains, where nothing else is reached
 T1: Final[ChooserPath] = ((Level.KIND, 'train'), (Level.LINE, 't1'))
+TRAIN: Final[ChooserPath] = ((Level.KIND, 'train'),)
+TRAIN_STATIONS: Final[Column] = Column(
+    level=Level.STATION,
+    items=tuple(
+        Choice(key=key, label=found.name, place=found)
+        for key, found in sorted(
+            T1_PLACES.items(), key=lambda item: item[1].name,
+        )
+    ),
+)  # Emu Plains, Penrith, Richmond, Riverstone
+TRAIN_TO: Final[Column] = Column(
+    level=Level.TO,
+    items=(
+        station('E2', tag='ALL'),
+        station('R1'),
+        station('R2'),
+    ),
+)  # from Penrith
 LINE: Final[tuple[StopPlace, ...]] = (
     place('S1', name='Parramatta'),
     place('S2', name='Northmead'),

@@ -437,7 +437,7 @@ def test_the_train_chooser_lists_lines_by_where_they_go(
         SqliteNetworkRepository(city=CAMBRIDGE, path=norwich_built),
     ) as network:
         kinds = network.kind_column()
-        lines = network.next_column(path=((Level.KIND, 'train'),))
+        lines = network.line_column(kind='train')
         stations = network.next_column(path=line)
         towards = network.next_column(
             path=(*gn, (Level.STATION, 'rail:CBG')),
@@ -495,7 +495,7 @@ def test_the_replacement_bus_joins_its_operators_line(
     with closing(
         SqliteNetworkRepository(city=CAMBRIDGE, path=path),
     ) as network:
-        lines = network.next_column(path=((Level.KIND, 'train'),))
+        lines = network.line_column(kind='train')
     assert lines is not None
     assert [(c.key, c.badge) for c in lines.items] == [
         ('train:GN:Kings Lynn & Kings Cross', 'GN'),

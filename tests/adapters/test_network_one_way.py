@@ -8,7 +8,6 @@ from typing import Final
 import pytest
 
 from paperroute_sydney.city import (
-    SYDNEY,
     SYDNEY_PROJECTION,
     SYDNEY_REF,
     SYDNEY_ZONE,
@@ -22,6 +21,7 @@ from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.core.chooser import Column, Level
 from paperroute_transit.core.model import Pin, StopPlace
 from tests.adapters.test_network_db import (
+    LINE_CITY,
     T1,
     build_network,
     merge_e2_into_r3,
@@ -74,7 +74,7 @@ def to_column(*, path: Path, origin: str) -> Column:
     """
     with closing(SqliteNetworkRepository(
         path=path,
-        city=SYDNEY,
+        city=LINE_CITY,
     )) as repo:
         column = repo.choices(path=(*T1, (Level.STATION, origin)))
     assert column is not None
@@ -201,7 +201,7 @@ def test_every_bright_to_has_a_departure(tmp_path: Path) -> None:
     with closing(
         SqliteTimetableRepository(
             path=path,
-            city=SYDNEY,
+            city=LINE_CITY,
         ),
     ) as repo:
         missing = [

@@ -13,12 +13,12 @@ from paperroute_sydney.city import SYDNEY, SYDNEY_PROJECTION, SydneyMode
 from paperroute_transit.adapters import pin_options
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.adapters.pin_options import SqlitePinOptions
-from paperroute_transit.core.chooser import UNPICKED, Choice, Level, focusable
+from paperroute_transit.core.chooser import UNPICKED, Choice, focusable
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.pin_choices import kind_names
 from paperroute_transit.core.reach import RowKind, StripKey, build_reach
 from paperroute_transit.core.route_colours import RouteColour
-from tests.adapters.test_network_db import T1, add_named_lines, build_network
+from tests.adapters.test_network_db import add_named_lines, build_network
 
 SCHOOL_RUN: str = (
     "INSERT INTO runs VALUES (90, 'school', 'S901', '[\"B1\", \"B2\"]', 3)"
@@ -249,7 +249,9 @@ def test_destinations_station_first_match_to_column(
 ) -> None:
     """The To list is the focusable rows of the line's TO column."""
     line = options.lines_at(stop_id='C', kind=SydneyMode.TRAIN)[0]
-    column = network.choices(path=(*T1, (Level.STATION, 'C')))
+    column = network.lines.to_column(
+        line_key='train:T1', origin='C', kind='train',
+    )
     assert column is not None
     expected = tuple(
         row.place

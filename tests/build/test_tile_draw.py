@@ -687,6 +687,26 @@ def test_crossing_transit_is_seamless(empty: FeatureStore) -> None:
     np.testing.assert_array_equal(tiles, whole)
 
 
+def test_ticked_light_rail_crossing_a_tile_edge_is_seamless(
+    empty: FeatureStore,
+) -> None:
+    """Ticks line up across a tile edge and stand clear of each other."""
+    left, _, _ = seam_windows(mpp=SEAM_MPP)
+    middle = left.top + TILE // 2 + 0.5
+    add_pixel_line(
+        store=empty,
+        layer='light_rail',
+        pixels=[(left.left - 100.0, middle), (left.left + 600.0, middle)],
+        mpp=SEAM_MPP,
+    )
+    tiles, whole = stitched(store=empty, mpp=SEAM_MPP)
+    row = int(middle) - left.top
+    assert (whole[row] == INK).all()
+    assert (whole[row - 2] == INK).any()
+    assert (whole[row - 2] == PAPER).any()
+    np.testing.assert_array_equal(tiles, whole)
+
+
 def test_one_pixel_roads_land_on_exact_pixels(empty: FeatureStore) -> None:
     window = tile_window(mpp=14)
     x, y = float(window.left), float(window.top)

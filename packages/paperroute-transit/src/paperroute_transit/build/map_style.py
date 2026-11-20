@@ -41,6 +41,13 @@ AREA_GREYS: Final[dict[str, int]] = {
     'water': DARK,
     'sea': DARK,
 }
+LIGHT_RAIL_TICKS: Final[dict[int, tuple[int, int]]] = {
+    3: (6, 8),
+    5: (6, 8),
+    8: (5, 7),
+    14: (5, 7),
+    25: (4, 6),
+}  # tick length and spacing, pixels
 RIVER_STYLE: Final[tuple[int, int]] = (2, DARK)
 
 STREET_ZOOMS: Final[frozenset[int]] = frozenset({3, 5, 8, 14})
@@ -128,8 +135,9 @@ def transit_style(*, layer: str, mpp: int) -> list[Stroke]:
     Returns
     -------
     list[tuple[float, int, tuple[float, float] | None]]
-        Width, grey and dash pattern of each stroke. Unknown layers have
-        none.
+        Width, grey and dash pattern of each stroke. Light rail is a 1 px
+        line with a second, ticked stroke below 45 m/px. Unknown layers
+        have none.
     """
     if layer.endswith('_tunnel'):
         return [(2, DARK, (4, 4))]
@@ -141,7 +149,11 @@ def transit_style(*, layer: str, mpp: int) -> list[Stroke]:
         width = 5 if mpp <= 5 else 4 if mpp == 8 else 3
         return [(width, INK, None), (width - 2, PAPER, (6, 6))]
     if layer == 'light_rail':
-        return [(2 if mpp < CITY else 1, INK, None)]
+        strokes: list[Stroke] = [(1, INK, None)]
+        if mpp in LIGHT_RAIL_TICKS:
+            length, spacing = LIGHT_RAIL_TICKS[mpp]
+            strokes.append((length, INK, (1, spacing - 1)))
+        return strokes
     return []
 
 

@@ -17,6 +17,7 @@ from paperroute_transit.build.map_style import (
     STREET_REPEAT_PX,
     STREET_ZOOMS,
     SUBURB_FACE,
+    Stroke,
     named_roads,
     road_style,
     transit_style,
@@ -159,14 +160,31 @@ def test_rail_has_paper_dashes_below_city() -> None:
     assert transit_style(layer='subway', mpp=45) == [(2, DARK, None)]
 
 
+@pytest.mark.parametrize(
+    ('mpp', 'strokes'),
+    [
+        (3, [(1, INK, None), (6, INK, (1, 7))]),
+        (5, [(1, INK, None), (6, INK, (1, 7))]),
+        (8, [(1, INK, None), (5, INK, (1, 6))]),
+        (14, [(1, INK, None), (5, INK, (1, 6))]),
+        (25, [(1, INK, None), (4, INK, (1, 5))]),
+        (45, [(1, INK, None)]),
+    ],
+)
+def test_light_rail_is_ticked(mpp: int, strokes: list[Stroke]) -> None:
+    """Light rail is a 1 px ink line with ink ticks below 45 m/px."""
+    assert transit_style(layer='light_rail', mpp=mpp) == strokes
+    assert transit_style(layer='light_rail_tunnel', mpp=mpp) == [
+        (2, DARK, (4, 4)),
+    ]
+
+
 def test_transit_style_other_layers() -> None:
     """Tunnels, ferries and light rail have their own strokes."""
     assert transit_style(layer='rail_tunnel', mpp=5) == [
         (2, DARK, (4, 4)),
     ]
     assert transit_style(layer='ferry', mpp=5) == [(1, INK, (4, 3))]
-    assert transit_style(layer='light_rail', mpp=45) == [(1, INK, None)]
-    assert transit_style(layer='light_rail', mpp=14) == [(2, INK, None)]
     assert transit_style(layer='rail', mpp=3)[0][0] == 5
     assert transit_style(layer='rail', mpp=5)[0][0] == 5
     assert transit_style(layer='rail', mpp=14)[0][0] == 3

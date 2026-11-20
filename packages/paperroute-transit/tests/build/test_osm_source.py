@@ -71,6 +71,8 @@ def _features(tiny_osm: Path) -> list[OsmLine | OsmArea | OsmPlace]:
     [
         ({'highway': 'residential'}, 'road_minor'),
         ({'highway': 'motorway_link'}, 'road_motorway'),
+        ({'highway': 'busway'}, 'road_busway'),
+        ({'highway': 'bus_guideway'}, 'road_busway'),
         ({'railway': 'rail', 'service': 'yard'}, None),
         ({'railway': 'subway', 'tunnel': 'yes'}, 'subway_tunnel'),
         ({'railway': 'light_rail'}, 'light_rail'),

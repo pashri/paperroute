@@ -12,6 +12,7 @@ SUPERSAMPLE: Final[int] = 4  # sub-pixels per map pixel along each side
 ROAD_LAYERS: Final[tuple[str, ...]] = (
     'road_minor',
     'road_tertiary',
+    'road_busway',
     'road_secondary',
     'road_primary',
     'road_trunk',
@@ -20,6 +21,7 @@ ROAD_LAYERS: Final[tuple[str, ...]] = (
 ROAD_WIDTHS: Final[dict[str, tuple[int, ...]]] = {
     'road_minor': (3, 2, 1, 1, 1, 0),
     'road_tertiary': (4, 3, 2, 1, 1, 1),
+    'road_busway': (4, 3, 2, 2, 1, 1),
     'road_secondary': (5, 4, 3, 2, 1, 1),
     'road_primary': (7, 6, 5, 3, 2, 2),
     'road_trunk': (8, 7, 5, 4, 3, 2),
@@ -102,13 +104,16 @@ def road_grey(*, layer: str, mpp: int) -> int:
     Returns
     -------
     int
-        Grey level: at the city zoom, dark for trunk roads and
+        Grey level: dark for busways from 14 m/px out; otherwise at
+        the city zoom, dark for trunk roads and
         motorways and light for the rest; at 25 m/px, light for minor
         and tertiary roads and dark for the rest. Below that, minor
         roads are light from 14 m/px and tertiary roads dark from 14
         m/px; other roads are ink, or dark when at least
         ``MAIN_ROAD_PX`` wide.
     """
+    if layer == 'road_busway' and mpp >= 14:
+        return DARK
     if mpp == CITY:
         return DARK if layer in ('road_trunk', 'road_motorway') else LIGHT
     if mpp == TOWN:
@@ -170,10 +175,10 @@ def named_roads(*, mpp: int) -> frozenset[str]:
     -------
     frozenset[str]
         Every road layer at 8 and under, secondary and up at 14, none at
-        city zoom.
+        city zoom. Busways are named at 8 and under.
     """
     if mpp <= 8:
         return frozenset(ROAD_LAYERS)
     if mpp == 14:
-        return frozenset(ROAD_LAYERS[2:])
+        return frozenset(ROAD_LAYERS[ROAD_LAYERS.index('road_secondary') :])
     return frozenset()

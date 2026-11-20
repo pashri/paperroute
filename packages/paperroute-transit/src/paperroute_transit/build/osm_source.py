@@ -34,6 +34,8 @@ ROAD_CLASSES: Final[Mapping[str, str]] = {
     'residential': 'minor',
     'living_street': 'minor',
     'pedestrian': 'minor',
+    'busway': 'busway',
+    'bus_guideway': 'busway',
 }
 RAIL_KINDS: Final[frozenset[str]] = frozenset({'rail', 'light_rail', 'subway'})
 RIVER_KINDS: Final[frozenset[str]] = frozenset({'river', 'canal'})

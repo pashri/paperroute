@@ -47,6 +47,7 @@ def test_city_zoom_is_grey() -> None:
     assert [road_style(layer=layer, mpp=45) for layer in ROAD_LAYERS] == [
         (0, LIGHT),
         (1, LIGHT),
+        (1, DARK),
         (1, LIGHT),
         (2, LIGHT),
         (2, DARK),
@@ -143,11 +144,42 @@ def test_faces_and_areas_match_the_spec() -> None:
     assert RIVER_STYLE == (2, DARK)
 
 
+def test_busway_strokes() -> None:
+    """Busways follow tertiary roads, dark from 14 m/px out."""
+    assert ROAD_LAYERS.index('road_busway') == (
+        ROAD_LAYERS.index('road_tertiary') + 1
+    )
+    assert [road_style(layer='road_busway', mpp=mpp) for mpp in ZOOMS] == [
+        (4, DARK),
+        (3, DARK),
+        (2, INK),
+        (2, DARK),
+        (1, DARK),
+        (1, DARK),
+    ]
+
+
+def test_busways_are_named_at_8_and_closer() -> None:
+    """Busways are named like streets at 8 m/px, not at 14."""
+    assert 'road_busway' in named_roads(mpp=8)
+    assert named_roads(mpp=14) == {
+        'road_secondary',
+        'road_primary',
+        'road_trunk',
+        'road_motorway',
+    }
+
+
 def test_named_roads_by_zoom() -> None:
     """Street names cover every class at 8, main ones at 14, none at 45."""
     assert named_roads(mpp=3) == frozenset(ROAD_LAYERS)
     assert named_roads(mpp=8) == frozenset(ROAD_LAYERS)
-    assert named_roads(mpp=14) == frozenset(ROAD_LAYERS[2:])
+    assert named_roads(mpp=14) == {
+        'road_secondary',
+        'road_primary',
+        'road_trunk',
+        'road_motorway',
+    }
     assert named_roads(mpp=45) == frozenset()
 
 

@@ -609,6 +609,30 @@ def start_time(*, at: datetime | None, city: City) -> datetime:
     return at if at.tzinfo else at.replace(tzinfo=city.zone)
 
 
+def plain_pin(*, repo: SqliteTimetableRepository, stop: str) -> Pin | None:
+    """
+    Build a pin at a stop, with no Destination.
+
+    Parameters
+    ----------
+    repo : SqliteTimetableRepository
+        Timetable.
+    stop : str
+        The stop ID.
+
+    Returns
+    -------
+    Pin | None
+        The pin; None, after saying so on stderr, for an unknown stop.
+    """
+    try:
+        origin = repo.stop(stop_id=stop)
+    except LookupError:
+        print(f'unknown stop {stop}', file=sys.stderr)
+        return None
+    return Pin(origin=origin, destination=None, kind=None)
+
+
 def no_departures(
     *,
     repo: SqliteTimetableRepository,
@@ -704,12 +728,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     with closing(
         SqliteTimetableRepository(path=db, city=city),
     ) as repo, closing(SqliteTileRepository(path=tiles_path)) as tiles:
-        try:
-            origin = repo.stop(stop_id=args.stop)
-        except LookupError:
-            print(f'unknown stop {args.stop}', file=sys.stderr)
+        pin = plain_pin(repo=repo, stop=args.stop)
+        if pin is None:
             return 1
-        pin = Pin(origin=origin, destination=None, kind=None)
         drawn = first_departures(repo=repo, pin=pin, at=start)
         if not drawn:
             print(

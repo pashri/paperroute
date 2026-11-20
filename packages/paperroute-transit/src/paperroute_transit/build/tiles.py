@@ -22,6 +22,7 @@ from paperroute_transit.build.tile_set import (
     tile_set,
 )
 from paperroute_transit.build.tile_store import TileWriter
+from paperroute_transit.build.track_osm import read_track
 from paperroute_transit.core.geo import (
     DegreeBox,
     MetreBox,
@@ -80,6 +81,9 @@ class TileBuildConfig:
         Osmium node location store, such as ``flex_mem``.
     places : MapPlaces
         The place names the map labels.
+    track_osm : tuple[Path, ...]
+        ``.osm.pbf`` extracts to read the rail track from; none leaves
+        the track out of the file.
     """
 
     osm: Path
@@ -93,6 +97,7 @@ class TileBuildConfig:
     jobs: int = 1
     index: str = 'flex_mem'
     places: MapPlaces = MapPlaces()
+    track_osm: tuple[Path, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -577,12 +582,40 @@ def check_count(*, writer: TileWriter, expected: int) -> None:
         raise RuntimeError(f'wrote {count} tiles, wanted {expected}')
 
 
+def add_track(*, config: TileBuildConfig, writer: TileWriter) -> int:
+    """
+    Read the rail track and store it in the tiles file.
+
+    Parameters
+    ----------
+    config : TileBuildConfig
+        The build.
+    writer : TileWriter
+        The open tiles file.
+
+    Returns
+    -------
+    int
+        Track nodes written; 0 when the build names no track files.
+    """
+    if not config.track_osm:
+        return 0
+    progress(phase='track')
+    track = read_track(
+        paths=config.track_osm,
+        projection=config.projection,
+    )
+    writer.add_track(track=track)
+    return len(track.xs)
+
+
 def swap(
     *,
     config: TileBuildConfig,
     writer: TileWriter,
     store: FeatureStore,
     count: int,
+    track_nodes: int,
 ) -> None:
     """
     Copy the labels and meta into the tiles file and move it into place.
@@ -597,6 +630,8 @@ def swap(
         The store holding the placed labels.
     count : int
         Tiles written.
+    track_nodes : int
+        Track nodes written.
     """
     progress(phase='swap')
     for mpp in config.zooms:
@@ -608,6 +643,7 @@ def swap(
             'origin': config.projection.origin_text,
             'osm_timestamp': header_timestamp(path=config.osm),
             'tiles': str(count),
+            'track_nodes': str(track_nodes),
             'style': TILE_STYLE,
         },
     )
@@ -653,7 +689,14 @@ def build_in(
             writer=writer,
             expected=sum(len(wanted) for wanted in tiles.values()),
         )
-        swap(config=config, writer=writer, store=store, count=count)
+        track_nodes = add_track(config=config, writer=writer)
+        swap(
+            config=config,
+            writer=writer,
+            store=store,
+            count=count,
+            track_nodes=track_nodes,
+        )
     return count, labels
 
 

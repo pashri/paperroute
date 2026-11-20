@@ -14,6 +14,7 @@ from paperroute_sydney.city import SYDNEY, SYDNEY_PROJECTION
 from paperroute_testkit.build.osm_factory import (
     TIMESTAMP,
     TINY_BBOX,
+    write_rail_osm,
     write_tiny_osm,
 )
 from paperroute_transit.adapters.tiles_db import SqliteTileRepository
@@ -25,6 +26,7 @@ from paperroute_transit.build.tiles import (
     TileReport,
     build_tiles,
 )
+from paperroute_transit.build.track_db import read_track_db
 from paperroute_transit.core.geo import to_metres
 from paperroute_transit.core.map_places import (
     STATION_SOURCES,
@@ -411,3 +413,25 @@ def test_build_leaves_out_a_station_source_when_told(
         places=MapPlaces(stations=STATION_SOURCES - {left_out}),
     )
     assert names == {'Quay Wharf', 'Parramatta', 'Tram Stop'} - {gone}
+
+
+def test_tiles_writes_the_track(inputs: Path, tmp_path: Path) -> None:
+    """A build given a track file stores its graph and counts it."""
+    rail = tmp_path / 'rail.osm.pbf'
+    write_rail_osm(path=rail)
+    config = replace(
+        config_for(tmp_path=inputs, jobs=1),
+        out=tmp_path / 'tiles-track.db',
+        work=tmp_path / 'work-track',
+        track_osm=(rail,),
+    )
+    build_tiles(config=config)
+    track = read_track_db(path=config.out)
+    assert track is not None
+    assert len(track.xs) == 3
+    assert [s.name for s in track.stations] == ['Halt One']
+    meta = read_rows(
+        path=config.out,
+        sql="SELECT value FROM meta WHERE key = 'track_nodes'",
+    )
+    assert meta == [('3',)]

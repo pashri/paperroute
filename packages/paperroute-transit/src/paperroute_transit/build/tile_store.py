@@ -11,6 +11,7 @@ from types import TracebackType
 from typing import Final, Self
 from urllib.parse import quote
 
+from paperroute_transit.build.track_db import RailTrack, write_track
 from paperroute_transit.core.tiles import LabelKind, StreetLabel, zooms_of
 
 TILE_FORMAT: Final[str] = 'z2'
@@ -193,6 +194,17 @@ class TileWriter:
                 for item in labels
             ),
         )
+
+    def add_track(self, *, track: RailTrack) -> None:
+        """
+        Store the rail track.
+
+        Parameters
+        ----------
+        track : RailTrack
+            The track to store.
+        """
+        write_track(conn=self.database(), track=track)
 
     def finish(self, *, meta: Mapping[str, str]) -> None:
         """

@@ -142,6 +142,7 @@ def add_tiles(*, command: argparse.ArgumentParser, city: City) -> None:
         The city, whose box is the default.
     """
     command.add_argument('--osm', type=Path, required=True)
+    command.add_argument('--track-osm', type=Path, action='append')
     command.add_argument('--timetable', type=Path, required=True)
     command.add_argument('--out', type=Path, required=True)
     command.add_argument('--work', type=Path)
@@ -327,6 +328,7 @@ def run_tiles(*, args: argparse.Namespace, city: City) -> int:
     configure_logging()
     config = TileBuildConfig(
         osm=args.osm,
+        track_osm=tuple(args.track_osm or [args.osm]),
         timetable=args.timetable,
         out=args.out,
         work=args.work or args.out.parent / 'tiles-work',

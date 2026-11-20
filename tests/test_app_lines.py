@@ -5,7 +5,7 @@ from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Final
 
-from paperroute_testkit.core.factories import START, departure
+from paperroute_testkit.core.factories import START, calls, departure
 from paperroute_testkit.core.strip_factories import PIN
 from paperroute_testkit.fakes import EmptyPlacedTimetable
 from paperroute_transit.app_effects import loaded_patterns, map_data
@@ -19,7 +19,7 @@ from paperroute_transit.core.messages import (
 from paperroute_transit.core.model import Departure, Pin
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.measures import StopMeasures
-from tests.core.test_track import FEED, HOP, RAIL
+from tests.core.test_track import FEED, HOP, POINTS, RAIL
 
 DAY: Final[date] = START.date()
 PIN_NO_TO: Final[Pin] = replace(PIN, destination=None)
@@ -140,7 +140,14 @@ class HopTimetable(EmptyPlacedTimetable):
         bus = replace(
             RAIL, trip_id='replacement', shape_id='bus-shape', road=True,
         )
-        return {'train': RAIL, 'replacement': bus}
+        stops = calls(stations='AXBC', step=300, points=POINTS)
+        express = replace(
+            RAIL,
+            trip_id='express',
+            stops=(stops[0], replace(stops[1], passes=True), *stops[2:]),
+            along=(0.0, 1100.0, 2000.0, 4000.0),
+        )
+        return {'train': RAIL, 'replacement': bus, 'express': express}
 
     def shapes(self, *, shape_ids: Collection[str]) -> dict[str, Shape]:
         """
@@ -164,23 +171,27 @@ class HopTimetable(EmptyPlacedTimetable):
         self, *, pairs: Collection[tuple[str, str]],
     ) -> dict[tuple[str, str], tuple[Point, ...]]:
         """
-        Give the A to B track.
+        Give the A to B track when it is asked for.
 
         Parameters
         ----------
         pairs : Collection[tuple[str, str]]
-            Ignored.
+            The pairs asked for.
 
         Returns
         -------
         dict[tuple[str, str], tuple[Point, ...]]
-            The one hop.
+            The hop, when asked for.
         """
-        return {('A', 'B'): HOP}
+        return {
+            key: points
+            for key, points in {('A', 'B'): HOP}.items()
+            if key in pairs
+        }
 
 
 LOAD: Final[LoadPatterns] = LoadPatterns(
-    trip_ids=frozenset({'train', 'replacement'}), day=DAY,
+    trip_ids=frozenset({'train', 'replacement', 'express'}), day=DAY,
 )
 
 
@@ -223,3 +234,17 @@ def test_estimates_keep_the_feed_shape() -> None:
     )
     train = loaded.patterns['train']
     assert train is not None and train.shape_id == 'feed'
+
+
+def test_express_patterns_follow_track_across_a_passed_station() -> None:
+    """A hop between two calls is asked for though a station is passed."""
+    loaded = map_data(
+        timetable=HopTimetable(),
+        effect=LoadPatterns(trip_ids=frozenset({'express'}), day=DAY),
+        measures=StopMeasures(),
+    )
+    assert isinstance(loaded, PatternsLoaded)
+    express = loaded.patterns['express']
+    assert express is not None and express.shape_id is not None
+    shape = loaded.shapes[express.shape_id]
+    assert shape.points[: len(HOP)] == HOP

@@ -146,10 +146,10 @@ ORDER BY a.alias_id, t.trip_id
 SHAPES_BY_ID: Final[str] = (
     'SELECT shape_id, points FROM shapes WHERE shape_id IN ({marks})'
 )
-RAIL_HOPS_FROM: Final[str] = '''
+RAIL_HOPS_FROM: Final[str] = """
 SELECT a, b, path FROM rail_hops
 WHERE inside = 1 AND path IS NOT NULL AND a IN ({marks})
-'''
+"""
 MODES_NEAR: Final[str] = """
 SELECT DISTINCT mode FROM shapes
 WHERE west <= :east AND east >= :west
@@ -710,11 +710,9 @@ class SqliteTimetableRepository:
             sql=RAIL_HOPS_FROM, ids=stations,
         ):
             key = (str(start), str(end))
-            points = (
-                unpack_shape(shape_id='', blob=cast(bytes, blob)).points
-                if key in pairs or key[::-1] in pairs
-                else ()
-            )
+            if key not in pairs and key[::-1] not in pairs:
+                continue
+            points = unpack_shape(shape_id='', blob=cast(bytes, blob)).points
             if key in pairs:
                 found[key] = points
             if key[::-1] in pairs:

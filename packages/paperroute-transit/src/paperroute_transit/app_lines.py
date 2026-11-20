@@ -1,7 +1,6 @@
 """Reads of the day's lines at a stop."""
 
 from dataclasses import replace
-from itertools import pairwise
 
 from paperroute_transit.app_connections import usable
 from paperroute_transit.core.map_lines import first_per_line
@@ -11,7 +10,7 @@ from paperroute_transit.core.messages import (
     PatternsLoaded,
 )
 from paperroute_transit.core.modes import skippable_modes
-from paperroute_transit.core.track import tracked_shape
+from paperroute_transit.core.track import call_pairs, tracked_shape
 from paperroute_transit.measures import StopMeasures
 from paperroute_transit.ports import DayTimetable, TimetableRepository
 
@@ -81,9 +80,9 @@ def tracked_patterns(
     }
     hops = timetable.rail_hops(
         pairs={
-            (before.station, after.station)
+            (pattern.stops[first].station, pattern.stops[second].station)
             for pattern in rail.values()
-            for before, after in pairwise(pattern.stops)
+            for first, second in call_pairs(pattern=pattern)
         },
     )
     version = timetable.version()

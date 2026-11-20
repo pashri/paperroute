@@ -1,6 +1,6 @@
 """A train pattern's shape redrawn along the stored rail track."""
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from hashlib import blake2b
 from itertools import pairwise
 from math import dist
@@ -11,8 +11,31 @@ from paperroute_transit.core.patterns import TripPattern
 
 TRACK_JOIN: Final[float] = 150.0  # metres
 ID_BYTES: Final[int] = 8
+MIN_TRACK: Final[int] = 2  # points
 
-Hops = Mapping[tuple[str, str], tuple[Point, ...]]
+type Hops = Mapping[tuple[str, str], tuple[Point, ...]]
+
+
+def call_pairs(*, pattern: TripPattern) -> Iterator[tuple[int, int]]:
+    """
+    Pair each stopping call that has a point with the next one.
+
+    Parameters
+    ----------
+    pattern : TripPattern
+        The trip.
+
+    Yields
+    ------
+    tuple[int, int]
+        The indexes of two consecutive stopping calls.
+    """
+    ends = [
+        index
+        for index, stop in enumerate(pattern.stops)
+        if stop.point is not None and not stop.passes
+    ]
+    yield from pairwise(ends)
 
 
 def hop_pieces(
@@ -36,18 +59,13 @@ def hop_pieces(
         One piece per hop, and the pairs whose track was used.
     """
     along = pattern.along
-    ends = [
-        index
-        for index, stop in enumerate(pattern.stops)
-        if stop.point is not None and not stop.passes
-    ]
     pieces: list[tuple[Point, ...]] = []
     used: list[tuple[str, str]] = []
-    for first, second in pairwise(ends):
+    for first, second in call_pairs(pattern=pattern):
         start, end = pattern.stops[first], pattern.stops[second]
         key = (start.station, end.station)
         piece = hops.get(key, ())
-        if piece:
+        if len(piece) >= MIN_TRACK:
             used.append(key)
         elif shape is not None and along is not None:
             piece = cut(shape=shape, start=along[first], end=along[second])
@@ -112,7 +130,8 @@ def tracked_shape(
     if not used:
         return None
     digest = blake2b(digest_size=ID_BYTES)
-    for part in (version or '', pattern.shape_id or '', *used):
+    parts = (version or '', pattern.shape_id or '', *used, *pieces)
+    for part in parts:
         digest.update(repr(part).encode())
     return make_shape(
         shape_id=f'track:{digest.hexdigest()}',

@@ -5,7 +5,7 @@ from typing import Final
 
 from paperroute_testkit.core.factories import calls, pattern
 from paperroute_transit.core.geo import Point, make_shape
-from paperroute_transit.core.track import tracked_shape
+from paperroute_transit.core.track import call_pairs, tracked_shape
 
 POINTS: Final[dict[str, Point]] = {
     'A': (0.0, 0.0),
@@ -95,3 +95,35 @@ def test_a_hop_without_a_feed_shape_runs_straight() -> None:
     )
     assert shape is not None
     assert shape.points == ((0.0, 0.0), (2000.0, 0.0), (3990.0, 0.0))
+
+
+def test_a_one_point_hop_is_not_held() -> None:
+    """A track path of one point is no track."""
+    assert tracked_shape(
+        pattern=RAIL, shape=FEED, hops={('A', 'B'): (HOP[0],)}, version='v1',
+    ) is None
+
+
+def test_the_id_changes_with_the_calls() -> None:
+    """Two trips on one shape with the same hops but another end differ."""
+    short = replace(
+        RAIL, stops=RAIL.stops[:2], along=RAIL.along[:2] if RAIL.along else None,
+    )
+    ids = {
+        tracked_shape(
+            pattern=trip, shape=FEED, hops={('A', 'B'): HOP}, version='v1',
+        ).shape_id  # type: ignore[union-attr]
+        for trip in (RAIL, short)
+    }
+    assert len(ids) == 2
+
+
+def test_call_pairs_skip_passed_stations() -> None:
+    """Pairs join consecutive stopping calls."""
+    stops = calls(stations='AXBC', step=300, points=POINTS)
+    passing = replace(
+        RAIL, stops=(stops[0], replace(stops[1], passes=True), *stops[2:]),
+    )
+    assert list(call_pairs(pattern=passing)) == [
+        (0, 2), (2, 3),
+    ]

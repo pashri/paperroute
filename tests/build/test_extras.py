@@ -113,6 +113,72 @@ def tables_of(*, db: Path) -> set[str]:
         }
 
 
+def spy_extras(
+    *, monkeypatch: pytest.MonkeyPatch,
+) -> list[tuple[str, Path | None, Path | None]]:
+    """
+    Replace the build and the landing with recorders.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        Patches undone after the test.
+
+    Returns
+    -------
+    list[tuple[str, Path | None, Path | None]]
+        Filled by each call: ``built`` with the tiles file, or ``landed``
+        with the handoff file.
+    """
+    calls: list[tuple[str, Path | None, Path | None]] = []
+
+    def build(*, path: Path, city: object, tiles: Path | None) -> None:
+        del path, city
+        calls.append(('built', tiles, None))
+
+    def land(
+        *, scratch: Path, path: Path, build: object, city_ref: str,
+    ) -> int:
+        del scratch, build, city_ref
+        calls.append(('landed', None, path))
+        return 0
+
+    monkeypatch.setattr(extras, 'run_extras', build)
+    monkeypatch.setattr(extras, 'land', land)
+    return calls
+
+
+def test_main_reads_the_old_handoff_argument_shape(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """City, scratch and handoff, with no tiles, still lands."""
+    calls = spy_extras(monkeypatch=monkeypatch)
+    handoff = tmp_path / 'handoff.json'
+    assert extras.main(
+        argv=[SYDNEY_REF, str(tmp_path / 'x.new'), str(handoff)],
+    ) == 0
+    assert calls == [('landed', None, handoff)]
+
+
+def test_main_reads_the_new_argument_shapes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A tiles slot builds as a child; a handoff after it lands."""
+    calls = spy_extras(monkeypatch=monkeypatch)
+    scratch = str(tmp_path / 'x.new')
+    tiles = tmp_path / 'tiles.db'
+    assert extras.main(argv=[SYDNEY_REF, scratch, str(tiles)]) == 0
+    assert extras.main(argv=[SYDNEY_REF, scratch, '']) == 0
+    handoff = tmp_path / 'handoff.json'
+    assert extras.main(
+        argv=[SYDNEY_REF, scratch, str(tiles), str(handoff)],
+    ) == 0
+    assert calls == [
+        ('built', tiles, None), ('built', None, None),
+        ('landed', None, handoff),
+    ]
+
+
 def test_run_extras_prints_each_phase(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

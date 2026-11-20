@@ -11,6 +11,7 @@ from pathlib import Path
 
 from paperroute_device.rss import peak_rss_mb
 from paperroute_transit.build.catalogue import CATALOGUE_SCHEMA, load_catalogue
+from paperroute_transit.build.handoff import HANDOFF_NAME
 from paperroute_transit.build.passed import write_passed
 from paperroute_transit.build.runs import RUN_SCHEMA, load_runs
 from paperroute_transit.build.swap import land
@@ -189,7 +190,9 @@ def main(*, argv: Sequence[str]) -> int:
     ----------
     argv : Sequence[str]
         The city's reference (see `city_named`), the scratch file, the
-        tiles file (empty for none), then the handoff file if any.
+        tiles file (empty for none), then the handoff file if any. Three
+        values whose last is a ``handoff.json`` are the older shape: the
+        handoff file with no tiles.
 
     Returns
     -------
@@ -198,12 +201,13 @@ def main(*, argv: Sequence[str]) -> int:
     """
     city = city_named(ref=argv[0])
     scratch = Path(argv[1])
-    tiles = Path(argv[2]) if argv[2] else None
-    if len(argv) == 3:
+    older = len(argv) == 3 and Path(argv[2]).name == HANDOFF_NAME
+    tiles = Path(argv[2]) if argv[2] and not older else None
+    if len(argv) == 3 and not older:
         run_extras(path=scratch, city=city, tiles=tiles)
         return 0
     return land(
-        scratch=scratch, path=Path(argv[3]),
+        scratch=scratch, path=Path(argv[-1]),
         build=lambda path: run_extras(path=path, city=city, tiles=tiles),
         city_ref=argv[0],
     )

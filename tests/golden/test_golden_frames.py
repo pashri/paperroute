@@ -44,9 +44,6 @@ PLANES: Final[Path] = FRAMES / 'planes.json'
 PLANE_SCENES: Final[tuple[str, ...]] = ('stop', 'map')
 # CI runs Linux, so its baselines must exist.
 PLATFORMS: Final[frozenset[str]] = frozenset({'darwin', 'linux'})
-NO_LINUX_FRAME: Final[frozenset[str]] = frozenset(
-    {'train_strip', 'train_strip_ends'},
-)  # scenes whose linux frame is not drawn yet
 
 
 def decoded(*, data: bytes) -> NDArray[np.uint8]:
@@ -176,9 +173,7 @@ def test_every_platform_has_every_baseline() -> None:
     assert set(folders) == PLATFORMS
     wanted = {f'{name}.png' for name in SCENES} | {'planes.json'}
     for folder in folders.values():
-        missing = NO_LINUX_FRAME if folder.name == 'linux' else frozenset()
-        expected = wanted - {f'{name}.png' for name in missing}
-        assert {path.name for path in folder.iterdir()} == expected, folder
+        assert {path.name for path in folder.iterdir()} == wanted, folder
 
 
 def test_png_round_trip_is_exact() -> None:
@@ -193,8 +188,6 @@ def test_frame_matches_baseline(name: str, tmp_path: Path) -> None:
     """The scene draws exactly its baseline frame."""
     actual = frame_of(state=SCENES[name]())
     path = FRAMES / f'{name}.png'
-    if not UPDATING and not path.exists() and name in NO_LINUX_FRAME:
-        pytest.skip(f'no {sys.platform} frame for {name} yet')
     expected = decoded(
         data=baseline_bytes(path=path, data=encode_png(grey=actual)),
     )

@@ -35,8 +35,11 @@ class MapPlaces:
     stations : frozenset[StationSource]
         The stations that are named: railway stations, minor stops (halts
         and tram stops) and ferry terminals.
+    dropped : frozenset[str]
+        OSM place names that are never named, whatever their kind.
     """
 
     kinds: frozenset[str] = PLACE_KINDS
     extras: tuple[tuple[str, float, float], ...] = ()
     stations: frozenset[StationSource] = STATION_SOURCES
+    dropped: frozenset[str] = frozenset()

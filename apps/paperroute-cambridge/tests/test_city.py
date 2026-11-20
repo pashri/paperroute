@@ -185,6 +185,7 @@ def test_map_places_drop_localities_and_add_the_named_places() -> None:
         ('Darwin Green', 52.2251, 0.1006),
         ('Franklin Gardens', 52.2293, 0.1082),
     )
+    assert rules.dropped == {'Chesterton'}
 
 
 def test_cambridge_fetches_no_extra_stop_view_positions() -> None:

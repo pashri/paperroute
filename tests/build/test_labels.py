@@ -699,3 +699,19 @@ def test_places_go_by_rank(store: FeatureStore) -> None:
     add_place(store=store, kind='suburb', name='Major', rank=0)
     labels = place(store=store, zooms=[8])
     assert [label.name for label in labels] == ['M A J O R']
+
+
+def test_a_city_can_drop_a_named_place(store: FeatureStore) -> None:
+    """A dropped place is never named; a near namesake still is."""
+    add_place(store=store, kind='suburb', name='Chesterton')
+    add_place(
+        store=store,
+        kind='suburb',
+        name='West Chesterton',
+        point=(ANCHOR[0] + 4000.0, ANCHOR[1]),
+    )
+    rules = MapPlaces(dropped=frozenset({'Chesterton'}))
+    labels = place(store=store, zooms=[8], places=rules)
+    assert [label.name for label in labels] == [
+        'W E S T   C H E S T E R T O N',
+    ]

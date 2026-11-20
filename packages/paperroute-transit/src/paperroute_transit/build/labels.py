@@ -565,7 +565,7 @@ def place_names(
     block : Block
         The block being placed.
     rules : MapPlaces
-        The kinds of place that are named.
+        The kinds of place that are named, and the names that are not.
 
     Yields
     ------
@@ -580,7 +580,7 @@ def place_names(
     places = [
         place
         for place in store.places_in(box=block.metres(grow=POINT_REACH))
-        if place[0] in kinds
+        if place[0] in kinds and place[1] not in rules.dropped
     ]
     for kind, name, rank, point in sorted(places, key=lambda p: p[2]):
         label = point_label(

@@ -16,7 +16,7 @@ PIN_NO_TO: Final[Pin] = replace(PIN, destination=None)
 
 
 @dataclass
-class DayTimetable(EmptyPlacedTimetable):
+class RecordingTimetable(EmptyPlacedTimetable):
     """Gives a fixed day of departures and records each read."""
 
     reads: list[tuple[Pin, date]] = field(default_factory=list)
@@ -49,9 +49,9 @@ class DayTimetable(EmptyPlacedTimetable):
         ]
 
 
-def routes(*, skip_school: bool) -> list[str]:
+def kept(*, skip_school: bool) -> list[tuple[str, str]]:
     """
-    List the routes of the day lines read with a school setting.
+    List the route and trip of the day lines read with a school setting.
 
     Parameters
     ----------
@@ -60,21 +60,21 @@ def routes(*, skip_school: bool) -> list[str]:
 
     Returns
     -------
-    list[str]
-        The routes, in order.
+    list[tuple[str, str]]
+        The route and trip ID of each, in order.
     """
     loaded = loaded_day_lines(
-        timetable=DayTimetable(),
+        timetable=RecordingTimetable(),
         effect=LoadDayLines(
             pin=PIN_NO_TO, day=DAY, timetable=None, skip_school=skip_school,
         ),
     )
-    return [item.route for item in loaded.departures]
+    return [(item.route, item.trip_id) for item in loaded.departures]
 
 
 def test_day_lines_keep_the_first_departure_of_each_line() -> None:
     """The day is read once and kept one departure per line."""
-    timetable = DayTimetable()
+    timetable = RecordingTimetable()
     loaded_day_lines(
         timetable=timetable,
         effect=LoadDayLines(
@@ -82,9 +82,13 @@ def test_day_lines_keep_the_first_departure_of_each_line() -> None:
         ),
     )
     assert timetable.reads == [(PIN_NO_TO, DAY)]
-    assert routes(skip_school=False) == ['606', '610', '620', 'S1']
+    assert kept(skip_school=False) == [
+        ('606', 'a'), ('610', 'b'), ('620', 'd'), ('S1', 'e'),
+    ]
 
 
 def test_day_lines_drop_school_runs_when_school_buses_are_off() -> None:
     """A school run gets no line while the school buses setting is on."""
-    assert routes(skip_school=True) == ['606', '610', '620']
+    assert kept(skip_school=True) == [
+        ('606', 'a'), ('610', 'b'), ('620', 'd'),
+    ]

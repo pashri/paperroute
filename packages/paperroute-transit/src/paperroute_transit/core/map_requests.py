@@ -765,13 +765,15 @@ def sleep_effects(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the requests recorded, and a LoadShapes and a
-        LoadPatterns for the drawn departures' lines and stops; no
+        State with the requests recorded, a LoadDayLines when the day's
+        lines are not held, and a LoadShapes and a LoadPatterns for the
+        drawn departures' lines and stops; no
         positions, and nothing when the From has no location.
     """
     inputs = map_inputs(state=state, stop_view=stop_view, asleep=True)
     if inputs.centre is None:
         return state, ()
+    state, day = request_day_lines(state=state, stop_view=stop_view)
     drawn = (
         *inputs.departures,
         *day_extras(state=state, stop_view=stop_view),
@@ -781,7 +783,7 @@ def sleep_effects(
         state=state,
         wanted=frozenset(dep.trip_id for dep in drawn),
     )
-    return state, (*shapes, *loads)
+    return state, (*day, *shapes, *loads)
 
 
 def stop_patterns(*, stop_view: StopView) -> frozenset[str]:

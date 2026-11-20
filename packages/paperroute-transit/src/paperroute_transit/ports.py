@@ -61,17 +61,6 @@ class DayTimetable(Protocol):
 class TimetableRepository(DayTimetable, Protocol):
     """Read access to the built timetable."""
 
-    @property
-    def city(self) -> City:
-        """
-        The city the timetable was built for.
-
-        Returns
-        -------
-        City
-            The city.
-        """
-
     def stop(self, *, stop_id: str) -> StopPlace:
         """
         A stop or station with its position.

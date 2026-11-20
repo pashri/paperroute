@@ -3,11 +3,12 @@
 from dataclasses import replace
 from datetime import date, timedelta
 
+from paperroute_device.core.kit_events import Tick
 from paperroute_sydney.city import SydneyMode
 from paperroute_testkit.core.factories import START, departure
 from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.strip_factories import CENTRE, PIN, on_view
-from paperroute_transit.core.day_lines import line_choice
+from paperroute_transit.core.day_lines import day_extras, line_choice
 from paperroute_transit.core.geo import make_shape
 from paperroute_transit.core.map_requests import map_effects
 from paperroute_transit.core.messages import (
@@ -228,3 +229,143 @@ def test_loaded_extras_keep_the_shape_and_pattern_mappings() -> None:
     assert after.map.patterns is state.map.patterns
     assert after.map.shapes is state.map.shapes
     assert 'x:0' in after.map.shapes
+
+
+def asleep_empty() -> State:
+    """
+    Make a bus pin's state asleep with no day lines held.
+
+    Returns
+    -------
+    State
+        The state.
+    """
+    state = plain_on_map(departures=bus_pin())
+    return replace(
+        state,
+        map=replace(state.map, day_lines=None),
+        panel=replace(state.panel, asleep=True),
+    )
+
+
+def day_loads(*, effects: tuple[Effect, ...]) -> list[LoadDayLines]:
+    """
+    List the day line loads among some effects.
+
+    Parameters
+    ----------
+    effects : tuple[Effect, ...]
+        Effects.
+
+    Returns
+    -------
+    list[LoadDayLines]
+        The loads.
+    """
+    return [e for e in effects if isinstance(e, LoadDayLines)]
+
+
+def test_sleeping_map_asks_for_the_day_lines_once() -> None:
+    """A sleeping pin with nothing held asks once, not every tick."""
+    state = asleep_empty()
+    state, effects = step(state, Tick(now=state.now + timedelta(seconds=1)))
+    (load,) = day_loads(effects=effects)
+    assert pending(state=state) == load
+    _, effects = step(state, Tick(now=state.now + timedelta(seconds=1)))
+    assert day_loads(effects=effects) == []
+
+
+def test_sleeping_map_asks_again_for_a_new_timetable() -> None:
+    """A new timetable version while asleep asks exactly once more."""
+    state = asleep_empty()
+    state, _ = step(state, Tick(now=state.now + timedelta(seconds=1)))
+    state = replace(state, saving=replace(state.saving, timetable='v2'))
+    state, effects = step(state, Tick(now=state.now + timedelta(seconds=1)))
+    (load,) = day_loads(effects=effects)
+    assert load.timetable == 'v2'
+    _, effects = step(state, Tick(now=state.now + timedelta(seconds=1)))
+    assert day_loads(effects=effects) == []
+
+
+def test_awake_map_asks_again_for_a_new_timetable() -> None:
+    """A new timetable version asks exactly once more."""
+    state = plain_on_map(departures=bus_pin())
+    state = replace(state, saving=replace(state.saving, timetable='v2'))
+    (load,) = asked(state=state)
+    assert load.timetable == 'v2'
+
+
+def test_awake_map_asks_again_when_the_school_setting_flips() -> None:
+    """Toggling the school buses setting asks exactly once more."""
+    state = plain_on_map(departures=bus_pin())
+    board = state.settings.board
+    flipped = replace(
+        state,
+        settings=replace(
+            state.settings,
+            board=replace(board, skip_school_buses=not board.skip_school_buses),
+        ),
+    )
+    (load,) = asked(state=flipped)
+    assert load.skip_school is not board.skip_school_buses
+
+
+def other_pin_state(*, state: State) -> State:
+    """
+    Show another bus pin with no Destination.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    State
+        The state with the other pin shown.
+    """
+    other = replace(state.places.pins[0], nickname='other')
+    return replace(state, places=replace(state.places, pins=(other,)))
+
+
+def test_awake_map_asks_again_for_a_new_pin() -> None:
+    """Changing the pin asks exactly once more, for the new pin."""
+    state = other_pin_state(state=plain_on_map(departures=bus_pin()))
+    (load,) = asked(state=state)
+    assert load.pin.nickname == 'other'
+
+
+def test_stale_day_lines_are_ignored() -> None:
+    """Day lines for an old request leave the held request alone."""
+    state = plain_on_map(departures=bus_pin())
+    old = pending(state=state)
+    state = replace(state, saving=replace(state.saving, timetable='v2'))
+    state, _, _ = map_effects(
+        state=state, stop_view=live_stop_view(state=state),
+    )
+    after, _ = step(
+        state, DayLinesLoaded(request=old, departures=(extra_line(),)),
+    )
+    held = after.map.day_lines
+    assert held is not None and held.departures is None
+    assert held.request.timetable == 'v2'
+
+
+def test_old_pins_extras_are_not_drawn_for_a_new_pin() -> None:
+    """After a pin change the old extras go while the new load waits."""
+    state = plain_on_map(departures=bus_pin())
+    state, _ = step(
+        state,
+        DayLinesLoaded(
+            request=pending(state=state), departures=(extra_line(),),
+        ),
+    )
+    stop_view = live_stop_view(state=state)
+    assert day_extras(state=state, stop_view=stop_view)
+    other = other_pin_state(state=state)
+    other, _, _ = map_effects(
+        state=other, stop_view=live_stop_view(state=other),
+    )
+    assert day_extras(
+        state=other, stop_view=live_stop_view(state=other),
+    ) == ()

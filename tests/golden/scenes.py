@@ -652,6 +652,59 @@ def line_scene() -> State:
     )
 
 
+def destination_scene() -> State:
+    """
+    Show a bus pin with a Destination on its route, at the default zoom.
+
+    Returns
+    -------
+    State
+        State at `START`; the 606 runs from the west through the From to
+        the Destination just past `ROUTE[1]`, so its From and To are lettered
+        A and B and its ride between them is solid.
+    """
+    beyond = (
+        ROUTE[1][0] + (ROUTE[2][0] - ROUTE[1][0]) / 4,
+        ROUTE[1][1] + (ROUTE[2][1] - ROUTE[1][1]) / 4,
+    )
+    stops = {
+        name: point for name, point in APPROACH.items() if name != 'E2'
+    }
+    stops['D'] = beyond
+    stops['E2'] = ROUTE[2]
+    pin = Pin(
+        origin=place('C', name='Hollis St', point=CENTRE),
+        destination=place('D', name=LABEL, point=beyond),
+        kind=SydneyMode.BUS,
+    )
+    line = make_shape(shape_id='a:0', points=list(stops.values()))
+    made = replace(
+        departure(
+            departs=START + timedelta(minutes=3),
+            route='606',
+            mode=SydneyFeed.BUS,
+            kind=SydneyMode.BUS,
+            trip_id='a',
+        ),
+        shape_id='a:0',
+    )
+    state, _ = on_view(view=LiveView.MAP, pin=pin, departures=(made,))
+    run = measured(
+        made=pattern(
+            trip_id='a',
+            route='606',
+            stops=calls(
+                stations=tuple(stops),
+                start=EIGHT + 180 - 150 * list(stops).index('C'),
+                step=150,
+                points=stops,
+            ),
+        ),
+        line=line,
+    )
+    return patterns_loaded(state=state, patterns={'a': run}, shapes=[line])
+
+
 def map_panes() -> State:
     """
     Show a two-change connection pin's Map, one pane per change.
@@ -932,6 +985,7 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     'map': map_scene,
     'map_panes': map_panes,
     'map_lines': line_scene,
+    'map_destination': destination_scene,
     'map_approach': lambda: map_framed(framing=MapFraming.APPROACH),
     'map_centred': lambda: map_framed(framing=MapFraming.CENTRED),
     'strip': lambda: strip_scene(view=LiveView.STRIP),

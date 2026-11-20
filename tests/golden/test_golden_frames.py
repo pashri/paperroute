@@ -167,6 +167,14 @@ def test_map_panes_scene_has_panes() -> None:
     assert isinstance(view, MapView) and view.panes
 
 
+def test_map_destination_scene_letters_the_ends() -> None:
+    """The Destination scene draws A and B discs and its ride solid."""
+    view = view_of(state=SCENES['map_destination']())
+    assert isinstance(view, MapView)
+    assert view.base.trip is not None and view.base.trip.lettered
+    assert view.base.trip.end is not None and view.base.lines
+
+
 def test_every_platform_has_every_baseline() -> None:
     """Each platform's baselines hold every scene's frame and the planes."""
     folders = {path.name: path for path in (GOLDEN / 'frames').iterdir()}

@@ -787,6 +787,39 @@ def test_uncertain_carry_on_gives_way_to_the_note() -> None:
     assert (gap == PAPER).all()
 
 
+FASTER_BOX: Final[tuple[slice, slice]] = (
+    slice(PANEL_TOP + 51, PANEL_TOP + 66), slice(712, RULE_RIGHT),
+)
+
+
+def test_faster_covers_uncertain() -> None:
+    """FASTER is an ink block on the second line, over any note."""
+    row = replace(
+        panel_row(pill=Pill.FASTER),
+        destination='Emu Plains',
+        estimate=UNSURE,
+    )
+    drawn = painted(row=row)
+    plain = painted(row=replace(row, pill=None, estimate=None))
+    assert (drawn[PANEL_TOP + 51, 712:RULE_RIGHT] == INK).all()
+    assert (drawn[PANEL_TOP + 65, 712:RULE_RIGHT] == INK).all()
+    assert (plain[FASTER_BOX] == PAPER).all()
+    outside = drawn.copy()
+    outside[FASTER_BOX] = PAPER
+    bare = painted(row=replace(row, pill=None, estimate=None))
+    assert (outside == bare).all()
+
+
+def test_a_carry_on_stops_short_of_faster() -> None:
+    """A long carry-on leaves the FASTER box clear by the gap."""
+    then = CarryOn(route='T2', headsign='Leppington via Granville Junction')
+    row = replace(
+        panel_row(then=then, pill=Pill.FASTER), destination='Emu Plains',
+    )
+    gap = painted(row=row)[SECOND_LINE, 712 - NOTE_GAP + 1 : 712]
+    assert (gap == PAPER).all()
+
+
 LONGEST = (
     'Our Lady Of Mercy College Via Old Windsor Rd And Every Other Street'
 )

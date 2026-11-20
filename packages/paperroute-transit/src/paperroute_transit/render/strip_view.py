@@ -32,6 +32,7 @@ from paperroute_transit.core.strip_model import (
 from paperroute_transit.render.chrome import (
     ARROW_WIDTH,
     BANNER,
+    FASTER,
     NAME_GAP,
     arrow,
     badge,
@@ -89,6 +90,8 @@ TWO_LINE_DROPS: Final[tuple[int, int]] = (27, 43)  # baselines below the rule
 TWO_LINE_BADGE_DROP: Final[int] = 30  # badge centre beside two lines
 CANCELLED_LEFT: Final[int] = 684
 CANCELLED_TEXT: Final[str] = 'CANCELLED'
+FASTER_LEFT: Final[int] = 712
+FASTER_PX: Final[int] = 11
 EMPTY_FACE: Final[Face] = Face(weight=700, px=15)
 EMPTY_Y: Final[int] = 158
 EMPTY_LEADING: Final[int] = 20
@@ -111,9 +114,12 @@ def note_width(*, row: Row) -> float:
     Returns
     -------
     float
-        The word's room, or 0 when the row is not uncertain.
+        The room of the FASTER block or the word, whichever the row has
+        and is wider, or 0 when it has neither.
     """
-    return note_room(face=TAG_FACE) if uncertain_row(row=row) else 0.0
+    word = note_room(face=TAG_FACE) if uncertain_row(row=row) else 0.0
+    block = RULE_RIGHT - FASTER_LEFT if row.pill is Pill.FASTER else 0
+    return max(word, block)
 
 
 def row_note(canvas: Canvas, *, row: Row, top: int) -> None:
@@ -133,6 +139,28 @@ def row_note(canvas: Canvas, *, row: Row, top: int) -> None:
         canvas.text(
             at=(TEXT_RIGHT, top + SECOND_DROP), text=UNCERTAIN,
             face=TAG_FACE, grey=INK, anchor='rs',
+        )
+
+
+def row_faster(canvas: Canvas, *, row: Row, top: int) -> None:
+    """
+    Draw the FASTER block on a row's second line.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Departure; nothing is drawn unless it earns FASTER.
+    top : int
+        The row's rule.
+    """
+    if row.pill is Pill.FASTER:
+        pill(
+            canvas,
+            box=(FASTER_LEFT, top + 51, RULE_RIGHT, top + 66),
+            text=FASTER,
+            px=FASTER_PX,
         )
 
 
@@ -373,6 +401,7 @@ def panel_row(
     left = row_middle(canvas, row=row, top=top, whole=whole)
     row_countdown(canvas, row=row, top=top)
     row_note(canvas, row=row, top=top)
+    row_faster(canvas, row=row, top=top)
     carry_on(canvas, row=row, top=top, left=left)
     if picked:
         canvas.invert(box=(RULE_LEFT, top, RULE_RIGHT, top + PICKED_DEPTH))

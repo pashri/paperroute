@@ -14,6 +14,7 @@ from paperroute_testkit.core.factories import (
     departure,
     place,
     snapshot,
+    stop_view_of,
     vehicle,
 )
 from paperroute_testkit.core.kit_steps import step
@@ -43,7 +44,7 @@ from paperroute_transit.core.messages import (
     StripLoaded,
     TimetableSeen,
 )
-from paperroute_transit.core.model import CarryOn, Departure
+from paperroute_transit.core.model import CarryOn, Departure, Pin
 from paperroute_transit.core.modes import end_point_modes
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
 from paperroute_transit.core.reducers import initial_state
@@ -54,12 +55,14 @@ from paperroute_transit.core.strip_model import (
     LOADING,
     NEEDS_UPDATE,
     STRIP_ROWS,
+    StripInputs,
     StripMapView,
     StripView,
 )
 from paperroute_transit.core.strip_state import (
     keys_in_use,
     request_strips,
+    strip_inputs,
     strip_key,
     strip_patterns,
 )
@@ -189,6 +192,36 @@ def test_strip_view_requests_reach_once() -> None:
     assert state.view is LiveView.STRIP_MAP
     assert not kinds(effects=effects, kind=LoadStrip)
     assert KEY in state.strip.reaches
+
+
+def inputs_for(*, pin: Pin) -> StripInputs:
+    """
+    Build the Strip inputs of a state showing one pin.
+
+    Parameters
+    ----------
+    pin : Pin
+        The shown pin.
+
+    Returns
+    -------
+    StripInputs
+        The inputs, with no departures.
+    """
+    state, _ = on_view(view=LiveView.STRIP, pin=pin, departures=())
+    return strip_inputs(
+        state=state,
+        stop_view=stop_view_of(departures=(), now=START),
+        departures=(),
+        positions={},
+    )
+
+
+def test_strip_inputs_flag_a_train_pin() -> None:
+    """A pin of an end-point kind sets `end_points`; a line pin does not."""
+    train = replace(PIN, kind=SydneyMode.TRAIN)
+    assert inputs_for(pin=train).end_points
+    assert not inputs_for(pin=PIN).end_points
 
 
 def test_strip_failure_backs_off() -> None:

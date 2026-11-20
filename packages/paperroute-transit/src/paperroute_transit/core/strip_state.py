@@ -578,4 +578,7 @@ def strip_inputs(
         stop_view=stop_view,
         key=key,
         selected=state.strip.selected,
+        end_points=(
+            shown(state=state).kind in end_point_modes(modes=state.city.modes)
+        ),
     )

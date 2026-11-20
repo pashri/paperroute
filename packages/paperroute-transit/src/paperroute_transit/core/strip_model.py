@@ -344,6 +344,8 @@ class StripInputs:
     selected : TripDay | None
         The picked train, whose times the rows below the From show; None
         for the next train.
+    end_points : bool
+        Whether the pin's kind is chosen by end points.
     """
 
     reach: Reach | None
@@ -363,6 +365,7 @@ class StripInputs:
     stop_view: StopView = EMPTY_STOP_VIEW
     key: StripKey | None = None
     selected: TripDay | None = None
+    end_points: bool = False
 
 
 @dataclass(frozen=True)

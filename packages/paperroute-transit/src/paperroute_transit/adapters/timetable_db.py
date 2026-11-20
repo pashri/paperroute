@@ -71,6 +71,7 @@ from paperroute_transit.core.model import (
 from paperroute_transit.core.modes import end_point_modes, line_modes
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.reach import StripKey
+from paperroute_transit.core.strip_list import loop_passes
 from paperroute_transit.core.strip_times import (
     board_departures,
     filtered,
@@ -101,6 +102,14 @@ NEXT_COLUMNS: Final[str] = 'n.route, n.headsign, n.next_trip'
 OLD_NEXT_COLUMNS: Final[str] = 'n.route, n.headsign, NULL'
 SERVICE_ONLY: Final[str] = 'AND t.service = 1'
 NEXT_JOIN: Final[str] = 'LEFT JOIN trip_next n ON n.trip_id = t.trip_id'
+FROM_CALLS: Final[str] = """
+SELECT trip_id, seq FROM stop_times
+WHERE trip_id IN ({marks})
+  AND stop_id IN (SELECT stop_id FROM stops
+                  WHERE stop_id = ? OR parent_station = ?)
+  AND NOT (pickup = 1 AND dropoff = 1)
+ORDER BY trip_id, seq
+"""
 NO_NEXT: Final[str] = 'NULL, NULL, NULL'
 NAMED_NEAR: Final[str] = """
 SELECT stop_id, lon, lat FROM stops
@@ -1027,6 +1036,14 @@ class SqliteTimetableRepository:
                 departures=found, kind=pin.kind, modes=self.city.modes,
             ))
         else:
+            if pin.kind in end_point_modes(modes=self.city.modes):
+                found = list(loop_passes(
+                    departures=found,
+                    from_seqs=self.from_seqs(
+                        trip_ids={d.trip_id for d in found},
+                        origin=pin.origin.stop_id,
+                    ),
+                ))
             found = list(strip_departures(
                 departures=first_to_arrive(departures=found),
                 key=StripKey(
@@ -1043,6 +1060,32 @@ class SqliteTimetableRepository:
             filtered(departures=found, only=pin.only),
             key=lambda departure: (departure.departs, departure.trip_id),
         )
+
+    def from_seqs(
+        self, *, trip_ids: Collection[str], origin: str,
+    ) -> dict[str, tuple[int, ...]]:
+        """
+        Read where each trip calls at a From, whatever the day.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Trip IDs.
+        origin : str
+            From stop or station ID; its platforms count.
+
+        Returns
+        -------
+        dict[str, tuple[int, ...]]
+            Each trip's call sequences at the From, in order, counting
+            only calls where passengers get on or off.
+        """
+        found: dict[str, list[int]] = {}
+        for trip, seq in self.fetch_in(
+            sql=FROM_CALLS, ids=trip_ids, tail=(origin, origin),
+        ):
+            found.setdefault(str(trip), []).append(int(cast(int, seq)))
+        return {trip: tuple(seqs) for trip, seqs in found.items()}
 
     def on_day(
         self,

@@ -1350,6 +1350,8 @@ def test_no_destination_covers_every_platform(tmp_path: Path) -> None:
         ),
         {'stop_id': 'Q', 'stop_name': 'Q Station', 'location_type': '0',
          'parent_station': '', 'stop_lat': '-33.9', 'stop_lon': '151.1'},
+        {'stop_id': 'Z', 'stop_name': 'Z Station', 'location_type': '0',
+         'parent_station': '', 'stop_lat': '-33.7', 'stop_lon': '150.9'},
     ]
     archive = write_feed(
         path=tmp_path / 'p.zip',
@@ -1890,7 +1892,7 @@ def platform_repo(
     *, tmp_path: Path, trips: list[tuple[str, str, list[tuple[str, str]]]],
 ) -> SqliteTimetableRepository:
     """
-    Build a timetable with station P (platforms P_1, P_2) and stop Q.
+    Build a timetable with station P (platforms P_1, P_2) and stops Q, Z.
 
     Parameters
     ----------
@@ -2031,6 +2033,81 @@ def test_consecutive_calls_keep_the_last_with_pickup(
             assert p_departures(repo=repo, destination=destination) == [
                 ('two', at(hour=8, minute=0)),
             ]
+
+
+LOOP: Final[list[tuple[str, str, list[tuple[str, str]]]]] = [
+    (
+        'x',
+        'Q',
+        [
+            ('Z', '07:50:00'), ('P_1', '08:00:00'), ('Z', '08:10:00'),
+            ('Z', '08:20:00'), ('P_2', '08:30:00'), ('Z', '08:40:00'),
+            ('Q', '08:50:00'),
+        ],
+    ),
+]
+
+
+def loop_departures(
+    *,
+    repo: SqliteTimetableRepository,
+    kind: str | None,
+    end: datetime,
+) -> list[tuple[str, datetime]]:
+    """
+    List the trips and times leaving P for Q from 7:55 until a time.
+
+    Parameters
+    ----------
+    repo : SqliteTimetableRepository
+        Repository.
+    kind : str | None
+        The pin's kind, or None for no kind.
+    end : datetime
+        Latest departure.
+
+    Returns
+    -------
+    list[tuple[str, datetime]]
+        Trip ID and departure time of each departure.
+    """
+    pin = replace(pin_of('P', 'Q'), kind=kind)
+    found = repo.departures(
+        pin=pin, start=at(hour=7, minute=55), end=end,
+    )
+    return [(d.trip_id, d.departs) for d in found]
+
+
+def test_a_loop_pass_is_not_listed(tmp_path: Path) -> None:
+    """A train kind lists only the pass after the last call at the From."""
+    with closing(platform_repo(tmp_path=tmp_path, trips=LOOP)) as repo:
+        assert loop_departures(
+            repo=repo,
+            kind=SydneyMode.TRAIN,
+            end=at(hour=9, minute=0),
+        ) == [('x', at(hour=8, minute=30))]
+        assert loop_departures(
+            repo=repo,
+            kind=None,
+            end=at(hour=9, minute=0),
+        ) == [('x', at(hour=8, minute=0)), ('x', at(hour=8, minute=30))]
+
+
+def test_a_loop_pass_is_dropped_when_its_later_pass_is_past_the_window(
+    tmp_path: Path,
+) -> None:
+    """The window ends before the later pass, which still drops the first."""
+    with closing(platform_repo(tmp_path=tmp_path, trips=LOOP)) as repo:
+        assert loop_departures(
+            repo=repo,
+            kind=SydneyMode.TRAIN,
+            end=at(hour=8, minute=15),
+        ) == []
+        assert loop_departures(
+            repo=repo,
+            kind=None,
+            end=at(hour=8, minute=15),
+        ) == [('x', at(hour=8, minute=0))]
 
 
 def empty_running_repo(*, tmp_path: Path) -> SqliteTimetableRepository:

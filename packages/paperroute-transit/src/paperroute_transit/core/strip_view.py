@@ -20,6 +20,7 @@ from paperroute_transit.core.strip_follow import (
     origin_of,
     picked_calls,
 )
+from paperroute_transit.core.strip_list import listed_rows
 from paperroute_transit.core.strip_model import (
     ALL_TAG,
     BANNER_ROWS,
@@ -876,7 +877,7 @@ def strip_panel(*, inputs: StripInputs) -> StripPanel:
     return StripPanel(
         title=stop.origin,
         destination=stop.destination,
-        rows=() if inputs.picking == PICK_FROM else stop.head_rows[:shown],
+        rows=listed_rows(inputs=inputs, shown=shown),
         no_destination=stop.destination is None,
         hint=hint,
         empty=None if inputs.picking == PICK_FROM else stop.empty,

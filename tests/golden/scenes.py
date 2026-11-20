@@ -69,6 +69,7 @@ from paperroute_transit.core.chains import Legs, leg_key
 from paperroute_transit.core.connection_model import way_legs
 from paperroute_transit.core.geo import Shape, make_shape, nearest_along
 from paperroute_transit.core.messages import (
+    DayLinesLoaded,
     DeparturesLoaded,
     FeedFetched,
     FetchFeed,
@@ -135,6 +136,18 @@ APPROACH: Final[dict[str, tuple[float, float]]] = {
     'E2': ROUTE[2],
 }
 LABEL: Final[str] = 'Golden St'
+DAY_STOPS: Final[dict[str, tuple[float, float]]] = {
+    'N2': (-17_000.0, 2_000.0),
+    'N1': (-17_000.0, 1_600.0),
+    'C': CENTRE,
+    'S1': (-17_000.0, 500.0),
+    'S2': (-17_000.0, 100.0),
+}
+NORTH_EAST: Final[dict[str, tuple[float, float]]] = {
+    'C': CENTRE,
+    'B1': (-16_600.0, 1_500.0),
+    'B2': (-16_100.0, 2_000.0),
+}
 STRIP_TRIPS: Final[dict[str, tuple[tuple[str, ...], int]]] = {
     'e0': (EAST, -2),
     'e': (EAST, 0),
@@ -565,6 +578,79 @@ def map_framed(*, framing: MapFraming) -> State:
     return patterns_loaded(state=state, patterns=patterns)
 
 
+def line_scene() -> State:
+    """
+    Show a bus pin with no Destination and the day's lines at its stop.
+
+    Returns
+    -------
+    State
+        State at `START`; the 606 comes from the west so its dashes run
+        up to the From and its ride is solid after it, the 610 leaves
+        north-east, and the 620 passes north to south, loaded as a day
+        line and drawn dashed. Every pattern is measured along its shape.
+    """
+    plain = Pin(
+        origin=place('C', name='Hollis St', point=CENTRE),
+        kind=SydneyMode.BUS,
+    )
+    runs = {
+        'a': ('606', 'a:0', 3, APPROACH),
+        'b': ('610', 'b:0', 6, NORTH_EAST),
+        'x': ('620', 'x:0', 9, DAY_STOPS),
+    }
+    shapes = {
+        trip: make_shape(shape_id=shape_id, points=list(points.values()))
+        for trip, (_, shape_id, _, points) in runs.items()
+    }
+    made = {
+        trip: replace(
+            departure(
+                departs=START + timedelta(minutes=minutes),
+                route=route,
+                mode=SydneyFeed.BUS,
+                kind=SydneyMode.BUS,
+                trip_id=trip,
+            ),
+            shape_id=shape_id,
+        )
+        for trip, (route, shape_id, minutes, _) in runs.items()
+    }
+    state, _ = on_view(
+        view=LiveView.MAP,
+        pin=plain,
+        departures=(made['a'], made['b']),
+    )
+    held = state.map.day_lines
+    assert held is not None
+    state, _ = step(
+        state, DayLinesLoaded(request=held.request, departures=(made['x'],)),
+    )
+    patterns: dict[str, TripPattern | None] = {
+        trip: measured(
+            made=pattern(
+                trip_id=trip,
+                route=runs[trip][0],
+                stops=calls(
+                    stations=tuple(runs[trip][3]),
+                    start=(
+                        EIGHT
+                        + int((made[trip].departs - START).total_seconds())
+                        - 150 * list(runs[trip][3]).index('C')
+                    ),
+                    step=150,
+                    points=runs[trip][3],
+                ),
+            ),
+            line=line,
+        )
+        for trip, line in shapes.items()
+    }
+    return patterns_loaded(
+        state=state, patterns=patterns, shapes=list(shapes.values()),
+    )
+
+
 def map_panes() -> State:
     """
     Show a two-change connection pin's Map, one pane per change.
@@ -846,6 +932,7 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     ),
     'map': map_scene,
     'map_panes': map_panes,
+    'map_lines': line_scene,
     'map_approach': lambda: map_framed(framing=MapFraming.APPROACH),
     'map_centred': lambda: map_framed(framing=MapFraming.CENTRED),
     'strip': lambda: strip_scene(view=LiveView.STRIP),

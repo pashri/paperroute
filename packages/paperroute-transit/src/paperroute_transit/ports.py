@@ -26,7 +26,39 @@ from paperroute_transit.core.saved import Settings
 from paperroute_transit.core.tiles import LabelKind, StreetLabel, TileVariant
 
 
-class TimetableRepository(Protocol):
+class DayTimetable(Protocol):
+    """Read access to a service day's departures."""
+
+    @property
+    def city(self) -> City:
+        """
+        The city the timetable serves.
+
+        Returns
+        -------
+        City
+            The city.
+        """
+
+    def day_departures(self, *, pin: Pin, day: date) -> list[Departure]:
+        """
+        Direct services leaving the pin's From on a service day.
+
+        Parameters
+        ----------
+        pin : Pin
+            From and Destination.
+        day : date
+            Service day.
+
+        Returns
+        -------
+        list[Departure]
+            The departures of that service day, in departure order.
+        """
+
+
+class TimetableRepository(DayTimetable, Protocol):
     """Read access to the built timetable."""
 
     @property

@@ -4,9 +4,10 @@ from dataclasses import replace
 
 from paperroute_transit.core.chooser_steps import chooser_event
 from paperroute_transit.core.cycle import answered, answered_late
-from paperroute_transit.core.map_state import failed, with_patterns
+from paperroute_transit.core.map_state import DayLines, failed, with_patterns
 from paperroute_transit.core.messages import (
     ChooserEvent,
+    DayLinesLoaded,
     Effect,
     MapDataFailed,
     MapEvent,
@@ -56,6 +57,14 @@ def on_map_event(
                 map_state,
                 area_modes={**map_state.area_modes, mpp: modes},
                 pending_modes=map_state.pending_modes - {mpp},
+            )
+        case DayLinesLoaded(request=request, departures=found):
+            held = map_state.day_lines
+            if held is None or held.request != request:
+                return state, ()
+            map_state = replace(
+                map_state,
+                day_lines=DayLines(request=request, departures=found),
             )
         case PositionsFetched(feed=feed, snapshot=snapshot):
             draw = not answered_late(state=state, feed=feed)

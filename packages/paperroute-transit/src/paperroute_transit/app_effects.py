@@ -11,6 +11,7 @@ from datetime import datetime
 from typing import Final
 
 from paperroute_transit.app_connections import between_read
+from paperroute_transit.app_lines import loaded_day_lines
 from paperroute_transit.core.alert_model import (
     AlertPlaces,
     AlertsFetched,
@@ -35,6 +36,7 @@ from paperroute_transit.core.messages import (
     LineLoaded,
     LoadChooserDepartures,
     LoadColumn,
+    LoadDayLines,
     LoadHolidays,
     LoadLine,
     LoadModes,
@@ -881,7 +883,7 @@ def map_data(
     Returns
     -------
     Event
-        ShapesLoaded, PatternsLoaded or ModesLoaded.
+        ShapesLoaded, PatternsLoaded, ModesLoaded or DayLinesLoaded.
     """
     match effect:
         case LoadShapes(shape_ids=shape_ids):
@@ -897,6 +899,8 @@ def map_data(
                 extra={'mpp': mpp, 'modes': sorted(modes)},
             )
             return ModesLoaded(mpp=mpp, box=box, modes=modes)
+        case LoadDayLines():
+            return loaded_day_lines(timetable=timetable, effect=effect)
 
 
 def placed(*, timetable: TimetableRepository, place: StopPlace) -> StopPlace:

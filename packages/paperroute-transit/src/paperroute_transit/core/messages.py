@@ -73,6 +73,7 @@ class MapData(StrEnum):
     SHAPES = 'shapes'
     PATTERNS = 'patterns'
     MODES = 'modes'
+    LINES = 'lines'
 
 
 @dataclass(frozen=True)
@@ -142,6 +143,16 @@ class LoadModes:
 
     mpp: int
     box: MetreBox
+
+
+@dataclass(frozen=True)
+class LoadDayLines:
+    """Ask the timetable for the first departure of each line in a day."""
+
+    pin: Pin
+    day: date
+    timetable: str | None
+    skip_school: bool
 
 
 @dataclass(frozen=True)
@@ -233,7 +244,7 @@ class MatchPlaces:
     timetable: str | None = None
 
 
-MapRequest = LoadShapes | LoadPatterns | LoadModes
+MapRequest = LoadShapes | LoadPatterns | LoadModes | LoadDayLines
 ChooserLoad = LoadColumn | LoadLine | LoadChooserDepartures
 Effect = (
     LoadDepartures
@@ -241,6 +252,7 @@ Effect = (
     | LoadShapes
     | LoadPatterns
     | LoadModes
+    | LoadDayLines
     | LoadStrip
     | MatchPlaces
     | RebuildTimetable
@@ -536,6 +548,14 @@ class ModesLoaded:
 
 
 @dataclass(frozen=True)
+class DayLinesLoaded:
+    """The first departure of each line in a day arrived."""
+
+    request: LoadDayLines
+    departures: tuple[Departure, ...]
+
+
+@dataclass(frozen=True)
 class PositionsFetched:
     """A positions feed was downloaded and parsed."""
 
@@ -564,6 +584,8 @@ class MapDataFailed:
                 return MapData.SHAPES
             case LoadPatterns():
                 return MapData.PATTERNS
+            case LoadDayLines():
+                return MapData.LINES
         return MapData.MODES
 
 
@@ -681,6 +703,7 @@ MapEvent = (
     ShapesLoaded
     | PatternsLoaded
     | ModesLoaded
+    | DayLinesLoaded
     | PositionsFetched
     | MapDataFailed
 )

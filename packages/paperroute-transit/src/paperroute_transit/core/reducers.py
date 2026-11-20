@@ -39,6 +39,7 @@ from paperroute_transit.core.messages import (
     ChooserDeparturesLoaded,
     ColumnFailed,
     ColumnLoaded,
+    DayLinesLoaded,
     DeparturesFailed,
     DeparturesLoaded,
     Effect,
@@ -644,6 +645,7 @@ def data_result(
             ShapesLoaded()
             | PatternsLoaded()
             | ModesLoaded()
+            | DayLinesLoaded()
             | PositionsFetched()
             | MapDataFailed()
         ):

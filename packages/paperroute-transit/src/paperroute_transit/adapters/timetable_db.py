@@ -481,6 +481,29 @@ class SqliteTimetableRepository:
             fetch=lambda sql: self.fetch(sql=sql, params=()),
         )
 
+    def day_departures(self, *, pin: Pin, day: date) -> list[Departure]:
+        """
+        Direct services leaving the pin's From on a service day.
+
+        Parameters
+        ----------
+        pin : Pin
+            From and Destination.
+        day : date
+            Service day.
+
+        Returns
+        -------
+        list[Departure]
+            The departures `departures` lists for `SERVICE_DAY_LENGTH`
+            from the day's start, whose service day is `day`.
+        """
+        start = service_epoch(day=day, zone=self.zone)
+        found = self.departures(
+            pin=pin, start=start, end=start + SERVICE_DAY_LENGTH,
+        )
+        return [item for item in found if item.service_day == day]
+
     def service_span(self, *, pin: Pin, day: date) -> ServiceSpan | None:
         """
         When a pin's trips run on a service day.
@@ -499,12 +522,8 @@ class SqliteTimetableRepository:
             `SERVICE_DAY_LENGTH` after its start; None when there are
             none.
         """
-        start = service_epoch(day=day, zone=self.zone)
-        found = self.departures(
-            pin=pin, start=start, end=start + SERVICE_DAY_LENGTH,
-        )
         return service_span(
-            departures=found,
+            departures=self.day_departures(pin=pin, day=day),
             day=day,
             fetch_in=lambda sql, ids: self.fetch_in(sql=sql, ids=ids),
             zone=self.zone,

@@ -15,6 +15,7 @@ from paperroute_transit.core.banners import OFFLINE_PHRASE, timetable_banner
 from paperroute_transit.core.chooser_steps import chooser_view
 from paperroute_transit.core.connection_screens import connection_screen
 from paperroute_transit.core.cycle import cycle_effects, cycle_held
+from paperroute_transit.core.day_lines import line_choice
 from paperroute_transit.core.live import LiveDeparture, live_since, resolved
 from paperroute_transit.core.map_lines import plain_map_view
 from paperroute_transit.core.map_requests import (
@@ -367,7 +368,10 @@ def live_view(*, state: State, stop_view: StopView) -> ScreenView:
     match state.view:
         case LiveView.MAP:
             inputs = map_inputs(state=state, stop_view=stop_view)
-            return plain_map_view(inputs=inputs)
+            return plain_map_view(
+                inputs=inputs,
+                choice=line_choice(state=state, stop_view=stop_view),
+            )
         case LiveView.STRIP:
             strip = shown_strip(state=state, stop_view=stop_view)
             return build_strip_view(inputs=strip)
@@ -377,7 +381,10 @@ def live_view(*, state: State, stop_view: StopView) -> ScreenView:
             )
             strip = shown_strip(state=state, stop_view=stop_view)
             return StripMapView(
-                map=plain_map_view(inputs=inputs),
+                map=plain_map_view(
+                    inputs=inputs,
+                    choice=line_choice(state=state, stop_view=stop_view),
+                ),
                 pane=build_strip_pane(inputs=strip),
             )
         case LiveView.ALERTS if listed := shown_alerts(state=state):

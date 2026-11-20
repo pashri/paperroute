@@ -13,7 +13,7 @@ from paperroute_transit.core.chains import Legs
 from paperroute_transit.core.chooser import ChooserState
 from paperroute_transit.core.city import City
 from paperroute_transit.core.map_state import MapState
-from paperroute_transit.core.messages import ScreenView
+from paperroute_transit.core.messages import MapData, ScreenView
 from paperroute_transit.core.model import Departure, Pin, ServiceSpan, shifted
 from paperroute_transit.core.reach import Reach, StripKey
 from paperroute_transit.core.realtime import RealtimeSnapshot
@@ -50,6 +50,29 @@ def elapsed(*, since: datetime | None, now: datetime, span: timedelta) -> bool:
     if since is None:
         return True
     return now.timestamp() - since.timestamp() >= span.total_seconds()
+
+
+def may_load(*, state: State, kind: MapData) -> bool:
+    """
+    Say whether a kind of map data may be asked for again.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    kind : MapData
+        Kind of map data.
+
+    Returns
+    -------
+    bool
+        False for `RETRY_AFTER` after that kind last failed.
+    """
+    return elapsed(
+        since=state.map.failed_at.get(kind),
+        now=state.now,
+        span=RETRY_AFTER,
+    )
 
 
 def load_window(

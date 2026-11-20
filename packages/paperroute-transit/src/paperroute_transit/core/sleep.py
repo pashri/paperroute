@@ -3,6 +3,7 @@
 from paperroute_device.core.sleep import SLEEP_BAND
 from paperroute_transit.core.connection import live_chains
 from paperroute_transit.core.connection_screens import connection_map
+from paperroute_transit.core.day_lines import line_choice
 from paperroute_transit.core.map_lines import plain_map_view
 from paperroute_transit.core.map_requests import map_inputs
 from paperroute_transit.core.map_state import awaiting
@@ -70,4 +71,5 @@ def pin_map(*, state: State, stop_view: StopView) -> MapView:
         )
     return plain_map_view(
         inputs=map_inputs(state=state, stop_view=stop_view, asleep=True),
+        choice=line_choice(state=state, stop_view=stop_view),
     )

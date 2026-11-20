@@ -10,6 +10,7 @@ from paperroute_transit.core.connection_map import (
     connection_inputs,
     panes_inputs,
 )
+from paperroute_transit.core.day_lines import day_extras, request_day_lines
 from paperroute_transit.core.geo import MetreBox, Point
 from paperroute_transit.core.map_fit import (
     FrameKey,
@@ -39,7 +40,7 @@ from paperroute_transit.core.places import shown
 from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.rhythm import frame_time, stale_after
 from paperroute_transit.core.saved import LiveView
-from paperroute_transit.core.state_model import RETRY_AFTER, State, elapsed
+from paperroute_transit.core.state_model import State, may_load
 from paperroute_transit.core.stop_view import StopView, hero_departure
 from paperroute_transit.core.strip_state import (
     picked_window,
@@ -70,29 +71,6 @@ class PatternAsk:
 
     wanted: frozenset[str]
     drawn: tuple[Departure, ...]
-
-
-def may_load(*, state: State, kind: MapData) -> bool:
-    """
-    Say whether a kind of map data may be asked for again.
-
-    Parameters
-    ----------
-    state : State
-        State.
-    kind : MapData
-        Kind of map data.
-
-    Returns
-    -------
-    bool
-        False for `RETRY_AFTER` after that kind last failed.
-    """
-    return elapsed(
-        since=state.map.failed_at.get(kind),
-        now=state.now,
-        span=RETRY_AFTER,
-    )
 
 
 def polled_departures(*, state: State) -> Sequence[Departure]:
@@ -553,6 +531,10 @@ def map_patterns(
     if inputs is not None:
         wanted |= needed_patterns(inputs=inputs)
         wanted |= fitted_trips(state=state, inputs=inputs)
+        wanted |= {
+            item.trip_id
+            for item in day_extras(state=state, stop_view=inputs.stop_view)
+        }
     return wanted
 
 
@@ -790,10 +772,14 @@ def sleep_effects(
     inputs = map_inputs(state=state, stop_view=stop_view, asleep=True)
     if inputs.centre is None:
         return state, ()
-    state, shapes = request_shapes(state=state, departures=inputs.departures)
+    drawn = (
+        *inputs.departures,
+        *day_extras(state=state, stop_view=stop_view),
+    )
+    state, shapes = request_shapes(state=state, departures=drawn)
     state, loads = request_patterns(
         state=state,
-        wanted=frozenset(dep.trip_id for dep in inputs.departures),
+        wanted=frozenset(dep.trip_id for dep in drawn),
     )
     return state, (*shapes, *loads)
 
@@ -941,10 +927,16 @@ def map_effects(
     )
     drawn = () if inputs is None else tuple(inputs.departures)
     state = drawn_state(state=state, inputs=inputs, stop_view=stop_view)
+    state, day = (
+        (state, ())
+        if inputs is None
+        else request_day_lines(state=state, stop_view=stop_view)
+    )
     wanted = map_patterns(state=state, inputs=inputs)
-    state = pruned(state=state, wanted=wanted, departures=drawn)
-    state, area = area_effects(state=state, departures=drawn)
-    return state, area, PatternAsk(wanted=wanted, drawn=drawn)
+    kept = (*drawn, *day_extras(state=state, stop_view=stop_view))
+    state = pruned(state=state, wanted=wanted, departures=kept)
+    state, area = area_effects(state=state, departures=kept)
+    return state, (*day, *area), PatternAsk(wanted=wanted, drawn=drawn)
 
 
 def pattern_effects(

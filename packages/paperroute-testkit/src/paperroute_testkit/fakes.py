@@ -504,6 +504,30 @@ class BrokenTimetable:
         self.calls += 1
         raise sqlite3.DatabaseError('file is not a database')
 
+    def day_departures(self, *, pin: Pin, day: date) -> list[Departure]:
+        """
+        Fail like a damaged database file.
+
+        Parameters
+        ----------
+        pin : Pin
+            Ignored.
+        day : date
+            Ignored.
+
+        Returns
+        -------
+        list[Departure]
+            Never returns.
+
+        Raises
+        ------
+        sqlite3.DatabaseError
+            Always.
+        """
+        self.calls += 1
+        raise sqlite3.DatabaseError('file is not a database')
+
 
 @dataclass
 class PlacedTimetable(BrokenTimetable):
@@ -543,6 +567,24 @@ class EmptyPlacedTimetable(PlacedTimetable):
         start : datetime
             Ignored.
         end : datetime
+            Ignored.
+
+        Returns
+        -------
+        list[Departure]
+            Nothing.
+        """
+        return []
+
+    def day_departures(self, *, pin: Pin, day: date) -> list[Departure]:
+        """
+        Find nothing.
+
+        Parameters
+        ----------
+        pin : Pin
+            Ignored.
+        day : date
             Ignored.
 
         Returns

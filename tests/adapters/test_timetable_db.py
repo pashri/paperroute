@@ -145,6 +145,15 @@ def test_departures_bus_with_stand_and_times(
     assert found[0].arrives == at(hour=8, minute=39)
 
 
+def test_day_departures_keep_only_the_service_day(
+    repo: SqliteTimetableRepository,
+) -> None:
+    """A day's departures are that service day's, the 606 among them."""
+    found = repo.day_departures(pin=HOLLIS_TO_PARRA, day=date(2026, 10, 16))
+    assert {d.service_day for d in found} == {date(2026, 10, 16)}
+    assert 'bus-0803' in {d.trip_id for d in found}
+
+
 def test_departures_carry_road(repo: SqliteTimetableRepository) -> None:
     """The 606 bus is road and the Parramatta trains are not."""
     bus = repo.departures(

@@ -9,6 +9,7 @@ from paperroute_transit.core.geo import MetreBox, Point, Shape
 from paperroute_transit.core.map_fit import FrameKey, resting_zoom
 from paperroute_transit.core.map_view import MAP_HEIGHT, MAP_WIDTH
 from paperroute_transit.core.messages import (
+    LoadDayLines,
     LoadModes,
     LoadPatterns,
     LoadShapes,
@@ -16,11 +17,29 @@ from paperroute_transit.core.messages import (
     MapDataFailed,
     PatternsLoaded,
 )
+from paperroute_transit.core.model import Departure
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.tiles import ZOOMS
 
 AREA_GROWTH: Final[float] = 1.1
+
+
+@dataclass(frozen=True)
+class DayLines:
+    """
+    The day's other lines a plain pin's map draws.
+
+    Attributes
+    ----------
+    request : LoadDayLines
+        The load asked for.
+    departures : tuple[Departure, ...] | None
+        The first departure of each line, or None while loading.
+    """
+
+    request: LoadDayLines
+    departures: tuple[Departure, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -62,6 +81,8 @@ class MapState:
     fit_zoom : int | None
         The zoom, an index into `ZOOMS`, the map takes with no step and
         no held frame; None when no map is drawn.
+    day_lines : DayLines | None
+        The day's other lines asked for or loaded; None before the ask.
     """
 
     step: int = 0
@@ -80,6 +101,7 @@ class MapState:
     frame: tuple[Point, int] | None = None
     frame_key: FrameKey | None = None
     fit_zoom: int | None = None
+    day_lines: DayLines | None = None
 
 
 def area_frame(*, map_state: MapState) -> tuple[Point | None, int]:
@@ -231,5 +253,9 @@ def failed(
         case LoadModes(mpp=mpp):
             modes = map_state.pending_modes - {mpp}
             map_state = replace(map_state, pending_modes=modes)
+        case LoadDayLines() as request:
+            held = map_state.day_lines
+            if held is not None and held.request == request:
+                map_state = replace(map_state, day_lines=None)
     failures = {**map_state.failed_at, event.kind: now}
     return replace(map_state, failed_at=failures)

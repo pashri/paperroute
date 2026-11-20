@@ -129,7 +129,7 @@ def loaded(*, shape_id: str, length: float) -> PatternsLoaded:
     )
 
 
-def test_with_patterns_keeps_the_held_shape_when_the_fingerprint_matches() -> None:
+def test_with_patterns_keeps_a_held_shape_with_the_same_fingerprint() -> None:
     """An equal shape loaded again leaves the held object in place."""
     state = with_patterns(
         map_state=MapState(), event=loaded(shape_id='s', length=100.0),

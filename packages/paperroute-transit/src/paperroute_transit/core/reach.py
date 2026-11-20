@@ -200,6 +200,8 @@ class RowKind(StrEnum):
     BRANCH = 'branch'
     FOLD = 'fold'
     EXIT = 'exit'
+    PASSED = 'passed'
+    EARLIER = 'earlier'
 
 
 @dataclass(frozen=True)
@@ -212,8 +214,8 @@ class ReachRow:
     place : StopPlace
         The station.
     kind : RowKind
-        Approach, the From, the main line, a branch, a closed fold or a
-        way off the line.
+        Approach, the From, the main line, a branch, a closed fold, a way
+        off the line, a station passed through, or an earlier call.
     depth : int
         Indent: 0 for the main line, one more per branch level.
     above : bool
@@ -231,6 +233,8 @@ class ReachRow:
         Route numbers of an exit row, whose place is the first station
         off the line and whose depth is its junction's; empty for any
         other row.
+    inside : bool
+        False when the hop arriving at the row is outside the track.
     """
 
     place: StopPlace
@@ -241,6 +245,7 @@ class ReachRow:
     trips: int = 0
     folded: int = 0
     lines: tuple[str, ...] = ()
+    inside: bool = True
 
 
 @dataclass(frozen=True)

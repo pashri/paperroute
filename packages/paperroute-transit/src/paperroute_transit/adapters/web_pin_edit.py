@@ -8,13 +8,9 @@ from urllib.parse import urlencode
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_web import board_text
 from paperroute_transit.adapters.pin_windows import DEFAULT_BUTTON
+from paperroute_transit.core.chooser import pin_value
 from paperroute_transit.core.model import StopPlace
-from paperroute_transit.core.modes import (
-    ModeSpec,
-    destination_first_modes,
-    pin_value,
-    spec_of,
-)
+from paperroute_transit.core.modes import ModeSpec, end_point_modes, spec_of
 from paperroute_transit.core.pin_choices import (
     NICKNAME_MAX,
     PinDraft,
@@ -512,7 +508,7 @@ def editor_form(
     """
     draft = editor.draft
     spec = spec_of(modes=modes, mode=draft.kind)
-    if spec is not None and spec.id in destination_first_modes(modes=modes):
+    if spec is not None and spec.id in end_point_modes(modes=modes):
         routed = reach_fields(editor=editor, spec=spec, origin=origin)
     else:
         routed = line_field(editor=editor, modes=modes) + to_field(

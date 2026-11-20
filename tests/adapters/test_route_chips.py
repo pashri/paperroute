@@ -1,5 +1,7 @@
 """Tests for the route chips on the Pins list."""
 
+from dataclasses import replace
+
 from paperroute_sydney.city import SYDNEY, SydneyMode
 from paperroute_transit.adapters.route_chips import chip_html, colour_sheet
 from paperroute_transit.core.model import Pin, StopPlace
@@ -26,6 +28,14 @@ def chip_of(*, pin: Pin, colour: RouteColour | None = None) -> str:
         The chip's markup.
     """
     return chip_html(pin=pin, colour=colour, modes=SYDNEY.modes)
+
+
+def test_chips_ignore_a_train_pins_routes() -> None:
+    """A train pin's stored routes give the chip of one with none."""
+    train = Pin(origin=STOP, kind=SydneyMode.TRAIN)
+    old = replace(train, routes=('T1',))
+    assert chip_of(pin=old) == chip_of(pin=train)
+    assert '>T</span>' in chip_of(pin=old)
 
 
 def test_chip_text() -> None:
@@ -89,7 +99,7 @@ def test_a_line_value_chips_as_its_badge() -> None:
     pin = Pin(
         origin=STOP,
         destination=STOP,
-        kind=SydneyMode.TRAIN,
+        kind=SydneyMode.METRO,
         routes=('GA:Norwich',),
     )
     assert '>GA</span>' in chip_of(pin=pin)

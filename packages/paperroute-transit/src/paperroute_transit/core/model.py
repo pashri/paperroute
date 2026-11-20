@@ -2,7 +2,7 @@
 
 import hashlib
 import json
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from itertools import pairwise
@@ -293,6 +293,28 @@ def pin_key(*, pin: Pin) -> PinKey:
         pin.routes if open_ended else (),
         pin.only if open_ended else (),
     )
+
+
+def pin_routes(
+    *, pin: Pin, end_points: Collection[str],
+) -> tuple[str, ...]:
+    """
+    List the routes a pin's readers may use.
+
+    Parameters
+    ----------
+    pin : Pin
+        Pin.
+    end_points : Collection[str]
+        Ids of the modes chosen by end points.
+
+    Returns
+    -------
+    tuple[str, ...]
+        None for a pin of an end-point mode, whatever it stores; else its
+        routes.
+    """
+    return () if pin.kind in end_points else pin.routes
 
 
 def pin_ref(*, pin: Pin) -> str:

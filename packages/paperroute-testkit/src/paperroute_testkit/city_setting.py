@@ -85,6 +85,27 @@ def line_mode() -> str:
     Returns
     -------
     str
+        Its mode id, such as Sydney's 'metro'; a mode chosen by end
+        points is skipped.
+
+    Raises
+    ------
+    ValueError
+        When the city has no such mode.
+    """
+    for spec in city_under_test().modes:
+        if spec.by_line and not spec.end_points:
+            return spec.id
+    raise ValueError('the city under test has no mode chosen by line')
+
+
+def train_mode() -> str:
+    """
+    Give the first mode of the city under test chosen by end points.
+
+    Returns
+    -------
+    str
         Its mode id, such as Sydney's 'train'.
 
     Raises
@@ -93,9 +114,9 @@ def line_mode() -> str:
         When the city has no such mode.
     """
     for spec in city_under_test().modes:
-        if spec.by_line:
+        if spec.end_points:
             return spec.id
-    raise ValueError('the city under test has no mode chosen by line')
+    raise ValueError('the city under test has no mode chosen by end points')
 
 
 def street_mode() -> str:

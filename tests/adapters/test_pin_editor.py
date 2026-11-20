@@ -153,7 +153,7 @@ KINGS_LYNN = Choice(
     key='train:GN:K', label='Kings Lynn', badge='GN', value='GN:K',
 )
 ROUTED: Final[tuple[ModeSpec, ...]] = tuple(
-    replace(spec, destination_first=True)
+    replace(spec, end_points=True)
     if spec.id == SydneyMode.TRAIN
     else spec
     for spec in SYDNEY.modes
@@ -208,7 +208,7 @@ def routed_options() -> KindedOptions:
 OPTIONS: Final[KindedOptions] = routed_options()
 
 
-def test_a_destination_first_train_suggests_the_busiest_line() -> None:
+def test_an_end_points_train_suggests_the_busiest_line() -> None:
     """With a To and no line, the busiest line is chosen and suggested."""
     editor = edited(
         options=OPTIONS, draft=PinDraft(stop='S', kind='train', to='D1'),
@@ -253,7 +253,7 @@ def test_a_train_destination_is_not_offered_from_another_kind() -> None:
     assert [p.stop_id for p in editor.destinations] == ['D1', 'D2']
 
 
-def test_the_route_filter_survives_a_destination_first_train() -> None:
+def test_the_route_filter_survives_an_end_points_train() -> None:
     """The routes the owner ticked are kept, and the offered ones listed."""
     draft = PinDraft(stop='S', kind='train', to='D1', only=('X2', 'Z'))
     editor = edited(options=OPTIONS, draft=draft, modes=ROUTED)

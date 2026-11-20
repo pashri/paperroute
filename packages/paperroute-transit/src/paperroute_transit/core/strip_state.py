@@ -1,6 +1,6 @@
 """Which reaches the strips need, asking for them, and the Strip's scroll."""
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import replace
 from typing import Final
 
@@ -18,8 +18,9 @@ from paperroute_transit.core.model import (
     Pin,
     StopPlace,
     is_connection,
+    pin_routes,
 )
-from paperroute_transit.core.modes import line_modes
+from paperroute_transit.core.modes import end_point_modes, line_modes
 from paperroute_transit.core.places import shown
 from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.reach import Reach, StripKey
@@ -44,7 +45,7 @@ STRIP_VIEWS: Final[frozenset[LiveView]] = frozenset(
 )
 
 
-def strip_key(*, pin: Pin) -> StripKey:
+def strip_key(*, pin: Pin, end_points: Collection[str]) -> StripKey:
     """
     Say which runs feed a place's strip.
 
@@ -52,14 +53,38 @@ def strip_key(*, pin: Pin) -> StripKey:
     ----------
     pin : Pin
         The place.
+    end_points : Collection[str]
+        Ids of the modes chosen by end points.
 
     Returns
     -------
     StripKey
-        Its From's ID, kind and routes.
+        Its From's ID, kind and routes (see `pin_routes`).
     """
     return StripKey(
-        station=pin.origin.stop_id, kind=pin.kind, routes=pin.routes
+        station=pin.origin.stop_id,
+        kind=pin.kind,
+        routes=pin_routes(pin=pin, end_points=end_points),
+    )
+
+
+def shown_key(*, state: State) -> StripKey:
+    """
+    Say which runs feed the shown place's strip.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    StripKey
+        The shown place's key (see `strip_key`).
+    """
+    return strip_key(
+        pin=shown(state=state),
+        end_points=end_point_modes(modes=state.city.modes),
     )
 
 
@@ -119,7 +144,7 @@ def keys_in_use(*, state: State) -> frozenset[StripKey]:
         views never builds its reach again, and the chooser's in the TO
         stage.
     """
-    keys = {strip_key(pin=shown(state=state))}
+    keys = {shown_key(state=state)}
     picked = chooser_strip(state=state)
     if picked is not None:
         keys.add(picked[0])
@@ -148,7 +173,10 @@ def strips_shown(*, state: State) -> dict[StripKey, StopPlace]:
     on_strip = state.chooser is None and state.view in STRIP_VIEWS
     if not on_strip or is_connection(pin=pin):
         return {}
-    return {strip_key(pin=pin): pin.origin}
+    key = strip_key(
+        pin=pin, end_points=end_point_modes(modes=state.city.modes),
+    )
+    return {key: pin.origin}
 
 
 def pruned_reaches(*, state: State) -> State:
@@ -322,7 +350,7 @@ def shown_reach(*, state: State) -> Reach | None:
         train it follows, or None while it is not built or the timetable
         has none.
     """
-    key = strip_key(pin=shown(state=state))
+    key = shown_key(state=state)
     destination = destination_id(state=state)
     reach = folded_reach(state=state, key=key, destination=destination)
     if reach is None:
@@ -435,7 +463,7 @@ def strip_window(*, state: State) -> tuple[Departure, ...]:
     return tuple(
         window_departures(
             departures=state.board.departures,
-            key=strip_key(pin=shown(state=state)),
+            key=shown_key(state=state),
             now=state.now,
             line_kinds=line_modes(modes=state.city.modes),
         )
@@ -492,7 +520,7 @@ def strip_patterns(*, state: State) -> frozenset[str]:
     elif state.view in STRIP_VIEWS:
         wanted |= strip_trips(
             departures=state.board.departures,
-            key=strip_key(pin=shown(state=state)),
+            key=shown_key(state=state),
             now=state.now,
             line_kinds=line_modes(modes=state.city.modes),
         )
@@ -526,7 +554,7 @@ def strip_inputs(
         Inputs with no cursor; `NEEDS_UPDATE` when the timetable has no
         reach for the place.
     """
-    key = strip_key(pin=shown(state=state))
+    key = shown_key(state=state)
     reaches = state.strip.reaches
     return StripInputs(
         reach=shown_reach(state=state),

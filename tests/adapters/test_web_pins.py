@@ -43,6 +43,7 @@ from paperroute_transit.core.messages import (
     PinsOrdered,
 )
 from paperroute_transit.core.model import AutoWindow, Pin, StopPlace, pin_ref
+from paperroute_transit.core.modes import end_point_modes
 from paperroute_transit.core.pin_choices import PinDraft, StopMatch
 from paperroute_transit.core.route_colours import RouteColour
 from paperroute_transit.observers import PinsSeen
@@ -76,6 +77,7 @@ def _pin(
     )
 
 
+ENDS = end_point_modes(modes=SYDNEY.modes)
 WORK = _pin(
     name='Hollis St', stop_id='a', to='Parramatta', routes=('606',),
     nickname='Work',
@@ -159,8 +161,8 @@ def test_pin_line_without_a_to_names_only_its_filter() -> None:
     """A T1 pin without a To lists every line, so no line is named."""
     station = StopPlace(stop_id='P', name='Parramatta Station', point=None)
     line = Pin(origin=station, kind=SydneyMode.TRAIN, routes=('T1',))
-    assert pin_line(pin=line) == 'Parramatta Station'
-    assert pin_line(pin=replace(line, only=('T2',))) == (
+    assert pin_line(pin=line, end_points=ENDS) == 'Parramatta Station'
+    assert pin_line(pin=replace(line, only=('T2',)), end_points=ENDS) == (
         'Parramatta Station · T2'
     )
 
@@ -171,16 +173,20 @@ def test_pin_line_shows_the_badge_of_a_named_line() -> None:
     pin = Pin(
         origin=station,
         destination=station,
-        kind=SydneyMode.TRAIN,
+        kind=SydneyMode.METRO,
         routes=('GA:Norwich',),
     )
-    assert pin_line(pin=pin) == 'Parramatta Station → Parramatta Station · GA'
+    assert pin_line(pin=pin, end_points=ENDS) == (
+        'Parramatta Station → Parramatta Station · GA'
+    )
 
 
 def test_pin_line_joins_from_to_and_routes() -> None:
     """The line has the To and routes only when there are some."""
-    assert pin_line(pin=WORK) == 'Hollis St → Parramatta · 606'
-    assert pin_line(pin=HOME) == 'Home Stop'
+    assert pin_line(pin=WORK, end_points=ENDS) == (
+        'Hollis St → Parramatta · 606'
+    )
+    assert pin_line(pin=HOME, end_points=ENDS) == 'Home Stop'
 
 
 async def test_list_shows_pins_in_order(client: Client) -> None:
@@ -547,7 +553,7 @@ def _options() -> FakePinOptions:
             CENTRAL, JUNCTION, REDFERN, BUS_STOP, TOWN_HALL,
         )},
         lines={
-            ('C', SydneyMode.TRAIN): (
+            ('C', SydneyMode.METRO): (
                 Choice(key='T1', label='North Shore', badge='T1'),
                 Choice(key='T2', label='Leppington', badge='T2'),
             ),
@@ -561,13 +567,13 @@ def _options() -> FakePinOptions:
             ('B2', '811'): (TOWN_HALL,),
         },
         only={
-            ('C', SydneyMode.TRAIN): ('T1', 'T2'),
+            ('C', SydneyMode.METRO): ('T1', 'T2'),
             ('B2', SydneyMode.BUS): ('809', '811'),
         },
         near=(BUS_STOP,),
         found=(
             StopMatch(
-                place=CENTRAL, kinds=(SydneyMode.TRAIN,), routes=('T1', 'T2'),
+                place=CENTRAL, kinds=(SydneyMode.METRO,), routes=('T1', 'T2'),
             ),
         ),
     )
@@ -583,7 +589,7 @@ async def _editor(pins: Pins) -> AsyncIterator[Client]:
 
 
 FULL: dict[str, str | list[str]] = {
-    'stop': 'C', 'kind': 'train', 'route': 'T1', 'to': 'J',
+    'stop': 'C', 'kind': 'metro', 'route': 'T1', 'to': 'J',
     'only': ['T2'], 'nickname': 'Home',
 }
 
@@ -606,17 +612,17 @@ def test_draft_of_reads_fields() -> None:
     assert (draft.stop, draft.kind, draft.ref) == ('C', None, 'x')
     assert draft.only == ('T1',)
     assert draft_of(
-        query={'kind': 'train'},
+        query={'kind': 'metro'},
         only=[],
         modes=SYDNEY.modes,
-    ).kind == SydneyMode.TRAIN
+    ).kind == SydneyMode.METRO
 
 
 async def test_search_lists_matches(editor: Client) -> None:
     """A match links to its editor with its kinds and routes."""
     text = await (await editor.get('/pins/new?q=c%20st')).text()
     assert 'href="/pins/edit?stop=C"' in text
-    assert '<small>Train</small>' in text
+    assert '<small>Metro</small>' in text
     assert '<span class="routes">T1 T2</span>' in text
 
 
@@ -636,7 +642,7 @@ async def test_search_without_hits(pins: Pins) -> None:
 
 async def test_editor_offers_valid_choices(editor: Client) -> None:
     """Only the fake's To places and filters are offered."""
-    response = await editor.get('/pins/edit?stop=C&kind=train&route=T1')
+    response = await editor.get('/pins/edit?stop=C&kind=metro&route=T1')
     text = await response.text()
     assert re.findall(r'<option value="(\w*)"', text) == [
         '', 'T1', 'T2', '', 'J', 'R',
@@ -653,13 +659,13 @@ async def test_editor_line_without_a_to_says_it_sets_the_strip(
 ) -> None:
     """With no To the line select is labelled as the Strip's, not a filter."""
     plain = await (
-        await editor.get('/pins/edit?stop=C&kind=train&route=T1')
+        await editor.get('/pins/edit?stop=C&kind=metro&route=T1')
     ).text()
     assert '>Strip line<' in plain
     assert 'aria-describedby="pin-route-hint"' in plain
     assert 'the stop lists every route' in plain
     to = await (
-        await editor.get('/pins/edit?stop=C&kind=train&route=T1&to=J')
+        await editor.get('/pins/edit?stop=C&kind=metro&route=T1&to=J')
     ).text()
     assert '>Line<' in to
     assert 'pin-route-hint' not in to
@@ -675,7 +681,7 @@ async def test_editor_without_line_has_no_save(editor: Client) -> None:
 async def test_editor_drops_unoffered_to(editor: Client) -> None:
     """A To not offered falls back to every departure."""
     response = await editor.get(
-        '/pins/edit?stop=C&kind=train&route=T1&to=ZZ',
+        '/pins/edit?stop=C&kind=metro&route=T1&to=ZZ',
     )
     text = await response.text()
     assert '<option value="" selected>None: every departure</option>' in text
@@ -691,7 +697,7 @@ async def test_save_posts_pin(pins: Pins, editor: Client) -> None:
     assert pins.posted == [PinSaved(ref=None, pin=Pin(
         origin=CENTRAL,
         destination=JUNCTION,
-        kind=SydneyMode.TRAIN,
+        kind=SydneyMode.METRO,
         routes=('T1',),
         only=('T2',),
         nickname='Home',
@@ -717,7 +723,7 @@ async def test_save_refuses_route_not_at_stop(
 ) -> None:
     """A train line at a bus stop is refused."""
     response = await editor.post('/pins/save', data=_form({
-        'stop': 'B2', 'kind': 'train', 'route': 'T1',
+        'stop': 'B2', 'kind': 'metro', 'route': 'T1',
     }))
     assert response.status == HTTPStatus.BAD_REQUEST
     assert not pins.posted
@@ -947,7 +953,7 @@ async def test_add_window_without_js(editor: Client) -> None:
 async def test_enter_uses_default_button(editor: Client) -> None:
     """The form's first submit button is the off-screen default."""
     text = await (await editor.get(
-        '/pins/edit?stop=C&kind=train&route=T1',
+        '/pins/edit?stop=C&kind=metro&route=T1',
     )).text()
     form = text[text.index('<form class="editor"'):]
     first = re.search(r'<button type="submit"[^>]*>', form)
@@ -1040,7 +1046,7 @@ async def test_connection_row_edit_link(pins: Pins) -> None:
     await client.close()
     ref = pin_ref(pin=CONNECTION)
     assert f'href="/pins/ways?ref={ref}"' in text
-    line = pin_line(pin=CONNECTION)
+    line = pin_line(pin=CONNECTION, end_points=ENDS)
     assert line == (
         'Hollis St Opp Constitution Hill Library → Westmead Station'
         ' · via Constitution Hill, North West Twy'
@@ -1055,7 +1061,7 @@ async def test_destination_row_line_is_cut(pins: Pins) -> None:
     client = await _client(pins=pins)
     text = await (await client.get('/pins')).text()
     await client.close()
-    line = escape(pin_line(pin=direct))
+    line = escape(pin_line(pin=direct, end_points=ENDS))
     assert f'<small class="trip">{line}</small>' in text
     assert text.count('class="trip"') == 1
 
@@ -1085,9 +1091,9 @@ def test_line_field_posts_the_value_and_shows_the_badge() -> None:
     found = edited(
         options=FakePinOptions(
             places={'S': StopPlace(stop_id='S', name='Sta', point=None)},
-            lines={('S', SydneyMode.TRAIN): lines},
+            lines={('S', SydneyMode.METRO): lines},
         ),
-        draft=PinDraft(stop='S', kind=SydneyMode.TRAIN),
+        draft=PinDraft(stop='S', kind=SydneyMode.METRO),
     )
     text = line_field(editor=found, modes=SYDNEY.modes)
     assert re.findall(r'<option value="([^"]*)"', text) == [
@@ -1096,11 +1102,11 @@ def test_line_field_posts_the_value_and_shows_the_badge() -> None:
     assert re.findall(r'>([^<]*)</option>', text)[1:] == ['GA', 'GA']
 
 
-def test_sydney_train_editor_keeps_line_then_to() -> None:
-    """A train editor still asks for the line before the To."""
+def test_sydney_metro_editor_keeps_line_then_to() -> None:
+    """A metro editor still asks for the line before the To."""
     found = edited(
         options=_options(),
-        draft=PinDraft(stop='C', kind='train', route='T1'),
+        draft=PinDraft(stop='C', kind='metro', route='T1'),
         modes=SYDNEY.modes,
     )
     text = editor_form(
@@ -1114,7 +1120,7 @@ def test_the_destination_hint_escapes_the_from() -> None:
     """A From with markup characters is escaped in the hint."""
     found = edited(
         options=OPTIONS,
-        draft=PinDraft(stop='S', kind='train', to='D1'),
+        draft=PinDraft(stop='S', kind='metro', to='D1'),
         modes=ROUTED,
     )
     text = editor_form(

@@ -458,7 +458,9 @@ class PinsPages:
         dict[str, RouteColour]
             Colours by route name.
         """
-        return chip_colours(seen=self._pins(), options=self.options)
+        return chip_colours(
+            seen=self._pins(), options=self.options, modes=self.modes,
+        )
 
     async def _sheet(self, request: web.Request) -> web.Response:
         """

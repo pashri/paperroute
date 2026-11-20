@@ -91,7 +91,7 @@ SYDNEY_MODES: Final[tuple[ModeSpec, ...]] = (
     ModeSpec(
         id=SydneyMode.TRAIN, label='Train', letter='T', chip='#f99d1c',
         by_line=True, named_alerts=True, chip_text=DARK_TEXT,
-        stop_positions=True,
+        stop_positions=True, end_points=True,
     ),
     ModeSpec(
         id=SydneyMode.METRO, label='Metro', letter='M', chip='#168388',

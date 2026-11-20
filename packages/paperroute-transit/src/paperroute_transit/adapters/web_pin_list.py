@@ -1,7 +1,7 @@
 """Draw the list of pins on the Pins page."""
 
 import html
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from typing import Final
 
 from paperroute_transit.adapters.route_chips import (
@@ -10,7 +10,7 @@ from paperroute_transit.adapters.route_chips import (
     named_routes,
 )
 from paperroute_transit.core.model import Pin, pin_ref, ticked_ways
-from paperroute_transit.core.modes import ModeSpec, line_badge
+from paperroute_transit.core.modes import ModeSpec, end_point_modes, line_badge
 from paperroute_transit.core.route_colours import RouteColour
 from paperroute_transit.observers import PinsSeen
 
@@ -60,7 +60,7 @@ def pin_label(*, pin: Pin) -> str:
     return pin.nickname or pin.origin.name
 
 
-def pin_line(*, pin: Pin) -> str:
+def pin_line(*, pin: Pin, end_points: Collection[str]) -> str:
     """
     Describe where a pin goes.
 
@@ -68,6 +68,8 @@ def pin_line(*, pin: Pin) -> str:
     ----------
     pin : Pin
         The pin.
+    end_points : Collection[str]
+        Ids of the modes chosen by end points.
 
     Returns
     -------
@@ -81,7 +83,10 @@ def pin_line(*, pin: Pin) -> str:
     line = pin.origin.name
     if pin.destination is not None:
         line += f' → {pin.destination.name}'
-    routes = tuple(line_badge(value=r) for r in named_routes(pin=pin))
+    routes = tuple(
+        line_badge(value=r)
+        for r in named_routes(pin=pin, end_points=end_points)
+    )
     boards = dict.fromkeys(
         change.board.name
         for way in ticked_ways(pin=pin)
@@ -154,7 +159,9 @@ def pin_item(
         editor='/pins/edit' if pin.destination is None else '/pins/ways',
         chip=chip_html(pin=pin, colour=colour, modes=modes),
         label=html.escape(pin_label(pin=pin)),
-        line=html.escape(pin_line(pin=pin)),
+        line=html.escape(
+            pin_line(pin=pin, end_points=end_point_modes(modes=modes)),
+        ),
         trip='' if pin.destination is None else ' class="trip"',
         flags=flags,
         up=move_form(pin=pin, steps=-1),
@@ -191,7 +198,12 @@ def pins_list(
         pin_item(
             pin=pin,
             shown=index == seen.shown,
-            colour=colours.get(chip_route(pin=pin) or ''),
+            colour=colours.get(
+                chip_route(
+                    pin=pin, end_points=end_point_modes(modes=modes),
+                )
+                or '',
+            ),
             modes=modes,
         )
         for index, pin in enumerate(seen.pins)

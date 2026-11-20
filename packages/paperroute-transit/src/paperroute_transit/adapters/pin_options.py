@@ -21,14 +21,18 @@ from paperroute_transit.adapters.network_db import (
 from paperroute_transit.adapters.network_lines import Row
 from paperroute_transit.adapters.timetable_db import to_point
 from paperroute_transit.build.catalogue import route_order
-from paperroute_transit.core.chooser import UNPICKED, Choice, focusable
+from paperroute_transit.core.chooser import (
+    UNPICKED,
+    Choice,
+    focusable,
+    pin_value,
+)
 from paperroute_transit.core.geo import Projection, to_lonlat
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.modes import (
     line_key,
     line_value,
     named_line_modes,
-    pin_value,
     skippable_modes,
 )
 from paperroute_transit.core.pin_choices import (

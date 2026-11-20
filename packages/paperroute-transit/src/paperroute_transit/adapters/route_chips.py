@@ -1,11 +1,16 @@
 """Route chips on the Pins list, and the sheet of their colours."""
 
 import html
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from typing import Final
 
-from paperroute_transit.core.model import Pin
-from paperroute_transit.core.modes import ModeSpec, line_badge, spec_of
+from paperroute_transit.core.model import Pin, pin_routes
+from paperroute_transit.core.modes import (
+    ModeSpec,
+    end_point_modes,
+    line_badge,
+    spec_of,
+)
 from paperroute_transit.core.route_colours import RouteColour
 from paperroute_transit.observers import PinsSeen
 from paperroute_transit.ports import PinOptions
@@ -20,7 +25,9 @@ RULE: Final[str] = (
 )
 
 
-def named_routes(*, pin: Pin) -> tuple[str, ...]:
+def named_routes(
+    *, pin: Pin, end_points: Collection[str],
+) -> tuple[str, ...]:
     """
     List the routes a pin's name and chip may claim.
 
@@ -31,6 +38,8 @@ def named_routes(*, pin: Pin) -> tuple[str, ...]:
     ----------
     pin : Pin
         The pin.
+    end_points : Collection[str]
+        Ids of the modes chosen by end points.
 
     Returns
     -------
@@ -39,10 +48,12 @@ def named_routes(*, pin: Pin) -> tuple[str, ...]:
     """
     if pin.only or pin.destination is None:
         return pin.only
-    return pin.routes
+    return pin_routes(pin=pin, end_points=end_points)
 
 
-def chip_route(*, pin: Pin) -> str | None:
+def chip_route(
+    *, pin: Pin, end_points: Collection[str],
+) -> str | None:
     """
     Pick the route a pin's chip names.
 
@@ -50,6 +61,8 @@ def chip_route(*, pin: Pin) -> str | None:
     ----------
     pin : Pin
         The pin.
+    end_points : Collection[str]
+        Ids of the modes chosen by end points.
 
     Returns
     -------
@@ -57,7 +70,10 @@ def chip_route(*, pin: Pin) -> str | None:
         The badge of the first of `named_routes`; None when there are
         none.
     """
-    route = next(iter(named_routes(pin=pin)), None)
+    route = next(
+        iter(named_routes(pin=pin, end_points=end_points)),
+        None,
+    )
     return None if route is None else line_badge(value=route)
 
 
@@ -81,7 +97,7 @@ def chip_html(
     str
         A span hidden from screen readers, its text escaped.
     """
-    route = chip_route(pin=pin)
+    route = chip_route(pin=pin, end_points=end_point_modes(modes=modes))
     spec = spec_of(modes=modes, mode=pin.kind)
     letter = None if spec is None else spec.letter
     kind = ANY_KIND if pin.kind is None else pin.kind.replace('_', '-')
@@ -94,7 +110,10 @@ def chip_html(
 
 
 def chip_colours(
-    *, seen: PinsSeen | None, options: PinOptions | None,
+    *,
+    seen: PinsSeen | None,
+    options: PinOptions | None,
+    modes: Sequence[ModeSpec],
 ) -> dict[str, RouteColour]:
     """
     Read the colours of the pins' chip routes.
@@ -105,6 +124,8 @@ def chip_colours(
         The pins the app reported, or None before the first report.
     options : PinOptions | None
         The timetable's choices, or None without a timetable.
+    modes : Sequence[ModeSpec]
+        The city's modes.
 
     Returns
     -------
@@ -113,7 +134,8 @@ def chip_colours(
     """
     if seen is None or options is None:
         return {}
-    names = {chip_route(pin=pin) for pin in seen.pins}
+    ends = end_point_modes(modes=modes)
+    names = {chip_route(pin=pin, end_points=ends) for pin in seen.pins}
     return options.route_colours(
         names={name for name in names if name is not None},
     )

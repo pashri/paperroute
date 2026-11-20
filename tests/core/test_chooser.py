@@ -19,6 +19,7 @@ from paperroute_transit.core.chooser import (
     kind_specs,
     opened,
     path_to,
+    pin_value,
     pressed,
     turned,
     with_column,
@@ -27,7 +28,6 @@ from paperroute_transit.core.chooser import (
 from paperroute_transit.core.chooser_station import knob_pressed
 from paperroute_transit.core.chooser_view import build_chooser_view
 from paperroute_transit.core.model import Pin
-from paperroute_transit.core.modes import pin_value
 from paperroute_transit.core.reach import RowKind, StripKey
 from tests.core.chooser_walks import (
     BUS_606,

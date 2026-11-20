@@ -7,7 +7,7 @@ from typing import Final
 from multidict import MultiMapping
 
 from paperroute_transit.adapters.state_change import ALLOW_MAX, ALLOW_MIN
-from paperroute_transit.core.chooser import Choice
+from paperroute_transit.core.chooser import Choice, pin_value
 from paperroute_transit.core.connection_model import (
     default_allow,
     direct_leg,
@@ -22,11 +22,7 @@ from paperroute_transit.core.model import (
     Way,
     way_key,
 )
-from paperroute_transit.core.modes import (
-    ModeSpec,
-    destination_first_modes,
-    pin_value,
-)
+from paperroute_transit.core.modes import ModeSpec, end_point_modes
 from paperroute_transit.core.pin_choices import busiest_line
 from paperroute_transit.ports import PinOptions
 
@@ -352,7 +348,7 @@ def strip_routes(
         busiest line between the pair, or none when no line links them.
         Empty for any other pin.
     """
-    if base is None or base.kind not in destination_first_modes(modes=modes):
+    if base is None or base.kind not in end_point_modes(modes=modes):
         return ()
     lines = options.lines_at(stop_id=origin.stop_id, kind=base.kind)
     if kept_routes(

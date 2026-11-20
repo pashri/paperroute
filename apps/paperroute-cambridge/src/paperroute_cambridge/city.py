@@ -91,7 +91,7 @@ CAMBRIDGE_MODES: Final[tuple[ModeSpec, ...]] = (
         chip=RAIL_BLUE,
         by_line=True,
         named_lines=True,
-        destination_first=True,
+        end_points=True,
         platform_notes=True,
     ),
 )

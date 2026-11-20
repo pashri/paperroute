@@ -10,6 +10,7 @@ from paperroute_cambridge.build.bods_sources import CAMBRIDGE_SOURCES
 from paperroute_cambridge.city import (
     CAMBRIDGE,
     DRUMMER_STREET,
+    CambridgeMode,
     classify_cambridge,
     merge_cambridge,
 )
@@ -17,7 +18,11 @@ from paperroute_device.core.device_settings import Window
 from paperroute_transit.core.city import MergeReport, Nouns
 from paperroute_transit.core.map_places import StationSource
 from paperroute_transit.core.model import Pin
-from paperroute_transit.core.modes import RouteClass, mode_problems
+from paperroute_transit.core.modes import (
+    RouteClass,
+    end_point_modes,
+    mode_problems,
+)
 from paperroute_transit.core.positions import ParkedAge
 from paperroute_transit.core.saved import MapFraming, default_settings
 from tests.build.timetable_rows import (
@@ -36,6 +41,11 @@ def test_cambridge_maps_start_framed_on_the_approach() -> None:
     """Cambridge's map framing starts as Approach."""
     settings = default_settings(city=CAMBRIDGE)
     assert settings.board.map_framing is MapFraming.APPROACH
+
+
+def test_cambridge_trains_take_end_points() -> None:
+    """Cambridge's train, and nothing else, takes end points."""
+    assert end_point_modes(modes=CAMBRIDGE.modes) == {CambridgeMode.TRAIN}
 
 
 def test_city_has_the_spec_values() -> None:

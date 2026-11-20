@@ -4,9 +4,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from paperroute_transit.core.chooser import Choice, kind_specs
+from paperroute_transit.core.chooser import Choice, kind_specs, pin_value
 from paperroute_transit.core.model import Pin, StopPlace
-from paperroute_transit.core.modes import ModeSpec, pin_value
+from paperroute_transit.core.modes import ModeSpec
 
 NICKNAME_MAX: Final[int] = 24
 

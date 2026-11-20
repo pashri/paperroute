@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Final
 
 from paperroute_transit.core.model import Departure, Pin, StopPlace
-from paperroute_transit.core.modes import ModeSpec, pin_value, spec_of
+from paperroute_transit.core.modes import ModeSpec, spec_of
 from paperroute_transit.core.reach import Reach, RowKind, StripKey
 from paperroute_transit.core.strip_follow import origin_of
 from paperroute_transit.core.strip_model import ALL_TAG
@@ -422,6 +422,23 @@ def previewed(
         return trimmed, None
     path = path_to(chooser=trimmed, index=chooser.focus)
     return replace(trimmed, waiting=path), ColumnRequest(path=path)
+
+
+def pin_value(*, choice: Choice) -> str:
+    """
+    What a pin stores for a chosen line or route.
+
+    Parameters
+    ----------
+    choice : Choice
+        The chosen line or route.
+
+    Returns
+    -------
+    str
+        The choice's value, else its badge.
+    """
+    return choice.value or choice.badge
 
 
 def kind_specs(*, modes: Sequence[ModeSpec]) -> tuple[ModeSpec, ...]:

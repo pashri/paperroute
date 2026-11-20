@@ -26,7 +26,7 @@ def test_city_under_test_is_sydney() -> None:
 def test_testkit_values_are_sydney_ones() -> None:
     """The test kit's times and modes come from Sydney."""
     assert START.tzinfo is SYDNEY.zone
-    assert TRAIN.kind == line_mode() == SydneyMode.TRAIN
+    assert TRAIN.kind == line_mode() == SydneyMode.METRO
     assert street_mode() == SydneyMode.BUS
 
 

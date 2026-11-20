@@ -674,6 +674,17 @@ def test_between_names_from_a_platform() -> None:
     ) == {'B', 'C'}
 
 
+def test_alerts_ignore_a_train_pins_routes() -> None:
+    """A train pin's stored routes give the facts of one with none."""
+    pin = replace(PARRAMATTA_CENTRAL, kind=SydneyMode.TRAIN)
+    old = replace(pin, routes=('T9',))
+    assert pin_facts(
+        pin=old, departures=[], between=frozenset(), city=SYDNEY,
+    ) == pin_facts(
+        pin=pin, departures=[], between=frozenset(), city=SYDNEY,
+    )
+
+
 def test_pin_facts_name_pin_by_modes() -> None:
     """A pin of any kind is a name pin when every departure is rail."""
     pin = replace(PARRAMATTA_CENTRAL, kind=None)

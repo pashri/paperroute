@@ -141,6 +141,7 @@ from paperroute_transit.core.model import (
     same_place,
     shifted,
 )
+from paperroute_transit.core.modes import end_point_modes
 from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.places import shown, stops_to_match
 from paperroute_transit.core.quota import QUOTA_SAVE_EVERY, quota_only
@@ -228,6 +229,7 @@ from tests.core.chooser_walks import (
 )
 
 ALL_SOURCES: Final[frozenset[str]] = SYDNEY.feeds.position_sources()
+ENDS: Final[frozenset[str]] = end_point_modes(modes=SYDNEY.modes)
 PIN = Pin(
     origin=place('2145615', name='Hollis St'),
     destination=place('215020', name='Parramatta'),
@@ -1243,7 +1245,10 @@ def strip_events(draw: st.DrawFn) -> Event:
     pin = draw(st.sampled_from(POOL))
     key = draw(
         st.sampled_from(
-            [strip_key(pin=pin), replace(strip_key(pin=pin), station='x')]
+            [
+                strip_key(pin=pin, end_points=ENDS),
+                replace(strip_key(pin=pin, end_points=ENDS), station='x'),
+            ]
         )
     )
     side = draw(st.sampled_from([0, 2, 20]))

@@ -8,7 +8,6 @@ from paperroute_transit.core.chooser_steps import (
     chooser_reach,
     picked_stop_view,
 )
-from paperroute_transit.core.places import shown
 from paperroute_transit.core.reach import Reach, RowKind
 from paperroute_transit.core.saved import LiveView
 from paperroute_transit.core.state_model import FoldContext, State
@@ -18,8 +17,8 @@ from paperroute_transit.core.strip_state import (
     STRIP_VIEWS,
     destination_id,
     picking_to,
+    shown_key,
     shown_reach,
-    strip_key,
 )
 from paperroute_transit.core.strip_view import first_row, home_of, window_of
 
@@ -49,7 +48,7 @@ def fold_context(*, state: State) -> FoldContext | None:
         return None
     return (
         state.view.value,
-        strip_key(pin=shown(state=state)),
+        shown_key(state=state),
         destination_id(state=state),
     )
 

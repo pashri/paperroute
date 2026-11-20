@@ -16,7 +16,8 @@ from paperroute_transit.core.alert_model import (
     Period,
 )
 from paperroute_transit.core.city import City
-from paperroute_transit.core.model import Departure, Pin
+from paperroute_transit.core.model import Departure, Pin, pin_routes
+from paperroute_transit.core.modes import end_point_modes
 from paperroute_transit.core.patterns import TripPattern
 
 BANNER_AHEAD: Final[timedelta] = timedelta(hours=24)
@@ -302,7 +303,12 @@ def pin_facts(
             for stop in known.get(end.stop_id, {end.stop_id})
         ),
         routes=(
-            frozenset((*pin.routes, *pin.only))
+            frozenset((
+                *pin_routes(
+                    pin=pin, end_points=end_point_modes(modes=city.modes),
+                ),
+                *pin.only,
+            ))
             | {item.route for item in departures}
         ),
         names=(

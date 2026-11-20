@@ -199,7 +199,7 @@ def test_strip_feeds_unchanged() -> None:
     state, _ = on_view(
         view=LiveView.STRIP, departures=(*bus_pin(), *trains()),
     )
-    assert map_feeds(state=state) == positions_of(sources={SydneyFeed.TRAIN})
+    assert map_feeds(state=state) == positions_of(sources={SydneyFeed.METRO})
 
 
 def test_positions_follow_rate() -> None:

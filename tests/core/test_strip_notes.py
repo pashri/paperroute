@@ -86,7 +86,7 @@ def with_run(
     """
     item = departure(
         departs=START + timedelta(minutes=minutes), trip_id='x',
-        route='T8', mode=SydneyFeed.TRAIN, kind=SydneyMode.TRAIN, then=T2_ON,
+        route='T8', mode=SydneyFeed.METRO, kind=SydneyMode.METRO, then=T2_ON,
     )
     run = pattern(
         trip_id='x', route='T8',

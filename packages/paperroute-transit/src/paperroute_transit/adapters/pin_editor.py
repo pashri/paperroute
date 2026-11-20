@@ -3,13 +3,9 @@
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
-from paperroute_transit.core.chooser import Choice
+from paperroute_transit.core.chooser import Choice, pin_value
 from paperroute_transit.core.model import Pin, StopPlace
-from paperroute_transit.core.modes import (
-    ModeSpec,
-    destination_first_modes,
-    pin_value,
-)
+from paperroute_transit.core.modes import ModeSpec, end_point_modes
 from paperroute_transit.core.pin_choices import (
     PinDraft,
     PinEditor,
@@ -459,7 +455,7 @@ def with_origin(
     kinds, kind, kind_kept = kind_step(
         options=options, stop=origin.stop_id, given=draft.kind,
     )
-    if kind is not None and kind in destination_first_modes(modes=modes):
+    if kind is not None and kind in end_point_modes(modes=modes):
         return reach_first(
             options=options, draft=draft, origin=origin, kind=kind,
             kinds=kinds,

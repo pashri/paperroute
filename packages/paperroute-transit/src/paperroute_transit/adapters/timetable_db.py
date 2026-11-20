@@ -64,10 +64,11 @@ from paperroute_transit.core.model import (
     Pin,
     ServiceSpan,
     StopPlace,
+    pin_routes,
     service_epoch,
     service_seconds,
 )
-from paperroute_transit.core.modes import line_modes
+from paperroute_transit.core.modes import end_point_modes, line_modes
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.reach import StripKey
 from paperroute_transit.core.strip_times import (
@@ -1031,7 +1032,10 @@ class SqliteTimetableRepository:
                 key=StripKey(
                     station=pin.origin.stop_id,
                     kind=pin.kind,
-                    routes=pin.routes,
+                    routes=pin_routes(
+                        pin=pin,
+                        end_points=end_point_modes(modes=self.city.modes),
+                    ),
                 ),
                 line_kinds=line_modes(modes=self.city.modes),
             ))

@@ -4,10 +4,7 @@ import re
 from collections import Counter
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Final, Protocol
-
-if TYPE_CHECKING:
-    from paperroute_transit.core.chooser import Choice
+from typing import Final, Protocol
 
 MODE_ID: Final[re.Pattern[str]] = re.compile(r'^[a-z][a-z0-9_]*$')
 HEX_COLOUR: Final[re.Pattern[str]] = re.compile(r'^#[0-9a-f]{6}$')
@@ -52,9 +49,9 @@ class ModeSpec:
     named_lines : bool
         True when one number heads several lines, told apart by their long
         names.
-    destination_first : bool
-        True when the phone editor asks for the Destination before the
-        line.
+    end_points : bool
+        True when a pin of it is a From and an optional Destination, with
+        no line.
     platform_notes : bool
         True when later rows note their platform.
     stop_positions : bool
@@ -77,7 +74,7 @@ class ModeSpec:
     skippable: bool = False
     chip_text: str = '#ffffff'
     named_lines: bool = False
-    destination_first: bool = False
+    end_points: bool = False
     platform_notes: bool = False
     stop_positions: bool = False
 
@@ -179,9 +176,9 @@ def named_line_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:
     return frozenset(spec.id for spec in modes if spec.named_lines)
 
 
-def destination_first_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:
+def end_point_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:
     """
-    List the modes whose editor asks for the Destination first.
+    List the modes whose pins are chosen by end points.
 
     Parameters
     ----------
@@ -191,9 +188,9 @@ def destination_first_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:
     Returns
     -------
     frozenset[str]
-        Ids of the specs with `destination_first` set.
+        Ids of the specs with `end_points` set.
     """
-    return frozenset(spec.id for spec in modes if spec.destination_first)
+    return frozenset(spec.id for spec in modes if spec.end_points)
 
 
 def line_key(
@@ -257,23 +254,6 @@ def line_badge(*, value: str) -> str:
         The text before the first colon, or all of it.
     """
     return value.split(':', 1)[0]
-
-
-def pin_value(*, choice: 'Choice') -> str:
-    """
-    What a pin stores for a chosen line or route.
-
-    Parameters
-    ----------
-    choice : Choice
-        The chosen line or route.
-
-    Returns
-    -------
-    str
-        The choice's value, else its badge.
-    """
-    return choice.value or choice.badge
 
 
 def tagged_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:

@@ -131,6 +131,8 @@ def draw_trip_legs(canvas: Canvas, *, base: MapBase, window: Window) -> None:
         return
     width = SOLID_WIDTH[base.mpp]
     for line in trip.second:
+        if len(line) < 2:
+            continue
         cased_line(
             canvas,
             points=on_map(points=line, base=base, window=window),

@@ -153,13 +153,14 @@ def cut_leg(
     Returns
     -------
     tuple[Line, ...]
-        The cut line, or nothing without a shape or a point.
+        The cut line, or nothing without a shape, a point or a span.
     """
     shape = shapes.get(departure.shape_id or '')
     start, end = ends[0].point, ends[1].point
     if shape is None or start is None or end is None:
         return ()
-    return (leg_line(shape=shape, start=start, end=end),)
+    line = leg_line(shape=shape, start=start, end=end)
+    return (line,) if line else ()
 
 
 def ride_lines(

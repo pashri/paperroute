@@ -26,12 +26,14 @@ from paperroute_testkit.core.factories import (
     vehicle,
 )
 from paperroute_testkit.core.kit_steps import step
+from paperroute_transit.adapters.tiles_db import NullTiles
 from paperroute_transit.core.chains import Chain, Legs, leg_key
 from paperroute_transit.core.connection_map import (
     build_connection_map,
     change_panes,
     change_points,
     connection_inputs,
+    cut_leg,
     leg_line,
 )
 from paperroute_transit.core.connection_model import way_legs
@@ -64,7 +66,8 @@ from paperroute_transit.core.rides import rides_of
 from paperroute_transit.core.saved import ConnectionMap, LiveView
 from paperroute_transit.core.state_views import current_view, live_stop_view
 from paperroute_transit.core.stop_view import empty_text
-from paperroute_transit.core.tiles import ZOOMS
+from paperroute_transit.core.tiles import ZOOMS, TileVariant
+from paperroute_transit.render.map_base import draw_map_base
 from tests.core.test_connection_screens import started
 from tests.core.test_connection_strip import CHAINS, STOP
 
@@ -145,6 +148,38 @@ def test_leg_line_cuts_between_stops() -> None:
     )
     line = leg_line(shape=shape, start=(200.0, 5.0), end=(700.0, -5.0))
     assert line == tuple((float(x), 0.0) for x in range(200, 701, 100))
+
+
+def test_cut_leg_drops_a_reversed_leg() -> None:
+    """Stops that project backwards along the shape cut no line."""
+    ride = rides_of(chain=SHAPED[0], pin=WORK)[1]
+    found = cut_leg(
+        departure=ride.item.departure,
+        ends=(ride.end, ride.start),
+        shapes={'s665': LEG_TWO},
+    )
+    assert found == ()
+
+
+def test_reversed_leg_two_draws_no_stroke() -> None:
+    """A reversed leg 2 builds and its base draws without a stroke."""
+    reversed_two = make_shape(
+        shape_id='s665', points=tuple(reversed(LEG_TWO.points)),
+    )
+    view = build_connection_map(
+        inputs=replace(
+            inputs_at(now=at(7, 35)),
+            shapes={'s606': LEG_ONE, 's665': reversed_two},
+        ),
+        pin=WORK,
+        chains=SHAPED,
+        mode=ConnectionMap.CHANGES,
+    )
+    assert view.base.trip is not None
+    assert view.base.trip.second == ()
+    draw_map_base(
+        base=view.base, tiles=NullTiles(), variant=TileVariant.GREY,
+    )
 
 
 def test_o2_fits_the_change() -> None:

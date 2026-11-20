@@ -172,6 +172,40 @@ def test_solid_wins_over_dashed(tmp_path: Path) -> None:
     assert np.all(grey[row, 280:500] == INK)
 
 
+def beside(
+    *, shape_id: str, start: float = 0.0, rise: float = 0.0,
+) -> MapLine:
+    """A dashed east-west line `rise` metres north of CENTRE's row."""
+    shape = make_shape(
+        shape_id=shape_id,
+        points=((CENTRE[0] - 50_000.0 + start, CENTRE[1] + rise),
+                (CENTRE[0] + 50_000.0, CENTRE[1] + rise)),
+    )
+    return MapLine(shape_id=shape_id, solid=None, shape=shape)
+
+
+def test_dash_phase_ignores_where_a_shared_road_starts(
+    tmp_path: Path,
+) -> None:
+    """A dashed line starting 7 px along a road adds no second dash set."""
+    one = beside(shape_id='one')
+    later = beside(shape_id='later', start=56.0)
+    assert np.array_equal(
+        drawn(tmp_path=tmp_path, mpp=8, lines=(one,)),
+        drawn(tmp_path=tmp_path, mpp=8, lines=(one, later)),
+    )
+
+
+def test_solid_hides_a_dashed_line_beside_it(tmp_path: Path) -> None:
+    """A dashed line 7 px from a solid one leaves the solid's pixels."""
+    solid = straight(solid=FULL)
+    dashed = beside(shape_id='dashed', rise=56.0)
+    assert np.array_equal(
+        drawn(tmp_path=tmp_path, mpp=8, lines=(solid,)),
+        drawn(tmp_path=tmp_path, mpp=8, lines=(solid, dashed)),
+    )
+
+
 @pytest.mark.parametrize(
     ('mpp', 'solid', 'radius'),
     [(3, True, 10), (8, True, 8.5), (45, True, 5),

@@ -5,9 +5,10 @@ import sys
 import zlib
 from array import array
 from bisect import bisect_left, bisect_right
+from collections import OrderedDict
 from collections.abc import Sequence
-from dataclasses import dataclass
-from functools import cached_property, lru_cache
+from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Final
 
 Point = tuple[float, float]
@@ -309,9 +310,86 @@ def nearest_from(
     return best[1], best[2]
 
 
-@lru_cache(maxsize=ALONG_CACHE)
+PlaceKey = tuple[str, int, float, Point]
+
+
+def shape_fingerprint(*, shape: Shape) -> tuple[str, int, float]:
+    """
+    Summarise a shape by its id, point count and length.
+
+    Parameters
+    ----------
+    shape : Shape
+        The shape to summarise.
+
+    Returns
+    -------
+    tuple[str, int, float]
+        The shape id, the number of points and the metres at the last
+        point.
+    """
+    return shape.shape_id, len(shape.points), shape.along[-1]
+
+
+@dataclass
+class AlongCache:
+    """
+    A bounded cache of placements keyed on a shape's fingerprint.
+
+    Attributes
+    ----------
+    size : int
+        The most placements held.
+    misses : int
+        Placements computed since the last clear.
+    held : OrderedDict[PlaceKey, float]
+        The placements, oldest first.
+    """
+
+    size: int
+    misses: int = 0
+    held: OrderedDict[PlaceKey, float] = field(default_factory=OrderedDict)
+
+    def clear(self) -> None:
+        """Forget every placement and reset the miss count."""
+        self.held.clear()
+        self.misses = 0
+
+    def place(self, *, shape: Shape, point: Point) -> float:
+        """
+        Measure where a point projects onto a shape, once per key.
+
+        Parameters
+        ----------
+        shape : Shape
+            The path to measure along.
+        point : Point
+            The point to place.
+
+        Returns
+        -------
+        float
+            Metres from the shape's start to its nearest position.
+        """
+        key = (*shape_fingerprint(shape=shape), point)
+        found = self.held.get(key)
+        if found is not None:
+            self.held.move_to_end(key)
+            return found
+        self.misses += 1
+        found = nearest_from(shape=shape, stop=point, first=0)[1]
+        self.held[key] = found
+        if len(self.held) > self.size:
+            self.held.popitem(last=False)
+        return found
+
+
+ALONG: Final[AlongCache] = AlongCache(size=ALONG_CACHE)
+
+
 def nearest_along(*, shape: Shape, point: Point) -> float:
-    """Measure where a point projects onto a shape.
+    """
+    Measure where a point projects onto a shape.
 
     Parameters
     ----------
@@ -323,9 +401,10 @@ def nearest_along(*, shape: Shape, point: Point) -> float:
     Returns
     -------
     float
-        Metres from the shape's start to its nearest position.
+        Metres from the shape's start to its nearest position. Shapes
+        with the same fingerprint share placements.
     """
-    return nearest_from(shape=shape, stop=point, first=0)[1]
+    return ALONG.place(shape=shape, point=point)
 
 
 def stop_distances(

@@ -12,7 +12,7 @@ from paperroute_testkit.core.factories import (
     departure,
     pattern,
 )
-from paperroute_transit.core.geo import Point, Shape, make_shape, nearest_along
+from paperroute_transit.core.geo import ALONG, Point, Shape, make_shape
 from paperroute_transit.core.map_line import MapLine
 from paperroute_transit.core.map_lines import (
     LineChoice,
@@ -477,11 +477,11 @@ def test_a_call_off_the_map_is_not_measured_against_the_shape() -> None:
     """A call off the map adds no `nearest_along` cache miss."""
     inputs = lines_inputs(departures=(RIDE,))
     far = (FROM_POINT[0] + 300 * 25.0, 0.0)
-    nearest_along.cache_clear()
+    ALONG.clear()
     assert not ringable(
         inputs=inputs, centre=FROM_POINT, shape=EAST, point=far,
     )
-    assert nearest_along.cache_info().misses == 0
+    assert ALONG.misses == 0
 
 
 def test_a_repeat_build_at_a_busy_stop_measures_nothing_again() -> None:
@@ -507,9 +507,9 @@ def test_a_repeat_build_at_a_busy_stop_measures_nothing_again() -> None:
             lines=(RIDE_LINE,),
             departures=(RIDE,),
         )
-        return nearest_along.cache_info().misses
+        return ALONG.misses
 
-    nearest_along.cache_clear()
+    ALONG.clear()
     first = build()
     assert first == 300
     assert build() == first

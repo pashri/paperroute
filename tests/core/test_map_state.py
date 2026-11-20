@@ -1,12 +1,17 @@
 """Tests for the Map view's slice of the state."""
 
+import gc
+import weakref
+
 import pytest
 
+from paperroute_transit.core.geo import ALONG, make_shape, nearest_along
 from paperroute_transit.core.map_fit import resting_zoom, stepped
 from paperroute_transit.core.map_state import (
     MapState,
     area_box,
     area_frame,
+    with_patterns,
     zoomed,
 )
 from paperroute_transit.core.map_view import (
@@ -14,6 +19,7 @@ from paperroute_transit.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
 )
+from paperroute_transit.core.messages import PatternsLoaded
 from paperroute_transit.core.tiles import ZOOMS
 
 FRAMED: MapState = MapState(centre=(1.0, 2.0), frame=((5.0, 6.0), 0))
@@ -113,3 +119,56 @@ def test_area_frame_rests_at_the_step() -> None:
     state = MapState(centre=(1.0, 2.0), step=-1)
     assert area_frame(map_state=state) == ((1.0, 2.0), DEFAULT_ZOOM - 1)
     assert area_frame(map_state=FRAMED) == ((5.0, 6.0), 0)
+
+
+def loaded(*, shape_id: str, length: float) -> PatternsLoaded:
+    """Give a PatternsLoaded holding one fresh straight shape."""
+    shape = make_shape(shape_id=shape_id, points=[(0.0, 0.0), (length, 0.0)])
+    return PatternsLoaded(
+        trip_ids=frozenset(), patterns={}, shapes={shape_id: shape},
+    )
+
+
+def test_with_patterns_keeps_the_held_shape_when_the_fingerprint_matches() -> None:
+    """An equal shape loaded again leaves the held object in place."""
+    state = with_patterns(
+        map_state=MapState(), event=loaded(shape_id='s', length=100.0),
+    )
+    held = state.shapes['s']
+    again = with_patterns(
+        map_state=state, event=loaded(shape_id='s', length=100.0),
+    )
+    assert again.shapes['s'] is held
+
+
+def test_with_patterns_replaces_a_shape_whose_length_changed() -> None:
+    """A shape of another length takes the held one's place."""
+    state = with_patterns(
+        map_state=MapState(), event=loaded(shape_id='s', length=100.0),
+    )
+    longer = with_patterns(
+        map_state=state, event=loaded(shape_id='s', length=200.0),
+    )
+    assert longer.shapes['s'].along[-1] == 200.0
+
+
+def test_distinct_equal_shapes_share_placements() -> None:
+    """A second equal shape adds no cache miss."""
+    points = [(0.0, 0.0), (500.0, 0.0)]
+    first = make_shape(shape_id='s', points=points)
+    second = make_shape(shape_id='s', points=points)
+    ALONG.clear()
+    nearest_along(shape=first, point=(100.0, 5.0))
+    nearest_along(shape=second, point=(100.0, 5.0))
+    assert ALONG.misses == 1
+
+
+def test_the_placement_cache_does_not_hold_a_shape() -> None:
+    """A shape dropped after being measured is freed."""
+    shape = make_shape(shape_id='s', points=[(0.0, 0.0), (500.0, 0.0)])
+    ALONG.clear()
+    nearest_along(shape=shape, point=(100.0, 5.0))
+    ref = weakref.ref(shape)
+    del shape
+    gc.collect()
+    assert ref() is None

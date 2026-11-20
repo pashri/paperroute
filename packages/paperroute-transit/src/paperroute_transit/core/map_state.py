@@ -5,7 +5,12 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Final
 
-from paperroute_transit.core.geo import MetreBox, Point, Shape
+from paperroute_transit.core.geo import (
+    MetreBox,
+    Point,
+    Shape,
+    shape_fingerprint,
+)
 from paperroute_transit.core.map_fit import FrameKey, resting_zoom
 from paperroute_transit.core.map_view import MAP_HEIGHT, MAP_WIDTH
 from paperroute_transit.core.messages import (
@@ -212,7 +217,7 @@ def with_patterns(*, map_state: MapState, event: PatternsLoaded) -> MapState:
     """
     return replace(
         map_state,
-        shapes={**map_state.shapes, **event.shapes},
+        shapes=held_shapes(held=map_state.shapes, loaded=event.shapes),
         patterns={
             **map_state.patterns,
             **dict.fromkeys(event.trip_ids),
@@ -220,6 +225,37 @@ def with_patterns(*, map_state: MapState, event: PatternsLoaded) -> MapState:
         },
         pending_patterns=map_state.pending_patterns - event.trip_ids,
     )
+
+
+def held_shapes(
+    *,
+    held: Mapping[str, Shape],
+    loaded: Mapping[str, Shape],
+) -> dict[str, Shape]:
+    """
+    Merge loaded shapes into the held ones, keeping equal held objects.
+
+    Parameters
+    ----------
+    held : Mapping[str, Shape]
+        The shapes already held.
+    loaded : Mapping[str, Shape]
+        The shapes just loaded.
+
+    Returns
+    -------
+    dict[str, Shape]
+        The held shapes with the loaded ones added; a held shape stays
+        when its fingerprint matches the loaded one with its id.
+    """
+    kept = {
+        shape_id: shape
+        for shape_id, shape in loaded.items()
+        if shape_id not in held
+        or shape_fingerprint(shape=held[shape_id])
+        != shape_fingerprint(shape=shape)
+    }
+    return {**held, **kept}
 
 
 def failed(

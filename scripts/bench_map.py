@@ -19,7 +19,7 @@ from paperroute_transit.app_effects import map_data
 from paperroute_transit.app_lines import loaded_day_lines
 from paperroute_transit.app_render import MapRenderer
 from paperroute_transit.core.city import City
-from paperroute_transit.core.geo import Point, nearest_along
+from paperroute_transit.core.geo import ALONG, Point
 from paperroute_transit.core.map_fit import (
     FrameKey,
     approach_points,
@@ -318,7 +318,7 @@ def cold_view(*, inputs: MapInputs, choice: LineChoice) -> MapView:
     MapView
         The view.
     """
-    nearest_along.cache_clear()
+    ALONG.clear()
     found_partings.cache_clear()
     return plain_map_view(inputs=inputs, choice=choice)
 

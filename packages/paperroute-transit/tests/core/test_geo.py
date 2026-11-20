@@ -4,7 +4,9 @@ import math
 
 from paperroute_transit.core.geo import (
     Projection,
+    cut,
     make_shape,
+    nearest_along,
     pack_shape,
     point_along,
     stop_distances,
@@ -17,6 +19,7 @@ from tests.projection import PROJECTION
 TOWN_HALL = (151.2070, -33.8732)
 PARRAMATTA = (151.00533, -33.81749)
 EARTH_RADIUS: float = 6_371_000.0  # metres
+SHORT = make_shape(shape_id='s', points=((0, 0), (100, 0), (200, 0)))
 
 
 def haversine(*, a: tuple[float, float], b: tuple[float, float]) -> float:
@@ -118,3 +121,22 @@ def test_pack_shape_round_trips_to_a_decimetre() -> None:
         assert math.hypot(want[0] - got[0], want[1] - got[1]) <= 0.1
     for want_m, got_m in zip(shape.along, back.along, strict=True):
         assert abs(want_m - got_m) <= 0.1
+
+
+def test_cut_takes_a_stretch_of_a_shape() -> None:
+    """A cut starts and ends at the asked distances."""
+    assert cut(shape=SHORT, start=50.0, end=150.0) == (
+        (50.0, 0.0), (100, 0), (150.0, 0.0),
+    )
+
+
+def test_cut_clamps_to_the_shape() -> None:
+    """Beyond the shape a cut is empty; a long cut stops at the end."""
+    assert cut(shape=SHORT, start=250.0, end=300.0) == ()
+    assert cut(shape=SHORT, start=150.0, end=150.0) == ()
+    assert cut(shape=SHORT, start=150.0, end=900.0)[-1] == (200.0, 0.0)
+
+
+def test_nearest_along_projects_onto_the_shape() -> None:
+    """A point beside the shape is measured where it projects."""
+    assert nearest_along(shape=SHORT, point=(130.0, 7.0)) == 130.0

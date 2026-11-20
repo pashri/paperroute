@@ -12,12 +12,7 @@ from paperroute_transit.core.connection_view import (
     chain_rows,
     no_pair_text,
 )
-from paperroute_transit.core.geo import (
-    Point,
-    Shape,
-    point_along,
-    stop_distances,
-)
+from paperroute_transit.core.geo import Point, Shape, cut, stop_distances
 from paperroute_transit.core.map_fit import (
     banner_room,
     bottom_room,
@@ -63,20 +58,10 @@ def leg_line(*, shape: Shape, start: Point, end: Point) -> Line:
     -------
     Line
         The point along the shape nearest `start`, the shape's points
-        between, then the point nearest `end`.
+        between, then the point nearest `end`; empty when they coincide.
     """
     distances = stop_distances(shape=shape, stops=(start, end))
-    first, last = distances[0], distances[-1]
-    inside = tuple(
-        point
-        for point, along in zip(shape.points, shape.along, strict=True)
-        if first < along < last
-    )
-    return (
-        point_along(shape=shape, distance=first),
-        *inside,
-        point_along(shape=shape, distance=last),
-    )
+    return cut(shape=shape, start=distances[0], end=distances[-1])
 
 
 def walk_ends(*, change: Change) -> tuple[Point, Point] | None:

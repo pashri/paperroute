@@ -49,7 +49,7 @@ from paperroute_transit.render.map_base import HALO
 from paperroute_transit.render.map_marks import (
     STOP_DISC,
     draw_stop,
-    ridden_ring,
+    ring_radius,
 )
 from paperroute_transit.render.markers import (
     CHANGE_HALF,
@@ -299,7 +299,7 @@ def stop_boxes(*, base: MapBase) -> list[Box]:
         A square one pixel wider than each stop's ring.
     """
     return [
-        square(at=stop, half=ridden_ring(mpp=base.mpp)[0] + 1)
+        square(at=stop, half=ring_radius(mpp=base.mpp, solid=True) + 1)
         for stop in map_pixels(base=base, points=base.stops)
     ]
 

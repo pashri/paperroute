@@ -9,7 +9,7 @@ from numpy.typing import NDArray
 
 from paperroute_device.render.canvas import INK, PAPER, Canvas, text_width
 from paperroute_transit.build.map_style import STREET_FACE, SUPERSAMPLE
-from paperroute_transit.core.geo import Point, Projection
+from paperroute_transit.core.geo import Point
 from paperroute_transit.core.map_view import (
     MAP_HEIGHT,
     MapBase,
@@ -34,8 +34,8 @@ from paperroute_transit.render.map_labels import (
     draw_place_knockouts,
     label_query,
 )
+from paperroute_transit.render.map_lines import draw_lines, route_pixels
 from paperroute_transit.render.map_marks import (
-    ROUTE_STYLE,
     Window,
     draw_ridden_stops,
     draw_stop,
@@ -43,7 +43,6 @@ from paperroute_transit.render.map_marks import (
 from paperroute_transit.render.tile_codec import THRESHOLD, diffuse, quantise4
 from paperroute_transit.render.trip_marks import draw_trip_ends, draw_trip_legs
 
-BEAD_DASH: Final[tuple[float, float]] = (2.0, 7.0)
 HALO: Final[int] = 2
 MATCH_POINTS: Final[int] = 9
 MATCH_NEEDED: Final[int] = 6
@@ -182,55 +181,6 @@ def compose_tiles(
     )
 
 
-def route_pixels(
-    *,
-    lines: Sequence[Sequence[Point]],
-    centre: Point,
-    mpp: int,
-    width: int,
-    projection: Projection,
-) -> list[NDArray[np.float64]]:
-    """
-    Convert route lines to map pixels.
-
-    Parameters
-    ----------
-    lines : Sequence[Sequence[Point]]
-        Route lines in metres.
-    centre : Point
-        The map centre in metres.
-    mpp : int
-        Metres per pixel.
-    width : int
-        Map width in pixels.
-    projection : Projection
-        The projection whose pixel grid the map sits on.
-
-    Returns
-    -------
-    list[NDArray[np.float64]]
-        One n by 2 array per line; lines of fewer than two points are
-        dropped.
-    """
-    return [
-        np.array(
-            [
-                screen_point(
-                    centre=centre,
-                    mpp=mpp,
-                    point=point,
-                    projection=projection,
-                    width=width,
-                )
-                for point in line
-            ],
-            dtype=np.float64,
-        )
-        for line in lines
-        if len(line) >= 2
-    ]
-
-
 def segments(
     *,
     routes: Sequence[NDArray[np.float64]],
@@ -326,49 +276,6 @@ def on_route(
     turn = np.abs((direction - label.angle + 90.0) % 180.0 - 90.0)
     matched = (gap <= MATCH_REACH) & (turn <= MATCH_TURN)
     return int(np.count_nonzero(matched)) >= MATCH_NEEDED
-
-
-def as_points(*, line: NDArray[np.float64]) -> list[Point]:
-    """
-    Turn an n by 2 array into canvas points.
-
-    Parameters
-    ----------
-    line : NDArray[np.float64]
-        Polyline.
-
-    Returns
-    -------
-    list[Point]
-        The vertices.
-    """
-    return [(float(x), float(y)) for x, y in line]
-
-
-def draw_route(
-    canvas: Canvas,
-    *,
-    routes: Sequence[NDArray[np.float64]],
-    mpp: int,
-) -> None:
-    """
-    Stroke the route in ink, beaded with paper dashes where styled.
-
-    Parameters
-    ----------
-    canvas : Canvas
-        Target.
-    routes : Sequence[NDArray[np.float64]]
-        Polylines in map pixels.
-    mpp : int
-        Metres per pixel.
-    """
-    outer, bead = ROUTE_STYLE[mpp]
-    for line in routes:
-        points = as_points(line=line)
-        canvas.line(points=points, width=outer, grey=INK)
-        if bead is not None:
-            canvas.line(points=points, width=bead, grey=PAPER, dash=BEAD_DASH)
 
 
 def draw_route_names(
@@ -487,16 +394,10 @@ def draw_line_and_names(
     list[StreetLabel]
         The labels redrawn over the line.
     """
-    routes = route_pixels(
-        lines=base.route,
-        centre=centre,
-        mpp=base.mpp,
-        width=base.width,
-        projection=base.projection,
-    )
-    draw_route(canvas, routes=routes, mpp=base.mpp)
+    drawn = draw_lines(canvas, base=base)
+    legs = () if base.trip is None else base.trip.second
     second = route_pixels(
-        lines=() if base.trip is None else base.trip.second,
+        lines=[np.asarray(line, dtype=np.float64) for line in legs],
         centre=centre,
         mpp=base.mpp,
         width=base.width,
@@ -510,7 +411,7 @@ def draw_line_and_names(
     return draw_route_names(
         canvas,
         labels=labels,
-        routes=[*routes, *second],
+        routes=[*drawn, *second],
         offset=window,
     )
 

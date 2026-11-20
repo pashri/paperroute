@@ -90,7 +90,7 @@ def test_route_stays_whole_through_a_station_name(tmp_path: Path) -> None:
     stroke = (slice(row - 5, row + 5), slice(x - 40, x + 41))
     assert (named[stroke] == plain[stroke]).all()
     assert (named[stroke] == INK).mean() > 0.5
-    outside = (slice(row - 9, row - 5), slice(x - 40, x + 41))
+    outside = (slice(row + 14, row + 26), slice(x - 40, x + 41))
     assert (named[outside] == INK).any()
     assert (plain[outside] == PAPER).all()
 

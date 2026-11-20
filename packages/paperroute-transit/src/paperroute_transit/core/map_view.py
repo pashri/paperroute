@@ -8,6 +8,7 @@ from typing import Final
 
 from paperroute_transit.core.connection_view import PairRow
 from paperroute_transit.core.geo import Point, Projection, Shape
+from paperroute_transit.core.map_line import MapLine
 from paperroute_transit.core.model import Departure
 from paperroute_transit.core.patterns import TripPattern, timetable_point
 from paperroute_transit.core.positions import (
@@ -80,7 +81,12 @@ class MapBase:
         The From, To and a connection's other marks, or None for a plain
         pin with no From point.
     stops : tuple[Point, ...]
-        The stops the drawn departures are ridden between, each once.
+        The stops the drawn departures are ridden between, each once;
+        rings on solid lines.
+    lines : tuple[MapLine, ...]
+        The route lines, each solid over a stretch and dashed elsewhere.
+    dashed_stops : tuple[Point, ...]
+        Rings on dashed lines.
     """
 
     centre: Point | None
@@ -90,6 +96,8 @@ class MapBase:
     width: int = MAP_WIDTH
     trip: TripMarks | None = None
     stops: tuple[Point, ...] = ()
+    lines: tuple[MapLine, ...] = ()
+    dashed_stops: tuple[Point, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -8,7 +8,7 @@ from paperroute_device.render.frame import HEADER
 from paperroute_transit.core.geo import Point
 from paperroute_transit.core.map_view import MapBase, screen_point
 from paperroute_transit.core.tiles import to_pixels
-from paperroute_transit.render.map_marks import ROUTE_STYLE, Window, draw_stop
+from paperroute_transit.render.map_marks import SOLID_WIDTH, Window, draw_stop
 
 CASING: Final[int] = 4  # extra paper width under leg 2
 LEG_DASH: Final[tuple[float, float]] = (12.0, 7.0)
@@ -129,7 +129,7 @@ def draw_trip_legs(canvas: Canvas, *, base: MapBase, window: Window) -> None:
     trip = base.trip
     if trip is None:
         return
-    width = ROUTE_STYLE[base.mpp][0]
+    width = SOLID_WIDTH[base.mpp]
     for line in trip.second:
         cased_line(
             canvas,

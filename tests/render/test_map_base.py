@@ -62,7 +62,6 @@ from paperroute_transit.render.map_base import (
     window_of,
 )
 from paperroute_transit.render.map_corners import BOX_FACE
-from paperroute_transit.render.map_marks import ROUTE_STYLE
 from paperroute_transit.render.tile_codec import (
     diffuse,
     pack_bits,
@@ -363,19 +362,6 @@ def test_route_line_is_ink_through_the_centre(tmp_path: Path) -> None:
     assert np.all(grey[row - 20, 20:240] == PAPER)
 
 
-def test_route_wears_paper_beads_at_street_zooms(tmp_path: Path) -> None:
-    """At 8 m/px the stroke's middle row holds paper beads."""
-    with closing(build(out=tmp_path / 'tiles.db')) as tiles:
-        grey = draw_map_base(
-            base=base(route=across(half=5000.0)),
-            tiles=tiles,
-            variant=TileVariant.GREY,
-        )
-    middle = grey[centre_row(), 300:500]
-    assert np.count_nonzero(middle == PAPER) > 0
-    assert np.count_nonzero(middle == INK) > 0
-
-
 def test_missing_shape_draws_no_line(tmp_path: Path) -> None:
     """No route, or a one-point route, draws nothing and doesn't raise."""
     lonely = ((CENTRE,),)
@@ -518,7 +504,7 @@ def test_names_over_the_line_are_redrawn(tmp_path: Path) -> None:
     assert np.count_nonzero(named[box] == PAPER) > np.count_nonzero(
         plain[box] == PAPER,
     )
-    assert set(np.unique(plain[box]).tolist()) == {INK, PAPER}
+    assert set(np.unique(plain[box]).tolist()) == {INK}
 
 
 def test_route_street_names_redrawn_in_ink(tmp_path: Path) -> None:
@@ -827,52 +813,6 @@ def test_no_tiles_hides_the_credit(tmp_path: Path) -> None:
     assert not np.array_equal(missing[corner], installed[corner])
 
 
-@pytest.mark.parametrize(
-    ('mpp', 'outer', 'bead'),
-    [
-        (3, 11, 5),
-        (5, 11, 5),
-        (8, 10, 4),
-        (14, 8, 2),
-        (25, 7, 0),
-        (45, 6, 0),
-    ],
-)
-def test_route_style_at_every_zoom(
-    tmp_path: Path,
-    mpp: int,
-    outer: int,
-    bead: int,
-) -> None:
-    """The stroke is ``outer`` rows deep, with beads ``bead`` rows deep."""
-    with closing(build(out=tmp_path / 'tiles.db')) as tiles:
-        grey = draw_map_base(
-            base=base(route=across(half=50_000.0), mpp=mpp),
-            tiles=tiles,
-            variant=TileVariant.GREY,
-        )
-    row = centre_row(mpp=mpp)
-    band = grey[row - 8 : row + 9, 20:240]
-    stroke = band[np.any(band == INK, axis=1)]
-    assert len(stroke) == outer
-    assert int(np.max(np.sum(stroke == PAPER, axis=0))) == bead
-
-
-def test_beads_are_2_px_dashes_7_px_apart(tmp_path: Path) -> None:
-    """Along the stroke's middle, paper runs of 2 alternate with ink 7."""
-    with closing(build(out=tmp_path / 'tiles.db')) as tiles:
-        grey = draw_map_base(
-            base=base(route=across(half=5000.0)),
-            tiles=tiles,
-            variant=TileVariant.GREY,
-        )
-    middle = pattern(values=grey[centre_row(), 20:240])
-    runs = re.findall(r'#+|\.+', middle)
-    inner = runs[1:-1]
-    assert {len(run) for run in inner if run[0] == '.'} == {2}
-    assert {len(run) for run in inner if run[0] == '#'} == {7}
-
-
 def horizontal(
     *,
     first: float,
@@ -1056,58 +996,6 @@ def test_scale_bar_is_2_km_at_14_m_per_px(tmp_path: Path) -> None:
     ink = np.flatnonzero(np.all(bar == INK, axis=0))
     assert ink.min() == 12
     assert 12 + 142 <= ink.max() + 1 <= 12 + 143
-
-
-def test_ridden_stops_are_rings(tmp_path: Path) -> None:
-    """A ridden stop is a 2 px ink ring round a paper centre."""
-    stop = (CENTRE[0] + 800.0, CENTRE[1] + 400.0)
-    with closing(build(out=tmp_path / 'tiles.db')) as tiles:
-        grey = draw_map_base(
-            base=replace(base(), stops=(stop,)),
-            tiles=tiles,
-            variant=TileVariant.GREY,
-        )
-    x, y = screen_point(
-        centre=CENTRE,
-        mpp=MPP,
-        point=stop,
-        projection=SYDNEY_PROJECTION,
-    )
-    column, row = math.floor(x), math.floor(y)
-    assert grey[row, column] == PAPER
-    assert grey[row, column + 3] == PAPER
-    assert grey[row, column + 6] == INK
-    assert grey[row, column - 6] == INK
-    assert grey[row + 6, column] == INK
-    assert grey[row, column + 9] == PAPER
-
-
-@pytest.mark.parametrize('mpp', [3, 5, 8])
-def test_ridden_stop_ring_shows_outside_the_route(
-    tmp_path: Path, mpp: int,
-) -> None:
-    """A stop on the bold route rings it 2 px outside the line."""
-    stop = (CENTRE[0] + 120.0 * mpp, CENTRE[1])
-    with closing(build(out=tmp_path / 'tiles.db')) as tiles:
-        grey = draw_map_base(
-            base=replace(
-                base(route=across(half=5000.0), mpp=mpp), stops=(stop,),
-            ),
-            tiles=tiles,
-            variant=TileVariant.GREY,
-        )
-    x, y = screen_point(
-        centre=CENTRE,
-        mpp=mpp,
-        point=stop,
-        projection=SYDNEY_PROJECTION,
-    )
-    column, row = math.floor(x), math.floor(y)
-    reach = math.floor(ROUTE_STYLE[mpp][0] / 2) + 1
-    assert grey[row - reach, column] == INK
-    assert grey[row + reach, column] == INK
-    assert grey[row, column] == PAPER
-    assert grey[row + 2, column] == PAPER
 
 
 def test_to_disc_is_12_px(tmp_path: Path) -> None:

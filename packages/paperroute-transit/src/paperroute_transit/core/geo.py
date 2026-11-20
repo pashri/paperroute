@@ -4,10 +4,10 @@ import math
 import sys
 import zlib
 from array import array
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 from collections.abc import Sequence
 from dataclasses import dataclass
-from functools import cached_property
+from functools import cached_property, lru_cache
 from typing import Final
 
 Point = tuple[float, float]
@@ -199,6 +199,36 @@ def point_along(*, shape: Shape, distance: float) -> Point:
     return (x0 + (x1 - x0) * fraction, y0 + (y1 - y0) * fraction)
 
 
+def cut(*, shape: Shape, start: float, end: float) -> tuple[Point, ...]:
+    """Take the stretch of a shape between two distances.
+
+    Parameters
+    ----------
+    shape : Shape
+        The path to cut.
+    start : float
+        Metres from the shape's start; clamped to the shape.
+    end : float
+        Metres from the shape's start; clamped to the shape.
+
+    Returns
+    -------
+    tuple[Point, ...]
+        The point at `start`, the shape's points strictly between, then
+        the point at `end`; empty when the stretch has no length.
+    """
+    first, last = max(0.0, start), min(shape.along[-1], end)
+    if last <= first:
+        return ()
+    low = bisect_right(shape.along, first)
+    high = bisect_left(shape.along, last)
+    return (
+        point_along(shape=shape, distance=first),
+        *shape.points[low:high],
+        point_along(shape=shape, distance=last),
+    )
+
+
 def project_onto_segment(
     *,
     point: Point,
@@ -265,6 +295,25 @@ def nearest_from(
         if gap < best[0]:
             best = (gap, index, shape.along[index] + offset)
     return best[1], best[2]
+
+
+@lru_cache(maxsize=256)
+def nearest_along(*, shape: Shape, point: Point) -> float:
+    """Measure where a point projects onto a shape.
+
+    Parameters
+    ----------
+    shape : Shape
+        The path to measure along.
+    point : Point
+        The point to place.
+
+    Returns
+    -------
+    float
+        Metres from the shape's start to its nearest position.
+    """
+    return nearest_from(shape=shape, stop=point, first=0)[1]
 
 
 def stop_distances(

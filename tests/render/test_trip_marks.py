@@ -160,3 +160,20 @@ def test_later_walks_dotted_with_change_square() -> None:
     assert not row.all()
     x, y = MIDDLE[0] + 100, MIDDLE[1] - 150
     assert (grey[y - 6:y + 7, x - 6:x + 7] == INK).all()
+
+
+def test_a_leg_line_of_one_point_is_skipped() -> None:
+    """A second ride's line with fewer than two points draws nothing."""
+    canvas = Canvas(width=MAP_WIDTH)
+    draw_trip_legs(
+        canvas,
+        base=MapBase(
+            centre=CENTRE,
+            mpp=MPP,
+            route=(),
+            trip=replace(TRIP, second=(((0.0, 0.0),), ()), walk=None),
+            projection=SYDNEY_PROJECTION,
+        ),
+        window=(0, 0),
+    )
+    assert np.all(canvas.grey() == PAPER)

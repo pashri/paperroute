@@ -110,6 +110,21 @@ def east_pattern(*, trip_id: str) -> TripPattern:
     )
 
 
+def north_pattern(*, trip_id: str) -> TripPattern:
+    """P and two stops north of it along NORTH."""
+    return replace(
+        pattern(
+            trip_id=trip_id, shape_id='north',
+            stops=calls(
+                stations='PAB', start=EIGHT, step=300,
+                points={'P': FROM_POINT, 'A': (0.0, 1000.0),
+                        'B': (0.0, 2000.0)},
+            ),
+        ),
+        along=(0.0, 1000.0, 2000.0),
+    )
+
+
 def lines_inputs(
     *, departures: tuple[Departure, ...], destination: bool = False,
     patterns: dict[str, TripPattern | None] | None = None,
@@ -218,10 +233,15 @@ def test_ride_starts_at_a_stand_under_a_station() -> None:
         departure=ride, pattern=parented, shape=EAST, station='P',
         ends=(FROM_POINT, None), zone=SYDNEY_ZONE,
     ) == (1000.0, 5000.0)
+    off_point = (400.0, 0.0)
+    assert ride_span(
+        departure=ride, pattern=parented, shape=EAST, station='P',
+        ends=(off_point, None), zone=SYDNEY_ZONE,
+    ) == (1000.0, 5000.0)
     assert ride_span(
         departure=ride, pattern=parented, shape=EAST, station='F1',
-        ends=(FROM_POINT, None), zone=SYDNEY_ZONE,
-    ) == (1000.0, 5000.0)
+        ends=(off_point, None), zone=SYDNEY_ZONE,
+    ) == (400.0, 5000.0)
 
 
 def test_ride_span_falls_back_to_the_nearest_point() -> None:
@@ -316,3 +336,106 @@ def test_a_hidden_school_run_keeps_its_vehicle() -> None:
     assert view.markers == plain_map_view(
         inputs=inputs, choice=CHOICE,
     ).markers
+
+
+def test_a_second_variant_of_a_drawn_line_gets_no_rings() -> None:
+    """With no Destination only the drawn shape's stops are ringed."""
+    east = bus(route='606', shape='east')
+    north = bus(route='606', shape='north', minutes=30)
+    inputs = lines_inputs(
+        departures=(east, north),
+        patterns={
+            east.trip_id: east_pattern(trip_id=east.trip_id),
+            north.trip_id: north_pattern(trip_id=north.trip_id),
+        },
+    )
+    view = plain_map_view(inputs=inputs, choice=CHOICE)
+    assert [line.shape_id for line in view.base.lines] == ['east']
+    rung = view.base.stops + view.base.dashed_stops
+    assert (0.0, 1000.0) not in rung
+    assert (0.0, 2000.0) not in rung
+    assert FROM_POINT in rung
+
+
+def test_an_extra_dropped_for_a_drawn_key_gets_no_rings() -> None:
+    """An extra of an already-drawn line adds no line and no rings."""
+    east = bus(route='606', shape='east')
+    extra = bus(route='606', shape='north', minutes=30)
+    inputs = lines_inputs(
+        departures=(east,),
+        patterns={
+            east.trip_id: east_pattern(trip_id=east.trip_id),
+            extra.trip_id: north_pattern(trip_id=extra.trip_id),
+        },
+    )
+    view = plain_map_view(
+        inputs=inputs, choice=replace(CHOICE, extras=(extra,)),
+    )
+    assert [line.shape_id for line in view.base.lines] == ['east']
+    rung = view.base.stops + view.base.dashed_stops
+    assert (0.0, 1000.0) not in rung
+
+
+def test_ride_ends_at_the_destination_call_among_equal_arrivals() -> None:
+    """Two calls share the arrival minute; the Destination's is taken."""
+    ride = bus(route='606', shape='east')
+    shared = replace(
+        pattern(
+            trip_id=ride.trip_id, shape_id='east',
+            stops=calls(
+                stations='PNTZ', start=EIGHT, step=300, points=STOPS,
+            ),
+        ),
+        along=(1000.0, 2000.0, 3000.0, 4000.0),
+    )
+    stops = list(shared.stops)
+    stops[1] = replace(stops[1], arrives=stops[2].arrives)
+    shared = replace(shared, stops=tuple(stops))
+    arrives = shared.stops[2].arrives
+    assert arrives == EIGHT + 600
+    assert ride_span(
+        departure=ride, pattern=shared, shape=EAST, station='P',
+        ends=(FROM_POINT, TO_POINT), zone=SYDNEY_ZONE,
+    ) == (1000.0, 3000.0)
+    assert ride_span(
+        departure=ride, pattern=shared, shape=EAST, station='P',
+        ends=(FROM_POINT, (2000.0, 0.0)), zone=SYDNEY_ZONE,
+    ) == (1000.0, 2000.0)
+
+
+def test_departures_on_one_drawn_shape_draw_one_line() -> None:
+    """Different shape ids that resolve to one pattern shape draw once."""
+    first = bus(route='606', shape='a')
+    second = bus(route='606', shape='b', minutes=30)
+    lines = plain_lines(
+        inputs=lines_inputs(
+            departures=(first, second),
+            destination=True,
+            patterns={
+                first.trip_id: east_pattern(trip_id=first.trip_id),
+                second.trip_id: east_pattern(trip_id=second.trip_id),
+            },
+        ),
+        choice=CHOICE,
+    )
+    assert [line.shape_id for line in lines] == ['east']
+
+
+def test_departures_with_no_shape_id_draw_their_own_shapes() -> None:
+    """Departures with no shape id still draw each pattern's shape."""
+    first = replace(bus(route='606', shape='x'), shape_id=None)
+    second = replace(
+        bus(route='610', shape='x', minutes=30), shape_id=None,
+    )
+    lines = plain_lines(
+        inputs=lines_inputs(
+            departures=(first, second),
+            destination=True,
+            patterns={
+                first.trip_id: east_pattern(trip_id=first.trip_id),
+                second.trip_id: north_pattern(trip_id=second.trip_id),
+            },
+        ),
+        choice=CHOICE,
+    )
+    assert [line.shape_id for line in lines] == ['east', 'north']

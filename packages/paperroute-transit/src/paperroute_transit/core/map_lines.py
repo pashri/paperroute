@@ -3,6 +3,7 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import tzinfo
+from math import dist
 
 from paperroute_transit.core.geo import Point, Shape, nearest_along
 from paperroute_transit.core.map_line import MapLine
@@ -115,6 +116,7 @@ def arrival_along(
     pattern: TripPattern,
     along: Sequence[float],
     first: int,
+    end: Point | None,
     zone: tzinfo,
 ) -> float | None:
     """
@@ -130,26 +132,37 @@ def arrival_along(
         Metres along the shape at each of the pattern's calls.
     first : int
         The index of the call it boards at.
+    end : Point | None
+        The Destination's point, if known.
     zone : tzinfo
         Local time zone.
 
     Returns
     -------
     float | None
-        Metres along at the first later call at its arrival time, or
+        Metres along at the later call at its arrival time nearest the
+        Destination, or the last such call with no Destination point;
         None when there is none.
     """
     arrives = service_seconds(
         day=departure.service_day, moment=departure.arrives, zone=zone,
     )
-    return next(
-        (
-            along[index]
-            for index in range(first + 1, len(pattern.stops))
-            if pattern.stops[index].arrives == arrives
-        ),
-        None,
-    )
+    matches = [
+        index
+        for index in range(first + 1, len(pattern.stops))
+        if pattern.stops[index].arrives == arrives
+    ]
+    if not matches:
+        return None
+    gaps = {
+        index: dist(point, end)
+        for index in matches
+        if end is not None
+        and (point := pattern.stops[index].point) is not None
+    }
+    if not gaps:
+        return along[matches[-1]]
+    return along[min(gaps, key=lambda index: gaps[index])]
 
 
 def ride_span(
@@ -216,10 +229,34 @@ def ride_span(
         pattern=pattern,
         along=pattern.along,
         first=index,
+        end=end,
         zone=zone,
     )
     stop = nearest_along(shape=shape, point=end) if found is None else found
     return pattern.along[index], stop
+
+
+def drawn_key(*, inputs: MapInputs, departure: Departure) -> str:
+    """
+    Give the key of the shape a departure draws.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs.
+    departure : Departure
+        The departure.
+
+    Returns
+    -------
+    str
+        The drawn shape's ID, or the trip's own ID when no shape is
+        loaded for it.
+    """
+    shape = line_shape(
+        departure=departure, patterns=inputs.patterns, shapes=inputs.shapes,
+    )
+    return departure.trip_id if shape is None else shape.shape_id
 
 
 def drawn_lines(
@@ -248,9 +285,14 @@ def drawn_lines(
         if found.facts.kind not in choice.hidden
     )
     if inputs.stop_view.destination is not None:
-        first = {found.shape_id: found for found in reversed(shown)}
+        first = {
+            drawn_key(inputs=inputs, departure=found): found
+            for found in reversed(shown)
+        }
         return tuple(
-            found for found in shown if first[found.shape_id] is found
+            found
+            for found in shown
+            if first[drawn_key(inputs=inputs, departure=found)] is found
         ), ()
     solid = first_per_line(departures=shown)
     keys = {map_line_key(departure=found) for found in solid}
@@ -336,11 +378,17 @@ def ring_points(
         pattern = inputs.patterns.get(found.trip_id)
         if pattern is None:
             continue
-        spans = [
-            line.solid
+        drawn = line_shape(
+            departure=found, patterns=inputs.patterns, shapes=inputs.shapes,
+        )
+        matching = [
+            line
             for line in lines
-            if line.shape_id == pattern.shape_id and line.solid is not None
+            if drawn is not None and line.shape_id == drawn.shape_id
         ]
+        if not matching:
+            continue
+        spans = [line.solid for line in matching if line.solid is not None]
         for index, stop in enumerate(pattern.stops):
             if stop.point is None or stop.passes or not visible(
                 at=screen_point(

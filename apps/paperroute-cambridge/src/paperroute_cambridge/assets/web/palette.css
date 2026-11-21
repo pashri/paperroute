@@ -96,7 +96,9 @@ h2 {
 
 body > nav {
   position: static;
+  min-height: 0;
   margin: 1rem;
+  padding-block: 0;
   border: 3px solid var(--line);
   background: var(--surface);
 }

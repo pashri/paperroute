@@ -213,3 +213,72 @@ def test_stop_distances_never_decrease_and_miss_no_more_than_today(
         assert total_miss(
             shape=shape, stops=stops, distances=placed,
         ) <= total_miss(shape=shape, stops=stops, distances=today) + 1e-9
+
+
+HAIRPIN: Final[Shape] = make_shape(
+    shape_id='hairpin',
+    points=[(0.0, 0.0), (1000.0, 0.0), (0.0, 8.0), (0.0, 500.0)],
+)
+SPUR: Final[Shape] = make_shape(
+    shape_id='spur',
+    points=[(0.0, 0.0), (300.0, 0.0), (0.0, 6.0), (0.0, 500.0)],
+)
+TAIL: Final[Shape] = make_shape(
+    shape_id='tail',
+    points=[(0.0, 500.0), (0.0, 6.0), (300.0, 0.0), (0.0, 0.0)],
+)
+PACKED_CORNER: Final[Shape] = Shape(
+    shape_id='packed-corner',
+    points=((0.0, 0.0), (100.0, 0.0), (100.0, 100.0)),
+    along=(0.0, 100.05, 200.05),
+)
+
+
+def test_passes_offers_both_legs_of_a_hairpin() -> None:
+    """A stop a metre nearer the way out still has a pass on the way back."""
+    found = passes(shape=HAIRPIN, stop=(500.0, 1.5), ceiling=math.inf)
+    assert [one.along for one in found] == pytest.approx(
+        [500.0, 1500.0], abs=0.01,
+    )
+    assert [one.gap for one in found] == pytest.approx([1.5, 2.5], abs=0.01)
+
+
+def test_stop_distances_serves_a_hairpin_stop_on_the_way_back() -> None:
+    """A call beside both legs after the tip lands on the way back."""
+    stops = [
+        (200.0, -2.0), (1003.0, 2.0), (500.0, 1.5), (100.0, 4.0),
+        (0.0, 300.0),
+    ]
+    assert stop_distances(shape=HAIRPIN, stops=stops) == pytest.approx(
+        (200.0, 1000.0, 1500.0, 1900.0, 2292.0), abs=0.1,
+    )
+
+
+def test_passes_keeps_the_first_vertex_of_a_spur() -> None:
+    """A line's first point is a pass when the line then moves away."""
+    found = passes(shape=SPUR, stop=(0.0, 3.2), ceiling=math.inf)
+    assert [one.along for one in found] == pytest.approx(
+        [0.0, 600.0], abs=0.01,
+    )
+
+
+def test_stop_distances_starts_a_spur_at_its_first_call() -> None:
+    """A trip that starts with an out-and-back keeps its first call there."""
+    stops = [(0.0, 3.2), (150.0, -1.0), (0.0, 400.0)]
+    assert stop_distances(shape=SPUR, stops=stops) == pytest.approx(
+        (0.0, 150.0, 994.06), abs=0.01,
+    )
+
+
+def test_passes_keeps_the_last_vertex_of_a_spur() -> None:
+    """A line's last point is a pass when the line came to it from afar."""
+    found = passes(shape=TAIL, stop=(0.0, 3.2), ceiling=math.inf)
+    assert [one.along for one in found] == pytest.approx(
+        [494.06, 1094.06], abs=0.01,
+    )
+
+
+def test_passes_skips_a_corner_the_next_segment_comes_nearer() -> None:
+    """A segment's end vertex is no pass when the next segment is nearer."""
+    found = passes(shape=PACKED_CORNER, stop=(110.0, 50.0), ceiling=math.inf)
+    assert [one.along for one in found] == pytest.approx([150.05])

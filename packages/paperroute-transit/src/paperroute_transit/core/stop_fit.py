@@ -2,7 +2,7 @@
 
 import math
 from bisect import bisect_left, bisect_right
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from itertools import groupby
 from typing import Final
@@ -18,6 +18,7 @@ from paperroute_transit.core.geo import (
 
 RADIUS: Final[float] = 100.0  # metres beyond a call's nearest pass
 CANDIDATES: Final[int] = 32  # passes kept per call
+AT_VERTEX: Final[float] = 1e-6  # metres from a vertex counted as at it
 ORDER_SLACK: Final[float] = 1.0  # metres a pass may lie behind the call before
 TIE: Final[float] = 0.1  # metres of total miss a fit must save
 MARGIN: Final[float] = 500.0  # metres above the cheapest fit a fit is kept
@@ -181,12 +182,47 @@ def scan(
     return best, seen
 
 
+def is_minimum(
+    *, shape: Shape, gaps: Mapping[int, float], index: int, at: float,
+) -> bool:
+    """Tell whether a segment's nearest point is a local minimum.
+
+    The nearest point of a segment is a local minimum of the stop's distance
+    to the line when it lies inside the segment. At a vertex it is one when
+    the segment across that vertex, if visited, comes no nearer.
+
+    Parameters
+    ----------
+    shape : Shape
+        The line.
+    gaps : Mapping[int, float]
+        Each visited segment's index and gap.
+    index : int
+        The segment.
+    at : float
+        Metres along the line of the segment's nearest point.
+
+    Returns
+    -------
+    bool
+        Whether the nearest point is a local minimum.
+    """
+    gap = gaps[index]
+    offset = at - shape.along[index]
+    if offset <= AT_VERTEX:
+        return gap <= gaps.get(index - 1, math.inf)
+    length = math.dist(shape.points[index], shape.points[index + 1])
+    if offset >= length - AT_VERTEX:
+        return gap <= gaps.get(index + 1, math.inf)
+    return True
+
+
 def passes(*, shape: Shape, stop: Point, ceiling: float) -> list[Pass]:
     """Find where a line runs near a stop.
 
-    A pass is a visited segment no farther than `RADIUS` beyond the nearest
-    and no farther than either visited neighbour. Only the `CANDIDATES`
-    nearest are kept.
+    A pass is a visited segment whose nearest point is a local minimum, no
+    farther than `RADIUS` beyond the nearest. Only the `CANDIDATES` nearest
+    are kept.
 
     Parameters
     ----------
@@ -209,8 +245,7 @@ def passes(*, shape: Shape, stop: Point, ceiling: float) -> list[Pass]:
         (gap, index, at)
         for index, gap, at in seen
         if gap <= best + RADIUS
-        and gap <= gaps.get(index - 1, math.inf)
-        and gap <= gaps.get(index + 1, math.inf)
+        and is_minimum(shape=shape, gaps=gaps, index=index, at=at)
     ]
     found.sort()
     return [

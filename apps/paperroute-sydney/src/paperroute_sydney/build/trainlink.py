@@ -415,8 +415,9 @@ def clone_cut(
         [(service, date) for date in sorted(dates)],
     )
     conn.executemany(
-        'INSERT INTO stop_times SELECT ?, seq, stop_id, arr, dep, pickup, '
-        'dropoff FROM stop_times WHERE trip_id = ? AND seq = ?',
+        'INSERT INTO stop_times (trip_id, seq, stop_id, arr, dep, pickup, '
+        'dropoff, along) SELECT ?, seq, stop_id, arr, dep, pickup, '
+        'dropoff, along FROM stop_times WHERE trip_id = ? AND seq = ?',
         [(copy, trip.trip_id, call.seq) for call in keep],
     )
     conn.execute(

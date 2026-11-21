@@ -1752,8 +1752,9 @@ def test_departures_at_the_same_time_sort_by_trip(
         "INSERT INTO trips SELECT 'zz', route_id, service_id, headsign, "
         'direction_id, block_id, agency_id, source, shape_id, service '
         "FROM trips WHERE trip_id = 'ew1';"
-        f"INSERT INTO stop_times VALUES ('zz', 1, 'C_1', {late}, {late}, 0, 0),"
-        f"('zz', 2, 'J_1', {late + 180}, {late + 180}, 0, 0);"
+        "INSERT INTO stop_times VALUES "
+        f"('zz', 1, 'C_1', {late}, {late}, 0, 0, NULL),"
+        f"('zz', 2, 'J_1', {late + 180}, {late + 180}, 0, 0, NULL);"
     )
     with closing(
         edited_network(network_db=network_db, tmp_path=tmp_path, script=script)

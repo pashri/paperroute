@@ -10,7 +10,7 @@ from typing import Final
 
 from paperroute_transit.core.geo import Point
 
-TIMETABLE_SCHEMA: Final[str] = '10'
+TIMETABLE_SCHEMA: Final[str] = '11'
 SOURCE_END: Final[str] = 'source_end:'  # meta key prefix, then the source
 SOURCE_DATE: Final[str] = 'source_date:'  # meta key prefix, then the source
 DAY_NAMES: Final[tuple[str, ...]] = (

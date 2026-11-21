@@ -3,6 +3,7 @@
 import logging
 import math
 import sqlite3
+from array import array
 from contextlib import closing
 from datetime import date
 from pathlib import Path
@@ -17,6 +18,7 @@ from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.shapes import (
     SIMPLIFY_M,
+    Run,
     load_shapes,
     shape_record,
     shape_runs,
@@ -155,8 +157,9 @@ def test_shape_runs_streams_only_wanted(tmp_path: Path) -> None:
     ])
     runs = list(shape_runs(archive=archive, wanted={'S1', 'S3'}))
     assert runs == [
-        ('S1', [(1, *ROUTE[0]), (2, *ROUTE[1]), (3, *ROUTE[2])]),
-        ('S3', [(1, *ROUTE[0]), (2, *ROUTE[1])]),
+        ('S1', [(1, *ROUTE[0], None), (2, *ROUTE[1], None),
+                (3, *ROUTE[2], None)]),
+        ('S3', [(1, *ROUTE[0], None), (2, *ROUTE[1], None)]),
     ]
 
 
@@ -173,7 +176,7 @@ def test_shape_runs_skips_a_repeated_run_with_warning(
     split: set[str] = set()
     with caplog.at_level(logging.WARNING):
         runs = list(shape_runs(archive=archive, wanted={'S1'}, split=split))
-    assert runs == [('S1', [(1, *ROUTE[0]), (2, *ROUTE[1])])]
+    assert runs == [('S1', [(1, *ROUTE[0], None), (2, *ROUTE[1], None)])]
     assert split == {'S1'}
     assert [record.getMessage() for record in caplog.records] == [
         'shape S1 not contiguous',
@@ -274,15 +277,60 @@ def lonlat(*, x: float, y: float) -> tuple[float, float]:
 
 def test_shape_record_widens_bounds_to_whole_decimetres() -> None:
     """Bounds hold points that round outward when packed."""
-    run = [(1, *lonlat(x=1000.04, y=2000.04)),
-           (2, *lonlat(x=1500.06, y=2500.06))]
-    shape_id, mode, west, south, east, north, blob = shape_record(
+    run: Run = [(1, *lonlat(x=1000.04, y=2000.04), None),
+                (2, *lonlat(x=1500.06, y=2500.06), None)]
+    (shape_id, mode, west, south, east, north, blob), feed = shape_record(
         shape_id='bundle:S1', mode=SydneyFeed.BUS, run=run,
         projection=SYDNEY_PROJECTION)
+    assert feed is None
     assert (shape_id, mode) == ('bundle:S1', 'bus')
     assert (west, south, east, north) == (1000.0, 2000.0, 1500.1, 2500.1)
     points = unpack_shape(shape_id=shape_id, blob=blob).points
     assert points == ((1000.0, 2000.0), (1500.1, 2500.1))
+
+
+def test_shape_runs_reads_the_feed_distance(tmp_path: Path) -> None:
+    """A point's distance is read; a blank one is None."""
+    archive = shapes_zip(path=tmp_path / 's.zip', rows=shape_rows(
+        shape_id='S1', points=ROUTE[:3], distances=['0', '', '7.5'],
+    ))
+    assert list(shape_runs(archive=archive, wanted={'S1'})) == [
+        ('S1', [(1, *ROUTE[0], 0.0), (2, *ROUTE[1], None),
+                (3, *ROUTE[2], 7.5)]),
+    ]
+
+
+def test_shape_record_keeps_the_feed_distance_of_kept_points() -> None:
+    """The dropped middle point's distance is dropped with it."""
+    run: Run = [
+        (1, *lonlat(x=1000.0, y=2000.0), 0.0),
+        (2, *lonlat(x=1500.0, y=2000.0), 5.0),
+        (3, *lonlat(x=2000.0, y=2000.0), 10.0),
+        (4, *lonlat(x=2000.0, y=2500.0), 15.0),
+    ]
+    _, feed = shape_record(shape_id='bundle:S1', mode=SydneyFeed.BUS,
+                           run=run, projection=SYDNEY_PROJECTION)
+    assert feed == array('d', [0.0, 10.0, 15.0]).tobytes()
+
+
+def test_load_shapes_keeps_feed_distances_of_whole_lines_only(
+    tmp_path: Path,
+) -> None:
+    """A line with a blank distance keeps its shape but no feed row."""
+    archive = shapes_zip(path=tmp_path / 's.zip', rows=[
+        *shape_rows(shape_id='S1', points=ROUTE[:3],
+                    distances=['0', '1', '2']),
+        *shape_rows(shape_id='S2', points=ROUTE[:3],
+                    distances=['0', '', '2']),
+    ])
+    with closing(sqlite3.connect(':memory:')) as conn:
+        create_schema(conn=conn)
+        load_shapes(conn=conn, source=Source(name='bundle', archive=archive),
+                    modes={'S1': SydneyFeed.BUS, 'S2': SydneyFeed.BUS},
+                    projection=SYDNEY_PROJECTION)
+        assert conn.execute(
+            'SELECT shape_id FROM temp.shape_feed ORDER BY shape_id',
+        ).fetchall() == [('bundle:S1',)]
 
 
 def test_shape_runs_without_shapes_member_yields_nothing(

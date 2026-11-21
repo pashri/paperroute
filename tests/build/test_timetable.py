@@ -26,10 +26,12 @@ from paperroute_transit.build.timetable import (
 from paperroute_transit.core.city import MergeReport, TimetableRules
 from tests.build.feeds import (
     DAILY,
+    MEASURED,
     build_db,
     bundle_rail_files,
     bus_feed,
     bus_files,
+    measured_bus_feed,
     shape_rows,
     shaped_bus_feed,
     stop_times,
@@ -259,7 +261,44 @@ def test_meta_records_schema_version(tmp_path: Path) -> None:
     assert query(db=db, sql="SELECT value FROM meta "
                             "WHERE key = 'schema_version'") == [
         (SCHEMA_VERSION,)]
-    assert SCHEMA_VERSION == '10'
+    assert SCHEMA_VERSION == '11'
+
+
+def test_stop_times_carry_metres_along_the_stored_line(
+    tmp_path: Path,
+) -> None:
+    """Each call stores the feed's distance as whole metres along S1."""
+    db = built(tmp_path=tmp_path, sources=[Source(
+        name='bundle', archive=measured_bus_feed(path=tmp_path / 'm.zip'),
+    )])
+    assert query(
+        db=db, sql='SELECT trip_id, seq, along FROM stop_times'
+                   ' ORDER BY trip_id, seq',
+    ) == [('bus-0803', 1, 0), ('bus-0803', 2, 5587),
+          ('bus-2510', 1, 0), ('bus-2510', 2, 5587)]
+
+
+def test_stop_times_without_feed_distances_store_null(
+    tmp_path: Path,
+) -> None:
+    """A feed without shape_dist_traveled stores no distance."""
+    feed = shaped_bus_feed(path=tmp_path / 'b.zip', points=MEASURED)
+    db = built(tmp_path=tmp_path,
+               sources=[Source(name='bundle', archive=feed)])
+    assert query(db=db, sql='SELECT along FROM stop_times') == [(None,)] * 4
+
+
+def test_a_feed_distance_far_from_its_stop_stores_null(
+    tmp_path: Path,
+) -> None:
+    """A call the feed puts at the corner, far from its stop, stores NULL."""
+    feed = measured_bus_feed(path=tmp_path / 'm.zip',
+                             stop_figures=('0', '2.79'))
+    db = built(tmp_path=tmp_path,
+               sources=[Source(name='bundle', archive=feed)])
+    assert query(
+        db=db, sql='SELECT along FROM stop_times ORDER BY trip_id, seq',
+    ) == [(0,), (None,), (0,), (None,)]
 
 
 def test_meta_records_origin(tmp_path: Path) -> None:
@@ -270,7 +309,7 @@ def test_meta_records_origin(tmp_path: Path) -> None:
         sql="SELECT key, value FROM meta"
             " WHERE key IN ('schema_version', 'origin') ORDER BY key",
     )
-    assert rows == [('origin', '151.2093,-33.8688'), ('schema_version', '10')]
+    assert rows == [('origin', '151.2093,-33.8688'), ('schema_version', '11')]
 
 
 def test_meta_records_each_source_end(tmp_path: Path) -> None:

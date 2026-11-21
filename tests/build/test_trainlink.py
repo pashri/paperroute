@@ -85,8 +85,8 @@ def add_trip(
             (station, station),
         )
         conn.execute(
-            'INSERT INTO stop_times VALUES (?, ?, ?, ?, ?, 0, 0)',
-            (trip_id, seq, station, arr, dep),
+            'INSERT INTO stop_times VALUES (?, ?, ?, ?, ?, 0, 0, ?)',
+            (trip_id, seq, station, arr, dep, seq * 1000),
         )
 
 
@@ -247,6 +247,19 @@ def test_cut_on_some_dates_makes_a_copy(conn: sqlite3.Connection) -> None:
     assert conn.execute(
         'SELECT service FROM trips WHERE trip_id = ?', (copy,),
     ).fetchall() == [(1,)]
+
+
+def test_a_copy_keeps_its_calls_distances(conn: sqlite3.Connection) -> None:
+    """A copy made on some dates keeps each kept call's distance."""
+    add_trip(conn=conn, trip_id='b1', route='b', calls=THROUGH,
+             dates=(DAY, NEXT))
+    add_trip(conn=conn, trip_id='n1', route='n', calls=THROUGH[:3])
+    trim_trainlink(conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK)
+    copy = next(trip for trip in trip_ids(conn=conn) if '~' in trip)
+    assert conn.execute(
+        'SELECT along FROM stop_times WHERE trip_id = ? ORDER BY seq',
+        (copy,),
+    ).fetchall() == [(2000,), (3000,)]
 
 
 def test_drop_on_some_dates_skips_those_dates(

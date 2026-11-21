@@ -370,7 +370,7 @@ def trainlink_db(
                 (station, station),
             )
             conn.execute(
-                'INSERT INTO stop_times VALUES (?, ?, ?, 0, 0, 0, 0)',
+                'INSERT INTO stop_times VALUES (?, ?, ?, 0, 0, 0, 0, NULL)',
                 (f't-{route_id}', seq, station),
             )
     return conn
@@ -538,7 +538,7 @@ def add_trip(
             (station, station),
         )
         conn.execute(
-            'INSERT INTO stop_times VALUES (?, ?, ?, ?, ?, 0, 0)',
+            'INSERT INTO stop_times VALUES (?, ?, ?, ?, ?, 0, 0, NULL)',
             (trip_id, seq, station, time, time),
         )
 

@@ -103,7 +103,7 @@ def loaded(
         trips,
     )
     conn.executemany(
-        'INSERT INTO stop_times VALUES (?, ?, ?, 0, 0, 0, 0)',
+        'INSERT INTO stop_times VALUES (?, ?, ?, 0, 0, 0, 0, NULL)',
         [
             (trip_id, seq, stop_id)
             for seq, (trip_id, stop_id) in enumerate(calls)

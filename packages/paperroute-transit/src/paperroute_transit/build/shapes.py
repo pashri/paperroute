@@ -16,6 +16,14 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
+from paperroute_transit.build.feed_along import (
+    FEED_COLUMN,
+    FEED_INSERT,
+    FEED_TABLE,
+    feed_figure,
+    kept_feed,
+    pack_feed,
+)
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.core.geo import (
     DECIMETRES,
@@ -38,14 +46,15 @@ COLUMNS: Final[tuple[str, ...]] = (
 
 logger = logging.getLogger(__name__)
 
-Run = list[tuple[int, float, float]]
+Run = list[tuple[int, float, float, float | None]]
 ShapeRow = tuple[str, str, float, float, float, float, bytes]
+ShapeRecord = tuple[ShapeRow, bytes | None]
 
 
 def shape_groups(
     *,
     archive: Path,
-) -> Iterator[tuple[str, Iterator[tuple[str, str, str]]]]:
+) -> Iterator[tuple[str, Iterator[tuple[str, ...]]]]:
     """
     Group the rows of shapes.txt by shape ID, as they come.
 
@@ -56,8 +65,9 @@ def shape_groups(
 
     Yields
     ------
-    tuple[str, Iterator[tuple[str, str, str]]]
-        A shape ID and its consecutive rows as (sequence, lon, lat) text.
+    tuple[str, Iterator[tuple[str, ...]]]
+        A shape ID and its consecutive rows as (sequence, lon, lat,
+        distance) text, the distance '' when the file has no such column.
         The rows can only be read until the next group is taken.
     """
     with zipfile.ZipFile(archive) as feed:
@@ -66,12 +76,19 @@ def shape_groups(
         with feed.open(MEMBER) as raw:
             reader = csv.reader(io.TextIOWrapper(raw, encoding='utf-8-sig'))
             header = next(reader, [])
-            pick = itemgetter(*(header.index(name) for name in COLUMNS[1:]))
+            named = COLUMNS[1:] + (
+                (FEED_COLUMN,) if FEED_COLUMN in header else ()
+            )
+            pick = itemgetter(*(header.index(name) for name in named))
             for shape_id, rows in groupby(
                 filter(None, reader),
                 key=itemgetter(header.index(COLUMNS[0])),
             ):
-                yield shape_id, map(pick, rows)
+                picked = map(pick, rows)
+                yield shape_id, (
+                    picked if FEED_COLUMN in header
+                    else ((*row, '') for row in picked)
+                )
 
 
 def noted_split(*, split: set[str], shape_id: str) -> None:
@@ -116,7 +133,8 @@ def shape_runs(
     Yields
     ------
     tuple[str, Run]
-        A shape ID and its (sequence, lon, lat) points sorted by sequence.
+        A shape ID and its (sequence, lon, lat, feed distance) points
+        sorted by sequence; the distance is None when blank or unreadable.
     """
     split = set() if split is None else split
     done: set[str] = set()
@@ -128,7 +146,11 @@ def shape_runs(
             continue
         done.add(shape_id)
         yield shape_id, sorted(
-            (int(seq), float(lon), float(lat)) for seq, lon, lat in rows
+            (
+                (int(seq), float(lon), float(lat), feed_figure(text=figure))
+                for seq, lon, lat, figure in rows
+            ),
+            key=itemgetter(0, 1, 2),
         )
 
 
@@ -270,14 +292,14 @@ def farthest(
     return search(line=line, first=first, last=last)
 
 
-def simplify(
+def keep_mask(
     *,
     points: NDArray[np.float64],
     tolerance: float,
     small_range: int = SMALL_RANGE,
-) -> NDArray[np.float64]:
+) -> NDArray[np.bool_]:
     """
-    Simplify a line with Douglas-Peucker, keeping both ends.
+    Mark the points Douglas-Peucker keeps, always both ends.
 
     Distances are to the chord as a segment, so a point beyond either end
     of the chord, as on a route that doubles back, is measured from that
@@ -295,8 +317,8 @@ def simplify(
 
     Returns
     -------
-    NDArray[np.float64]
-        The kept points, in order.
+    NDArray[np.bool_]
+        One flag per point, True for the kept ones.
     """
     xs, ys = points[:, 0], points[:, 1]
     line = Line(xs=xs, ys=ys, x_list=xs.tolist(), y_list=ys.tolist())
@@ -313,7 +335,35 @@ def simplify(
                 span for span in ((first, index), (index, last))
                 if span[1] - span[0] > 1
             )
-    return points[keep]
+    return keep
+
+
+def simplify(
+    *,
+    points: NDArray[np.float64],
+    tolerance: float,
+    small_range: int = SMALL_RANGE,
+) -> NDArray[np.float64]:
+    """
+    Simplify a line with Douglas-Peucker, keeping both ends.
+
+    Parameters
+    ----------
+    points : NDArray[np.float64]
+        Points as rows of x and y.
+    tolerance : float
+        Furthest a dropped point may lie from the simplified line.
+    small_range : int
+        Ranges of this many points or fewer are searched in plain Python.
+
+    Returns
+    -------
+    NDArray[np.float64]
+        The kept points, in order.
+    """
+    return points[
+        keep_mask(points=points, tolerance=tolerance, small_range=small_range)
+    ]
 
 
 def shape_record(
@@ -322,9 +372,9 @@ def shape_record(
     mode: str,
     run: Run,
     projection: Projection,
-) -> ShapeRow:
+) -> ShapeRecord:
     """
-    Turn one shape's points into a shapes row.
+    Turn one shape's points into a shapes row and its feed distances.
 
     Parameters
     ----------
@@ -333,50 +383,54 @@ def shape_record(
     mode : str
         Feed source of the trips that use it.
     run : Run
-        (sequence, lon, lat) points in order.
+        (sequence, lon, lat, feed distance) points in order.
     projection : Projection
         The projection to store the points in.
 
     Returns
     -------
-    ShapeRow
-        Values of a shapes row. The bounds are widened to whole decimetres
-        so they hold the rounded points of the blob.
+    ShapeRecord
+        Values of a shapes row, with its bounds widened to whole
+        decimetres so they hold the rounded points of the blob; and the
+        packed feed distances of the kept points, None when the line has
+        none.
     """
-    kept = simplify(
-        points=np.array(
-            [
-                to_metres(lon=lon, lat=lat, projection=projection)
-                for _, lon, lat in run
-            ],
-            dtype=np.float64,
-        ),
-        tolerance=SIMPLIFY_M,
+    points = np.array(
+        [
+            to_metres(lon=lon, lat=lat, projection=projection)
+            for _, lon, lat, _ in run
+        ],
+        dtype=np.float64,
     )
+    keep = keep_mask(points=points, tolerance=SIMPLIFY_M)
+    kept = points[keep]
+    feed = kept_feed(distances=[row[3] for row in run], keep=keep)
     shape = make_shape(
         shape_id=shape_id,
         points=[(float(x), float(y)) for x, y in kept],
     )
     low = np.floor(kept.min(axis=0) * DECIMETRES) / DECIMETRES
     high = np.ceil(kept.max(axis=0) * DECIMETRES) / DECIMETRES
-    return (shape_id, str(mode), float(low[0]), float(low[1]),
-            float(high[0]), float(high[1]), pack_shape(shape=shape))
+    row = (shape_id, str(mode), float(low[0]), float(low[1]),
+           float(high[0]), float(high[1]), pack_shape(shape=shape))
+    return row, None if feed is None else pack_feed(feed=feed)
 
 
 def insert_shapes(
     *,
     conn: sqlite3.Connection,
-    records: Iterator[ShapeRow],
+    records: Iterator[ShapeRecord],
 ) -> int:
     """
-    Insert shapes rows in batches.
+    Insert shapes rows in batches, and their feed distances.
 
     Parameters
     ----------
     conn : sqlite3.Connection
         Database with the schema.
-    records : Iterator[ShapeRow]
-        Rows to insert.
+    records : Iterator[ShapeRecord]
+        Rows to insert, each with its packed feed distances if it has any;
+        those go to the temp.shape_feed table.
 
     Returns
     -------
@@ -387,7 +441,11 @@ def insert_shapes(
     for chunk in batched(records, SHAPES_BATCH):
         conn.executemany(
             'INSERT INTO shapes VALUES (?, ?, ?, ?, ?, ?, ?)',
-            chunk,
+            [row for row, _ in chunk],
+        )
+        conn.executemany(
+            FEED_INSERT,
+            [(row[0], feed) for row, feed in chunk if feed is not None],
         )
         count += len(chunk)
     return count
@@ -404,6 +462,8 @@ def load_shapes(
     Store the simplified shapes one feed's trips use.
 
     A shape whose rows are not all together in shapes.txt is not stored.
+    The feed distances of each stored line that has them go to the
+    temp.shape_feed table.
 
     Parameters
     ----------
@@ -421,6 +481,7 @@ def load_shapes(
     int
         Number of shapes stored.
     """
+    conn.execute(FEED_TABLE)
     split: set[str] = set()
     count = insert_shapes(conn=conn, records=(
         shape_record(

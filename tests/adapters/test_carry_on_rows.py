@@ -118,7 +118,7 @@ def add_trip(*, conn: sqlite3.Connection, k: int) -> None:
     )
     first = FIRST + k * HOP
     conn.executemany(
-        'INSERT INTO stop_times VALUES (?, ?, ?, ?, ?, 0, 0)',
+        'INSERT INTO stop_times VALUES (?, ?, ?, ?, ?, 0, 0, NULL)',
         [
             (trip, 1, f'{CHAIN[k]}_1', first, first),
             (trip, 2, f'{CHAIN[k + 1]}_1', first + 300, first + 300),
@@ -318,7 +318,7 @@ def add_loop(*, db: Path, trip: str, calls: str) -> None:
           NULL, 1);
         WITH c(seq, stop, minutes, pickup, dropoff) AS (VALUES {calls})
         INSERT INTO stop_times SELECT '{trip}', seq, stop,
-          {FIRST} + minutes * 60, {FIRST} + minutes * 60, pickup, dropoff
+          {FIRST} + minutes * 60, {FIRST} + minutes * 60, pickup, dropoff, NULL
           FROM c;
     """)
 

@@ -305,8 +305,12 @@ def regional_sources(*, tmp_path: Path) -> list[Source]:
             Source(name='bundle', archive=bundle)]
 
 
-def shape_rows(*, shape_id: str,
-               points: list[tuple[float, float]]) -> list[dict[str, str]]:
+def shape_rows(
+    *,
+    shape_id: str,
+    points: list[tuple[float, float]],
+    distances: list[str] | None = None,
+) -> list[dict[str, str]]:
     """
     Build shapes.txt rows for one shape.
 
@@ -316,15 +320,21 @@ def shape_rows(*, shape_id: str,
         Shape ID.
     points : list[tuple[float, float]]
         (lon, lat) in order.
+    distances : list[str] | None
+        shape_dist_traveled of each point; the column is left out when None.
 
     Returns
     -------
     list[dict[str, str]]
         Rows, numbered from 1.
     """
-    return [{'shape_id': shape_id, 'shape_pt_lat': str(lat),
+    rows = [{'shape_id': shape_id, 'shape_pt_lat': str(lat),
              'shape_pt_lon': str(lon), 'shape_pt_sequence': str(index + 1)}
             for index, (lon, lat) in enumerate(points)]
+    if distances is None:
+        return rows
+    return [{**row, 'shape_dist_traveled': distance}
+            for row, distance in zip(rows, distances, strict=True)]
 
 
 def shaped_bus_feed(*, path: Path,
@@ -351,6 +361,45 @@ def shaped_bus_feed(*, path: Path,
                       for row in files['trips.txt']],
         'shapes.txt': [*shape_rows(shape_id='S1', points=points),
                        *shape_rows(shape_id='S9', points=points)]})
+
+
+MEASURED: Final[list[tuple[float, float]]] = [
+    (150.9746, -33.7924), (150.9746, -33.8176), (151.0049, -33.8176),
+]
+
+
+def measured_bus_feed(
+    *, path: Path, stop_figures: tuple[str, str] = ('0', '5.59'),
+) -> Path:
+    """
+    Write the bus feed on shape 'S1', with feed distances in kilometres.
+
+    S1 runs south from Hollis St, then east to Parramatta Stand B4.
+
+    Parameters
+    ----------
+    path : Path
+        Zip to write.
+    stop_figures : tuple[str, str]
+        shape_dist_traveled of each trip's first and second call.
+
+    Returns
+    -------
+    Path
+        The zip.
+    """
+    files = bus_files()
+    return write_feed(path=path, files={
+        **files,
+        'trips.txt': [{**row, 'shape_id': 'S1'}
+                      for row in files['trips.txt']],
+        'stop_times.txt': [
+            {**row, 'shape_dist_traveled':
+             stop_figures[int(row['stop_sequence']) - 1]}
+            for row in files['stop_times.txt']
+        ],
+        'shapes.txt': shape_rows(shape_id='S1', points=MEASURED,
+                                 distances=['0', '2.79', '5.59'])})
 
 
 CUT_COMMENT: Final[bytes] = b'cut'

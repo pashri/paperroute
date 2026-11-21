@@ -17,6 +17,7 @@ from typing import Final
 
 from paperroute_device.rss import current_rss_mb, max_rss_mb
 from paperroute_transit.build.extras import build_extras, city_named
+from paperroute_transit.build.feed_along import CLEAR_FEED, FeedAlong
 from paperroute_transit.build.gtfs_files import (
     Source,
     active_dates,
@@ -66,7 +67,7 @@ CREATE TABLE trips (trip_id TEXT PRIMARY KEY, route_id TEXT NOT NULL,
   service INTEGER NOT NULL);
 CREATE TABLE stop_times (trip_id TEXT NOT NULL, seq INTEGER NOT NULL,
   stop_id TEXT NOT NULL, arr INTEGER NOT NULL, dep INTEGER NOT NULL,
-  pickup INTEGER NOT NULL, dropoff INTEGER NOT NULL,
+  pickup INTEGER NOT NULL, dropoff INTEGER NOT NULL, along INTEGER,
   PRIMARY KEY (trip_id, seq)) WITHOUT ROWID;
 CREATE TABLE trip_aliases (alias_id TEXT NOT NULL, trip_id TEXT NOT NULL,
   PRIMARY KEY (alias_id, trip_id)) WITHOUT ROWID;
@@ -560,8 +561,8 @@ def shape_modes(
     return modes
 
 
-def stop_time_rows(*, archive: Path,
-                   trips: set[str]) -> Iterator[tuple[object, ...]]:
+def stop_time_rows(*, archive: Path, trips: set[str],
+                   feed: FeedAlong) -> Iterator[tuple[object, ...]]:
     """
     Stop times of the given trips as table rows.
 
@@ -571,6 +572,8 @@ def stop_time_rows(*, archive: Path,
         GTFS zip.
     trips : set[str]
         Trips to keep.
+    feed : FeedAlong
+        Converts each kept row's feed distance to metres along its line.
 
     Yields
     ------
@@ -583,7 +586,8 @@ def stop_time_rows(*, archive: Path,
                    parse_time(row['arrival_time'] or row['departure_time']),
                    parse_time(row['departure_time'] or row['arrival_time']),
                    int(row.get('pickup_type') or 0),
-                   int(row.get('drop_off_type') or 0))
+                   int(row.get('drop_off_type') or 0),
+                   feed.along(row=row))
 
 
 def load_source(*, conn: sqlite3.Connection, source: Source,
@@ -618,21 +622,27 @@ def load_source(*, conn: sqlite3.Connection, source: Source,
         rows=route_rows(source=source))
     services = load_services(conn=conn, source=source, window=window)
     trips = load_trips(conn=conn, source=source, services=services)
-    insert_many(conn=conn,
-                sql='INSERT INTO stop_times VALUES (?, ?, ?, ?, ?, ?, ?)',
-                rows=stop_time_rows(archive=source.archive,
-                                    trips=trips.inserted))
+    load_shapes(conn=conn, source=source,
+                modes=shape_modes(
+                    conn=conn, source=source, classify=city.classify,
+                ),
+                projection=city.projection)
+    insert_many(
+        conn=conn,
+        sql='INSERT INTO stop_times VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        rows=stop_time_rows(
+            archive=source.archive,
+            trips=trips.inserted,
+            feed=FeedAlong(conn=conn, projection=city.projection),
+        ),
+    )
     short = mark_short_suspects(
         conn=conn, suspects=trips.suspects, bbox=city.bbox,
     )
     if trips.hidden + short:
         logger.info('kept %d %s trips out of service',
                     trips.hidden + short, source.name)
-    load_shapes(conn=conn, source=source,
-                modes=shape_modes(
-                    conn=conn, source=source, classify=city.classify,
-                ),
-                projection=city.projection)
+    conn.execute(CLEAR_FEED)
     conn.commit()
     return len(trips.inserted)
 

@@ -8,7 +8,7 @@ from collections.abc import Callable
 from typing import Final
 
 from paperroute_hardware.ports import PanelBus
-from paperroute_hardware.render.panel_bits import Box
+from paperroute_hardware.render.panel_bits import HEIGHT, WIDTH, Box
 
 STATUS: Final[int] = 0x71
 POLL: Final[float] = 0.02  # seconds
@@ -17,10 +17,29 @@ SLEEP_PAUSE: Final[float] = 2  # seconds
 PLANE_BYTES: Final[int] = 48_000
 GREY_BOOSTER: Final[bytes] = bytes.fromhex('27271817')
 INVERT: Final[bytes] = bytes(range(255, -1, -1))
+SCREEN: Final[Box] = Box(left=0, top=0, right=WIDTH, bottom=HEIGHT)
 
 
 class PanelTimeout(Exception):
     """The panel stayed busy for longer than the timeout."""
+
+
+def black_bits(*, planes: tuple[bytes, bytes]) -> bytes:
+    """
+    Pick the black pixels out of two grey planes.
+
+    Parameters
+    ----------
+    planes : tuple[bytes, bytes]
+        The two grey planes.
+
+    Returns
+    -------
+    bytes
+        A 1-bit plane, 1 where both planes are set.
+    """
+    both = int.from_bytes(planes[0]) & int.from_bytes(planes[1])
+    return both.to_bytes(len(planes[0]))
 
 
 class Uc8179:
@@ -60,6 +79,8 @@ class Uc8179:
         """
         Wipe the panel white with a hot wipe, then draw four greys.
 
+        A quick pass then drives the black pixels again.
+
         Parameters
         ----------
         planes : tuple[bytes, bytes]
@@ -84,6 +105,11 @@ class Uc8179:
         self._bus.command(code=0x13, data=planes[1])
         self._refresh(step='grey refresh')
         self._rest()
+        self.draw_partial(
+            box=SCREEN,
+            old=bytes(len(planes[0])),
+            patch=black_bits(planes=planes),
+        )
 
     def draw_clear(self, *, bits: bytes) -> None:
         """

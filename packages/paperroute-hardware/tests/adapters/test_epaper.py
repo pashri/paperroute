@@ -68,7 +68,7 @@ def sent(*, bus: FakePanelBus) -> list[tuple[int, bytes]]:
 
 
 def test_draw_full_sequence() -> None:
-    """Every command of the wipe and grey passes, in order."""
+    """Every command of the wipe, grey and black passes, in order."""
     bus = FakePanelBus()
     make(bus=bus).draw_full(planes=(b'a' * 48000, b'b' * 48000))
     assert bus.log[:2] == [('power', True), ('reset', None)]
@@ -81,6 +81,10 @@ def test_draw_full_sequence() -> None:
         (0x00, 1), (0x50, 2), (0x06, 4), (0xE0, 1), (0xE5, 1),
         (0x10, 48000), (0x13, 48000), (0x12, 0), (0x71, 0),
         (0x50, 1), (0x02, 0), (0x71, 0),
+        (0x00, 1), (0x04, 0), (0x71, 0), (0xE0, 1), (0xE5, 1),
+        (0x50, 2), (0x91, 0), (0x90, 9), (0x10, 48000),
+        (0x13, 48000), (0x12, 0),
+        (0x71, 0), (0x92, 0), (0x50, 1), (0x02, 0), (0x71, 0),
     ]
     commands = sent(bus=bus)
     assert (0x10, b'\xff' * 48000) in commands
@@ -217,6 +221,21 @@ def test_draw_full_hot_wipe() -> None:
     assert wipe.index((0xE0, b'\x02')) > wipe.index((0x60, b'\x22'))
     assert (0xE5, b'\x6e') in wipe
     assert (0xE5, b'\x5f') in grey
+
+
+def test_draw_full_drives_black_again() -> None:
+    """A quick whole-screen pass follows, driving only the black pixels."""
+    bus = FakePanelBus()
+    planes = (b'\xcc' * 48000, b'\xaa' * 48000)
+    make(bus=bus).draw_full(planes=planes)
+    commands = sent(bus=bus)
+    start = [i for i, (code, _) in enumerate(commands) if code == 0x12][1]
+    quick = commands[start:]
+    assert (0xE5, b'\x6e') in quick
+    assert (0x50, bytes.fromhex('A907')) in quick
+    assert (0x90, bytes.fromhex('0000031F' '000001DF' '01')) in quick
+    assert (0x10, b'\xff' * 48000) in quick
+    assert (0x13, b'\x77' * 48000) in quick
 
 
 def test_draw_clear_sequence() -> None:

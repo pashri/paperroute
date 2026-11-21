@@ -25,7 +25,7 @@ def stepped_frame() -> NDArray[np.uint8]:
 
 def drawn_planes(*, bus: FakePanelBus) -> tuple[bytes, bytes]:
     """
-    Get the last grey planes a bus was sent.
+    Get the grey planes of the last full refresh a bus was sent.
 
     Parameters
     ----------
@@ -35,7 +35,7 @@ def drawn_planes(*, bus: FakePanelBus) -> tuple[bytes, bytes]:
     Returns
     -------
     tuple[bytes, bytes]
-        The data of the last 0x10 and 0x13 commands.
+        The data of the 0x10 and 0x13 commands before the black pass.
     """
     sent = [
         cast(tuple[int, bytes], entry)
@@ -44,4 +44,4 @@ def drawn_planes(*, bus: FakePanelBus) -> tuple[bytes, bytes]:
     ]
     first = [data for code, data in sent if code == 0x10]
     second = [data for code, data in sent if code == 0x13]
-    return first[-1], second[-1]
+    return first[-2], second[-2]

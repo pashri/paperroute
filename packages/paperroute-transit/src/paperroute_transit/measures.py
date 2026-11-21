@@ -133,9 +133,10 @@ class StopMeasures:
         Returns
         -------
         TripPattern
-            The trip with `along` set, sharing the tuple of an earlier
-            trip with the same shape and stops; unchanged when there is no
-            shape or a stop has no point.
+            The trip with `along` set. A trip that states no distances
+            shares the tuple of an earlier trip with the same shape and
+            stops; the result is unchanged when there is no shape or a
+            stop has no point.
         """
         stops = tuple(stop.point for stop in pattern.stops)
         if shape is None or None in stops:

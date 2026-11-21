@@ -80,8 +80,12 @@ def shape_groups(
                 (FEED_COLUMN,) if FEED_COLUMN in header else ()
             )
             pick = itemgetter(*(header.index(name) for name in named))
+            width = len(header)
             for shape_id, rows in groupby(
-                filter(None, reader),
+                (
+                    [*row, *('',) * (width - len(row))]
+                    for row in filter(None, reader)
+                ),
                 key=itemgetter(header.index(COLUMNS[0])),
             ):
                 picked = map(pick, rows)

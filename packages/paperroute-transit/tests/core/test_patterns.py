@@ -72,7 +72,7 @@ def test_measure_takes_stated_distances_when_every_call_has_one() -> None:
     assert result.along == (0.0, 1900.0)
 
 
-@pytest.mark.parametrize('along', [(0.0, None), (1900.0, 0.0)])
+@pytest.mark.parametrize('along', [(100.0, None), (1900.0, 0.0)])
 def test_measure_fits_unless_every_call_states_a_rising_distance(
     along: tuple[float | None, ...],
 ) -> None:

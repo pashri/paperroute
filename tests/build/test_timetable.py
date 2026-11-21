@@ -301,6 +301,17 @@ def test_a_feed_distance_far_from_its_stop_stores_null(
     ) == [(0,), (None,), (0,), (None,)]
 
 
+def test_a_blank_stop_figure_stores_null(tmp_path: Path) -> None:
+    """A call whose figure is blank on a valid line stores NULL."""
+    feed = measured_bus_feed(path=tmp_path / 'm.zip',
+                             stop_figures=('0', ''))
+    db = built(tmp_path=tmp_path,
+               sources=[Source(name='bundle', archive=feed)])
+    assert query(
+        db=db, sql='SELECT along FROM stop_times ORDER BY trip_id, seq',
+    ) == [(0,), (None,), (0,), (None,)]
+
+
 def test_meta_records_origin(tmp_path: Path) -> None:
     """The build writes the schema version and projection origin."""
     db = built(tmp_path=tmp_path, sources=bundle_bus(tmp_path=tmp_path))

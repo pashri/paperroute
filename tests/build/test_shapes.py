@@ -3,6 +3,7 @@
 import logging
 import math
 import sqlite3
+import zipfile
 from array import array
 from contextlib import closing
 from datetime import date
@@ -331,6 +332,29 @@ def test_load_shapes_keeps_feed_distances_of_whole_lines_only(
         assert conn.execute(
             'SELECT shape_id FROM temp.shape_feed ORDER BY shape_id',
         ).fetchall() == [('bundle:S1',)]
+
+
+def test_load_shapes_reads_a_row_missing_its_distance(
+    tmp_path: Path,
+) -> None:
+    """A short row reads as blank: the shape is kept, its figures are not."""
+    archive = tmp_path / 's.zip'
+    lines = ['shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,'
+             'shape_dist_traveled']
+    lines += [f'S1,{lat},{lon},{index + 1},{index}'
+              for index, (lon, lat) in enumerate(ROUTE[:2])]
+    lines.append(f'S1,{ROUTE[2][1]},{ROUTE[2][0]},3')
+    with zipfile.ZipFile(archive, 'w') as feed:
+        feed.writestr('shapes.txt', '\n'.join(lines) + '\n')
+    with closing(sqlite3.connect(':memory:')) as conn:
+        create_schema(conn=conn)
+        load_shapes(conn=conn, source=Source(name='bundle', archive=archive),
+                    modes={'S1': SydneyFeed.BUS},
+                    projection=SYDNEY_PROJECTION)
+        assert conn.execute('SELECT shape_id FROM shapes').fetchall() == [
+            ('bundle:S1',),
+        ]
+        assert not conn.execute('SELECT * FROM temp.shape_feed').fetchall()
 
 
 def test_shape_runs_without_shapes_member_yields_nothing(

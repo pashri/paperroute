@@ -10,6 +10,7 @@ from paperroute_transit.core.messages import (
     PatternsLoaded,
 )
 from paperroute_transit.core.modes import skippable_modes
+from paperroute_transit.core.patterns import without_stated
 from paperroute_transit.core.track import call_pairs, tracked_shape
 from paperroute_transit.measures import StopMeasures
 from paperroute_transit.ports import DayTimetable, TimetableRepository
@@ -98,7 +99,9 @@ def tracked_patterns(
         if track is not None:
             shapes[track.shape_id] = track
             patterns[trip_id] = measures.measure(
-                pattern=replace(pattern, shape_id=track.shape_id),
+                pattern=without_stated(
+                    pattern=replace(pattern, shape_id=track.shape_id),
+                ),
                 shape=track,
             )
     return replace(loaded, patterns=patterns, shapes=shapes)

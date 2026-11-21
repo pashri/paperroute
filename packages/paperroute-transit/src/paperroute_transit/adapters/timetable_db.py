@@ -82,6 +82,8 @@ DEFAULT_PATH: Final[Path] = Path('/opt/paperroute/data/timetable.db')
 CHUNK: Final[int] = 500
 LABEL_LIMIT: Final[int] = 20_000
 NO_SHAPE: Final[str] = 'NULL'
+STOP_ALONG: Final[str] = 'st.along'
+NO_ALONG: Final[str] = 'NULL'
 MATCH_RADIUS: Final[float] = 100.0  # metres
 SCHEMA_CHECK: Final[str] = """
 SELECT
@@ -98,7 +100,9 @@ SELECT
   (SELECT COUNT(*) FROM sqlite_master
    WHERE type = 'table' AND name = 'trip_joins'),
   (SELECT COUNT(*) FROM sqlite_master
-   WHERE type = 'table' AND name = 'rail_hops')
+   WHERE type = 'table' AND name = 'rail_hops'),
+  (SELECT COUNT(*) FROM pragma_table_info('stop_times')
+   WHERE name = 'along')
 """
 NEXT_COLUMNS: Final[str] = 'n.route, n.headsign, n.next_trip'
 OLD_NEXT_COLUMNS: Final[str] = 'n.route, n.headsign, NULL'
@@ -178,6 +182,8 @@ class Features:
         Whether the trip_joins table exists.
     hops : bool
         Whether the rail_hops table exists.
+    stop_along : bool
+        Whether stop_times has the along column.
     """
 
     shape_column: bool = False
@@ -187,6 +193,7 @@ class Features:
     service: bool = False
     joins: bool = False
     hops: bool = False
+    stop_along: bool = False
 
     @property
     def next_columns(self) -> str:
@@ -292,6 +299,7 @@ class SqliteTimetableRepository:
         lead: tuple[object, ...] = (),
         tail: tuple[object, ...] = (),
         shape: str = NO_SHAPE,
+        along: str = NO_ALONG,
     ) -> list[tuple[object, ...]]:
         """
         Run a query with an IN list, in chunks.
@@ -309,6 +317,8 @@ class SqliteTimetableRepository:
             Parameters that come after the IN list.
         shape : str
             Expression to select in place of ``{shape}``.
+        along : str
+            Expression to select in place of ``{along}``.
 
         Returns
         -------
@@ -317,7 +327,11 @@ class SqliteTimetableRepository:
         """
         rows: list[tuple[object, ...]] = []
         for chunk in batched(sorted(set(ids)), CHUNK):
-            query = sql.format(marks=','.join('?' * len(chunk)), shape=shape)
+            query = sql.format(
+                marks=','.join('?' * len(chunk)),
+                shape=shape,
+                along=along,
+            )
             rows.extend(
                 self.fetch(sql=query, params=(*lead, *chunk, *tail)),
             )
@@ -345,7 +359,7 @@ class SqliteTimetableRepository:
         self.fetch(sql='SELECT 1', params=())
         if known is None or known[0] != self.identity:
             rows = self.fetch(sql=SCHEMA_CHECK, params=())
-            found = rows[0] if rows else (0, 0, 0, 0, 0, 0, 0)
+            found = rows[0] if rows else (0, 0, 0, 0, 0, 0, 0, 0)
             known = (
                 self.identity,
                 Features(
@@ -356,6 +370,7 @@ class SqliteTimetableRepository:
                     service=bool(found[4]),
                     joins=bool(found[5]),
                     hops=bool(found[6]),
+                    stop_along=bool(found[7]),
                 ),
             )
             self.schema = known
@@ -885,8 +900,12 @@ class SqliteTimetableRepository:
             Trip ID to its calls.
         """
         calls: dict[str, list[PatternStop]] = {}
-        rows = self.fetch_in(sql=PATTERN_STOPS, ids=trip_ids)
-        for trip, arr, dep, lon, lat, station, name, passes in rows:
+        rows = self.fetch_in(
+            sql=PATTERN_STOPS,
+            ids=trip_ids,
+            along=STOP_ALONG if self.features().stop_along else NO_ALONG,
+        )
+        for trip, arr, dep, lon, lat, station, name, passes, along in rows:
             calls.setdefault(str(trip), []).append(
                 PatternStop(
                     arrives=int(str(arr)),
@@ -899,6 +918,7 @@ class SqliteTimetableRepository:
                     station=str(station),
                     name=str(name),
                     passes=bool(passes),
+                    along=None if along is None else float(str(along)),
                 )
             )
         return calls

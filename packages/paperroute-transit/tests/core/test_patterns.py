@@ -1,5 +1,6 @@
 """Tests for trip patterns and timetable positions."""
 
+from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 from zoneinfo import ZoneInfo
@@ -21,6 +22,7 @@ from paperroute_transit.core.patterns import (
     measure,
     point_at,
     timetable_point,
+    without_stated,
 )
 
 ZONE: Final[ZoneInfo] = city_under_test().zone
@@ -39,6 +41,55 @@ DIAGONAL = (
 
 HALFWAY = START + timedelta(minutes=5)
 QUARTER = START + timedelta(minutes=2, seconds=30)
+
+
+def stated(*, along: tuple[float | None, ...]) -> tuple[PatternStop, ...]:
+    """
+    Give the DIAGONAL calls stated distances.
+
+    Parameters
+    ----------
+    along : tuple[float | None, ...]
+        One stated distance per call.
+
+    Returns
+    -------
+    tuple[PatternStop, ...]
+        The calls.
+    """
+    return tuple(
+        replace(stop, along=value)
+        for stop, value in zip(DIAGONAL, along, strict=True)
+    )
+
+
+def test_measure_takes_stated_distances_when_every_call_has_one() -> None:
+    """Calls that all state a distance are placed there, not fitted."""
+    result = measure(
+        pattern=pattern(shape_id='L', stops=stated(along=(0.0, 1900.0))),
+        shape=CORNER,
+    )
+    assert result.along == (0.0, 1900.0)
+
+
+@pytest.mark.parametrize('along', [(0.0, None), (1900.0, 0.0)])
+def test_measure_fits_unless_every_call_states_a_rising_distance(
+    along: tuple[float | None, ...],
+) -> None:
+    """A missing or falling stated distance leaves the trip to the fit."""
+    result = measure(
+        pattern=pattern(shape_id='L', stops=stated(along=along)),
+        shape=CORNER,
+    )
+    assert result.along == pytest.approx((0.0, 2000.0))
+
+
+def test_without_stated_drops_every_calls_distance() -> None:
+    """No call keeps a stated distance."""
+    plain = without_stated(
+        pattern=pattern(shape_id='L', stops=stated(along=(0.0, 1900.0))),
+    )
+    assert plain.stops == DIAGONAL
 
 
 def test_measure_sets_stop_distances_along_the_shape() -> None:

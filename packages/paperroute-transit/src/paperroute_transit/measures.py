@@ -6,7 +6,7 @@ from dataclasses import replace
 from typing import Final
 
 from paperroute_transit.core.geo import Point, Shape
-from paperroute_transit.core.patterns import TripPattern, measure
+from paperroute_transit.core.patterns import TripPattern, measure, stated_along
 
 MAX_SHAPES: Final[int] = 256
 MAX_STOP_LISTS: Final[int] = 16  # per shape
@@ -120,6 +120,9 @@ class StopMeasures:
         """
         Place a trip's stops along its shape, reusing a past measurement.
 
+        A trip whose calls state their distances is placed at them,
+        neither reusing nor keeping a placement.
+
         Parameters
         ----------
         pattern : TripPattern
@@ -137,6 +140,8 @@ class StopMeasures:
         stops = tuple(stop.point for stop in pattern.stops)
         if shape is None or None in stops:
             return pattern
+        if stated_along(pattern=pattern) is not None:
+            return measure(pattern=pattern, shape=shape)
         key = shape_key(shape=shape)
         known = self.recall(key=key, stops=stops)
         if known is not None:

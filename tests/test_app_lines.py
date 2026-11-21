@@ -5,11 +5,13 @@ from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import Final
 
+import pytest
+
 from paperroute_testkit.core.factories import START, calls, departure
 from paperroute_testkit.core.strip_factories import PIN
 from paperroute_testkit.fakes import EmptyPlacedTimetable
 from paperroute_transit.app_effects import loaded_patterns, map_data
-from paperroute_transit.app_lines import loaded_day_lines
+from paperroute_transit.app_lines import loaded_day_lines, tracked_patterns
 from paperroute_transit.core.geo import Point, Shape
 from paperroute_transit.core.messages import (
     LoadDayLines,
@@ -18,6 +20,7 @@ from paperroute_transit.core.messages import (
 )
 from paperroute_transit.core.model import Departure, Pin
 from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.stop_fit import stop_distances
 from paperroute_transit.measures import StopMeasures
 from tests.core.test_track import FEED, HOP, POINTS, RAIL
 
@@ -249,3 +252,28 @@ def test_express_patterns_follow_track_across_a_passed_station() -> None:
     assert express is not None and express.shape_id is not None
     shape = loaded.shapes[express.shape_id]
     assert shape.points[: len(HOP)] == HOP
+
+
+def test_track_drops_stated_distances() -> None:
+    """A train's distances on its feed line are not used on the track."""
+    stops = tuple(
+        replace(stop, along=value)
+        for stop, value in zip(RAIL.stops, (0.0, 1000.0, 4000.0),
+                               strict=True)
+    )
+    loaded = tracked_patterns(
+        timetable=HopTimetable(),
+        loaded=PatternsLoaded(
+            trip_ids=frozenset({'train'}),
+            patterns={'train': replace(RAIL, stops=stops)},
+            shapes={'feed': FEED},
+        ),
+        measures=StopMeasures(),
+    )
+    train = loaded.patterns['train']
+    assert train is not None and train.shape_id is not None
+    assert all(stop.along is None for stop in train.stops)
+    assert train.along == pytest.approx(stop_distances(
+        shape=loaded.shapes[train.shape_id],
+        stops=[POINTS[name] for name in 'ABC'],
+    ))

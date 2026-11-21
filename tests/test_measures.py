@@ -1,5 +1,6 @@
 """Tests for the stop positions kept between pattern loads."""
 
+from dataclasses import replace
 from datetime import date
 from typing import Final
 
@@ -167,3 +168,49 @@ def test_a_busy_stops_shapes_are_all_held() -> None:
     assert all(
         again is before for again, before in zip(second, first, strict=True)
     )
+
+
+def stated_trip(*, trip_id: str, along: tuple[float, ...]) -> TripPattern:
+    """
+    Make a trip at STOPS whose calls state their distances.
+
+    Parameters
+    ----------
+    trip_id : str
+        Trip ID.
+    along : tuple[float, ...]
+        One stated distance per call.
+
+    Returns
+    -------
+    TripPattern
+        The trip, not yet measured.
+    """
+    made = trip(trip_id=trip_id, points=STOPS)
+    return replace(made, stops=tuple(
+        replace(stop, along=value)
+        for stop, value in zip(made.stops, along, strict=True)
+    ))
+
+
+def test_stated_distances_are_never_shared() -> None:
+    """A trip that states its distances keeps them and lends them to none."""
+    measures = StopMeasures()
+    fitted = measures.measure(pattern=trip(trip_id='a', points=STOPS),
+                              shape=LINE)
+    own = measures.measure(
+        pattern=stated_trip(trip_id='b', along=(0.0, 150.0, 300.0)),
+        shape=LINE,
+    )
+    later = measures.measure(pattern=trip(trip_id='c', points=STOPS),
+                             shape=LINE)
+    assert own.along == (0.0, 150.0, 300.0)
+    assert later.along is fitted.along
+    fresh = StopMeasures()
+    fresh.measure(
+        pattern=stated_trip(trip_id='d', along=(0.0, 150.0, 300.0)),
+        shape=LINE,
+    )
+    assert fresh.measure(
+        pattern=trip(trip_id='e', points=STOPS), shape=LINE,
+    ).along == pytest.approx((0.0, 100.0, 300.0))

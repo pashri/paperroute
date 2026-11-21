@@ -33,7 +33,8 @@ ORDER BY t.trip_id, sv.date
 PATTERN_STOPS: Final[str] = """
 SELECT st.trip_id, st.arr, st.dep, s.lon, s.lat,
   COALESCE(NULLIF(s.parent_station, ''), s.stop_id),
-  COALESCE(p.name, s.name), st.pickup = 1 AND st.dropoff = 1
+  COALESCE(p.name, s.name), st.pickup = 1 AND st.dropoff = 1,
+  {along}
 FROM stop_times st
 JOIN stops s ON s.stop_id = st.stop_id
 LEFT JOIN stops p ON p.stop_id = NULLIF(s.parent_station, '')

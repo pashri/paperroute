@@ -140,3 +140,23 @@ def slice_db(*, tmp_path: Path) -> Path:
     with closing(sqlite3.connect(db)) as conn:
         merge_rail(conn=conn)
     return db
+
+
+def schema_ten(*, path: Path) -> None:
+    """
+    Turn a built timetable back into a schema-10 file.
+
+    Only stop_times' along column is dropped, and the schema version set
+    to '10'.
+
+    Parameters
+    ----------
+    path : Path
+        Timetable file, changed in place.
+    """
+    with closing(sqlite3.connect(path)) as conn:
+        conn.execute('ALTER TABLE stop_times DROP COLUMN along')
+        conn.execute(
+            "UPDATE meta SET value = '10' WHERE key = 'schema_version'",
+        )
+        conn.commit()

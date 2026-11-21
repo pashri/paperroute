@@ -34,6 +34,9 @@ class PatternStop:
     passes : bool
         True when the trip runs through without picking up or setting
         down.
+    along : float | None
+        Metres along the trip's stored line the timetable states for the
+        call, or None when it states none.
     """
 
     arrives: int
@@ -42,6 +45,7 @@ class PatternStop:
     station: str = ''
     name: str = ''
     passes: bool = False
+    along: float | None = None
 
 
 @dataclass(frozen=True)
@@ -82,9 +86,56 @@ class TripPattern:
     road: bool = True
 
 
+def stated_along(*, pattern: TripPattern) -> tuple[float, ...] | None:
+    """
+    Read the distances a trip's calls state.
+
+    Parameters
+    ----------
+    pattern : TripPattern
+        The trip.
+
+    Returns
+    -------
+    tuple[float, ...] | None
+        Every call's stated distance when all have one and none falls
+        below the one before; otherwise None.
+    """
+    stated = tuple(stop.along for stop in pattern.stops)
+    figures = tuple(value for value in stated if value is not None)
+    if len(figures) != len(stated) or not figures:
+        return None
+    if any(second < first for first, second in pairwise(figures)):
+        return None
+    return figures
+
+
+def without_stated(*, pattern: TripPattern) -> TripPattern:
+    """
+    Drop the distances a trip's calls state.
+
+    Parameters
+    ----------
+    pattern : TripPattern
+        The trip.
+
+    Returns
+    -------
+    TripPattern
+        The trip with every call's `along` set to None.
+    """
+    return replace(
+        pattern,
+        stops=tuple(replace(stop, along=None) for stop in pattern.stops),
+    )
+
+
 def measure(*, pattern: TripPattern, shape: Shape | None) -> TripPattern:
     """
     Place a trip's stops along its shape.
+
+    Calls are placed at their stated distances when every call states one
+    and none falls; otherwise they are fitted along the shape.
 
     Parameters
     ----------
@@ -102,6 +153,9 @@ def measure(*, pattern: TripPattern, shape: Shape | None) -> TripPattern:
     points = [stop.point for stop in pattern.stops]
     if shape is None or None in points:
         return pattern
+    stated = stated_along(pattern=pattern)
+    if stated is not None:
+        return replace(pattern, along=stated)
     return replace(
         pattern,
         along=stop_distances(

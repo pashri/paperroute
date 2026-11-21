@@ -63,7 +63,7 @@ def forward_distances(
     shape: Shape,
     stops: Sequence[Point],
 ) -> tuple[float, ...]:
-    """Place stops along a shape, in order.
+    """Place each stop at its nearest point from the previous stop onward.
 
     Each stop is matched only to segments from the previous stop's segment
     onwards, so a loop that passes the same corner twice keeps its order.

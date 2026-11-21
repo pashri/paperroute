@@ -92,7 +92,7 @@ ZIGZAG: Final[Shape] = make_shape(
 
 
 def test_passes_keeps_the_nearest_up_to_the_cap() -> None:
-    """A line through a stop forty times gives the earliest passes."""
+    """A line through a stop forty times keeps the nearest passes."""
     found = passes(shape=ZIGZAG, stop=(0.0, 0.0), ceiling=math.inf)
     assert [one.along for one in found] == [
         200.0 * k + 100.0 for k in range(CANDIDATES)
@@ -172,6 +172,22 @@ def test_stop_distances_keeps_the_nearest_pass_at_a_free_end() -> None:
     stops = [(100.0, 2.0), (300.0, 2.0), (500.0, 5.05)]
     assert stop_distances(shape=OUT_AND_BACK, stops=stops) == pytest.approx(
         (100.0, 300.0, 1510.0),
+    )
+
+
+def test_stop_distances_keeps_the_earlier_pass_on_an_exact_tie() -> None:
+    """A last call as near the way back as the way out stays on the way out."""
+    stops = [(100.0, 2.0), (300.0, 2.0), (500.0, 5.0)]
+    assert stop_distances(shape=OUT_AND_BACK, stops=stops) == pytest.approx(
+        (100.0, 300.0, 500.0),
+    )
+
+
+def test_stop_distances_ignores_a_fit_that_saves_less_than_the_tie() -> None:
+    """A fit that saves under a decimetre of miss is not taken."""
+    stops = [(100.0, 5.04), (100.0, 4.93)]
+    assert stop_distances(shape=OUT_AND_BACK, stops=stops) == pytest.approx(
+        (1910.0, 1910.0),
     )
 
 

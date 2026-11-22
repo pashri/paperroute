@@ -8,6 +8,7 @@ import pytest
 
 from paperroute_device.core.text import DOT
 from paperroute_device.render.canvas import (
+    ELLIPSIS,
     INK,
     PAPER,
     Canvas,
@@ -18,6 +19,7 @@ from paperroute_device.render.frame import HEADER, finish
 from paperroute_testkit.render.factories import STOP_VIEW as BASE
 from paperroute_testkit.render.factories import stop_row as row
 from paperroute_transit.core.model import CarryOn
+from paperroute_transit.core.names import JOINING_WORDS, NameRules
 from paperroute_transit.core.stop_under import NextCall, UnderNumber
 from paperroute_transit.core.stop_view import (
     HORIZON_TEXT,
@@ -35,6 +37,7 @@ from paperroute_transit.render.chrome import (
     note_room,
     route_pair,
 )
+from paperroute_transit.render.names import Naming
 from paperroute_transit.render.stop_view import (
     FASTER_LEFT,
     LARGE_ROW_H,
@@ -52,6 +55,7 @@ from paperroute_transit.render.stop_view import (
     Scale,
     draw_stop_view,
     headline_width,
+    hero_headline,
     hero_under,
     list_row,
     open_width,
@@ -59,6 +63,7 @@ from paperroute_transit.render.stop_view import (
     small_parts,
     small_text,
 )
+from tests.render.test_chrome import Recording
 
 
 def test_frame_is_one_bit_800_by_480() -> None:
@@ -204,7 +209,9 @@ def test_list_widest_count_clears_a_long_pair(
         countdown='100',
         arrives_at='23:58',
     )
-    list_row(canvas, row=long, y=y, large=large)
+    list_row(
+        canvas, row=long, y=y, large=large, naming=PLAIN,
+    )
     frame = finish(canvas)
     rows = slice(y, y + Scale(large=large).y(31))
     ink = np.flatnonzero((frame[rows] == INK).any(axis=0))
@@ -677,7 +684,9 @@ def test_without_calls_there_is_no_calls_heading() -> None:
 def test_hero_under_draws_only_below_the_top() -> None:
     """Drawing the block touches nothing above the rule."""
     canvas = Canvas()
-    hero_under(canvas, under=UNDER, row=row(), top=100)
+    hero_under(
+        canvas, under=UNDER, row=row(), top=100, rules=NameRules(),
+    )
     frame = finish(canvas)
     assert (frame[:100 + 183] == PAPER).all()
     assert (frame[100 + 184:100 + 186, 18:418] == INK).all()
@@ -763,3 +772,59 @@ def test_open_width_has_three_edges() -> None:
     assert open_width(row=cancelled, k=k) == (
         PILL_LEFT - NAME_GAP - LIST_LEFT
     )
+
+
+PLAIN: Final[Naming] = Naming(rules=NameRules())
+
+
+def test_hero_headline_wraps_a_long_headsign_whole() -> None:
+    """A headsign too long for one line wraps onto two, losing nothing."""
+    long = 'Cottenham Rampton Road via Histon Impington Village College'
+    canvas = Recording()
+    hero_headline(canvas, row=row(destination=long), top=100, naming=PLAIN)
+    first, second = canvas.drawn[-2:]
+    assert f'{first} {second}' == long
+
+
+def test_hero_headline_keeps_one_line_when_it_fits() -> None:
+    """A short headsign is drawn on one line."""
+    canvas = Recording()
+    hero_headline(canvas, row=row(), top=100, naming=PLAIN)
+    assert canvas.drawn[-1] == 'Parramatta'
+
+
+def test_list_row_cuts_via_when_the_headsign_does_not_fit() -> None:
+    """A headsign that overflows loses its via part."""
+    canvas = Recording()
+    list_row(
+        canvas, row=row(destination='Mount Druitt via Rooty Hill'), y=100,
+        naming=PLAIN,
+    )
+    assert 'Mount Druitt' in canvas.drawn
+
+
+def test_list_row_keeps_via_when_another_row_would_read_alike() -> None:
+    """A sibling with the same start keeps the via part, cut by ellipsis."""
+    canvas = Recording()
+    list_row(
+        canvas, row=row(destination='Mount Druitt via Rooty Hill'), y=100,
+        naming=Naming(
+            rules=NameRules(), siblings=('Mount Druitt via Plumpton',),
+        ),
+    )
+    assert any(
+        text.startswith('Mount Druitt via') and text.endswith(ELLIPSIS)
+        for text in canvas.drawn
+    )
+
+
+def test_hero_under_shortens_call_names_by_the_rules() -> None:
+    """Call names are shortened by the joining-word rules."""
+    name = 'Great Western Highway Opp Rooty Hill Road North'
+    under = replace(UNDER, calls=(NextCall(at='8:12', name=name),))
+    canvas = Recording()
+    hero_under(
+        canvas, under=under, row=row(), top=100,
+        rules=NameRules(joining=JOINING_WORDS),
+    )
+    assert 'Great Western Hwy Opp Rooty Hill Road North' in canvas.drawn

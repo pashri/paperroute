@@ -17,6 +17,7 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER, finish
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.stop_under import NextCall, UnderNumber
 from paperroute_transit.core.stop_view import (
     HORIZON_TEXT,
@@ -43,6 +44,7 @@ from paperroute_transit.render.chrome import (
     view_banner,
     view_header,
 )
+from paperroute_transit.render.names import Naming, fit_headsign, fit_name
 
 SPLIT: Final[int] = 438
 ROW_H: Final[int] = 50
@@ -77,10 +79,15 @@ CALL_STEP: Final[int] = 24  # between calls' baselines
 CALL_TIME_X: Final[int] = 46
 CALL_NAME_X: Final[int] = 96
 CALL_NAME_WIDTH: Final[int] = 320
+HERO_FACE: Final[Face] = Face(weight=700, px=18)
+HERO_DROP: Final[int] = 57  # baseline below the top
+HERO_DROPS: Final[tuple[int, int]] = (50, 71)  # two-line baselines
 OPEN_RIGHT: Final[int] = 786  # right edge of an open row's times
 
 
-def hero_headline(canvas: Canvas, *, row: Row, top: int) -> None:
+def hero_headline(
+    canvas: Canvas, *, row: Row, top: int, naming: Naming
+) -> None:
     """
     Draw the vehicle label, route badge and destination of the hero.
 
@@ -92,6 +99,8 @@ def hero_headline(canvas: Canvas, *, row: Row, top: int) -> None:
         Next service.
     top : int
         Top of the panel.
+    naming : Naming
+        How names are shortened.
     """
     canvas.text(
         at=(18, top + 24), text=f'NEXT {row.vehicle.upper()}',
@@ -99,11 +108,18 @@ def hero_headline(canvas: Canvas, *, row: Row, top: int) -> None:
     width = route_pair(
         canvas, x=18, y=top + 50, route=row.route, onto=row.onto, px=20,
     )
-    dest = Face(weight=700, px=18)
-    fitted = canvas.fit(
-        text=row.destination, face=dest, width=SPLIT - 50 - width)
-    canvas.text(
-        at=(30 + width, top + 57), text=fitted, face=dest, grey=INK)
+    lines = fit_headsign(
+        text=row.destination,
+        face=HERO_FACE,
+        width=SPLIT - 50 - width,
+        naming=naming,
+        two_lines=True,
+    )
+    drops = HERO_DROPS if len(lines) == 2 else (HERO_DROP,)
+    for line, drop in zip(lines, drops):
+        canvas.text(
+            at=(30 + width, top + drop), text=line, face=HERO_FACE,
+            grey=INK)
 
 
 def hero_countdown(canvas: Canvas, *, row: Row, top: int) -> None:
@@ -312,7 +328,12 @@ def small_text(*, parts: Sequence[str], face: Face, width: float) -> str:
 
 
 def call_row(
-    canvas: Canvas, *, calls: Sequence[NextCall], index: int, top: int
+    canvas: Canvas,
+    *,
+    calls: Sequence[NextCall],
+    index: int,
+    top: int,
+    naming: Naming,
 ) -> None:
     """
     Draw one call: its dot, the link to the next call, time and name.
@@ -327,6 +348,8 @@ def call_row(
         Which call to draw.
     top : int
         Top of the content.
+    naming : Naming
+        How names are shortened.
     """
     y = top + CALLS_DROP + index * CALL_STEP
     canvas.ellipse(box=(25, y - 10, 35, y), grey=INK)
@@ -337,15 +360,24 @@ def call_row(
         at=(CALL_TIME_X, y), text=call.at, face=CALL_TIME_FACE, grey=INK)
     canvas.text(
         at=(CALL_NAME_X, y),
-        text=canvas.fit(
-            text=call.name, face=SMALL_FACE, width=CALL_NAME_WIDTH),
+        text=fit_name(
+            text=call.name,
+            face=SMALL_FACE,
+            width=CALL_NAME_WIDTH,
+            naming=naming,
+        )[0],
         face=SMALL_FACE,
         grey=INK,
     )
 
 
 def hero_under(
-    canvas: Canvas, *, under: UnderNumber, row: Row, top: int
+    canvas: Canvas,
+    *,
+    under: UnderNumber,
+    row: Row,
+    top: int,
+    rules: NameRules,
 ) -> None:
     """
     Draw the block under the hero's number.
@@ -360,6 +392,8 @@ def hero_under(
         The hero departure.
     top : int
         Top of the content.
+    rules : NameRules
+        Word lists and options for shortening call names.
     """
     status, small = UNDER_DROPS
     canvas.rect(box=(18, top + 184, 418, top + 186), grey=INK)
@@ -382,8 +416,13 @@ def hero_under(
     canvas.text(
         at=(18, top + CALLS_HEAD_DROP), text=CALLS_HEAD,
         face=CALLS_HEAD_FACE, grey=INK)
+    naming = Naming(
+        rules=rules, siblings=tuple(call.name for call in under.calls),
+    )
     for index in range(len(under.calls)):
-        call_row(canvas, calls=under.calls, index=index, top=top)
+        call_row(
+            canvas, calls=under.calls, index=index, top=top, naming=naming,
+        )
 
 
 def hero(
@@ -391,6 +430,7 @@ def hero(
     *,
     row: Row,
     top: int,
+    naming: Naming,
     under: UnderNumber | None = None,
 ) -> None:
     """
@@ -404,14 +444,18 @@ def hero(
         Next service.
     top : int
         Top of the panel.
+    naming : Naming
+        How names are shortened.
     under : UnderNumber | None
         The block to draw under the number, in place of the arrival
         footer and due line.
     """
-    hero_headline(canvas, row=row, top=top)
+    hero_headline(canvas, row=row, top=top, naming=naming)
     hero_countdown(canvas, row=row, top=top)
     if under is not None:
-        hero_under(canvas, under=under, row=row, top=top)
+        hero_under(
+            canvas, under=under, row=row, top=top, rules=naming.rules,
+        )
         return
     hero_footer(canvas, row=row, top=top)
     hero_due(canvas, row=row, top=top)
@@ -425,6 +469,7 @@ def headline(
     text: str,
     face: Face,
     width: float,
+    naming: Naming,
 ) -> None:
     """
     Draw a headsign and, after it, the tag for where the vehicle runs on.
@@ -447,10 +492,14 @@ def headline(
         Headsign face.
     width : float
         Width for the headsign and tag together.
+    naming : Naming
+        How names are shortened.
     """
     then = row.then
     if then is None:
-        fitted = canvas.fit(text=text, face=face, width=width)
+        fitted = fit_headsign(
+            text=text, face=face, width=width, naming=naming,
+        )[0]
         canvas.text(at=at, text=fitted, face=face, grey=INK)
         return
     tagged_headline(
@@ -460,6 +509,7 @@ def headline(
         text=text,
         face=face,
         width=width,
+        naming=naming,
     )
 
 
@@ -471,6 +521,7 @@ def tagged_headline(
     text: str,
     face: Face,
     width: float,
+    naming: Naming,
 ) -> None:
     """
     Draw a headsign, an arrow and the run-on tag, fitted together.
@@ -489,6 +540,8 @@ def tagged_headline(
         Headsign face.
     width : float
         Width for the headsign and tag together.
+    naming : Naming
+        How names are shortened.
     """
     lead = ARROW_WIDTH + ARROW_GAP
     room = width - TAG_GAP - canvas.length(text=text, face=face)
@@ -496,8 +549,12 @@ def tagged_headline(
         canvas.length(text=tag, face=TAG_FACE) + lead,
         max(room, lead + TAG_FLOOR),
     )
-    fitted = canvas.fit(
-        text=text, face=face, width=width - tag_width - TAG_GAP)
+    fitted = fit_headsign(
+        text=text,
+        face=face,
+        width=width - tag_width - TAG_GAP,
+        naming=naming,
+    )[0]
     x, baseline = at
     x += canvas.text(at=at, text=fitted, face=face, grey=INK) + TAG_GAP
     arrow(canvas, x=x, y=baseline - 4, grey=INK)
@@ -629,6 +686,7 @@ def list_row(
     *,
     row: Row,
     y: int,
+    naming: Naming,
     large: bool = False,
     arrives: bool = True,
 ) -> None:
@@ -643,6 +701,8 @@ def list_row(
         Departure.
     y : int
         Row top.
+    naming : Naming
+        How names are shortened.
     large : bool
         Whether to draw larger text in a taller row.
     arrives : bool
@@ -664,14 +724,17 @@ def list_row(
     if arrives:
         headline(
             canvas, row=row, at=at, text=row.destination, face=face,
-            width=headline_width(row=row, k=k))
+            width=headline_width(row=row, k=k), naming=naming)
         list_times(canvas, row=row, y=y, k=k)
     else:
         canvas.text(
             at=at,
-            text=canvas.fit(
-                text=row.destination, face=face,
-                width=open_width(row=row, k=k)),
+            text=fit_headsign(
+                text=row.destination,
+                face=face,
+                width=open_width(row=row, k=k),
+                naming=naming,
+            )[0],
             face=face,
             grey=INK,
         )
@@ -756,9 +819,15 @@ def draw_stop_view(*, view: StopView) -> NDArray[np.uint8]:
     view_banner(canvas, view=view)
     if view.empty:
         empty_message(canvas, text=view.empty)
+    names = [item.destination for item in view.rows]
     if view.hero:
-        hero_split(canvas, row=view.hero, top=top, under=view.under)
-    return finish_view(canvas, view=view, top=top)
+        names.append(view.hero.destination)
+    naming = Naming(rules=view.name_rules, siblings=tuple(names))
+    if view.hero:
+        hero_split(
+            canvas, row=view.hero, top=top, under=view.under, naming=naming,
+        )
+    return finish_view(canvas, view=view, top=top, naming=naming)
 
 
 def empty_message(canvas: Canvas, *, text: str) -> None:
@@ -780,7 +849,12 @@ def empty_message(canvas: Canvas, *, text: str) -> None:
 
 
 def hero_split(
-    canvas: Canvas, *, row: Row, top: int, under: UnderNumber | None
+    canvas: Canvas,
+    *,
+    row: Row,
+    top: int,
+    under: UnderNumber | None,
+    naming: Naming,
 ) -> None:
     """
     Draw the hero, the rule beside it and the list's column heads.
@@ -796,8 +870,10 @@ def hero_split(
     under : UnderNumber | None
         The block under the hero's number; when given, the list is
         headed LEAVES alone, at the right edge.
+    naming : Naming
+        How names are shortened.
     """
-    hero(canvas, row=row, top=top, under=under)
+    hero(canvas, row=row, top=top, under=under, naming=naming)
     canvas.rect(box=(SPLIT, top, SPLIT + 3, HEIGHT), grey=INK)
     head = Face(weight=700, px=11)
     if under is not None:
@@ -816,7 +892,7 @@ def hero_split(
 
 
 def finish_view(
-    canvas: Canvas, *, view: StopView, top: int
+    canvas: Canvas, *, view: StopView, top: int, naming: Naming
 ) -> NDArray[np.uint8]:
     """
     Draw the departure rows, then threshold and invert the list if asked.
@@ -829,6 +905,8 @@ def finish_view(
         View-model.
     top : int
         Top of the content below the header and any banner.
+    naming : Naming
+        How names are shortened.
 
     Returns
     -------
@@ -842,6 +920,7 @@ def finish_view(
             canvas,
             row=item,
             y=first + index * height,
+            naming=naming,
             large=view.large,
             arrives=view.destination is not None,
         )

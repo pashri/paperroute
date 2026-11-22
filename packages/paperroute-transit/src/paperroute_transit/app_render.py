@@ -20,6 +20,7 @@ from paperroute_transit.core.connection_strip import (
 from paperroute_transit.core.connection_view import ConnectionView
 from paperroute_transit.core.map_view import MapBase, MapView
 from paperroute_transit.core.panel_views import SleepView
+from paperroute_transit.core.stop_under import EachWay
 from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.core.strip_model import StripMapView, StripView
 from paperroute_transit.core.tiles import TileVariant
@@ -35,6 +36,7 @@ from paperroute_transit.render.keep_out import KeepOut, keep_out
 from paperroute_transit.render.map_base import draw_map_base
 from paperroute_transit.render.map_panes import draw_map_panes
 from paperroute_transit.render.map_view import draw_map_view
+from paperroute_transit.render.stop_sides import draw_each_way_view
 from paperroute_transit.render.stop_view import draw_stop_view
 from paperroute_transit.render.strip_view import (
     draw_strip_map_view,
@@ -388,6 +390,8 @@ def stop_drawing(
         Draws the frame when called.
     """
     match view:
+        case StopView(each_way=EachWay()):
+            return functools.partial(draw_each_way_view, view=view)
         case StopView():
             return functools.partial(draw_stop_view, view=view)
         case ConnectionView():

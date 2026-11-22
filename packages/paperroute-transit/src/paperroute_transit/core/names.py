@@ -227,7 +227,8 @@ def base_name(*, name: str) -> str:
     if not text.endswith(STATION_SUFFIX):
         return text
     stem = text[: -len(STATION_SUFFIX)]
-    return text if stem.endswith(BUS_END) else stem
+    bus = stem == BUS_END.strip() or stem.endswith(BUS_END)
+    return text if bus else stem
 
 
 def from_end(

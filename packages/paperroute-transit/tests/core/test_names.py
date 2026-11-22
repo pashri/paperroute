@@ -26,6 +26,11 @@ def test_without_platform_drops_a_trailing_platform() -> None:
     assert without_platform(name='Platform Road') == 'Platform Road'
 
 
+def test_base_name_keeps_a_bare_bus_station() -> None:
+    """A stop named just 'Bus Station' keeps its suffix."""
+    assert base_name(name='Bus Station') == 'Bus Station'
+
+
 def test_base_name_drops_the_platform_and_a_trailing_station() -> None:
     """The base name has no platform and no trailing Station."""
     assert base_name(name='Central Station Platform 16') == 'Central'

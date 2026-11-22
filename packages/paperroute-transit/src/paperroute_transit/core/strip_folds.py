@@ -321,7 +321,10 @@ def line_end(*, reach: Reach, index: int, children: Sequence[list[int]]
 
 def short_name(*, place: StopPlace) -> str:
     """
-    Name a station without its ' Station' suffix.
+    Name a station by its base name.
+
+    The base name has no platform and no trailing Station; a Bus Station
+    is kept whole.
 
     Parameters
     ----------

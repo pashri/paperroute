@@ -136,7 +136,10 @@ class HasTables(Protocol):
 
 def short_name(*, name: object) -> str:
     """
-    Name a station without its ' Station' suffix.
+    Name a station by its base name.
+
+    The base name has no platform and no trailing Station; a Bus Station
+    is kept whole.
 
     Parameters
     ----------

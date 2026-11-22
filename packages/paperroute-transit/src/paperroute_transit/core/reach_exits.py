@@ -265,7 +265,8 @@ def exit_name(*, place: StopPlace, lines: Sequence[str]) -> str:
     Returns
     -------
     str
-        '<name> · <lines>', the name without ' Station' and the lines
+        '<name> · <lines>', the base name (no platform, no trailing
+        Station; a Bus Station kept whole) and the lines
         space-separated; just the name with no lines.
     """
     name = base_name(name=place.name)

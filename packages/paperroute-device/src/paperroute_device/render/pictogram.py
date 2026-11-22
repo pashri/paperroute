@@ -12,7 +12,7 @@ PLANE_POINTS: Final[tuple[tuple[float, float], ...]] = HALF + tuple(
     (1 - x, y) for x, y in reversed(HALF[1:-1])
 )
 PLANE_MARGIN: Final[int] = 1  # px each side
-PLANE_SCALE: Final[float] = 0.70 * 1.12  # of the type's pixel size
+PLANE_SCALE: Final[float] = 0.784  # of the type's pixel size
 
 
 def plane_size(*, px: int) -> int:

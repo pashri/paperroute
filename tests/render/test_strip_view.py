@@ -94,7 +94,9 @@ CENTRE: Point = to_metres(
 )
 PANEL_TOP = 128
 NAMING: Final[Naming] = Naming(rules=NameRules())
-LONG_STOP: Final[str] = 'Macquarie University Station, Herring Road Interchange'
+LONG_STOP: Final[str] = (
+    'Macquarie University Station, Herring Road Interchange'
+)
 PANEL_STEP = 70
 
 

@@ -631,7 +631,9 @@ def from_inputs(*, state: State, chooser: ChooserState) -> StripInputs:
         destination=None,
         tag=NOT_PINNED,
         stop_view=replace(
-            EMPTY_STOP_VIEW, origin=route_title(chooser=chooser),
+            EMPTY_STOP_VIEW,
+            origin=route_title(chooser=chooser),
+            name_rules=state.city.name_rules,
         ),
     )
 

@@ -26,6 +26,7 @@ from paperroute_transit.core.chooser import ChooserState, Level, Stage
 from paperroute_transit.core.chooser_steps import (
     DEPARTURES_FAILED,
     LINE_FAILED,
+    from_inputs,
 )
 from paperroute_transit.core.chooser_view import LOADING_LISTS, ChooserView
 from paperroute_transit.core.map_view import DEFAULT_ZOOM
@@ -274,6 +275,14 @@ def test_from_stage_says_when_the_line_fails() -> None:
     state, _ = step(state, LineFailed(towards=11))
     assert isinstance(state.last_view, StripView)
     assert state.last_view.empty == LINE_FAILED
+
+
+def test_from_stage_view_carries_the_city_name_rules() -> None:
+    """The FROM strip fits names with the city's own rules."""
+    state, _ = run_events(state=loaded(state=pinned()), events=TO_STAGE[:-2])
+    assert state.chooser is not None
+    inputs = from_inputs(state=state, chooser=state.chooser)
+    assert inputs.stop_view.name_rules is state.city.name_rules
 
 
 def test_to_stage_asks_for_the_strip_and_departures() -> None:

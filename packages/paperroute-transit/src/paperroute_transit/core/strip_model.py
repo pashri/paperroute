@@ -100,7 +100,8 @@ class StripRow:
     Attributes
     ----------
     name : str
-        Station name, without ' Station'.
+        Base station name (no platform, no trailing Station; a Bus
+        Station kept whole).
     depth : int
         Indent: 0 for the main line, one more per branch level.
     kind : RowKind

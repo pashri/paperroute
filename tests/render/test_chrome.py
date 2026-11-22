@@ -218,7 +218,10 @@ def test_picking_from_title() -> None:
     view_header(
         canvas,
         view=Titles(
-            origin='606 to Parramatta', destination=None, tag=NOT_PINNED, clock='8:41',
+            origin='606 to Parramatta',
+            destination=None,
+            tag=NOT_PINNED,
+            clock='8:41',
         ),
         active='Strip',
         picking='FROM',
@@ -233,7 +236,10 @@ def test_titles_stop_before_the_tag() -> None:
     view_header(
         canvas,
         view=Titles(
-            origin='A very long origin stop name indeed' * 3, destination='An equally long destination stop name' * 3, tag=PINNED, clock='8:41',
+            origin='A very long origin stop name indeed' * 3,
+            destination='An equally long destination stop name' * 3,
+            tag=PINNED,
+            clock='8:41',
         ),
         active='Map',
     )
@@ -291,7 +297,11 @@ def test_header_cuts_the_from_without_dropping_words(
     view_header(
         canvas,
         view=Titles(
-            origin=origin, destination=destination, tag=PinTag(text=tag, pinned=True), clock='9:20',
+            origin=origin,
+            destination=destination,
+            tag=PinTag(text=tag,
+            pinned=True),
+            clock='9:20',
         ),
         active='Stop',
     )
@@ -491,7 +501,11 @@ def test_long_nickname_tag_keeps_titles() -> None:
     view_header(
         canvas,
         view=Titles(
-            origin='Hollis St', destination=None, tag=PinTag(text=f'{"W" * 20} 2/3', pinned=True), clock='8:41',
+            origin='Hollis St',
+            destination=None,
+            tag=PinTag(text=f'{"W" * 20} 2/3',
+            pinned=True),
+            clock='8:41',
         ),
         active='Map',
     )

@@ -62,6 +62,7 @@ from paperroute_transit.core.saved import (
     Lookahead,
     MapFraming,
     Rate,
+    StopSides,
 )
 from paperroute_transit.core.sides import KerbPair
 from paperroute_transit.core.stop_view import StopView
@@ -430,6 +431,8 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
         How long since a vehicle was heard before the Map hides it.
     map_framing : MapFraming | None
         How a plain pin's map is framed.
+    stop_sides : StopSides | None
+        How the Stop view shows a pin covering both sides of a road.
     """
 
     auto_rebuild: bool | None = None
@@ -442,6 +445,7 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
     skip_school_on_route_pins: bool | None = None
     parked_age: ParkedAge | None = None
     map_framing: MapFraming | None = None
+    stop_sides: StopSides | None = None
 
 
 @dataclass(frozen=True)

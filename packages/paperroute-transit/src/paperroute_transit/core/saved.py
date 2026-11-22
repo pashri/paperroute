@@ -64,6 +64,13 @@ class MapFraming(StrEnum):
     CENTRED = 'centred'
 
 
+class StopSides(StrEnum):
+    """How the Stop view shows a pin covering both sides of a road."""
+
+    TIME_ORDER = 'time_order'
+    EACH_WAY = 'each_way'
+
+
 LOOKAHEAD: Final[dict[Lookahead, timedelta | None]] = {
     Lookahead.DAY: timedelta(days=1),
     Lookahead.THREE_DAYS: timedelta(days=3),
@@ -106,6 +113,8 @@ class BoardSettings:
         How long since a vehicle was heard before the Map hides it.
     map_framing : MapFraming
         How a plain pin's map is framed.
+    stop_sides : StopSides
+        How the Stop view shows a pin covering both sides of a road.
     """
 
     auto_rebuild: bool = True
@@ -118,6 +127,7 @@ class BoardSettings:
     skip_school_on_route_pins: bool = False
     parked_age: ParkedAge = ParkedAge.OFF
     map_framing: MapFraming = MapFraming.APPROACH
+    stop_sides: StopSides = StopSides.TIME_ORDER
 
     @property
     def school_off_route_pins(self) -> bool:

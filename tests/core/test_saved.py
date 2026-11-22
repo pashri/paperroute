@@ -13,6 +13,7 @@ from paperroute_transit.core.saved import (
     MapFraming,
     Rate,
     Settings,
+    StopSides,
     default_saved,
     default_settings,
     seeded,
@@ -73,3 +74,10 @@ def test_default_settings_take_the_citys_parked_age() -> None:
     assert default_settings(city=SYDNEY).board.parked_age is ParkedAge.OFF
     ten = replace(SYDNEY, parked_age=ParkedAge.TEN)
     assert default_settings(city=ten).board.parked_age is ParkedAge.TEN
+
+
+def test_board_settings_default_to_time_order() -> None:
+    """The both-sides view starts as time order."""
+    assert BoardSettings().stop_sides is StopSides.TIME_ORDER
+    settings = default_settings(city=SYDNEY)
+    assert settings.board.stop_sides is StopSides.TIME_ORDER

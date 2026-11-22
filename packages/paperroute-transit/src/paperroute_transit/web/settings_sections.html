@@ -75,6 +75,19 @@
           <p id="framing-centred-hint" class="hint">Your stop in the middle, zoomed in on the streets around it.</p>
         </fieldset>
         <fieldset>
+          <legend>Both sides of the road</legend>
+          <label class="switch">
+            <input type="radio" name="stop_sides" value="time_order"{{stop_sides:time_order}} aria-describedby="sides-time-hint">
+            Time order
+          </label>
+          <p id="sides-time-hint" class="hint">One list. The next bus from either side is shown large.</p>
+          <label class="switch">
+            <input type="radio" name="stop_sides" value="each_way"{{stop_sides:each_way}} aria-describedby="sides-each-hint">
+            Next bus each way
+          </label>
+          <p id="sides-each-hint" class="hint">The next bus from each side, one above the other.</p>
+        </fieldset>
+        <fieldset>
           <legend>Connection map</legend>
           <label class="switch">
             <input type="radio" name="connection_map" value="changes"{{connection_map:changes}} aria-describedby="map-changes-hint">

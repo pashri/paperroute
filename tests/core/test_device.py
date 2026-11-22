@@ -70,6 +70,7 @@ from paperroute_transit.core.saved import (
     MapFraming,
     Rate,
     Settings,
+    StopSides,
     default_settings,
 )
 from paperroute_transit.core.state_model import State
@@ -118,6 +119,7 @@ def test_on_settings_routes_every_field() -> None:
         skip_school_buses=False,
         skip_school_on_route_pins=True,
         map_framing=MapFraming.CENTRED,
+        stop_sides=StopSides.EACH_WAY,
     )
     state, _ = on_settings(state=fresh(), event=event)
     assert state.settings == Settings(
@@ -132,6 +134,7 @@ def test_on_settings_routes_every_field() -> None:
             skip_school_buses=False,
             skip_school_on_route_pins=True,
             map_framing=MapFraming.CENTRED,
+            stop_sides=StopSides.EACH_WAY,
         ),
     )
     same, _ = on_settings(state=fresh(), event=SettingsChanged())

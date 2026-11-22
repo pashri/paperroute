@@ -43,6 +43,7 @@ from paperroute_transit.core.saved import (
     MapFraming,
     Rate,
     Settings,
+    StopSides,
     default_settings,
     with_changes,
 )
@@ -68,6 +69,7 @@ ODD = Settings(
         alert_lookahead=Lookahead.THREE_DAYS,
         connection_map=ConnectionMap.WHOLE,
         map_framing=MapFraming.CENTRED,
+        stop_sides=StopSides.EACH_WAY,
     ),
 )
 PEAK = {
@@ -300,7 +302,14 @@ def test_bad_time_is_bad(bad: str) -> None:
 
 
 @pytest.mark.parametrize(
-    'field', ['peak_rate', 'connection_map', 'map_framing', 'auto_rebuild'],
+    'field',
+    [
+        'peak_rate',
+        'connection_map',
+        'map_framing',
+        'stop_sides',
+        'auto_rebuild',
+    ],
 )
 def test_unknown_values_are_unknown(field: str) -> None:
     """A value the page never sends is refused."""
@@ -502,3 +511,16 @@ def test_map_framing_sits_before_the_connection_map() -> None:
     assert 'name="map_framing" value="approach"' in text
     assert 'name="map_framing" value="centred"' in text
     assert text.index('Map framing') < text.index('Connection map')
+
+
+def test_stop_sides_two_choices() -> None:
+    """Each both-sides choice is read and checks its own radio."""
+    template = '<a{{stop_sides:time_order}}><b{{stop_sides:each_way}}>'
+    for tag, value in zip('ab', StopSides, strict=True):
+        assert _board(fields={'stop_sides': value}) == (
+            SettingsChanged(stop_sides=value)
+        )
+        settings = Settings(board=BoardSettings(stop_sides=value))
+        text = _marked(template=template, settings=settings, error=None)
+        assert text.count(' checked') == 1
+        assert f'<{tag} checked>' in text

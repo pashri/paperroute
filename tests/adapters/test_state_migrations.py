@@ -74,6 +74,7 @@ def golden_before_new_settings() -> dict[str, Any]:
     golden: dict[str, Any] = json.loads(GOLDEN_STATE.read_text())
     del golden['board']['settings']['parked_age']
     del golden['board']['settings']['map_framing']
+    del golden['board']['settings']['stop_sides']
     without_sides(board=golden['board'])
     return golden
 

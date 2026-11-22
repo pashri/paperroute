@@ -22,6 +22,7 @@ from paperroute_transit.core.saved import (
     MapFraming,
     Rate,
     Settings,
+    StopSides,
     with_changes,
 )
 
@@ -30,7 +31,9 @@ BOARD_SWITCHES: Final[tuple[str, ...]] = (
     'skip_school_buses',
     'skip_school_on_route_pins',
 )
-BOARD_RADIOS: Final[tuple[str, ...]] = ('map_framing', 'connection_map')
+BOARD_RADIOS: Final[tuple[str, ...]] = (
+    'map_framing', 'stop_sides', 'connection_map',
+)
 SLOTS: Final[tuple[str, ...]] = ('peak_1', 'peak_2')
 CHOICES: Final[frozenset[str]] = frozenset(
     {'peak_rate', 'offpeak_rate', 'alert_lookahead', 'parked_age'}
@@ -45,7 +48,7 @@ STATUS_SWITCHES: Final[tuple[str, ...]] = (
     'swap_knobs',
 )
 STATUS_RADIOS: Final[tuple[str, ...]] = (
-    'quiet_mode', 'map_framing', 'connection_map',
+    'quiet_mode', 'map_framing', 'stop_sides', 'connection_map',
 )
 STATUS_TIMES: Final[tuple[str, ...]] = (
     'clean_after', 'quiet_start', 'quiet_end',
@@ -227,6 +230,9 @@ def changed_from(*, fields: Mapping[str, str]) -> SettingsChanged | None:
         ),
         map_framing=optional_enum(
             kind=MapFraming, fields=fields, name='map_framing',
+        ),
+        stop_sides=optional_enum(
+            kind=StopSides, fields=fields, name='stop_sides',
         ),
         skip_school_buses=switches.get('skip_school_buses'),
         skip_school_on_route_pins=switches.get('skip_school_on_route_pins'),

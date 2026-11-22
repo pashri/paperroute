@@ -19,6 +19,7 @@ from paperroute_transit.core.saved import (
     Lookahead,
     MapFraming,
     Rate,
+    StopSides,
 )
 
 MAX_PEAK_WINDOWS: Final[int] = 2
@@ -42,6 +43,7 @@ class BoardSettingsModel(BaseModel):
     )
     alert_lookahead: Lookahead
     connection_map: ConnectionMap
+    stop_sides: StopSides = StopSides.TIME_ORDER
     skip_school_buses: bool = True
     skip_school_on_route_pins: bool = False
     parked_age: ParkedAge = ParkedAge.OFF
@@ -109,6 +111,7 @@ def board_settings_to_model(*, settings: BoardSettings) -> BoardSettingsModel:
         skip_school_on_route_pins=settings.skip_school_on_route_pins,
         parked_age=settings.parked_age,
         map_framing=settings.map_framing,
+        stop_sides=settings.stop_sides,
     )
 
 
@@ -139,6 +142,7 @@ def board_settings_from_model(*, model: BoardSettingsModel) -> BoardSettings:
         skip_school_on_route_pins=model.skip_school_on_route_pins,
         parked_age=model.parked_age,
         map_framing=model.map_framing,
+        stop_sides=model.stop_sides,
     )
 
 

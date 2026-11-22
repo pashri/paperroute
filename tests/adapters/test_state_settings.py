@@ -29,11 +29,12 @@ from paperroute_transit.core.saved import (
     ConnectionMap,
     MapFraming,
     Settings,
+    StopSides,
 )
 
 
 def test_settings_model_keys_unchanged() -> None:
-    """The settings older files kept stay today's seventeen flat keys."""
+    """The settings older files kept stay today's eighteen flat keys."""
     assert set(default_settings(city=SYDNEY)) == {
         'auto_rebuild',
         'peak_rate',
@@ -47,6 +48,7 @@ def test_settings_model_keys_unchanged() -> None:
         'alert_lookahead',
         'parked_age',
         'map_framing',
+        'stop_sides',
         'connection_map',
         'skip_school_buses',
         'skip_school_on_route_pins',
@@ -183,5 +185,22 @@ def test_settings_without_map_framing_load_as_approach() -> None:
 def test_settings_round_trip_map_framing() -> None:
     """Settings round trip map framing."""
     settings = BoardSettings(map_framing=MapFraming.CENTRED)
+    model = board_settings_to_model(settings=settings)
+    assert board_settings_from_model(model=model) == settings
+
+
+def test_settings_without_stop_sides_load_as_time_order() -> None:
+    """Settings stored before the both-sides view load as time order."""
+    each_way = BoardSettings(stop_sides=StopSides.EACH_WAY)
+    stored = board_settings_to_model(settings=each_way).model_dump()
+    del stored['stop_sides']
+    model = BoardSettingsModel.model_validate(stored)
+    found = board_settings_from_model(model=model)
+    assert found.stop_sides is StopSides.TIME_ORDER
+
+
+def test_settings_round_trip_stop_sides() -> None:
+    """Settings round trip the both-sides view."""
+    settings = BoardSettings(stop_sides=StopSides.EACH_WAY)
     model = board_settings_to_model(settings=settings)
     assert board_settings_from_model(model=model) == settings

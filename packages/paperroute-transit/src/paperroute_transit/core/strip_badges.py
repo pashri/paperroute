@@ -54,6 +54,9 @@ class Badge:
     spur : bool
         True on the last row into an exit, where it sits fixed on the
         exit hook's straight.
+    facing : bool
+        True for a bus approaching a both-sides From, drawn on the row
+        facing its stop; its `low` and `high` are that y.
     """
 
     marker: Marker
@@ -61,6 +64,7 @@ class Badge:
     high: float
     extra: int = 0
     spur: bool = False
+    facing: bool = False
 
 
 @dataclass(frozen=True)
@@ -655,7 +659,9 @@ def pushed(*, badges: Sequence[Badge], keep: Keepouts) -> tuple[Badge, ...]:
         move the least they need to clear the names level with them, the
         discs and each other, top to bottom. One with no room
         on its hop is counted in a badge on the same hop, which becomes a
-        '+<n>', or with none there is drawn on its hop anyway.
+        '+<n>', or with none there is drawn on its hop anyway. A facing
+        badge keeps its y and moves right a slot at a time off the
+        badges placed before it; it is never counted.
     """
     order = sorted(
         (
@@ -663,7 +669,7 @@ def pushed(*, badges: Sequence[Badge], keep: Keepouts) -> tuple[Badge, ...]:
                 marker=each.marker, spots=keep.spots,
             ))
             for each in badges
-            if not each.spur
+            if not each.spur and not each.facing
         ),
         key=lambda each: (each.marker.y, each.marker.x),
     )
@@ -674,6 +680,9 @@ def pushed(*, badges: Sequence[Badge], keep: Keepouts) -> tuple[Badge, ...]:
         badges=rest, placed=placed, keep=keep, first=len(placed),
     )
     retried(placed=placed, forced=again, keep=keep)
+    for each in badges:
+        if each.facing:
+            placed.extend(off_lined(lineup=[each], lined=placed))
     return tuple(sorted(
         placed, key=lambda each: (each.marker.x, each.marker.y),
     ))

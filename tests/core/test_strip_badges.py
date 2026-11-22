@@ -512,3 +512,17 @@ def test_reaches_count_every_wedge_and_tab() -> None:
     assert reaches(
         marker=replace(hollow, live=True, age=None),
     ) == (11.0, 22.0)
+
+
+def test_pushed_lines_a_facing_badge_up_beside_a_badge_on_its_row() -> None:
+    """A facing badge keeps its row, beside any badge already there."""
+    spots = {'A': Spot(x=30, y=100), 'C': Spot(x=30, y=136)}
+    departed = badge(x=30, y=112, low=100, high=136, bearing=0.0)
+    facing = replace(badge(x=30, y=100, low=100, high=100), facing=True)
+    assert shown(badges=[facing, departed], spots=spots) == [
+        ('T1', 30, 112), ('T1', BESIDE, 100),
+    ]
+    assert shown(badges=[facing], spots=spots) == [('T1', 30, 100)]
+    assert shown(badges=[facing, facing], spots=spots) == [
+        ('T1', 30, 100), ('T1', BESIDE, 100),
+    ]

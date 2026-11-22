@@ -249,6 +249,8 @@ DOWN: Final[KnobTurned] = KnobTurned(knob=Knob.BOTTOM, steps=1)
 PENRITH: Final[Pin] = Pin(
     origin=T1_PLACES['E2'], kind=SydneyMode.TRAIN, routes=('T1',),
 )
+
+
 def row(stop_id: str, kind: RowKind) -> ReachRow:
     """
     A strip row with no indent.

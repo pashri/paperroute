@@ -95,6 +95,7 @@ def test_kind_cursor_starts_on_current_kind() -> None:
 
 
 def test_kind_column_asks_for_every_kinds_preview() -> None:
+    """The KIND column asks for a previews read of every kind."""
     chooser, asked = opened(
         shown=Pin(origin=place('X'), kind=SydneyMode.TRAIN),
         modes=SYDNEY.modes,
@@ -109,6 +110,7 @@ def test_kind_column_asks_for_every_kinds_preview() -> None:
 
 
 def test_turned_shows_the_preloaded_preview_and_asks_nothing() -> None:
+    """Turning shows a preloaded preview and asks for nothing."""
     chooser, request = turned(
         chooser=opened_at_kind(), steps=1, reach=None,
     )
@@ -123,6 +125,7 @@ def test_turned_shows_the_preloaded_preview_and_asks_nothing() -> None:
 
 
 def test_turns_while_previews_load_ask_nothing_more() -> None:
+    """Turns while the previews are loading ask for nothing more."""
     chooser, asked = opened(shown=Pin(origin=place('X')), modes=SYDNEY.modes)
     chooser, _ = fed(chooser, asked, KINDS)
     for steps in (1, 1, -2):
@@ -132,6 +135,7 @@ def test_turns_while_previews_load_ask_nothing_more() -> None:
 
 
 def test_a_turn_after_failed_previews_asks_again() -> None:
+    """A turn after a failed previews read asks for them again."""
     chooser, asked = opened(shown=Pin(origin=place('X')), modes=SYDNEY.modes)
     chooser, first = fed(chooser, asked, KINDS)
     chooser = previews_failed(chooser=chooser, path=())
@@ -142,6 +146,7 @@ def test_a_turn_after_failed_previews_asks_again() -> None:
 
 
 def test_a_failed_read_after_a_new_timetable_drops_the_old_preview() -> None:
+    """A failed read after a new timetable drops the old preview."""
     chooser, request = previews_again(chooser=opened_at_kind())
     assert isinstance(request, PreviewsRequest)
     assert chooser.columns[1:] == (GROUPS,)
@@ -150,6 +155,7 @@ def test_a_failed_read_after_a_new_timetable_drops_the_old_preview() -> None:
 
 
 def test_press_asks_for_the_new_focus_and_back_keeps_previews() -> None:
+    """A press asks for the new focus and back keeps its previews."""
     chooser, request = pressed(chooser=opened_at_kind(), reach=None)
     assert request == PreviewsRequest(
         path=BUS, steps=preview_steps(column=GROUPS),
@@ -159,6 +165,23 @@ def test_press_asks_for_the_new_focus_and_back_keeps_previews() -> None:
     assert back is not None
     chooser, request = turned(chooser=back, steps=1, reach=None)
     assert (request, chooser.columns[1:]) == (None, (TRAIN_LINES,))
+
+def test_previews_landing_off_the_focus_are_stored_quietly() -> None:
+    """A previews reply for a column that lost the focus is kept there."""
+    chooser, request = pressed(chooser=opened_at_kind(), reach=None)
+    assert isinstance(request, PreviewsRequest)
+    back = backed(chooser=chooser)
+    assert back is not None
+    before = back.columns[0]
+    after, none = answered(back, request)
+    assert none is None
+    assert after.focus == back.focus
+    assert after.columns[0] == before
+    assert after.columns[1].previews
+    chooser, request = pressed(chooser=after, reach=None)
+    assert request is None
+
+
 def test_stale_column_is_ignored() -> None:
     chooser = opened_at_kind()
     chooser, _ = turned(chooser=chooser, steps=1, reach=None)
@@ -180,6 +203,7 @@ def test_press_before_preview_loaded_does_nothing() -> None:
     assert pressed(chooser=loading, reach=None) == (loading, None)
     with pytest.raises(ValueError, match='no From'):
         chosen_pin(chooser=loading, destination=None)
+
 def test_single_line_column_collapses() -> None:
     chooser, request = turned(
         chooser=opened_at_kind(), steps=2, reach=None,
@@ -192,12 +216,14 @@ def test_single_line_column_collapses() -> None:
     assert [column.level for column in view.columns] == [
         Level.KIND, Level.TOWARDS,
     ]
-    chooser, _ = pressed(chooser=chooser, reach=None)
+    chooser, asked = pressed(chooser=chooser, reach=None)
     assert chooser.focus == 2
+    assert asked is None
     assert build_chooser_view(chooser=chooser).trail == 'Metro · M1'
     chooser, _ = pressed(chooser=chooser, reach=None)
     view = build_chooser_view(chooser=chooser)
     assert view.trail == 'Metro · M1 · Parramatta'
+
 def test_towards_press_asks_for_line() -> None:
     chooser, request = pressed(chooser=at_towards(), reach=None)
     assert request == LineRequest(towards=11)

@@ -30,11 +30,12 @@ from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.places import shown, shown_index
 from paperroute_transit.core.rebuild import building_view
 from paperroute_transit.core.rhythm import frame_time, stale_after
-from paperroute_transit.core.saved import LiveView, Saved
-from paperroute_transit.core.sides import pin_title
+from paperroute_transit.core.saved import LiveView, Saved, StopSides
+from paperroute_transit.core.sides import both_sides, pin_title
 from paperroute_transit.core.sleep import sleep_view
 from paperroute_transit.core.state_model import State, clock_waiting, elapsed
 from paperroute_transit.core.stop_hero import with_detail
+from paperroute_transit.core.stop_sides import each_way, hero_station
 from paperroute_transit.core.stop_view import (
     StopInputs,
     StopView,
@@ -241,15 +242,24 @@ def banner_stop_view(*, state: State, banner: Banner | None) -> StopView:
     -------
     StopView
         View, at the frame time; on the Stop view, with the hero's
-        place and calls when its pattern is loaded.
+        place and calls when its pattern is loaded. For a both-sides pin
+        set to next bus each way, the view with each kerb's next bus and
+        no gauge.
     """
-    view = build_stop_view(inputs=stop_inputs(state=state, notice=banner))
+    inputs = stop_inputs(state=state, notice=banner)
+    view = build_stop_view(inputs=inputs)
     if state.view is not LiveView.STOP:
         return view
     pin = shown(state=state)
+    if (
+        both_sides(pin=pin)
+        and state.settings.board.stop_sides is StopSides.EACH_WAY
+    ):
+        return each_way(inputs=inputs, towards=pin.towards)
+    station = state.board.station or pin.origin.stop_id
     return with_detail(
         view=view,
-        station=state.board.station or pin.origin.stop_id,
+        station=hero_station(view=view, pin=pin, station=station),
         destination=(
             None
             if pin.destination is None

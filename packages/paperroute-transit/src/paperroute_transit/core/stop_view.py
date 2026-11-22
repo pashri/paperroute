@@ -14,7 +14,7 @@ from paperroute_transit.core.headsigns import tidy_headsign
 from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.model import CarryOn, Departure
 from paperroute_transit.core.names import NameRules
-from paperroute_transit.core.stop_under import StopGauge, UnderNumber
+from paperroute_transit.core.stop_under import EachWay, StopGauge, UnderNumber
 
 VISIBLE_ROWS: Final[int] = 8
 ROWS_UNDER_BANNER: Final[int] = 7
@@ -303,6 +303,9 @@ class StopView:
         The stops ahead of the hero's From, or None when not known.
     name_rules : NameRules
         The word lists that shorten this city's stop names.
+    each_way : EachWay[Row] | None
+        The next bus from each kerb of a both-sides pin, when the view
+        shows them each way.
     """
 
     origin: str
@@ -325,6 +328,7 @@ class StopView:
     delay: int = 0
     gauge: StopGauge | None = None
     name_rules: NameRules = NameRules()
+    each_way: EachWay[Row] | None = None
 
 
 @dataclass(frozen=True)
@@ -886,6 +890,40 @@ def head_indexes(*, count: int, lead: int | None) -> list[int]:
     return order[:SIDEBAR_ROWS]
 
 
+def listed_rows(
+    *, inputs: StopInputs
+) -> tuple[list[LiveDeparture], list[Row]]:
+    """
+    List the departures in view and their rows.
+
+    Parameters
+    ----------
+    inputs : StopInputs
+        The view's inputs.
+
+    Returns
+    -------
+    tuple[list[LiveDeparture], list[Row]]
+        The departures `in_view` keeps, and one row for each.
+    """
+    upcoming = in_view(departures=inputs.departures, now=inputs.now)
+    rows = [
+        to_row(
+            item=item,
+            now=inputs.now,
+            pill=pill,
+            zone=inputs.zone,
+            city=inputs.city,
+        )
+        for item, pill in zip(
+            upcoming,
+            pills(items=upcoming, faster=inputs.destination is not None),
+            strict=True,
+        )
+    ]
+    return upcoming, rows
+
+
 def build_stop_view(*, inputs: StopInputs) -> StopView:
     """
     Build the Stop view from resolved departures.
@@ -903,21 +941,7 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
         Every view with a departure that runs has a hero, and one with no
         destination also has the block under its number.
     """
-    upcoming = in_view(departures=inputs.departures, now=inputs.now)
-    rows = [
-        to_row(
-            item=item,
-            now=inputs.now,
-            pill=pill,
-            zone=inputs.zone,
-            city=inputs.city,
-        )
-        for item, pill in zip(
-            upcoming,
-            pills(items=upcoming, faster=inputs.destination is not None),
-            strict=True,
-        )
-    ]
+    upcoming, rows = listed_rows(inputs=inputs)
     lead = lead_index(rows=rows)
     rest = [row for i, row in enumerate(rows) if i != lead]
     head = head_indexes(count=len(rows), lead=lead)

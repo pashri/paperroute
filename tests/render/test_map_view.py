@@ -36,7 +36,13 @@ from paperroute_transit.core.map_view import (
     screen_point,
 )
 from paperroute_transit.core.names import JOINING_WORDS, NameRules
-from paperroute_transit.core.stop_view import Estimate, Pill, Row, empty_text
+from paperroute_transit.core.stop_view import (
+    UNCERTAIN,
+    Estimate,
+    Pill,
+    Row,
+    empty_text,
+)
 from paperroute_transit.core.tiles import (
     CITY,
     TILE,
@@ -46,6 +52,7 @@ from paperroute_transit.core.tiles import (
     to_pixels,
 )
 from paperroute_transit.render.chrome import BANNER, badge, view_header
+from paperroute_transit.render.late_marks import mark_room
 from paperroute_transit.render.map_base import draw_map_base
 from paperroute_transit.render.map_view import (
     ARRIVES_DROP,
@@ -53,6 +60,7 @@ from paperroute_transit.render.map_view import (
     COUNTDOWN_FACE,
     EMPTY_MARGIN,
     FASTER_LEFT,
+    MARK_FACE,
     PAIR_STEP,
     PAIRS_TOP,
     SIDEBAR_LEFT,
@@ -880,7 +888,7 @@ def test_badge_at_a_crowded_from_by_the_edge_still_shows() -> None:
     assert not any(overlaps(first=box, second=other) for other in reserved)
 
 
-UNSURE: Estimate = Estimate(due='8:09', late=31, uncertain=True)
+UNSURE: Estimate = Estimate(due='8:09', late=1, uncertain=True)
 
 
 def test_uncertain_sidebar_row_says_so_under_its_time() -> None:
@@ -929,3 +937,42 @@ def test_sidebar_destination_is_shortened_by_the_rules() -> None:
     (line,) = [text for text in canvas.drawn if text.startswith('to ')]
     assert line.startswith('to Great Western Hwy/Rooty')
     assert line.endswith(ELLIPSIS)
+
+
+LATE_UNSURE: Estimate = Estimate(due='7:58', late=12, uncertain=True)
+
+
+def test_sidebar_marks_lateness_after_the_countdown() -> None:
+    """A sidebar row four minutes late reads +4."""
+    late = Estimate(due='8:05', late=4, uncertain=False)
+    canvas = Recording()
+    draw_sidebar(
+        canvas, view=replace(VIEW, sidebar=(replace(row(), estimate=late),)),
+    )
+    assert '+4' in canvas.drawn
+
+
+def test_sidebar_folds_uncertainty_into_its_mark() -> None:
+    """+12? replaces the word on the arrival line."""
+    canvas = Recording()
+    draw_sidebar(
+        canvas,
+        view=replace(VIEW, sidebar=(replace(row(), estimate=LATE_UNSURE),)),
+    )
+    assert '+12?' in canvas.drawn
+    assert UNCERTAIN not in canvas.drawn
+
+
+def test_sidebar_pair_yields_to_a_marked_countdown() -> None:
+    """A BMT to CCN pair ends clear of '100 min +12?'."""
+    top = ROW_TOPS[0]
+    marked = replace(
+        row(route='BMT', onto='CCN', countdown='100'), estimate=LATE_UNSURE,
+    )
+    frame = draw_map_view(view=replace(VIEW, sidebar=(marked,)), base=paper())
+    group = text_width(text=WIDEST_COUNT, face=COUNTDOWN_FACE) + mark_room(
+        row=marked, face=MARK_FACE,
+    )
+    start = int(SIDEBAR_RIGHT - group)
+    band = frame[top - 8:top - 4, SIDEBAR_TEXT:start - 2] == INK
+    assert SIDEBAR_TEXT + np.flatnonzero(band.any(axis=0)).max() < start - 4

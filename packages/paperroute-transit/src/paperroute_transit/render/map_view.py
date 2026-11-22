@@ -45,6 +45,7 @@ from paperroute_transit.render.chrome import (
     view_header,
 )
 from paperroute_transit.render.keep_out import NO_KEEP_OUT, KeepOut
+from paperroute_transit.render.late_marks import mark_room, marked_countdown
 from paperroute_transit.render.map_base import HALO
 from paperroute_transit.render.map_marks import (
     STOP_DISC,
@@ -88,6 +89,7 @@ ROWS_TOP: Final[int] = 110
 ROW_STEP: Final[int] = 72
 BADGE_PX: Final[int] = 17
 COUNTDOWN_FACE: Final[Face] = Face(weight=800, px=34)
+MARK_FACE: Final[Face] = Face(weight=700, px=16)
 COUNTDOWN_DROP: Final[int] = 12  # baseline below the badge centre
 ARRIVES_FACE: Final[Face] = Face(weight=400, px=14)
 ARRIVES_DROP: Final[int] = 26  # baseline below the badge centre
@@ -380,12 +382,13 @@ def row_time(canvas: Canvas, *, row: Row, y: int) -> None:
             px=CANCELLED_PX,
         )
         return
-    canvas.text(
-        at=(SIDEBAR_RIGHT, y + COUNTDOWN_DROP),
+    marked_countdown(
+        canvas,
+        row=row,
         text=leaves(row=row),
+        at=(SIDEBAR_RIGHT, y + COUNTDOWN_DROP),
         face=COUNTDOWN_FACE,
-        grey=INK,
-        anchor='rs',
+        mark_face=MARK_FACE,
     )
 
 
@@ -441,7 +444,7 @@ def sidebar_row(canvas: Canvas, *, row: Row, y: int) -> None:
         route=row.route,
         onto=row.onto,
         px=BADGE_PX,
-        room=SIDEBAR_PAIR_ROOM,
+        room=SIDEBAR_PAIR_ROOM - mark_room(row=row, face=MARK_FACE),
     )
     row_time(canvas, row=row, y=y)
     arrival_note(canvas, row=row, y=y)

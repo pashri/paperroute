@@ -23,6 +23,7 @@ from paperroute_transit.core.names import JOINING_WORDS, NameRules
 from paperroute_transit.core.stop_under import NextCall, UnderNumber
 from paperroute_transit.core.stop_view import (
     HORIZON_TEXT,
+    UNCERTAIN,
     Estimate,
     Pill,
     Row,
@@ -37,6 +38,7 @@ from paperroute_transit.render.chrome import (
     note_room,
     route_pair,
 )
+from paperroute_transit.render.late_marks import mark_room
 from paperroute_transit.render.names import Naming
 from paperroute_transit.render.stop_view import (
     FASTER_LEFT,
@@ -46,6 +48,7 @@ from paperroute_transit.render.stop_view import (
     LIST_PAIR_ROOM,
     LIST_TOP,
     LIST_WIDTH,
+    MARK_PX,
     NOTE_PX,
     PILL_LEFT,
     ROW_H,
@@ -464,7 +467,8 @@ def test_later_head_moves_under_a_banner() -> None:
 
 
 LATE: Final[Estimate] = Estimate(due='8:05', late=4, uncertain=False)
-UNSURE: Final[Estimate] = Estimate(due='8:05', late=31, uncertain=True)
+ON_TIME: Final[Estimate] = Estimate(due='8:05', late=1, uncertain=False)
+UNSURE: Final[Estimate] = Estimate(due='8:05', late=1, uncertain=True)
 
 
 def changed(*, before: StopView, after: StopView) -> np.ndarray:
@@ -499,7 +503,7 @@ def test_uncertain_later_row_says_so_under_its_time() -> None:
 def test_certain_later_row_has_no_note() -> None:
     """A certain estimate draws just its count."""
     before = replace(BASE, rows=(row(),))
-    after = replace(BASE, rows=(replace(row(), estimate=LATE),))
+    after = replace(BASE, rows=(replace(row(), estimate=ON_TIME),))
     assert not changed(before=before, after=after).size
 
 
@@ -828,3 +832,57 @@ def test_hero_under_shortens_call_names_by_the_rules() -> None:
         rules=NameRules(joining=JOINING_WORDS),
     )
     assert 'Great Western Hwy Opp Rooty Hill Road North' in canvas.drawn
+
+
+LATE_UNSURE: Final[Estimate] = Estimate(due='7:58', late=12, uncertain=True)
+
+
+def test_list_row_marks_its_lateness_after_the_countdown() -> None:
+    """A row four minutes late reads +4."""
+    canvas = Recording()
+    list_row(canvas, row=replace(row(), estimate=LATE), y=100, naming=PLAIN)
+    assert '+4' in canvas.drawn
+
+
+def test_list_row_open_layout_marks_an_early_departure() -> None:
+    """An open row two minutes early reads −2."""
+    early = Estimate(due='8:11', late=-2, uncertain=False)
+    canvas = Recording()
+    list_row(
+        canvas, row=replace(row(), estimate=early), y=100, naming=PLAIN,
+        arrives=False,
+    )
+    assert '−2' in canvas.drawn
+
+
+def test_list_row_folds_uncertainty_into_its_mark() -> None:
+    """+12? replaces the word, and the platform keeps its slot."""
+    noted = replace(row(), estimate=LATE_UNSURE, note='platform 2B')
+    canvas = Recording()
+    list_row(canvas, row=noted, y=100, naming=PLAIN)
+    assert '+12?' in canvas.drawn
+    assert 'platform 2B' in canvas.drawn
+    assert UNCERTAIN not in canvas.drawn
+
+
+def test_list_row_under_the_floor_keeps_the_word() -> None:
+    """A row a minute off has no mark and still says uncertain."""
+    canvas = Recording()
+    list_row(canvas, row=replace(row(), estimate=UNSURE), y=100, naming=PLAIN)
+    assert UNCERTAIN in canvas.drawn
+    assert not any(text.startswith(('+', '−')) for text in canvas.drawn)
+
+
+def test_list_row_pair_yields_to_a_marked_countdown() -> None:
+    """A long pair ends clear of '100 min +12?'."""
+    marked = replace(
+        row(onto='CCN'), route='BMT', countdown='100', estimate=LATE_UNSURE,
+    )
+    canvas = Canvas()
+    list_row(canvas, row=marked, y=100, naming=PLAIN)
+    group = text_width(
+        text=WIDEST_COUNT, face=Face(weight=800, px=28),
+    ) + mark_room(row=marked, face=Face(weight=700, px=MARK_PX))
+    start = int(LIST_LEAVE_RIGHT - group)
+    band = canvas.grey()[109:113, LIST_LEFT:start - 2] < 128
+    assert LIST_LEFT + np.flatnonzero(band.any(axis=0)).max() < start - 4

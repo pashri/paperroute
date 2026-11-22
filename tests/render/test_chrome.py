@@ -20,8 +20,9 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER
+from paperroute_testkit.render.factories import stop_row
 from paperroute_transit.core.names import JOINING_WORDS, NameRules
-from paperroute_transit.core.stop_view import NOT_PINNED, PinTag, Row
+from paperroute_transit.core.stop_view import NOT_PINNED, Estimate, PinTag, Row
 from paperroute_transit.core.stop_view import pin_tag as tag_of
 from paperroute_transit.render.chrome import (
     BANNER,
@@ -46,6 +47,7 @@ from paperroute_transit.render.chrome import (
     row_px,
     shared_width,
     two_titles,
+    uncertain_row,
     view_header,
 )
 from paperroute_transit.render.pair_list import CHIP_PX
@@ -655,3 +657,13 @@ def test_header_titles_drop_a_station_only_when_it_does_not_fit() -> None:
         rules=NameRules(),
     )
     assert tight.drawn == ['Town Hall']
+
+
+def test_uncertain_row_is_false_once_the_mark_carries_it() -> None:
+    """The word shows only for uncertainty the mark does not carry."""
+    base = stop_row()
+    small = Estimate(due='8:05', late=1, uncertain=True)
+    large = Estimate(due='8:05', late=12, uncertain=True)
+    assert uncertain_row(row=replace(base, estimate=small))
+    assert not uncertain_row(row=replace(base, estimate=large))
+    assert uncertain_row(row=replace(base, live=False, estimate=large))

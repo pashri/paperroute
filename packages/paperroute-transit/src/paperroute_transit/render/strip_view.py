@@ -47,6 +47,7 @@ from paperroute_transit.render.chrome import (
     view_header,
 )
 from paperroute_transit.render.keep_out import NO_KEEP_OUT, KeepOut
+from paperroute_transit.render.late_marks import mark_room, marked_countdown
 from paperroute_transit.render.map_view import draw_overlay, snap
 from paperroute_transit.render.names import Naming, fit_headsign, fit_name
 from paperroute_transit.render.stop_view import TAG_FACE
@@ -79,6 +80,7 @@ PICKED_DEPTH: Final[int] = ROW_STEP - 4  # inverted pixels below a rule
 LEAVES_FACE: Final[Face] = Face(weight=800, px=30)
 ARRIVES_FACE: Final[Face] = Face(weight=400, px=16)
 COUNTDOWN_FACE: Final[Face] = Face(weight=700, px=22)
+MARK_FACE: Final[Face] = Face(weight=700, px=13)
 HEADSIGN_FACE: Final[Face] = Face(weight=400, px=14)
 TIME_DROP: Final[int] = 44  # baseline below the row's rule
 SECOND_DROP: Final[int] = 62  # carry-on baseline below the row's rule
@@ -188,7 +190,8 @@ def name_room(*, row: Row, left: float) -> float:
     slot = countdown_slot(row=row)
     if slot:
         count = text_width(text=slot, face=COUNTDOWN_FACE)
-        return TEXT_RIGHT - count - NAME_GAP - left
+        mark = mark_room(row=row, face=MARK_FACE)
+        return TEXT_RIGHT - count - mark - NAME_GAP - left
     return TEXT_RIGHT - left
 
 
@@ -324,12 +327,13 @@ def row_countdown(canvas: Canvas, *, row: Row, top: int) -> None:
             px=13,
         )
         return
-    canvas.text(
-        at=(TEXT_RIGHT, top + TIME_DROP),
+    marked_countdown(
+        canvas,
+        row=row,
         text=countdown_slot(row=row),
+        at=(TEXT_RIGHT, top + TIME_DROP),
         face=COUNTDOWN_FACE,
-        grey=INK,
-        anchor='rs',
+        mark_face=MARK_FACE,
     )
 
 

@@ -5,6 +5,7 @@ from datetime import timedelta
 from typing import Final
 
 import numpy as np
+import pytest
 from numpy.typing import NDArray
 
 from paperroute_device.core.text import DOT, HINT_DOT
@@ -59,6 +60,7 @@ from paperroute_transit.render.chrome import (
     note_room,
     route_pair,
 )
+from paperroute_transit.render.late_marks import mark_room
 from paperroute_transit.render.markers import badge_box
 from paperroute_transit.render.names import Naming, fit_headsign
 from paperroute_transit.render.stop_view import TAG_FACE, WIDEST_COUNT
@@ -71,6 +73,7 @@ from paperroute_transit.render.strip_view import (
     HINT_BOX,
     HINT_FACE,
     HINT_PAD,
+    MARK_FACE,
     MIDDLE_X,
     NAME_X,
     PANE_NAME_X,
@@ -754,7 +757,8 @@ def test_hint_separator_is_heavier() -> None:
     assert bullet >= 2 * dot > 0
 
 
-UNSURE: Final[Estimate] = Estimate(due='8:05', late=31, uncertain=True)
+UNSURE: Final[Estimate] = Estimate(due='8:05', late=1, uncertain=True)
+LATE: Final[Estimate] = Estimate(due='8:07', late=4, uncertain=False)
 
 
 def painted(*, row: Row) -> NDArray[np.uint8]:
@@ -928,3 +932,23 @@ def test_panel_row_fits_its_headsign_by_the_rules() -> None:
         width=name_room(row=row, left=left), naming=NAMING, two_lines=True,
     )
     assert all(line in canvas.drawn for line in expected)
+
+
+def test_panel_row_marks_lateness_after_the_countdown() -> None:
+    """A panel row four minutes late reads +4."""
+    canvas = Recording()
+    paint_panel_row(
+        canvas, row=replace(panel_row(), estimate=LATE), top=PANEL_TOP,
+        whole=False, naming=NAMING,
+    )
+    assert '+4' in canvas.drawn
+
+
+def test_name_room_leaves_room_for_the_mark() -> None:
+    """The name ends the mark's room further left."""
+    marked = replace(panel_row(), estimate=LATE)
+    count = text_width(text='6 min', face=COUNTDOWN_FACE)
+    assert name_room(row=marked, left=600.0) == pytest.approx(
+        TEXT_RIGHT - count - mark_room(row=marked, face=MARK_FACE)
+        - NAME_GAP - 600,
+    )

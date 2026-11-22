@@ -14,6 +14,7 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER
+from paperroute_transit.core.late_marks import row_mark
 from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.stop_view import UNCERTAIN, PinTag, Row
 from paperroute_transit.core.strip_model import PICK_FROM
@@ -889,7 +890,7 @@ def cancelled(*, row: Row) -> str:
 
 def uncertain_row(*, row: Row) -> bool:
     """
-    Say whether a row's estimate is uncertain.
+    Say whether a row shows the word ``uncertain``.
 
     Parameters
     ----------
@@ -899,9 +900,14 @@ def uncertain_row(*, row: Row) -> bool:
     Returns
     -------
     bool
-        True when the row has an estimate flagged uncertain.
+        True when the estimate is uncertain and the row's lateness mark
+        does not already carry that.
     """
-    return row.estimate is not None and row.estimate.uncertain
+    return (
+        row.estimate is not None
+        and row.estimate.uncertain
+        and not row_mark(row=row)
+    )
 
 
 def note_room(*, face: Face, text: str = UNCERTAIN) -> float:

@@ -44,6 +44,7 @@ from paperroute_transit.render.chrome import (
     view_banner,
     view_header,
 )
+from paperroute_transit.render.late_marks import mark_room, marked_countdown
 from paperroute_transit.render.names import Naming, fit_headsign, fit_name
 
 SPLIT: Final[int] = 438
@@ -57,6 +58,7 @@ LIST_WIDTH: Final[int] = 140
 LIST_PAIR_ROOM: Final[int] = 92  # clear of a '100 min' at LIST_LEAVE_RIGHT
 LIST_LEAVE_RIGHT: Final[int] = 688
 WIDEST_COUNT: Final[str] = '100 min'  # widest live count, Ruling 2
+MARK_PX: Final[int] = 14  # size of the lateness mark
 FASTER_LEFT: Final[int] = 712
 PILL_LEFT: Final[int] = 596
 TAGGED_WIDTH: Final[int] = FASTER_LEFT - LIST_LEFT - 16
@@ -675,9 +677,10 @@ def open_times(canvas: Canvas, *, row: Row, y: int, k: Scale) -> None:
     if row.pill is Pill.CANCELLED:
         cancelled_pill(canvas, row=row, y=y, k=k)
         return
-    canvas.text(
-        at=(OPEN_RIGHT, y + k.y(30)), text=leaves(row=row),
-        face=k.face(weight=800, px=28), grey=INK, anchor='rs')
+    marked_countdown(
+        canvas, row=row, text=leaves(row=row),
+        at=(OPEN_RIGHT, y + k.y(30)), face=k.face(weight=800, px=28),
+        mark_face=k.face(weight=700, px=MARK_PX))
     row_note(canvas, row=row, right=OPEN_RIGHT, y=y, k=k)
 
 
@@ -717,7 +720,8 @@ def list_row(
         route=row.route,
         onto=row.onto,
         px=k.px(14),
-        room=LIST_PAIR_ROOM,
+        room=LIST_PAIR_ROOM
+        - mark_room(row=row, face=k.face(weight=700, px=MARK_PX)),
     )
     face = k.face(weight=400, px=13)
     at = (LIST_LEFT, y + k.y(42))
@@ -783,9 +787,11 @@ def list_times(canvas: Canvas, *, row: Row, y: int, k: Scale) -> None:
     if row.pill is Pill.CANCELLED:
         cancelled_pill(canvas, row=row, y=y, k=k)
     else:
-        canvas.text(
-            at=(LIST_LEAVE_RIGHT, y + k.y(30)), text=leaves(row=row),
-            face=k.face(weight=800, px=28), grey=INK, anchor='rs')
+        marked_countdown(
+            canvas, row=row, text=leaves(row=row),
+            at=(LIST_LEAVE_RIGHT, y + k.y(30)),
+            face=k.face(weight=800, px=28),
+            mark_face=k.face(weight=700, px=MARK_PX))
         canvas.text(
             at=(786, y + k.y(24)), text=row.arrives_at,
             face=k.face(weight=800, px=20), grey=INK, anchor='rs')

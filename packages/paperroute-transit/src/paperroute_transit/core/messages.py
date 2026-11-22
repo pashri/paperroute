@@ -63,6 +63,7 @@ from paperroute_transit.core.saved import (
     MapFraming,
     Rate,
 )
+from paperroute_transit.core.sides import KerbPair
 from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.core.strip_model import StripMapView, StripView
 
@@ -659,11 +660,14 @@ class LineLoaded:
         Stations in running order, or None when there are none to read.
     timetable : str | None
         The timetable version they were read from.
+    pairs : tuple[KerbPair, ...]
+        The kerbs across the road from those stations that have one.
     """
 
     towards: int
     line: tuple[StopPlace, ...] | None
     timetable: str | None = None
+    pairs: tuple[KerbPair, ...] = ()
 
 
 @dataclass(frozen=True)

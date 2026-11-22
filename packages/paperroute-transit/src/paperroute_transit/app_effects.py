@@ -285,10 +285,21 @@ def line_loaded(*, network: NetworkRepository, effect: LoadLine) -> LineLoaded:
     LineLoaded
         The stations.
     """
+    line = network.towards_line(towards=effect.towards)
+    pairs = (
+        ()
+        if line is None
+        else tuple(
+            network.kerb_pairs(
+                stations=[place.stop_id for place in line],
+            ).values()
+        )
+    )
     return LineLoaded(
         towards=effect.towards,
-        line=network.towards_line(towards=effect.towards),
+        line=line,
         timetable=effect.timetable,
+        pairs=pairs,
     )
 
 

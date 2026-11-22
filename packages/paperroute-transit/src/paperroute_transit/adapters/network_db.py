@@ -42,6 +42,7 @@ from paperroute_transit.core.reach import (
     every_route,
     merge_tails,
 )
+from paperroute_transit.core.sides import KerbPair
 from paperroute_transit.core.train_network import TrainNetwork
 
 NETWORK_TABLES: Final[tuple[str, ...]] = (
@@ -82,6 +83,11 @@ REPLACEMENTS_LABEL: Final[str] = 'Trackwork'
 TOWARDS: Final[str] = """
 SELECT towards_id, headsign, trips FROM chooser_towards
 WHERE route_key = ? ORDER BY trips DESC, towards_id
+"""
+KERB_PAIRS: Final[str] = """
+SELECT p.station_id, p.other_id, p.busy, s.name, s.lon, s.lat
+FROM stop_pairs p JOIN stops s ON s.stop_id = p.other_id
+WHERE p.station_id IN (SELECT value FROM json_each(:ids))
 """
 TOWARDS_LINE: Final[str] = """
 SELECT j.value, s.name, s.lon, s.lat
@@ -754,6 +760,44 @@ class SqliteNetworkRepository:
         )
         return line or None
 
+    def kerb_pairs(
+        self, *, stations: Collection[str]
+    ) -> dict[str, KerbPair]:
+        """
+        Read the kerb across the road from each station that has one.
+
+        Parameters
+        ----------
+        stations : Collection[str]
+            Station IDs.
+
+        Returns
+        -------
+        dict[str, KerbPair]
+            Pair by station ID; empty for an old file.
+        """
+        if not self._has_tables(tables=('stop_pairs',)):
+            return {}
+        rows = self.fetch(
+            sql=KERB_PAIRS, params={'ids': json.dumps(list(stations))},
+        )
+        return {
+            str(station): KerbPair(
+                station=str(station),
+                other=StopPlace(
+                    stop_id=str(other),
+                    name=str(name),
+                    point=to_point(
+                        lon=lon,
+                        lat=lat,
+                        projection=self.projection,
+                    ),
+                ),
+                busy=bool(busy),
+            )
+            for station, other, busy, name, lon, lat in rows
+        }
+
     def station_for(self, *, stop_id: str) -> str:
         """
         Find the station a stop belongs to.
@@ -801,7 +845,7 @@ class SqliteNetworkRepository:
             for stop_id, name, lon, lat in rows
         }
 
-    def station_of(self, *, stations: Collection[str]) -> dict[str, str]:
+    def _station_of(self, *, stations: Collection[str]) -> dict[str, str]:
         """
         Map stations and the stops under them to the station.
 
@@ -896,7 +940,7 @@ class SqliteNetworkRepository:
             ),
             tails=tails,
             places=places,
-            station_of=self.station_of(stations=places),
+            station_of=self._station_of(stations=places),
             exits=exits,
             network=network,
         )

@@ -27,6 +27,7 @@ from paperroute_transit.core.model import (
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.reach import ReachInput, StripKey
 from paperroute_transit.core.saved import Saved, default_saved
+from paperroute_transit.core.sides import KerbPair
 from paperroute_transit.core.tiles import LabelKind, StreetLabel, TileVariant
 from paperroute_transit.ports import TileRepository
 
@@ -47,6 +48,8 @@ class FakeNetwork:
         The column every path leads to.
     line : tuple[StopPlace, ...] | None
         The stations of every towards row.
+    pairs : dict[str, KerbPair]
+        The pair of each station that has one.
     data : ReachInput | None
         The runs through every strip's From.
     error : sqlite3.Error | None
@@ -55,6 +58,7 @@ class FakeNetwork:
 
     column: Column | None = None
     line: tuple[StopPlace, ...] | None = None
+    pairs: dict[str, KerbPair] = field(default_factory=dict)
     data: ReachInput | None = None
     error: sqlite3.Error | None = None
 
@@ -86,6 +90,29 @@ class FakeNetwork:
         """
         self.check()
         return self.column
+
+    def kerb_pairs(
+        self, *, stations: Collection[str]
+    ) -> dict[str, KerbPair]:
+        """
+        Give the pairs of the asked stations.
+
+        Parameters
+        ----------
+        stations : Collection[str]
+            Station IDs.
+
+        Returns
+        -------
+        dict[str, KerbPair]
+            The fixed pairs of those stations.
+        """
+        self.check()
+        return {
+            station: pair
+            for station, pair in self.pairs.items()
+            if station in stations
+        }
 
     def towards_line(self, *, towards: int) -> tuple[StopPlace, ...] | None:
         """

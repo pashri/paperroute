@@ -23,6 +23,7 @@ from paperroute_transit.core.pin_choices import ChangeStop, StopMatch
 from paperroute_transit.core.reach import ReachInput, StripKey
 from paperroute_transit.core.route_colours import RouteColour
 from paperroute_transit.core.saved import Settings
+from paperroute_transit.core.sides import KerbPair
 from paperroute_transit.core.tiles import LabelKind, StreetLabel, TileVariant
 
 
@@ -398,6 +399,23 @@ class NetworkRepository(Protocol):
         Column | None
             The next column; None for an old timetable, an unknown path
             or a path with nothing after it.
+        """
+
+    def kerb_pairs(
+        self, *, stations: Collection[str]
+    ) -> dict[str, KerbPair]:
+        """
+        Read the kerb across the road from each station that has one.
+
+        Parameters
+        ----------
+        stations : Collection[str]
+            Station IDs.
+
+        Returns
+        -------
+        dict[str, KerbPair]
+            Pair by station ID; empty for an old file.
         """
 
     def towards_line(self, *, towards: int) -> tuple[StopPlace, ...] | None:

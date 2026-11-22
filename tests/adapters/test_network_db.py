@@ -166,6 +166,31 @@ def _copy(network_db: Path, tmp_path: Path) -> Path:
     return Path(shutil.copy(network_db, tmp_path / 'timetable.db'))
 
 
+def test_kerb_pairs_reads_the_other_kerb(copy: Path) -> None:
+    """A pair is read with the other kerb's name and point."""
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute('DELETE FROM stop_pairs')
+        conn.executemany('INSERT INTO stop_pairs VALUES (?, ?, ?)', [
+            ('B1', 'B2', 1), ('B2', 'B1', 1),
+        ])
+        conn.commit()
+    with closing(SqliteNetworkRepository(path=copy, city=LINE_CITY)) as repo:
+        found = repo.kerb_pairs(stations=['B1', 'nowhere'])
+    assert list(found) == ['B1']
+    assert found['B1'].other.stop_id == 'B2'
+    assert found['B1'].other.point is not None
+    assert found['B1'].busy
+
+
+def test_kerb_pairs_reads_nothing_from_an_old_file(copy: Path) -> None:
+    """A file without the pairs table gives no pairs."""
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute('DROP TABLE stop_pairs')
+        conn.commit()
+    with closing(SqliteNetworkRepository(path=copy, city=LINE_CITY)) as repo:
+        assert repo.kerb_pairs(stations=['B1']) == {}
+
+
 @pytest.fixture(name='network')
 def _network(network_db: Path) -> Iterator[SqliteNetworkRepository]:
     """

@@ -110,6 +110,7 @@ from paperroute_transit.core.reach import (
 )
 from paperroute_transit.core.realtime import RealtimeSnapshot
 from paperroute_transit.core.saved import seeded
+from paperroute_transit.core.sides import KerbPair
 from paperroute_transit.measures import StopMeasures
 from paperroute_transit.render.chooser import draw_chooser_view
 from paperroute_transit.render.stop_view import draw_stop_view
@@ -460,6 +461,25 @@ async def test_load_line_posts_line_and_failure() -> None:
     broken = FakeNetwork(error=sqlite3.OperationalError('locked'))
     posted = await posted_by(ports=ports_of(network=broken), effects=[load])
     assert posted == [LineFailed(towards=7, timetable='v1')]
+
+
+async def test_load_line_posts_the_pairs_of_its_stations() -> None:
+    """LoadLine carries the pairs of the line's stations, none off a line."""
+    line = (place('A'), place('B'))
+    pair = KerbPair(station='B', other=place('X'), busy=False)
+    network = FakeNetwork(line=line, pairs={'B': pair, 'Z': pair})
+    posted = await posted_by(
+        ports=ports_of(network=network),
+        effects=[LoadLine(towards=7, timetable='v1')],
+    )
+    assert posted == [
+        LineLoaded(towards=7, line=line, timetable='v1', pairs=(pair,)),
+    ]
+    posted = await posted_by(
+        ports=ports_of(network=FakeNetwork(pairs={'B': pair})),
+        effects=[LoadLine(towards=7, timetable='v1')],
+    )
+    assert posted == [LineLoaded(towards=7, line=None, timetable='v1')]
 
 
 @dataclass

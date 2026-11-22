@@ -171,6 +171,8 @@ def draw_pieces(
     """
     Draw text, with each pictogram character drawn as its outline.
 
+    The halo is drawn whole before the fill so it never covers ink.
+
     Parameters
     ----------
     target : skia.Canvas
@@ -190,22 +192,60 @@ def draw_pieces(
     halo : skia.Paint | None
         Paper stroke drawn under everything, or None.
     """
+    if halo:
+        draw_run(
+            target, text=text, origin=origin, face=face, font_=font_,
+            ink=halo, snap=snap,
+        )
+    draw_run(
+        target, text=text, origin=origin, face=face, font_=font_,
+        ink=fill, snap=snap,
+    )
+
+
+def draw_run(
+    target: skia.Canvas,
+    *,
+    text: str,
+    origin: Point,
+    face: Face,
+    font_: skia.Font,
+    ink: skia.Paint,
+    snap: bool,
+) -> None:
+    """
+    Draw text and pictogram outlines with one paint.
+
+    Parameters
+    ----------
+    target : skia.Canvas
+        Surface to draw on.
+    text : str
+        Text, possibly holding pictogram characters.
+    origin : Point
+        Baseline origin.
+    face : Face
+        Font.
+    font_ : skia.Font
+        Loaded font to draw the text pieces with.
+    ink : skia.Paint
+        Paint for the glyphs and outlines.
+    snap : bool
+        Round the pictogram centre to the pixel grid.
+    """
     x, y = origin
     cap = font(face).getMetrics().fCapHeight
     for index, piece in enumerate(text.split(PLANE)):
         if index:
-            shape = placed_plane(
-                left=x, baseline=y, cap=cap, px=face.px, snap=snap,
+            target.drawPath(
+                placed_plane(
+                    left=x, baseline=y, cap=cap, px=face.px, snap=snap,
+                ),
+                ink,
             )
-            if halo:
-                target.drawPath(shape, halo)
-            target.drawPath(shape, fill)
             x += plane_advance(face=face)
-        if piece:
-            if halo:
-                target.drawString(piece, x, y, font_, halo)
-            target.drawString(piece, x, y, font_, fill)
-            x += text_width(text=piece, face=face)
+        target.drawString(piece, x, y, font_, ink)
+        x += text_width(text=piece, face=face)
 
 
 def ellipsized(*, text: str, face: Face, width: float) -> str:

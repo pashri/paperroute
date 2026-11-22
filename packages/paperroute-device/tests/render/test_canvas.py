@@ -401,3 +401,15 @@ def test_ellipsized_drops_the_plane_first() -> None:
     assert ellipsized(
         text=f'Western Heights {PLANE}', face=PLANE_FACE, width=width + 0.5,
     ) == f'Western Heights{ELLIPSIS}'
+
+
+def test_text_keeps_the_plane_ink_under_a_halo() -> None:
+    """A halo on neighbouring text does not clip the plane's outline."""
+    plain = Canvas()
+    haloed = Canvas()
+    text = f'ab{PLANE}cd'
+    plain.text(at=(100, 100), text=text, face=PLANE_FACE, grey=INK)
+    haloed.text(
+        at=(100, 100), text=text, face=PLANE_FACE, grey=INK, halo=2,
+    )
+    assert ((haloed.grey() < 128) | (plain.grey() >= 128)).all()

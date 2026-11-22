@@ -58,6 +58,7 @@ from paperroute_transit.render.stop_view import (
     Scale,
     draw_stop_view,
     headline_width,
+    headsign_arrival,
     hero_headline,
     hero_under,
     list_row,
@@ -886,3 +887,9 @@ def test_list_row_pair_yields_to_a_marked_countdown() -> None:
     start = int(LIST_LEAVE_RIGHT - group)
     band = canvas.grey()[109:113, LIST_LEFT:start - 2] < 128
     assert LIST_LEFT + np.flatnonzero(band.any(axis=0)).max() < start - 4
+
+
+def test_headsign_arrival_joins_the_headsign_and_the_arrival() -> None:
+    """The headsign, a dot and the arrival; the arrival alone without one."""
+    assert headsign_arrival(row=row()) == f'Parramatta{DOT}arr 8:45'
+    assert headsign_arrival(row=row(destination='')) == 'arr 8:45'

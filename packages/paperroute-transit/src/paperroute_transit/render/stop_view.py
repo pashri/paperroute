@@ -25,6 +25,7 @@ from paperroute_transit.core.stop_view import (
     Pill,
     Row,
     StopView,
+    arrival_line,
     due_line,
     stops_text,
 )
@@ -461,6 +462,28 @@ def hero(
         return
     hero_footer(canvas, row=row, top=top)
     hero_due(canvas, row=row, top=top)
+
+
+def headsign_arrival(*, row: Row) -> str:
+    """
+    Join a row's headsign and its arrival line.
+
+    Parameters
+    ----------
+    row : Row
+        Departure.
+
+    Returns
+    -------
+    str
+        The headsign, a dot and the arrival; the arrival alone when the
+        headsign is empty.
+    """
+    return DOT.join(
+        part
+        for part in (row.destination, arrival_line(row=row))
+        if part
+    )
 
 
 def headline(

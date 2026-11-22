@@ -51,7 +51,7 @@ from paperroute_transit.render.keep_out import NO_KEEP_OUT, KeepOut
 from paperroute_transit.render.late_marks import mark_room, marked_countdown
 from paperroute_transit.render.map_view import draw_overlay, snap
 from paperroute_transit.render.names import Naming, fit_headsign, fit_name
-from paperroute_transit.render.stop_view import TAG_FACE
+from paperroute_transit.render.stop_view import TAG_FACE, headsign_arrival
 from paperroute_transit.render.strip import (
     draw_band,
     draw_rows,
@@ -208,9 +208,9 @@ def row_middle(
     Draw a departure's route badge and headsign, and its arrival if any.
 
     A train that continues as another route draws its route pair on the
-    whole-stop board, with its destination on the second line. With a
-    To, the second line holds the arrival, so the row draws its route
-    badge alone, as for a train that does not continue.
+    whole-stop board, with its destination and arrival on the second
+    line. Any other row draws its route badge alone, with the arrival on
+    the second line.
 
     Parameters
     ----------
@@ -221,7 +221,7 @@ def row_middle(
     top : int
         The row's rule.
     whole : bool
-        True on the whole-stop board, which shows no arrival.
+        True on the whole-stop board.
     naming : Naming
         How the destination is shortened.
 
@@ -257,8 +257,6 @@ def row_middle(
             face=HEADSIGN_FACE,
             grey=INK,
         )
-    if whole:
-        return MIDDLE_X
     arrival = canvas.text(
         at=(MIDDLE_X, top + SECOND_DROP),
         text=canvas.fit(
@@ -277,6 +275,8 @@ def continuing_middle(
 ) -> int:
     """
     Draw a continuing train's route pair, then its destination below.
+
+    The arrival follows the destination when both fit the room.
 
     Parameters
     ----------
@@ -303,12 +303,15 @@ def continuing_middle(
         px=BADGE_PX,
     )
     room = CARRY_ROOM if row.then is not None else 0
-    shown = fit_headsign(
-        text=row.destination,
-        face=HEADSIGN_FACE,
-        width=TEXT_RIGHT - MIDDLE_X - room - note_width(row=row),
-        naming=naming,
-    )[0]
+    width = TEXT_RIGHT - MIDDLE_X - room - note_width(row=row)
+    shown = headsign_arrival(row=row)
+    if text_width(text=shown, face=HEADSIGN_FACE) > width:
+        shown = fit_headsign(
+            text=row.destination,
+            face=HEADSIGN_FACE,
+            width=width,
+            naming=naming,
+        )[0]
     used = canvas.text(
         at=(MIDDLE_X, top + SECOND_DROP),
         text=shown,
@@ -382,6 +385,33 @@ def carry_on(canvas: Canvas, *, row: Row, top: int, left: int) -> None:
     )
 
 
+def leave_note(canvas: Canvas, *, row: Row, top: int) -> None:
+    """
+    Draw a row's note, such as its platform, under the leave time.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Departure; nothing is drawn when its note is empty.
+    top : int
+        The row's rule.
+    """
+    if not row.note:
+        return
+    canvas.text(
+        at=(TEXT_LEFT, top + SECOND_DROP),
+        text=canvas.fit(
+            text=row.note,
+            face=TAG_FACE,
+            width=MIDDLE_X - TEXT_LEFT - NAME_GAP,
+        ),
+        face=TAG_FACE,
+        grey=INK,
+    )
+
+
 def panel_row(
     canvas: Canvas,
     *,
@@ -417,6 +447,7 @@ def panel_row(
     left = row_middle(
         canvas, row=row, top=top, whole=whole, naming=naming,
     )
+    leave_note(canvas, row=row, top=top)
     row_countdown(canvas, row=row, top=top)
     row_note(canvas, row=row, top=top)
     row_faster(canvas, row=row, top=top)

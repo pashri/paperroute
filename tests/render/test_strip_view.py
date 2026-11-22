@@ -85,6 +85,8 @@ from paperroute_transit.render.strip_view import (
     NAME_X,
     PANE_NAME_X,
     RULE_RIGHT,
+    SECOND_DROP,
+    TEXT_LEFT,
     TEXT_RIGHT,
     TIME_DROP,
     draw_strip_map_view,
@@ -504,7 +506,7 @@ def test_destination_row_arrival_on_second_line() -> None:
     row = drawn_row()
     assert (row[SECOND_LINE, MIDDLE] == INK).any()
     whole = drawn_row(whole=True)
-    assert (whole[SECOND_LINE, MIDDLE] == PAPER).all()
+    assert (whole[SECOND_LINE, MIDDLE] == row[SECOND_LINE, MIDDLE]).all()
     assert (row[FIRST_LINE, 556:680] == whole[FIRST_LINE, 556:680]).all()
 
 
@@ -519,8 +521,8 @@ def test_destination_row_carry_on_after_arrival() -> None:
     assert right_edge(drawn_row(then=then)) > right_edge(drawn_row()) + 10
 
 
-def test_whole_stop_row_unchanged() -> None:
-    """A whole-stop row is the badge and headsign, with no arrival."""
+def test_whole_stop_row_adds_the_arrival() -> None:
+    """A whole-stop row is the badge and headsign, with the arrival."""
     canvas = Canvas()
     width = badge(canvas, x=556, y=PANEL_TOP + 34, route='T1', px=14)
     face = Face(weight=400, px=14)
@@ -529,7 +531,9 @@ def test_whole_stop_row_unchanged() -> None:
     expected = canvas.grey()[FIRST_LINE, 556:680]
     row = drawn_row(whole=True)
     assert (row[FIRST_LINE, 556:680] == expected).all()
-    assert (row[SECOND_LINE, MIDDLE] == PAPER).all()
+    assert (
+        row[SECOND_LINE, MIDDLE] == drawn_row()[SECOND_LINE, MIDDLE]
+    ).all()
 
 
 WHOLE = replace(PANEL, destination=None, no_destination=True)
@@ -596,14 +600,19 @@ def test_whole_board_continuing_row_puts_the_destination_second() -> None:
     )
     assert (frame[FIRST_LINE, int(pair_end) + 4:700] == PAPER).all()
     plain = panel_frame(panel=WHOLE, row=central(onto=None))
-    assert (plain[SECOND_LINE, MIDDLE] == PAPER).all()
+    expected = panel_frame(panel=PANEL, row=central(onto=None))
+    assert (
+        plain[SECOND_LINE, MIDDLE] == expected[SECOND_LINE, MIDDLE]
+    ).all()
 
 
 def test_whole_board_carry_on_follows_the_destination() -> None:
     """A carry-on starts CARRY_GAP after the destination on line 2."""
     then = CarryOn(route='T9', headsign='Hornsby')
     frame = panel_frame(panel=WHOLE, row=central(onto='T8', then=then))
-    width = text_width(text='Central', face=Face(weight=400, px=14))
+    width = text_width(
+        text=f'Central{DOT}arr 8:47', face=Face(weight=400, px=14),
+    )
     x = 556 + round(width) + CARRY_GAP
     assert (frame[SECOND_LINE, x:x + int(ARROW_WIDTH)] == INK).any()
     assert (frame[SECOND_LINE, x - 6:x - 1] == PAPER).all()
@@ -894,7 +903,9 @@ def test_a_long_name_takes_the_room_a_timetable_row_leaves() -> None:
     )
     frame = panel_frame(panel=WHOLE, row=row)
     assert (frame[PANEL_TOP + 28:PANEL_TOP + 44, 702:784] == INK).any()
-    assert (frame[PANEL_TOP + 45:PANEL_TOP + 68, 556:784] == PAPER).all()
+    band = (slice(PANEL_TOP + 45, PANEL_TOP + 68), slice(556, 784))
+    expected = panel_frame(panel=PANEL, row=row)
+    assert (frame[band] == expected[band]).all()
 
 
 def test_a_name_too_long_for_the_room_wraps_beside_a_centred_badge() -> None:
@@ -922,8 +933,9 @@ def test_a_name_still_too_long_never_takes_a_third_line() -> None:
     """Past two lines the name is cut, and the pill slot stays clear."""
     row = replace(panel_row(), destination=LONGEST)
     whole = panel_frame(panel=WHOLE, row=row)
-    assert (whole[PANEL_TOP + 48:PANEL_TOP + 68, 556:784] == PAPER).all()
     frame = panel_frame(panel=PANEL, row=row)
+    band = (slice(PANEL_TOP + 48, PANEL_TOP + 68), slice(556, 784))
+    assert (whole[band] == frame[band]).all()
     slot = frame[PANEL_TOP + 47:PANEL_TOP + 68, RULE_RIGHT - 74:RULE_RIGHT]
     assert (slot == PAPER).all()
 
@@ -983,3 +995,57 @@ def test_name_room_leaves_room_for_the_mark() -> None:
         TEXT_RIGHT - count - mark_room(row=marked, face=MARK_FACE)
         - NAME_GAP - 600,
     )
+
+
+def test_panel_row_shows_the_arrival_on_the_whole_board() -> None:
+    """A whole-stop row reads its arrival on the second line."""
+    canvas = Recording()
+    paint_panel_row(
+        canvas, row=panel_row(), top=PANEL_TOP, whole=True, naming=NAMING,
+    )
+    assert 'arr 8:47' in canvas.drawn
+
+
+def test_continuing_middle_adds_the_arrival_when_it_fits() -> None:
+    """A continuing whole-stop row reads 'Central · arr 8:47'."""
+    canvas = Recording()
+    paint_panel_row(
+        canvas, row=central(onto='T8'), top=PANEL_TOP, whole=True,
+        naming=NAMING,
+    )
+    assert f'Central{DOT}arr 8:47' in canvas.drawn
+
+
+def test_continuing_middle_drops_the_arrival_for_a_long_name() -> None:
+    """A long destination beside a carry-on keeps no arrival."""
+    row = replace(
+        central(onto='T8', then=CarryOn(route='T9', headsign='Hornsby')),
+        destination='Macarthur via Airport and Sydenham',
+    )
+    canvas = Recording()
+    paint_panel_row(
+        canvas, row=row, top=PANEL_TOP, whole=True, naming=NAMING,
+    )
+    assert not any('arr ' in text for text in canvas.drawn)
+
+
+def test_leave_note_sits_under_the_leave_time() -> None:
+    """'platform 4' is drawn left of the middle, on the second line."""
+    row = replace(panel_row(), note='platform 4')
+    found = np.argwhere(painted(row=row) != painted(row=panel_row()))
+    assert found.size
+    assert found[:, 0].min() >= PANEL_TOP + TIME_DROP + 4
+    assert found[:, 0].max() <= PANEL_TOP + SECOND_DROP + 4
+    assert found[:, 1].min() >= TEXT_LEFT
+    assert found[:, 1].max() < MIDDLE_X - NAME_GAP
+
+
+def test_panel_row_shows_the_platform_beside_uncertain() -> None:
+    """The platform and 'uncertain' each keep their own place."""
+    canvas = Recording()
+    paint_panel_row(
+        canvas,
+        row=replace(panel_row(), note='platform 4', estimate=UNSURE),
+        top=PANEL_TOP, whole=False, naming=NAMING,
+    )
+    assert {'platform 4', UNCERTAIN} <= set(canvas.drawn)

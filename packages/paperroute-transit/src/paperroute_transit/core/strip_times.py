@@ -369,6 +369,8 @@ def window_departures(
     for departure in strip_departures(
         departures=departures, key=key, line_kinds=line_kinds,
     ):
+        if departure.facts.across:
+            continue
         if start <= departure.departs.timestamp() <= end:
             kept.setdefault(departure.trip_id, departure)
     return list(kept.values())

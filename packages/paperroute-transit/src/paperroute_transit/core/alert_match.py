@@ -19,6 +19,7 @@ from paperroute_transit.core.city import City
 from paperroute_transit.core.model import Departure, Pin, pin_routes
 from paperroute_transit.core.modes import end_point_modes
 from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.sides import pin_places
 
 BANNER_AHEAD: Final[timedelta] = timedelta(hours=24)
 BETWEEN_TRIPS: Final[int] = 12
@@ -246,11 +247,9 @@ def pin_names(
     frozenset[str]
         The names.
     """
-    places = [pin.origin] + ([] if pin.destination is None else [
-        pin.destination,
-    ])
     return between | {
-        place_name(name=place.name, city=city) for place in places
+        place_name(name=place.name, city=city)
+        for place in pin_places(pin=pin)
     }
 
 
@@ -285,9 +284,7 @@ def pin_facts(
         The facts; routes come from the pin's chosen routes and filter
         as well as from its departures.
     """
-    ends = [pin.origin] + ([] if pin.destination is None else [
-        pin.destination,
-    ])
+    ends = pin_places(pin=pin)
     named = is_name_pin(pin=pin, departures=departures, city=city)
     spec = city.mode(mode_id=pin.kind)
     known = families or {}

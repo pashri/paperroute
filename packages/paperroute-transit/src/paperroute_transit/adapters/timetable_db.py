@@ -5,7 +5,7 @@
 import math
 import sqlite3
 from collections.abc import Collection
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, timedelta
 from itertools import batched
 from pathlib import Path
@@ -71,6 +71,7 @@ from paperroute_transit.core.model import (
 from paperroute_transit.core.modes import end_point_modes, line_modes
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.reach import StripKey
+from paperroute_transit.core.sides import both_sides
 from paperroute_transit.core.strip_list import loop_passes
 from paperroute_transit.core.strip_times import (
     board_departures,
@@ -1095,10 +1096,12 @@ class SqliteTimetableRepository:
         Returns
         -------
         list[Departure]
-            In departure order, then trip ID. With a Destination, only
-            the pin's kind and routes, as on its strip: a station's bus
-            stands sit under it too. Without one, the departures of the
-            pin's kind (see `board_departures`) from any platform of the
+            In departure order, then trip ID. A both-sides pin lists the
+            kerb across too, those departures marked `facts.across`.
+            With a Destination, only the pin's kind and routes, as on
+            its strip: a station's bus stands sit under it too.
+            Without one, the departures of the pin's kind (see
+            `board_departures`) from any platform of the
             From, each running to its last stop. A
             trip calling at the From several times in a row, such as a
             bus moving between two stands, leaves once, from its last call
@@ -1122,6 +1125,17 @@ class SqliteTimetableRepository:
                 end=end,
             )
         ]
+        across = pin.opposite if both_sides(pin=pin) else None
+        if across is not None:
+            found.extend(
+                replace(
+                    departure, facts=replace(departure.facts, across=True),
+                )
+                for day in sorted(days)
+                for departure in self.on_day(
+                    ends=(across.stop_id, None), day=day, start=start, end=end,
+                )
+            )
         if destination is None:
             found = list(board_departures(
                 departures=found, kind=pin.kind, modes=self.city.modes,

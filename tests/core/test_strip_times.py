@@ -29,6 +29,7 @@ from paperroute_transit.core.strip_times import (
     joined_ids,
     strip_trips,
     trip_ids,
+    window_departures,
 )
 
 TRAIN: Final[StripKey] = StripKey(
@@ -386,3 +387,16 @@ def test_board_modes_from_specs() -> None:
     assert board_modes(
         modes=SYDNEY.modes, kind=SydneyMode.TRAIN, skip=False,
     ) == {'train'}
+
+
+def test_window_departures_keeps_to_the_picked_kerb() -> None:
+    """A departure from the kerb across never feeds the strip."""
+    here = departure(departs=START, trip_id='a', kind=SydneyMode.BUS)
+    there = departure(departs=START, trip_id='b', kind=SydneyMode.BUS)
+    there = replace(there, facts=replace(there.facts, across=True))
+    assert window_departures(
+        departures=[here, there],
+        key=StripKey(station='C', kind=SydneyMode.BUS, routes=()),
+        now=START,
+        line_kinds=line_modes(modes=SYDNEY.modes),
+    ) == [here]

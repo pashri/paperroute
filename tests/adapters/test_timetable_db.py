@@ -2553,3 +2553,64 @@ def test_rail_hops_without_a_track_table_are_empty(
         conn.execute('DROP TABLE rail_hops')
         conn.commit()
     assert hops_repo.rail_hops(pairs={('A', 'B')}) == {}
+
+
+KERBS: Final[list[tuple[str, str, list[tuple[str, str]]]]] = [
+    ('here', 'P', [('Q', '08:00:00'), ('P_1', '08:10:00')]),
+    ('there', 'Q', [('P_1', '08:05:00'), ('Q', '08:15:00')]),
+    (
+        'loop', 'P',
+        [('P_2', '08:20:00'), ('Q', '08:30:00'), ('P_1', '08:40:00')],
+    ),
+]
+
+
+def kerb_departures(
+    *, tmp_path: Path, destination: str | None = None,
+) -> list[tuple[str, datetime, bool]]:
+    """
+    List a both-sides pin's departures at Q, the kerb across being P.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Working directory.
+    destination : str | None
+        The pin's Destination, if any.
+
+    Returns
+    -------
+    list[tuple[str, datetime, bool]]
+        Trip ID, departure time and whether it leaves from across.
+    """
+    pin = Pin(
+        origin=place('Q'),
+        opposite=place('P'),
+        destination=None if destination is None else place(destination),
+    )
+    with closing(platform_repo(tmp_path=tmp_path, trips=KERBS)) as repo:
+        found = repo.departures(
+            pin=pin, start=at(hour=7, minute=55), end=at(hour=9, minute=0),
+        )
+    return [(d.trip_id, d.departs, d.facts.across) for d in found]
+
+
+def test_departures_lists_both_kerbs_in_time_order(tmp_path: Path) -> None:
+    """A both-sides pin lists each kerb's departures in one time order."""
+    assert kerb_departures(tmp_path=tmp_path) == [
+        ('here', at(hour=8, minute=0), False),
+        ('there', at(hour=8, minute=5), True),
+        ('loop', at(hour=8, minute=20), True),
+        ('loop', at(hour=8, minute=30), False),
+    ]
+
+
+def test_departures_reads_one_kerb_beside_a_destination(
+    tmp_path: Path,
+) -> None:
+    """A pin with a Destination reads its From alone."""
+    found = kerb_departures(tmp_path=tmp_path, destination='P')
+    assert [trip for trip, _, across in found if not across] == [
+        'here', 'loop',
+    ]
+    assert not any(across for _, _, across in found)

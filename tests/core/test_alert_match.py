@@ -32,7 +32,7 @@ from paperroute_transit.core.alert_model import (
     Matched,
     Period,
 )
-from paperroute_transit.core.model import Departure, Pin
+from paperroute_transit.core.model import Departure, Pin, StopPlace
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from tests.core.alert_factories import (
     PENRITH_CENTRAL,
@@ -797,3 +797,16 @@ def test_route_alert_listing_other_stops_is_dropped() -> None:
         route='T1', stop_id='9999', stops=frozenset({'9999'}),
     ))
     assert tie_of(alert=elsewhere, facts=facts) is None
+
+
+def test_pin_facts_names_the_kerb_across() -> None:
+    """Alerts naming either kerb reach a both-sides pin."""
+    home = StopPlace(stop_id='s2', name='Orchard Close', point=None)
+    across = StopPlace(stop_id='x2', name='Orchard Close', point=None)
+    facts = pin_facts(
+        pin=Pin(origin=home, kind=SydneyMode.BUS, opposite=across),
+        departures=[],
+        between=frozenset(),
+        city=SYDNEY,
+    )
+    assert facts.stops == {'s2', 'x2'}

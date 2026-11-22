@@ -396,6 +396,8 @@ class TripFacts:
         name (T1's Western and North Shore runs); empty when not known.
     road : bool
         False for rail, metro, light rail and ferry.
+    across : bool
+        True for a departure from a both-sides pin's opposite kerb.
     """
 
     kind: str | None = None
@@ -403,6 +405,7 @@ class TripFacts:
     onto: CarryOn | None = None
     route_id: str = ''
     road: bool = True
+    across: bool = False
 
 
 NO_FACTS: Final[TripFacts] = TripFacts()

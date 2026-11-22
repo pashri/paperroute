@@ -69,7 +69,7 @@ from paperroute_transit.app_render import MapRenderer
 from paperroute_transit.core.chains import Legs, leg_key
 from paperroute_transit.core.connection_model import way_legs
 from paperroute_transit.core.device import on_settings
-from paperroute_transit.core.geo import Shape, make_shape
+from paperroute_transit.core.geo import Point, Shape, make_shape
 from paperroute_transit.core.messages import (
     DayLinesLoaded,
     DeparturesLoaded,
@@ -82,11 +82,17 @@ from paperroute_transit.core.messages import (
     ShapesLoaded,
     StripLoaded,
 )
-from paperroute_transit.core.model import Pin, StopPlace
+from paperroute_transit.core.model import Departure, Pin, StopPlace
 from paperroute_transit.core.modes import end_point_modes
 from paperroute_transit.core.panel_screens import TilesFacts
 from paperroute_transit.core.patterns import TripPattern, measure
 from paperroute_transit.core.places import shown
+from paperroute_transit.core.reach import (
+    Reach,
+    ReachInput,
+    RunTail,
+    build_reach,
+)
 from paperroute_transit.core.realtime import (
     EVERY_STOP,
     RealtimeSnapshot,
@@ -481,29 +487,53 @@ def stop_cambridge_trains() -> State:
     return state
 
 
-def both_sides_scene(*, sides: StopSides) -> State:
-    """
-    Show the Stop view of a both-sides pin, a bus each way.
+BOTH_PIN: Final[Pin] = Pin(
+    origin=place(STAND, name='King St At Missenden Rd', point=CENTRE),
+    opposite=place(
+        'opp', name='King St Opp Missenden Rd',
+        point=(CENTRE[0], CENTRE[1] + 37.0),
+    ),
+    kind=SydneyMode.BUS,
+    towards=('Leichhardt', 'Newtown'),
+)
+HERE_WAY: Final[tuple[str, ...]] = (
+    'H3', 'H2', 'H1', STAND, 'L1', 'L2', 'L3', 'L4', 'L5', 'L6',
+)
+ACROSS_WAY: Final[tuple[str, ...]] = (
+    'M3', 'M2', 'M1', 'opp', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6',
+)
+STREETS: Final[dict[str, str]] = {
+    'H3': 'Enmore Rd',
+    'H2': 'Stanmore Rd',
+    'H1': 'Station St',
+    'L1': 'Cardigan St',
+    'L2': 'Australia St',
+    'L3': 'Church St',
+    'L4': 'Smith St',
+    'L5': 'Pyrmont Bridge Rd',
+    'L6': 'Parramatta Rd',
+    'M3': 'Brown St',
+    'M2': 'Alice St',
+    'M1': 'Wilson St',
+    'N1': 'Carillon Ave',
+    'N2': 'Egan St',
+    'N3': 'Hawken St',
+    'N4': 'Lennox St',
+    'N5': 'Erskineville Rd',
+    'N6': 'Camperdown Rd',
+}
+STOP_SPACING: Final[float] = 250.0  # metres
 
-    Parameters
-    ----------
-    sides : StopSides
-        How the Stop view shows the two kerbs.
+
+def both_departures() -> tuple[Departure, ...]:
+    """
+    Make a bus 2, 5, 8 and 11 minutes out, the 2nd and 8th from across.
 
     Returns
     -------
-    State
-        State at `START`.
+    tuple[Departure, ...]
+        The departures, in time order.
     """
-    pin = Pin(
-        origin=place(STAND, name='King St At Missenden Rd', point=CENTRE),
-        opposite=place(
-            'opp', name='King St Opp Missenden Rd',
-            point=(CENTRE[0], CENTRE[1] + 37.0),
-        ),
-        kind=SydneyMode.BUS,
-        towards=('Leichhardt', 'Newtown'),
-    )
     departures = []
     for minutes in (2, 5, 8, 11):
         across = minutes in (2, 8)
@@ -518,8 +548,152 @@ def both_sides_scene(*, sides: StopSides) -> State:
         departures.append(
             replace(bus, facts=replace(bus.facts, across=across)),
         )
+    return tuple(departures)
+
+
+def way_points(*, way: tuple[str, ...], across: bool) -> dict[str, Point]:
+    """
+    Place a way's stops on a straight street, the From's kerb at index 3.
+
+    Parameters
+    ----------
+    way : tuple[str, ...]
+        Stop IDs in running order.
+    across : bool
+        Whether the street is the kerb across, running the other way.
+
+    Returns
+    -------
+    dict[str, Point]
+        Position in metres by stop ID.
+    """
+    sign = 1.0 if across else -1.0
+    north = 37.0 if across else 0.0
+    return {
+        stop: (
+            CENTRE[0] + sign * STOP_SPACING * (index - 3),
+            CENTRE[1] + north,
+        )
+        for index, stop in enumerate(way)
+    }
+
+
+def both_sides_reach() -> Reach:
+    """
+    Lay out a street of stops each way past a both-sides From.
+
+    Returns
+    -------
+    Reach
+        The reach, the kerb across's stops above the From.
+    """
+    places = {
+        stop: place(stop, name=name, point=point)
+        for way, across in ((HERE_WAY, False), (ACROSS_WAY, True))
+        for stop, point in way_points(way=way, across=across).items()
+        if (name := STREETS.get(stop))
+    }
+    return build_reach(data=ReachInput(
+        origin=BOTH_PIN.origin,
+        tails=(RunTail(before=HERE_WAY[:3], after=HERE_WAY[4:], trips=40),),
+        places=places,
+        station_of={'opp': STAND},
+        across_tails=(
+            RunTail(before=ACROSS_WAY[:3], after=ACROSS_WAY[4:], trips=40),
+        ),
+    ))
+
+
+def both_sides_live(*, view: LiveView) -> State:
+    """
+    Show a both-sides pin on a Map or Strip view, a bus each way.
+
+    Parameters
+    ----------
+    view : LiveView
+        The Map, Strip or Strip + map.
+
+    Returns
+    -------
+    State
+        State at `START` with the reach, both ways' shapes and patterns,
+        and a bus on each way.
+    """
     state, _ = on_view(
-        view=LiveView.STOP, pin=pin, departures=tuple(departures),
+        view=view, pin=BOTH_PIN, departures=both_departures(),
+    )
+    key = strip_key(pin=BOTH_PIN, end_points=end_point_modes(
+        modes=city_under_test().modes,
+    ))
+    state, _ = step(state, StripLoaded(key=key, reach=both_sides_reach()))
+    ways = {False: HERE_WAY, True: ACROSS_WAY}
+    points = {
+        across: way_points(way=way, across=across)
+        for across, way in ways.items()
+    }
+    lines = {
+        across: make_shape(
+            shape_id=f'370-{across}',
+            points=[points[across][stop] for stop in way],
+        )
+        for across, way in ways.items()
+    }
+    patterns: dict[str, TripPattern | None] = {}
+    for item in both_departures():
+        across = item.facts.across
+        leaves = (
+            int(item.departs.timestamp() - START.timestamp()) + EIGHT
+        )
+        patterns[item.trip_id] = measured(
+            made=pattern(
+                trip_id=item.trip_id,
+                route='370',
+                stops=calls(
+                    stations=ways[across],
+                    start=leaves - 3 * 90,
+                    step=90,
+                    points=points[across],
+                ),
+            ),
+            line=lines[across],
+        )
+    state = patterns_loaded(
+        state=state, patterns=patterns, shapes=list(lines.values()),
+    )
+    buses = tuple(
+        vehicle(
+            timestamp=int(START.timestamp()),
+            trip_id=trip,
+            label='370',
+            point=points[across][stop],
+        )
+        for trip, across, stop in (
+            ('trip-2', True, 'M1'), ('trip-5', False, 'H2'),
+        )
+    )
+    state, _ = step(state, PositionsFetched(
+        feed=BUS_POSITIONS,
+        snapshot=snapshot(fetched_at=START, vehicles=buses),
+    ))
+    return state
+
+
+def both_sides_scene(*, sides: StopSides) -> State:
+    """
+    Show the Stop view of a both-sides pin, a bus each way.
+
+    Parameters
+    ----------
+    sides : StopSides
+        How the Stop view shows the two kerbs.
+
+    Returns
+    -------
+    State
+        State at `START`.
+    """
+    state, _ = on_view(
+        view=LiveView.STOP, pin=BOTH_PIN, departures=both_departures(),
     )
     state, _ = on_settings(
         state=state, event=SettingsChanged(stop_sides=sides),
@@ -1119,8 +1293,13 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     'map_destination': destination_scene,
     'map_approach': lambda: map_framed(framing=MapFraming.APPROACH),
     'map_centred': lambda: map_framed(framing=MapFraming.CENTRED),
+    'map_both_sides': lambda: both_sides_live(view=LiveView.MAP),
     'strip': lambda: strip_scene(view=LiveView.STRIP),
     'strip_map': lambda: strip_scene(view=LiveView.STRIP_MAP),
+    'strip_both_sides': lambda: both_sides_live(view=LiveView.STRIP),
+    'strip_map_both_sides': lambda: both_sides_live(
+        view=LiveView.STRIP_MAP,
+    ),
     'train_strip': lambda: train_strip_scene(destination='Petersham'),
     'train_strip_ends': lambda: train_strip_scene(destination='Lidcombe'),
     'alerts': on_alerts,

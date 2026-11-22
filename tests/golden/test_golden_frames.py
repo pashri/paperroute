@@ -28,7 +28,12 @@ from paperroute_transit.core.messages import ScreenView
 from paperroute_transit.core.reach import RowKind
 from paperroute_transit.core.stop_under import UnderNumber
 from paperroute_transit.core.stop_view import StopView
-from paperroute_transit.core.strip_model import StripMapView, StripView
+from paperroute_transit.core.strip_model import (
+    PANE_ROWS,
+    STRIP_ROWS,
+    StripMapView,
+    StripView,
+)
 from tests.golden.scenes import (
     GOLDEN,
     SCENES,
@@ -286,3 +291,24 @@ def test_both_sides_scenes_build_their_views() -> None:
     assert each.each_way is not None and each.each_way.here.hero is not None
     assert each.each_way.here.hero.destination == 'Leichhardt'
     assert each.each_way.across.end == 'Newtown'
+
+
+def test_both_sides_live_scenes_build_their_views() -> None:
+    """The Map joins the kerbs; both strips put the From in the middle."""
+    shown = view_of(state=SCENES['map_both_sides']())
+    assert isinstance(shown, MapView) and shown.base.trip is not None
+    assert shown.base.trip.across is not None
+    assert len(shown.base.lines) == 2
+    assert all(line.solid is not None for line in shown.base.lines)
+    strip = view_of(state=SCENES['strip_both_sides']())
+    assert isinstance(strip, StripView)
+    rows = STRIP_ROWS - (strip.banner is not None)
+    names = [row.name for row in strip.rows]
+    assert names.index('King St At Missenden Rd') == (rows - 1) // 2
+    assert names[0] == 'Erskineville Rd'
+    assert strip.rows[4].time == '8:03'  # the 8:02 from across
+    pane = view_of(state=SCENES['strip_map_both_sides']())
+    assert isinstance(pane, StripMapView)
+    rows = PANE_ROWS - (pane.map.banner is not None)
+    kinds = [row.kind for row in pane.pane.rows]
+    assert kinds.index(RowKind.ORIGIN) == (rows - 1) // 2

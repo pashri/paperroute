@@ -257,18 +257,18 @@ def add_hourly(
 
 
 def test_load_pairs_marks_a_busy_pair(conn: sqlite3.Connection) -> None:
-    """Six departures an hour at each kerb make the pair busy."""
+    """Four departures an hour at each kerb make the pair busy."""
     add_stop(conn=conn, stop_id='b', lat=LAT + NORTH)
-    add_hourly(conn=conn, stop='a', way=0, count=6)
-    add_hourly(conn=conn, stop='b', way=1, count=6)
+    add_hourly(conn=conn, stop='a', way=0, count=4)
+    add_hourly(conn=conn, stop='b', way=1, count=4)
     assert pairs_of(conn=conn) == [('a', 'b', 1), ('b', 'a', 1)]
 
 
 def test_load_pairs_needs_both_kerbs_busy(conn: sqlite3.Connection) -> None:
     """A pair is busy only when both kerbs are."""
     add_stop(conn=conn, stop_id='b', lat=LAT + NORTH)
-    add_hourly(conn=conn, stop='a', way=0, count=6)
-    add_hourly(conn=conn, stop='b', way=1, count=5)
+    add_hourly(conn=conn, stop='a', way=0, count=4)
+    add_hourly(conn=conn, stop='b', way=1, count=3)
     assert pairs_of(conn=conn) == [('a', 'b', 0), ('b', 'a', 0)]
 
 

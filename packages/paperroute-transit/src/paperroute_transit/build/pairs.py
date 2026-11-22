@@ -9,7 +9,7 @@ from paperroute_transit.core.geo import METRES_PER_DEGREE_LAT, Projection
 from paperroute_transit.core.modes import is_road
 
 PAIR_RADIUS: Final[float] = 150.0  # metres
-BUSY_HOURLY: Final[int] = 6  # departures an hour, at each kerb's peak
+BUSY_HOURLY: Final[int] = 4  # departures an hour, at each kerb's peak
 PAIR_SCHEMA: Final[str] = """
 CREATE TABLE stop_pairs (station_id TEXT PRIMARY KEY,
   other_id TEXT NOT NULL, busy INTEGER NOT NULL) WITHOUT ROWID;

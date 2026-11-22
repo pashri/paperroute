@@ -52,7 +52,11 @@ from paperroute_transit.core.strip_model import (
     selected_index,
 )
 from paperroute_transit.core.strip_notes import carry_note
-from paperroute_transit.core.strip_sides import across_times, kerb_item
+from paperroute_transit.core.strip_sides import (
+    across_times,
+    kerb_item,
+    kerb_pick,
+)
 from paperroute_transit.core.strip_slots import (
     band_of,
     both_kerbs,
@@ -162,14 +166,17 @@ def row_times(
     if item is None:
         return {}
     here = kerb_item(
-        trips=trips, origin=station, target=target, selected=inputs.selected,
+        trips=trips,
+        origin=station,
+        target=target,
+        selected=kerb_pick(trips=trips, selected=inputs.selected),
     )
     below = {} if here is None else trip_text(
         item=here, trips=trips, reach=reach, rows=range(len(reach.rows)),
     )
     return {
         **below,
-        **across_times(trips=trips, reach=reach),
+        **across_times(trips=trips, reach=reach, selected=inputs.selected),
         origin: clock_text(moment=item.departs, zone=inputs.zone),
     }
 
@@ -202,20 +209,22 @@ def followed_times(
         still to come above the From, and at the line rows below it;
         the next train's at the From and above when the rows no longer
         match the trains. The next bus from a kerb across times the rows
-        above the From, and the From shows the next bus from either kerb.
+        above the From, and a both-kerb From shows the next bus from either
+        kerb.
     """
     origin = origin_of(reach=reach) or 0
+    kerb = kerb_pick(trips=trips, selected=selected)
     picked = picked_calls(
-        trips=trips, reach=reach, target=target, selected=selected,
+        trips=trips, reach=reach, target=target, selected=kerb,
     )
     station = reach.rows[origin].place.stop_id
     shown = shown_item(
         trips=trips, origin=station, target=target, selected=selected,
     )
     item = picked[0] if picked is not None else kerb_item(
-        trips=trips, origin=station, target=target, selected=selected,
+        trips=trips, origin=station, target=target, selected=kerb,
     )
-    stamp = shown or item
+    stamp = (shown or item) if both_kerbs(key=trips.key) else item
     if stamp is None:
         return {}
     below = {} if picked is None else picked[1]
@@ -224,7 +233,7 @@ def followed_times(
     )
     return {
         **here,
-        **across_times(trips=trips, reach=reach),
+        **across_times(trips=trips, reach=reach, selected=selected),
         **{
             index: clock_text(moment=at, zone=trips.zone)
             for index, at in below.items()

@@ -307,6 +307,7 @@ def test_both_sides_live_scenes_build_their_views() -> None:
     assert names.index('King St At Missenden Rd') == (rows - 1) // 2
     assert names[0] == 'Erskineville Rd'
     assert strip.rows[4].time == '8:03'  # the 8:02 from across
+    assert strip.markers == ()
     pane = view_of(state=SCENES['strip_map_both_sides']())
     assert isinstance(pane, StripMapView)
     rows = PANE_ROWS - (pane.map.banner is not None)

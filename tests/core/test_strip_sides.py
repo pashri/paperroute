@@ -3,6 +3,8 @@
 from dataclasses import replace
 from typing import Final
 
+import pytest
+
 from paperroute_sydney.city import SydneyMode
 from paperroute_testkit.core.factories import (
     TRAIN,
@@ -20,7 +22,11 @@ from paperroute_transit.core.model import Departure
 from paperroute_transit.core.reach import RowKind, StripKey
 from paperroute_transit.core.saved import LiveView
 from paperroute_transit.core.strip_follow import followed_reach, origin_of
-from paperroute_transit.core.strip_model import StripInputs, StripView
+from paperroute_transit.core.strip_model import (
+    StripInputs,
+    StripView,
+    trip_day,
+)
 from paperroute_transit.core.strip_sides import across_times
 from paperroute_transit.core.strip_state import shown_key
 from paperroute_transit.core.strip_view import (
@@ -150,8 +156,7 @@ def test_across_times_map_only_rows_above_the_from() -> None:
 
 
 def test_marks_time_a_followed_from_by_the_next_bus_from_across() -> None:
-    """On followed rows the From shows the bus from across, rows below
-    the picked kerb's bus and rows above the bus from across."""
+    """A followed From shows the bus from across; rows split by kerb."""
     inputs = laid_out(inputs=sided(across_minutes=3, here_minutes=6))
     assert inputs.reach is not None and inputs.reach.trip is not None
     times = times_by_station(inputs=inputs)
@@ -161,8 +166,7 @@ def test_marks_time_a_followed_from_by_the_next_bus_from_across() -> None:
 
 
 def test_marks_time_the_rows_below_by_the_picked_kerb_unfollowed() -> None:
-    """Unfollowed, the bus from across leaves the rows below timed by the
-    picked kerb's bus."""
+    """Unfollowed, rows below keep the picked kerb's bus's times."""
     times = times_by_station(inputs=sided(across_minutes=3, here_minutes=6))
     assert times['B1'] == '8:09'
     assert times['A1'] == '8:06'
@@ -216,3 +220,67 @@ def test_strip_scroll_bounds_centre_a_both_sides_from() -> None:
     kinds_shown = [row.kind for row in state.last_view.rows]
     assert kinds_shown.index(RowKind.ORIGIN) == 5
     assert state.strip.bounds == (-3, 3)
+
+
+def with_picked(*, selected: str | None, across: bool = True) -> StripInputs:
+    """Make inputs with buses at +3 and +9 (across) and +6, one picked."""
+    patterns = {
+        'x': line_pattern(trip_id='x', stations=('C', 'A1', 'A2'), minutes=3),
+        'y': line_pattern(
+            trip_id='y', stations=('C', 'B1', 'B2', 'B3'), minutes=6,
+        ),
+        'z': line_pattern(trip_id='z', stations=('C', 'A1', 'A2'), minutes=9),
+    }
+    items = {
+        trip: from_across(minutes=minutes, trip_id=trip)
+        if across and trip != 'y'
+        else train(minutes=minutes, trip_id=trip)
+        for trip, minutes in (('x', 3), ('y', 6), ('z', 9))
+    }
+    inputs = inputs_of(
+        reach=both_reach(),
+        departures=[live(item=item) for item in items.values()],
+        patterns=patterns,
+    )
+    chosen = None if selected is None else trip_day(
+        departure=items[selected],
+    )
+    return replace(inputs, key=BOTH if across else TRAIN, selected=chosen)
+
+
+@pytest.mark.parametrize('followed', [False, True])
+def test_marks_time_rows_below_when_the_first_bus_from_across_is_picked(
+    followed: bool,
+) -> None:
+    """Picking the first bus from across keeps the rows below timed."""
+    inputs = with_picked(selected='x')
+    times = times_by_station(
+        inputs=laid_out(inputs=inputs) if followed else inputs,
+    )
+    assert times == {
+        'A2': '8:09', 'A1': '8:06', 'C': '8:03',
+        'B1': '8:09', 'B2': '8:12', 'B3': '8:15',
+    }
+
+
+@pytest.mark.parametrize('followed', [False, True])
+def test_marks_time_rows_above_by_a_later_bus_from_across_picked(
+    followed: bool,
+) -> None:
+    """Picking a later bus from across times the rows above by it."""
+    inputs = with_picked(selected='z')
+    times = times_by_station(
+        inputs=laid_out(inputs=inputs) if followed else inputs,
+    )
+    assert times == {
+        'A2': '8:15', 'A1': '8:12', 'C': '8:09',
+        'B1': '8:09', 'B2': '8:12', 'B3': '8:15',
+    }
+
+
+def test_marks_keep_a_single_kerb_from_on_the_followed_bus() -> None:
+    """Without a kerb across the From shows the followed bus's time."""
+    inputs = with_picked(selected=None, across=False)
+    followed = laid_out(inputs=inputs)
+    assert followed.reach is not None and followed.reach.trip == 'y'
+    assert times_by_station(inputs=followed)['C'] == '8:06'

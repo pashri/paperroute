@@ -4,7 +4,7 @@ from paperroute_device.core.text import clock_text
 from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.reach import Reach, RowKind
 from paperroute_transit.core.strip_follow import boardable_items, origin_of
-from paperroute_transit.core.strip_model import TripDay
+from paperroute_transit.core.strip_model import TripDay, trip_day
 from paperroute_transit.core.strip_times import (
     TripInputs,
     shown_item,
@@ -12,9 +12,39 @@ from paperroute_transit.core.strip_times import (
 )
 
 
-def across_times(*, trips: TripInputs, reach: Reach) -> dict[int, str]:
+def kerb_pick(
+    *, trips: TripInputs, selected: TripDay | None,
+) -> TripDay | None:
     """
-    Time the rows above the From by the next bus from the kerb across.
+    Drop a pick that names a departure from the kerb across.
+
+    Parameters
+    ----------
+    trips : TripInputs
+        The strip's departures and live data.
+    selected : TripDay | None
+        The picked train, or None.
+
+    Returns
+    -------
+    TripDay | None
+        None when the pick is a departure from the kerb across, else
+        the pick.
+    """
+    if any(
+        trip_day(departure=each.departure) == selected
+        and each.departure.facts.across
+        for each in trips.departures
+    ):
+        return None
+    return selected
+
+
+def across_times(
+    *, trips: TripInputs, reach: Reach, selected: TripDay | None = None,
+) -> dict[int, str]:
+    """
+    Time the rows above the From by a bus from the kerb across.
 
     Parameters
     ----------
@@ -22,12 +52,15 @@ def across_times(*, trips: TripInputs, reach: Reach) -> dict[int, str]:
         The strip's departures and live data.
     reach : Reach
         The reach.
+    selected : TripDay | None
+        The picked train, or None.
 
     Returns
     -------
     dict[int, str]
-        Clock time by main or branch row above the From that the next
-        boardable bus from the kerb across calls at after the From.
+        Clock time by main or branch row above the From that the picked
+        bus from the kerb across, else the next boardable one, calls at
+        after the From.
         Empty for a strip not fed by both kerbs, with no such bus, or
         with its pattern not loaded.
     """
@@ -35,15 +68,19 @@ def across_times(*, trips: TripInputs, reach: Reach) -> dict[int, str]:
     if origin is None:
         return {}
     station = reach.rows[origin].place.stop_id
+    items = [
+        each
+        for each in boardable_items(
+            trips=trips, origin=station, target=None,
+        )
+        if each.departure.facts.across
+    ]
     item = next(
         (
-            each
-            for each in boardable_items(
-                trips=trips, origin=station, target=None,
-            )
-            if each.departure.facts.across
+            each for each in items
+            if trip_day(departure=each.departure) == selected
         ),
-        None,
+        items[0] if items else None,
     )
     if item is None:
         return {}

@@ -554,7 +554,7 @@ def test_rescrolled_puts_a_both_sides_from_in_slot_five() -> None:
     assert scrolled.strip.scroll == 0
 
 
-def test_pane_opened_centres_a_both_sides_from_in_slot_three() -> None:
+def test_pane_opened_centres_a_both_sides_from_in_slot_four() -> None:
     """With the From in slot 4 of the pane a fold in the top row shows."""
     state = both_sides_fold_state(at=9)
     opened = pane_opened(state, False)

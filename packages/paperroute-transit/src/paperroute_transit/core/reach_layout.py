@@ -389,7 +389,8 @@ def with_spurs(*, side: Hung, others: Sequence[LaidWay]) -> Hung:
 
 
 def hang_further(*, sides: Sequence[LaidWay], others: Sequence[LaidWay],
-                 places: Mapping[str, StopPlace]) -> list[LaidWay]:
+                 places: Mapping[str, StopPlace],
+                 top: Collection[str] = ()) -> list[LaidWay]:
     """
     Hang each further way at the From of the side heading its way.
 
@@ -401,15 +402,22 @@ def hang_further(*, sides: Sequence[LaidWay], others: Sequence[LaidWay],
         Further ways, laid out at depth 1.
     places : Mapping[str, StopPlace]
         Every station by ID, and the From under FROM_KEY.
+    top : Collection[str]
+        First hops of ways that go above the From.
 
     Returns
     -------
     list[LaidWay]
         The sides, each with the further ways whose first hop heads
-        closest to its own.
+        closest to its own. With `top` naming exactly one side, a
+        further way whose first hop is in `top` hangs on that side and
+        every other further way on the other.
     """
+    upper = [i for i, side in enumerate(sides) if side.hop in top]
     picks = [
-        closest(
+        (upper[0] if other.hop in top else 1 - upper[0])
+        if len(upper) == 1
+        else closest(
             places=places,
             origin=FROM_KEY,
             hop=other.hop,
@@ -435,8 +443,9 @@ def lay_out(*, trails: Sequence[Trail], places: Mapping[str, StopPlace],
     closest to its own, or on the top side without positions. The side
     with more spur rows, then more stations, goes on top, listed against
     travel order. With `top`, the busiest way whose first hop is in it is
-    the top side and the busiest other way the bottom side, and a further
-    way without positions goes on the bottom side. When only one kind of
+    the top side and the busiest other way the bottom side, and further
+    ways whose first hop is in ``top`` hang on the top side, all others
+    on the bottom. When only one kind of
     way exists, the two busiest are the sides and one way goes below. Each
     station's exits follow its branches; the From's go below it.
 
@@ -473,6 +482,7 @@ def lay_out(*, trails: Sequence[Trail], places: Mapping[str, StopPlace],
             way for way in ways if way.hop not in {each.hop for each in pair}
         ],
         places=places,
+        top=top,
     )
     upper, bottom = sorted(sides, key=lambda way: rank(way=way))
     return Sides(

@@ -824,3 +824,44 @@ def test_build_reach_lists_the_kerb_across_outward_from_the_from() -> None:
     """The rows above the From run from its far end down to the From."""
     reach = across_reach(here=[tail('B1 B2', 6)], there=[tail('A1 A2 A3', 3)])
     assert ids(reach=reach) == ['A3', 'A2', 'A1', 'C', 'B1', 'B2']
+
+
+def positioned_across_reach(
+    *, here: list[RunTail], there: list[RunTail],
+    points: dict[str, Point],
+) -> Reach:
+    """Build the reach from C with the kerb across's tails, placed."""
+    places = {
+        row.place.stop_id: row.place
+        for row in reach_of(tails=[*here, *there], points=points).rows
+    }
+    return build_reach(data=ReachInput(
+        origin=places['C'], tails=tuple(here), places=places, station_of={},
+        across_tails=tuple(there),
+    ))
+
+
+def test_build_reach_hangs_a_picked_kerb_spur_below_whatever_it_heads() -> None:
+    """A picked-kerb way heading the kerb across's way still hangs below."""
+    points: dict[str, Point] = {
+        'C': (0, 0), 'A1': (-1000, 0), 'B1': (1000, 0), 'D1': (-900, 100),
+    }
+    reach = positioned_across_reach(
+        here=[tail('B1', 6), tail('D1', 2)], there=[tail('A1', 5)],
+        points=points,
+    )
+    above = {row.place.stop_id for row in reach.rows if row.above}
+    assert above == {'A1'}
+
+
+def test_build_reach_hangs_a_second_way_from_across_above() -> None:
+    """A further way from the kerb across hangs above, heading either way."""
+    points: dict[str, Point] = {
+        'C': (0, 0), 'A1': (-1000, 0), 'B1': (1000, 0), 'A2': (900, 100),
+    }
+    reach = positioned_across_reach(
+        here=[tail('B1', 6)], there=[tail('A1', 5), tail('A2', 3)],
+        points=points,
+    )
+    above = {row.place.stop_id for row in reach.rows if row.above}
+    assert above == {'A1', 'A2'}

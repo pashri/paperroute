@@ -20,6 +20,7 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER
+from paperroute_transit.core.names import JOINING_WORDS, NameRules
 from paperroute_transit.core.stop_view import NOT_PINNED, PinTag, Row
 from paperroute_transit.core.stop_view import pin_tag as tag_of
 from paperroute_transit.render.chrome import (
@@ -29,13 +30,14 @@ from paperroute_transit.render.chrome import (
     LINK_WIDTH,
     MIN_SQUEEZE,
     TABS,
+    TAG_GAP,
     badge,
     badge_face,
     badge_width,
     banner,
     countdown_slot,
-    header,
     header_tabs,
+    header_titles,
     leaves,
     link_arrow,
     note_room,
@@ -94,13 +96,12 @@ def _tab_x(*, tab: str) -> int:
 def test_header_marks_active_tab() -> None:
     """The active tab is a paper box; the others stay ink."""
     canvas = Canvas()
-    header(
+    view_header(
         canvas,
-        origin='A',
-        destination='B',
-        clock='8:41',
+        view=Titles(
+            origin='A', destination='B', tag=NOT_PINNED, clock='8:41',
+        ),
         active='Map',
-        tag=NOT_PINNED,
     )
     grey = canvas.grey()
     assert int(grey[13, _tab_x(tab='Map')]) == PAPER
@@ -183,15 +184,14 @@ def test_unpinned_tag_text_is_paper() -> None:
 def test_no_destination_title() -> None:
     """With no destination the header draws no arrow and one name."""
     canvas = Recording()
-    header(
+    view_header(
         canvas,
-        origin='Town Hall',
-        destination=None,
-        clock='8:41',
+        view=Titles(
+            origin='Town Hall', destination=None, tag=NOT_PINNED, clock='8:41',
+        ),
         active='Stop',
-        tag=NOT_PINNED,
     )
-    assert canvas.fitted == ['Town Hall']
+    assert canvas.drawn[-1:] == ['Town Hall']
     assert not any(len(points) == 3 for points in canvas.shapes)
     assert 'None' not in canvas.drawn
 
@@ -199,16 +199,15 @@ def test_no_destination_title() -> None:
 def test_picking_title() -> None:
     """Picking shows the origin, an arrow and the pick target."""
     canvas = Recording()
-    header(
+    view_header(
         canvas,
-        origin='Town Hall',
-        destination=None,
-        clock='8:41',
+        view=Titles(
+            origin='Town Hall', destination=None, tag=NOT_PINNED, clock='8:41',
+        ),
         active='Stop',
-        tag=NOT_PINNED,
         picking='To',
     )
-    assert canvas.fitted == ['Town Hall', 'pick To']
+    assert canvas.drawn[-2:] == ['Town Hall', 'pick To']
     assert 'pick To' in canvas.drawn
     assert len(canvas.shapes) == 1
 
@@ -216,29 +215,27 @@ def test_picking_title() -> None:
 def test_picking_from_title() -> None:
     """Picking a From reads as one title, the route then 'pick FROM'."""
     canvas = Recording()
-    header(
+    view_header(
         canvas,
-        origin='606 to Parramatta',
-        destination=None,
-        clock='8:41',
+        view=Titles(
+            origin='606 to Parramatta', destination=None, tag=NOT_PINNED, clock='8:41',
+        ),
         active='Strip',
-        tag=NOT_PINNED,
         picking='FROM',
     )
-    assert canvas.fitted == ['606 to Parramatta · pick FROM']
+    assert canvas.drawn[-1:] == ['606 to Parramatta · pick FROM']
     assert not canvas.shapes
 
 
 def test_titles_stop_before_the_tag() -> None:
     """A long origin and destination leave the tag's box untouched."""
     canvas = Canvas()
-    header(
+    view_header(
         canvas,
-        origin='A very long origin stop name indeed' * 3,
-        destination='An equally long destination stop name' * 3,
-        clock='8:41',
+        view=Titles(
+            origin='A very long origin stop name indeed' * 3, destination='An equally long destination stop name' * 3, tag=PINNED, clock='8:41',
+        ),
         active='Map',
-        tag=PINNED,
     )
     left = (
         WIDTH - 12
@@ -265,7 +262,11 @@ def test_two_titles_keep_the_to_whole() -> None:
     """A From too long for its room is cut with '…'; the To stays whole."""
     canvas = Recording()
     two_titles(
-        canvas, first=LONG_FROM, second='Parramatta Station', limit=400,
+        canvas,
+        first=LONG_FROM,
+        second='Parramatta Station',
+        limit=400,
+        rules=NameRules(),
     )
     first, second = canvas.drawn
     assert first.endswith('…')
@@ -287,13 +288,12 @@ def test_header_cuts_the_from_without_dropping_words(
 ) -> None:
     """A real pin's From is whole or cut with '…'; its To stays whole."""
     canvas = Recording()
-    header(
+    view_header(
         canvas,
-        origin=origin,
-        destination=destination,
-        clock='9:20',
+        view=Titles(
+            origin=origin, destination=destination, tag=PinTag(text=tag, pinned=True), clock='9:20',
+        ),
         active='Stop',
-        tag=PinTag(text=tag, pinned=True),
     )
     first, second = canvas.drawn[-2:]
     assert first == origin or (
@@ -307,7 +307,11 @@ def test_two_titles_leave_a_fitting_from_alone() -> None:
     """A From that fits its room keeps its full name."""
     canvas = Recording()
     two_titles(
-        canvas, first=LONG_FROM, second='Parramatta Station', limit=500,
+        canvas,
+        first=LONG_FROM,
+        second='Parramatta Station',
+        limit=500,
+        rules=NameRules(),
     )
     assert canvas.drawn == [LONG_FROM, 'Parramatta Station']
 
@@ -320,11 +324,13 @@ def test_long_to_leaves_the_from_its_floor() -> None:
         first=LONG_FROM,
         second="Westmead Children's Hospital, Hawkesbury Rd",
         limit=400,
+        rules=NameRules(),
     )
     first, second = canvas.drawn
     assert first.startswith('Boga')
     assert first.endswith('\u2026')
-    assert text_width(text=first, face=TITLE_FACE) <= FROM_FLOOR
+    slack = text_width(text='W', face=TITLE_FACE)
+    assert text_width(text=first, face=TITLE_FACE) <= FROM_FLOOR + slack
     assert second.startswith('Westmead')
     assert second.endswith('\u2026')
     assert text_width(text=second, face=TITLE_FACE) > 240
@@ -338,6 +344,7 @@ class Titles:
     destination: str | None
     tag: PinTag
     clock: str
+    name_rules: NameRules = NameRules()
 
 
 def test_view_header_passes_picking() -> None:
@@ -350,8 +357,8 @@ def test_view_header_passes_picking() -> None:
     view_header(picking, view=view, active='Strip', picking='TO')
     plain = Recording()
     view_header(plain, view=view, active='Strip')
-    assert picking.fitted == ['Town Hall', 'pick TO']
-    assert plain.fitted == ['Town Hall', 'Parramatta']
+    assert picking.drawn[-2:] == ['Town Hall', 'pick TO']
+    assert plain.drawn[-2:] == ['Town Hall', 'Parramatta']
 
 
 def test_countdown_slot_shows_only_live_counts() -> None:
@@ -481,13 +488,12 @@ def test_more_pill_leaves_room_for_text() -> None:
 def test_long_nickname_tag_keeps_titles() -> None:
     """A 24-character tag still leaves the origin title drawn."""
     canvas = Canvas()
-    header(
+    view_header(
         canvas,
-        origin='Hollis St',
-        destination=None,
-        clock='8:41',
+        view=Titles(
+            origin='Hollis St', destination=None, tag=PinTag(text=f'{"W" * 20} 2/3', pinned=True), clock='8:41',
+        ),
         active='Map',
-        tag=PinTag(text=f'{"W" * 20} 2/3', pinned=True),
     )
     grey = canvas.grey()
     left = int(np.flatnonzero(grey[11] == PAPER).min())
@@ -599,3 +605,39 @@ def test_note_room_fits_its_text() -> None:
     """A longer text needs more room than 'uncertain'."""
     face = Face(weight=700, px=NOTE_PX)
     assert note_room(face=face, text='platform 2B') > note_room(face=face)
+
+
+JOINED: Final[NameRules] = NameRules(joining=JOINING_WORDS)
+
+
+def test_two_titles_shorten_the_to_by_the_rules_before_cutting() -> None:
+    """A To that fits once shortened is drawn shortened, not cut."""
+    shown = 'Westbrook Rd opp Cawdor Rd'
+    limit = 60 + FROM_FLOOR + text_width(text=shown, face=TITLE_FACE) + 1
+    canvas = Recording()
+    two_titles(
+        canvas, first='Marion St', second='Westbrook Road Opp Cawdor Road',
+        limit=limit, rules=JOINED,
+    )
+    assert canvas.drawn[-1] == shown
+
+
+def test_header_titles_drop_a_station_only_when_it_does_not_fit() -> None:
+    """'Station' is dropped from a lone title only when it is too wide."""
+    whole = Recording()
+    view_header(
+        whole,
+        view=Titles(
+            origin='Town Hall Station', destination=None, tag=NOT_PINNED,
+            clock='8:41',
+        ),
+        active='Stop',
+    )
+    assert whole.drawn[-1] == 'Town Hall Station'
+    tight = Recording()
+    right = TAG_GAP + 12 + text_width(text='Town Hall', face=TITLE_FACE) + 1
+    header_titles(
+        tight, origin='Town Hall Station', destination=None, right=right,
+        rules=NameRules(),
+    )
+    assert tight.drawn == ['Town Hall']

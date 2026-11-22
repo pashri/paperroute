@@ -10,6 +10,7 @@ import pytest
 from numpy.typing import NDArray
 
 from paperroute_device.render.canvas import (
+    ELLIPSIS,
     HEIGHT,
     INK,
     PAPER,
@@ -34,6 +35,7 @@ from paperroute_transit.core.map_view import (
     TripMarks,
     screen_point,
 )
+from paperroute_transit.core.names import JOINING_WORDS, NameRules
 from paperroute_transit.core.stop_view import Estimate, Pill, Row, empty_text
 from paperroute_transit.core.tiles import (
     CITY,
@@ -43,7 +45,7 @@ from paperroute_transit.core.tiles import (
     tile_of,
     to_pixels,
 )
-from paperroute_transit.render.chrome import BANNER, badge, header
+from paperroute_transit.render.chrome import BANNER, badge, view_header
 from paperroute_transit.render.map_base import draw_map_base
 from paperroute_transit.render.map_view import (
     ARRIVES_DROP,
@@ -58,6 +60,7 @@ from paperroute_transit.render.map_view import (
     SIDEBAR_RIGHT,
     SIDEBAR_TEXT,
     draw_map_view,
+    draw_sidebar,
     edge_boxes,
     empty_lines,
     end_boxes,
@@ -74,6 +77,7 @@ from paperroute_transit.render.markers import (
 )
 from paperroute_transit.render.stop_view import WIDEST_COUNT
 from paperroute_transit.render.tile_codec import GREYS, pack_bits, pack_grey
+from tests.render.test_chrome import Recording
 from tests.render.test_map_base import base
 
 MPP = 8
@@ -242,14 +246,7 @@ def test_map_frame_is_800_by_480_with_four_levels() -> None:
 def test_header_marks_the_map_tab() -> None:
     """The frame's header is the shared header with Map active."""
     canvas = Canvas()
-    header(
-        canvas,
-        origin=VIEW.origin,
-        destination=VIEW.destination,
-        clock=VIEW.clock,
-        active='Map',
-        tag=VIEW.tag,
-    )
+    view_header(canvas, view=VIEW, active='Map')
     expected = threshold(canvas=canvas)
     frame = draw_map_view(view=VIEW, base=paper())
     assert np.array_equal(frame[:HEADER], expected[:HEADER])
@@ -920,3 +917,15 @@ def test_end_boxes_shrink_with_the_marks() -> None:
 
     assert end_width(45) == pytest.approx(end_width(14) * 0.75)
     assert end_width(25) == pytest.approx(end_width(14) * 0.85)
+
+
+def test_sidebar_destination_is_shortened_by_the_rules() -> None:
+    """The 'to' line is shortened by the rules, then cut to fit."""
+    canvas = Recording()
+    draw_sidebar(canvas, view=replace(
+        VIEW, destination='Great Western Highway Opp Rooty Hill Road North',
+        name_rules=NameRules(joining=JOINING_WORDS), pairs=(),
+    ))
+    (line,) = [text for text in canvas.drawn if text.startswith('to ')]
+    assert line.startswith('to Great Western Hwy/Rooty')
+    assert line.endswith(ELLIPSIS)

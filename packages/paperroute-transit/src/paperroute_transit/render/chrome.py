@@ -14,8 +14,10 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.stop_view import UNCERTAIN, PinTag, Row
 from paperroute_transit.core.strip_model import PICK_FROM
+from paperroute_transit.render.names import Naming, fit_name
 
 ARROW_WIDTH: Final[float] = 22.0
 ARROW_GAP: Final[int] = 4
@@ -188,6 +190,7 @@ def header_titles(
     origin: str,
     destination: str | None,
     right: float,
+    rules: NameRules,
     picking: str | None = None,
 ) -> None:
     """
@@ -208,6 +211,8 @@ def header_titles(
         Destination name, or None when the place has none.
     right : float
         Left edge of the pin tag, which the titles must stay 8 px short of.
+    rules : NameRules
+        How names are shortened to fit.
     picking : str | None
         What is being picked, such as 'To'.
     """
@@ -217,21 +222,33 @@ def header_titles(
         origin, second = f'{origin}{DOT}{second}', None
     limit = right - TAG_GAP
     if second is None:
-        shown = canvas.fit(text=origin, face=title, width=limit - 12)
+        shown = fit_name(
+            text=origin,
+            face=title,
+            width=limit - 12,
+            naming=Naming(rules=rules),
+        )[0]
         canvas.text(at=(12, 27), text=shown, face=title, grey=PAPER)
         return
-    two_titles(canvas, first=origin, second=second, limit=limit)
+    two_titles(
+        canvas, first=origin, second=second, limit=limit, rules=rules,
+    )
 
 
 def two_titles(
-    canvas: Canvas, *, first: str, second: str, limit: float,
+    canvas: Canvas,
+    *,
+    first: str,
+    second: str,
+    limit: float,
+    rules: NameRules,
 ) -> None:
     """
     Draw two header titles with an arrow between, keeping the right whole.
 
     The right title takes all the room but ``FROM_FLOOR`` pixels. The
-    left title gets the rest, cut with an ellipsis when it does not fit;
-    no word is dropped from inside it.
+    left title gets the rest. Each is shortened by the rules, then cut
+    with an ellipsis when it still does not fit.
 
     Parameters
     ----------
@@ -243,62 +260,26 @@ def two_titles(
         The right title.
     limit : float
         Where the titles must end.
+    rules : NameRules
+        How names are shortened to fit.
     """
     title = Face(weight=700, px=18)
+    naming = Naming(rules=rules)
     room = limit - 60
-    to_room = min(canvas.length(text=second, face=title), room - FROM_FLOOR)
-    from_room = room - to_room
-    shown = canvas.fit(text=first, face=title, width=from_room)
+    to_shown = fit_name(
+        text=second, face=title, width=room - FROM_FLOOR, naming=naming,
+    )[0]
+    from_room = room - text_width(text=to_shown, face=title)
+    shown = fit_name(
+        text=first, face=title, width=from_room, naming=naming,
+    )[0]
     x = 12 + canvas.text(
         at=(12, 27), text=shown, face=title, grey=PAPER) + 8
     x += arrow(canvas, x=x, y=20, grey=PAPER)
-    name = canvas.fit(text=second, face=title, width=limit - TITLE_END - x)
+    name = fit_name(
+        text=second, face=title, width=limit - TITLE_END - x, naming=naming,
+    )[0]
     canvas.text(at=(x, 27), text=name, face=title, grey=PAPER)
-
-
-def header(
-    canvas: Canvas,
-    *,
-    origin: str,
-    destination: str | None,
-    clock: str,
-    active: str,
-    tag: PinTag,
-    picking: str | None = None,
-    tabs: tuple[str, ...] = TABS,
-) -> None:
-    """
-    Draw the black header: titles, pin tag, tabs, clock.
-
-    Parameters
-    ----------
-    canvas : Canvas
-        Target.
-    origin : str
-        Origin name.
-    destination : str | None
-        Destination name, or None when the place has none.
-    clock : str
-        Clock text.
-    active : str
-        Name of the highlighted tab.
-    tag : PinTag
-        The pin tag.
-    picking : str | None
-        What is being picked; the title reads '<origin> -> pick <it>'.
-    tabs : tuple[str, ...]
-        Tab names, left to right.
-    """
-    canvas.rect(box=(0, 0, WIDTH, HEADER), grey=INK)
-    right = header_tabs(canvas, clock=clock, active=active, tabs=tabs)
-    left = pin_tag(canvas, right=right, tag=tag)
-    header_titles(
-        canvas,
-        origin=origin,
-        destination=destination,
-        right=left,
-        picking=picking,
-    )
 
 
 class Titled(Protocol):
@@ -319,6 +300,10 @@ class Titled(Protocol):
     @property
     def clock(self) -> str:
         """The clock text."""
+
+    @property
+    def name_rules(self) -> NameRules:
+        """How names are shortened to fit."""
 
 
 def view_header(
@@ -345,15 +330,18 @@ def view_header(
     tabs : tuple[str, ...]
         Tab names, left to right.
     """
-    header(
+    canvas.rect(box=(0, 0, WIDTH, HEADER), grey=INK)
+    right = header_tabs(
+        canvas, clock=view.clock, active=active, tabs=tabs,
+    )
+    left = pin_tag(canvas, right=right, tag=view.tag)
+    header_titles(
         canvas,
         origin=view.origin,
         destination=view.destination,
-        clock=view.clock,
-        active=active,
-        tag=view.tag,
+        right=left,
+        rules=view.name_rules,
         picking=picking,
-        tabs=tabs,
     )
 
 

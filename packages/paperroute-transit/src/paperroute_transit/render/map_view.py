@@ -60,6 +60,7 @@ from paperroute_transit.render.markers import (
     nearest_first,
     square,
 )
+from paperroute_transit.render.names import Naming, fit_name
 from paperroute_transit.render.pair_list import draw_pair_list
 from paperroute_transit.render.tile_codec import THRESHOLD, quantise4
 from paperroute_transit.render.trip_marks import draw_trip_points
@@ -521,11 +522,14 @@ def draw_sidebar(canvas: Canvas, *, view: MapView) -> None:
     if view.destination is not None:
         canvas.text(
             at=(SIDEBAR_TEXT, DESTINATION_Y + drop),
-            text=canvas.fit(
-                text=f'to {view.destination}',
+            text='to ' + fit_name(
+                text=view.destination,
                 face=DESTINATION_FACE,
-                width=DESTINATION_WIDTH,
-            ),
+                width=DESTINATION_WIDTH - text_width(
+                    text='to ', face=DESTINATION_FACE,
+                ),
+                naming=Naming(rules=view.name_rules),
+            )[0],
             face=DESTINATION_FACE,
             grey=INK,
         )

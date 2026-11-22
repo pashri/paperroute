@@ -12,6 +12,7 @@ from pathlib import Path
 from paperroute_device.rss import peak_rss_mb
 from paperroute_transit.build.catalogue import CATALOGUE_SCHEMA, load_catalogue
 from paperroute_transit.build.handoff import HANDOFF_NAME
+from paperroute_transit.build.pairs import PAIR_SCHEMA, load_pairs
 from paperroute_transit.build.passed import write_passed
 from paperroute_transit.build.runs import RUN_SCHEMA, load_runs
 from paperroute_transit.build.swap import land
@@ -115,6 +116,7 @@ def run_extras(*, path: Path, city: City, tiles: Path | None) -> None:
         conn.execute('PRAGMA cache_size = -2000')
         conn.executescript(RUN_SCHEMA)
         conn.executescript(CATALOGUE_SCHEMA)
+        conn.executescript(PAIR_SCHEMA)
         timed(
             phase='runs',
             step=lambda: load_runs(
@@ -142,6 +144,10 @@ def run_extras(*, path: Path, city: City, tiles: Path | None) -> None:
                 modes=city.modes,
                 rules=city.catalogue,
             ),
+        )
+        timed(
+            phase='pairs',
+            step=lambda: load_pairs(conn=conn, projection=city.projection),
         )
         conn.commit()
         if city.timetable.compact:

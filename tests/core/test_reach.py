@@ -776,3 +776,51 @@ def test_build_reach_puts_the_kerb_across_on_top() -> None:
     assert [row.above for row in reach.rows] == [
         True, False, False, False, False,
     ]
+
+
+def across_reach(*, here: list[RunTail], there: list[RunTail]) -> Reach:
+    """
+    Build the reach from C with the kerb across's tails.
+
+    Parameters
+    ----------
+    here : list[RunTail]
+        Tails of the picked kerb.
+    there : list[RunTail]
+        Tails of the kerb across.
+
+    Returns
+    -------
+    Reach
+        The reach, the kerb across's ways above the From.
+    """
+    places = {
+        row.place.stop_id: row.place
+        for row in reach_of(tails=[*here, *there]).rows
+    }
+    return build_reach(data=ReachInput(
+        origin=places['C'], tails=tuple(here), places=places, station_of={},
+        across_tails=tuple(there),
+    ))
+
+
+def test_build_reach_keeps_the_lightest_kerb_across_as_the_main_line() -> None:
+    """A kerb across lighter than two picked ways is still a main chain."""
+    reach = across_reach(
+        here=[tail('B1 B2 B3', 6), tail('D1 D2', 5)],
+        there=[tail('A1 A2', 3)],
+    )
+    depths = {row.place.stop_id: row.depth for row in reach.rows}
+    assert ids(reach=reach) == [
+        'A2', 'A1', 'C', 'D1', 'D2', 'B1', 'B2', 'B3',
+    ]
+    assert depths == {
+        'A2': 0, 'A1': 0, 'C': 0, 'D1': 1, 'D2': 1,
+        'B1': 0, 'B2': 0, 'B3': 0,
+    }
+
+
+def test_build_reach_lists_the_kerb_across_outward_from_the_from() -> None:
+    """The rows above the From run from its far end down to the From."""
+    reach = across_reach(here=[tail('B1 B2', 6)], there=[tail('A1 A2 A3', 3)])
+    assert ids(reach=reach) == ['A3', 'A2', 'A1', 'C', 'B1', 'B2']

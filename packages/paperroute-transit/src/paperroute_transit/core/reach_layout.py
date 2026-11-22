@@ -118,8 +118,32 @@ class Sides:
     below: tuple[Entry, ...]
 
 
-def lay_ways(*, trails: Sequence[Trail], places: Mapping[str, StopPlace]
-             ) -> list[LaidWay]:
+def side_hops(*, hops: Sequence[str], top: Collection[str]) -> list[str]:
+    """
+    Pick the first hops of the two ways that become the sides.
+
+    Parameters
+    ----------
+    hops : Sequence[str]
+        First hops, busiest first.
+    top : Collection[str]
+        First hops that must go on top.
+
+    Returns
+    -------
+    list[str]
+        The busiest hop in `top` and the busiest not in it when both
+        exist; else the two busiest.
+    """
+    high = [hop for hop in hops if hop in top]
+    low = [hop for hop in hops if hop not in top]
+    if high and low:
+        return [high[0], low[0]]
+    return list(hops[:SIDES])
+
+
+def lay_ways(*, trails: Sequence[Trail], places: Mapping[str, StopPlace],
+             top: Collection[str] = ()) -> list[LaidWay]:
     """
     Split the tails into ways and lay each out, heaviest first.
 
@@ -129,12 +153,14 @@ def lay_ways(*, trails: Sequence[Trail], places: Mapping[str, StopPlace]
         Stations after the From and trips, heaviest first.
     places : Mapping[str, StopPlace]
         Every station by ID, and the From under FROM_KEY.
+    top : Collection[str]
+        First hops that must go on top.
 
     Returns
     -------
     list[LaidWay]
-        Ways by trips, then by first hop. The first two have main chains
-        at depth 0; the rest at depth 1.
+        Ways by trips, then by first hop. The two `side_hops` ways have
+        main chains at depth 0; the rest at depth 1.
     """
     stats = hop_stats(trails=trails)
     hops = hop_ways(stats=stats, places=places, origin=FROM_KEY)
@@ -143,14 +169,15 @@ def lay_ways(*, trails: Sequence[Trail], places: Mapping[str, StopPlace]
     order = sorted(ways, key=lambda way: (
         -sum(run.trips for run in ways[way]), way,
     ))
+    sides = side_hops(hops=order, top=top)
     return [
         LaidWay(hop=way, hung=lay_way(
             runs=ways[way],
             places=places,
-            depth=0 if rank < SIDES else 1,
+            depth=0 if way in sides else 1,
             through=through,
         ))
-        for rank, way in enumerate(order)
+        for way in order
     ]
 
 
@@ -331,11 +358,8 @@ def side_pair(*, ways: Sequence[LaidWay], top: Collection[str]
         The busiest way in `top` and the busiest not in it when both
         exist; else the two busiest.
     """
-    high = [way for way in ways if way.hop in top]
-    low = [way for way in ways if way.hop not in top]
-    if high and low:
-        return [high[0], low[0]]
-    return list(ways[:SIDES])
+    chosen = side_hops(hops=[way.hop for way in ways], top=top)
+    return [way for hop in chosen for way in ways if way.hop == hop]
 
 
 def with_spurs(*, side: Hung, others: Sequence[LaidWay]) -> Hung:
@@ -410,9 +434,11 @@ def lay_out(*, trails: Sequence[Trail], places: Mapping[str, StopPlace],
     is a depth-1 spur at the From on the side whose first hop heads
     closest to its own, or on the top side without positions. The side
     with more spur rows, then more stations, goes on top, listed against
-    travel order. A way whose first hop is in `top` goes on top. One way
-    goes below. Each station's exits follow its
-    branches; the From's go below it.
+    travel order. With `top`, the busiest way whose first hop is in it is
+    the top side and the busiest other way the bottom side, and a further
+    way without positions goes on the bottom side. When only one kind of
+    way exists, the two busiest are the sides and one way goes below. Each
+    station's exits follow its branches; the From's go below it.
 
     Parameters
     ----------
@@ -430,7 +456,7 @@ def lay_out(*, trails: Sequence[Trail], places: Mapping[str, StopPlace],
     Sides
         Rows above and below the From.
     """
-    ways = lay_ways(trails=trails, places=places)
+    ways = lay_ways(trails=trails, places=places, top=top)
     if len(ways) < SIDES:
         below = side_rows(
             hung=ways[0].hung, above=False, exits=exits,
@@ -440,9 +466,12 @@ def lay_out(*, trails: Sequence[Trail], places: Mapping[str, StopPlace],
         return Sides(above=(), below=tuple(below))
     rank = partial(top_rank, places=places, top=top)
     pair = side_pair(ways=ways, top=top)
+    ranked = sorted(pair, key=lambda way: rank(way=way))
     sides = hang_further(
-        sides=sorted(pair, key=lambda way: rank(way=way)),
-        others=[way for way in ways if way not in pair],
+        sides=ranked[::-1] if top else ranked,
+        others=[
+            way for way in ways if way.hop not in {each.hop for each in pair}
+        ],
         places=places,
     )
     upper, bottom = sorted(sides, key=lambda way: rank(way=way))

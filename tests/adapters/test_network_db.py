@@ -1597,3 +1597,24 @@ def test_reach_input_reads_the_kerb_across(network_db: Path) -> None:
     assert found.across_tails == across
     assert found.station_of['B1'] == 'B2'
     assert {*across[0].after} <= found.places.keys()
+
+
+def test_reach_input_reads_a_kerb_across_under_a_station(
+    network_db: Path,
+) -> None:
+    """A kerb across named by its platform reads its station's runs."""
+    with closing(SqliteNetworkRepository(
+        path=network_db, city=LINE_CITY,
+    )) as network:
+        found = network.reach_input(
+            key=StripKey(
+                station='R3', kind=SydneyMode.TRAIN, routes=(),
+                across='W2_1',
+            ),
+            origin=place(stop_id='R3'),
+        )
+    across = tails_from(path=network_db, station='W2')
+    assert found is not None and across
+    assert found.across_tails == across
+    assert 'W1' in found.places
+    assert found.station_of['W2'] == 'R3'

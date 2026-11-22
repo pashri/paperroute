@@ -68,6 +68,7 @@ from paperroute_testkit.core.strip_factories import (
 from paperroute_transit.app_render import MapRenderer
 from paperroute_transit.core.chains import Legs, leg_key
 from paperroute_transit.core.connection_model import way_legs
+from paperroute_transit.core.device import on_settings
 from paperroute_transit.core.geo import Shape, make_shape
 from paperroute_transit.core.messages import (
     DayLinesLoaded,
@@ -77,6 +78,7 @@ from paperroute_transit.core.messages import (
     PatternsLoaded,
     PositionsFetched,
     ScreenView,
+    SettingsChanged,
     ShapesLoaded,
     StripLoaded,
 )
@@ -92,7 +94,12 @@ from paperroute_transit.core.realtime import (
     TripRealtime,
 )
 from paperroute_transit.core.reducers import initial_state
-from paperroute_transit.core.saved import LiveView, MapFraming, seeded
+from paperroute_transit.core.saved import (
+    LiveView,
+    MapFraming,
+    StopSides,
+    seeded,
+)
 from paperroute_transit.core.sleep import sleep_view
 from paperroute_transit.core.state_model import RELOAD_BEFORE, State
 from paperroute_transit.core.state_views import (
@@ -471,6 +478,52 @@ def stop_cambridge_trains() -> State:
         departures=departures,
         until=CAMBRIDGE_AT + HORIZON + RELOAD_BEFORE,
     ))
+    return state
+
+
+def both_sides_scene(*, sides: StopSides) -> State:
+    """
+    Show the Stop view of a both-sides pin, a bus each way.
+
+    Parameters
+    ----------
+    sides : StopSides
+        How the Stop view shows the two kerbs.
+
+    Returns
+    -------
+    State
+        State at `START`.
+    """
+    pin = Pin(
+        origin=place(STAND, name='King St At Missenden Rd', point=CENTRE),
+        opposite=place(
+            'opp', name='King St Opp Missenden Rd',
+            point=(CENTRE[0], CENTRE[1] + 37.0),
+        ),
+        kind=SydneyMode.BUS,
+        towards=('Leichhardt', 'Newtown'),
+    )
+    departures = []
+    for minutes in (2, 5, 8, 11):
+        across = minutes in (2, 8)
+        bus = departure(
+            departs=START + timedelta(minutes=minutes),
+            mode=SydneyFeed.BUS,
+            kind=SydneyMode.BUS,
+            route='370',
+            trip_id=f'trip-{minutes}',
+            headsign='Newtown' if across else 'Leichhardt',
+        )
+        departures.append(
+            replace(bus, facts=replace(bus.facts, across=across)),
+        )
+    state, _ = on_view(
+        view=LiveView.STOP, pin=pin, departures=tuple(departures),
+    )
+    state, _ = on_settings(
+        state=state, event=SettingsChanged(stop_sides=sides),
+    )
     return state
 
 
@@ -1051,6 +1104,8 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     'stop_trainlink': stop_trainlink,
     'stop_cambridge_trains': stop_cambridge_trains,
     'stop_no_destination': stop_no_destination,
+    'stop_both_sides': lambda: both_sides_scene(sides=StopSides.TIME_ORDER),
+    'stop_each_way': lambda: both_sides_scene(sides=StopSides.EACH_WAY),
     'stop_gauge': stop_gauge,
     'stop_estimates': lambda: estimated(
         state=stop(), lates={0: (-2, False), 1: (2, False)},

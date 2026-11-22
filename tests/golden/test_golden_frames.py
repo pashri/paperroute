@@ -273,3 +273,16 @@ def test_a_destination_pin_draws_its_gauge() -> None:
     assert gauge is not None and gauge.end is not None
     assert gauge.calls[gauge.end].name == 'Pitt St At Barlow St'
     assert (gauge.behind, gauge.bus, gauge.words) == ((), None, '')
+
+
+def test_both_sides_scenes_build_their_views() -> None:
+    """The both-sides scenes show time order and the next bus each way."""
+    time_order = view_of(state=SCENES['stop_both_sides']())
+    each = view_of(state=SCENES['stop_each_way']())
+    assert isinstance(time_order, StopView) and isinstance(each, StopView)
+    assert time_order.origin == 'King St At Missenden Rd, both sides'
+    assert time_order.each_way is None and time_order.hero is not None
+    assert time_order.hero.countdown == '2'
+    assert each.each_way is not None and each.each_way.here.hero is not None
+    assert each.each_way.here.hero.destination == 'Leichhardt'
+    assert each.each_way.across.end == 'Newtown'

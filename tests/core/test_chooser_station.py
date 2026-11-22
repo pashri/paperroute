@@ -21,9 +21,8 @@ from paperroute_transit.core.chooser import (
     Failure,
     Level,
     focusable,
-    pressed,
-    turned,
 )
+from paperroute_transit.core.chooser_lists import pressed, turned
 from paperroute_transit.core.chooser_station import knob_backed, knob_pressed
 from paperroute_transit.core.chooser_steps import trip_feeds
 from paperroute_transit.core.chooser_view import (

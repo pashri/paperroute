@@ -54,10 +54,8 @@ from paperroute_transit.core.chooser import (
     ColumnRequest,
     Level,
     opened,
-    pressed,
-    turned,
-    with_column,
 )
+from paperroute_transit.core.chooser_lists import pressed, turned, with_column
 from paperroute_transit.core.chooser_station import knob_pressed
 from paperroute_transit.core.city import MergeReport
 from paperroute_transit.core.model import Pin, StopPlace

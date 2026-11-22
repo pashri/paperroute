@@ -8,9 +8,8 @@ from paperroute_transit.core.chooser import (
     ColumnRequest,
     Level,
     opened,
-    pressed,
-    turned,
 )
+from paperroute_transit.core.chooser_lists import pressed, turned
 from paperroute_transit.core.chooser_view import (
     build_chooser_view,
     route_title,

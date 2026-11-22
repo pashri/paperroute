@@ -15,10 +15,8 @@ from paperroute_transit.core.chooser import (
     ColumnRequest,
     Level,
     opened,
-    pressed,
-    turned,
-    with_column,
 )
+from paperroute_transit.core.chooser_lists import pressed, turned, with_column
 from paperroute_transit.core.chooser_sides import with_line
 from paperroute_transit.core.chooser_station import knob_pressed
 from paperroute_transit.core.messages import ColumnLoaded, Event, LineLoaded

@@ -11,14 +11,12 @@ from paperroute_transit.core.chooser import (
     DepartureLoad,
     Level,
     Stage,
-    backed,
     chosen,
     chosen_pin,
     focusable,
     path_to,
-    pressed,
-    previewed,
 )
+from paperroute_transit.core.chooser_lists import backed, pressed, previewed
 from paperroute_transit.core.chooser_sides import pressed_side
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.reach import Reach

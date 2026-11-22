@@ -8,10 +8,9 @@ from paperroute_transit.core.chooser import (
     ChooserState,
     Stage,
     StripRequest,
-    backed,
-    pressed,
     pressed_from,
 )
+from paperroute_transit.core.chooser_lists import backed, pressed
 from paperroute_transit.core.chooser_sides import (
     ONLY_HERE,
     OTHER_SIDE,

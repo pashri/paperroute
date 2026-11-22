@@ -13,8 +13,8 @@ from paperroute_transit.core.chooser import (
     Level,
     Stage,
     chosen,
-    preview_of,
 )
+from paperroute_transit.core.chooser_lists import preview_of
 from paperroute_transit.core.chooser_station import focus_level
 from paperroute_transit.core.strip_model import HINTS, PICK_TO
 

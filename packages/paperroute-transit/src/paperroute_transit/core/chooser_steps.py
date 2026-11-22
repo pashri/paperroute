@@ -20,9 +20,8 @@ from paperroute_transit.core.chooser import (
     chosen_pin,
     opened,
     to_row,
-    turned,
-    with_column,
 )
+from paperroute_transit.core.chooser_lists import turned, with_column
 from paperroute_transit.core.chooser_sides import (
     side_reach,
     turned_from,

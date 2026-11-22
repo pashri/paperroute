@@ -15,15 +15,17 @@ from paperroute_transit.core.chooser import (
     LineRequest,
     Stage,
     StripRequest,
-    backed,
     chosen_pin,
     kind_specs,
     opened,
     path_to,
     pin_value,
+    turned_to,
+)
+from paperroute_transit.core.chooser_lists import (
+    backed,
     pressed,
     turned,
-    turned_to,
     with_column,
 )
 from paperroute_transit.core.chooser_sides import with_line

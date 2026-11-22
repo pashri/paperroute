@@ -772,7 +772,9 @@ def pressed_from(
     *, chooser: ChooserState, origin: StopPlace | None = None,
 ) -> tuple[ChooserState, ChooserRequest | None]:
     """
-    Take the cursor's station as the From and ask for its strip.
+    Take the From and ask for its strip.
+
+    The From is `origin` when given, else the cursor's station.
 
     Parameters
     ----------

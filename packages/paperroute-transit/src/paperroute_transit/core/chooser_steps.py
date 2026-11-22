@@ -242,12 +242,15 @@ def commit(*, state: State, chooser: ChooserState, pin: Pin) -> State:
     """
     Close the chooser and show its place on the Stop view.
 
+    Commits from the TO stage, from a TO column and, for a pin on both
+    sides, from the FROM stage.
+
     Parameters
     ----------
     state : State
         State.
     chooser : ChooserState
-        Chooser in the TO stage or on a TO column.
+        Chooser in the FROM or TO stage or on a TO column.
     pin : Pin
         The place chosen.
 

@@ -29,8 +29,8 @@ class BoardSettingsModel(BaseModel):
     """
     The transit board's Settings page choices as stored.
 
-    The school switches, the parked age and the map framing have defaults, so
-    files stored before them load.
+    The school switches, the parked age, the map framing and the both-sides
+    setting (time order) have defaults, so files stored before them load.
     """
 
     model_config = ConfigDict(extra='forbid', frozen=True)

@@ -278,8 +278,7 @@ def choice_label(
     Returns
     -------
     str
-        The label; a kerb at either end of the line is named by its side,
-        so no label names the station it sits under.
+        The label; a kerb at either end of the line is named by its side.
     """
     if choice is SideChoice.BOTH:
         return BOTH_LABEL
@@ -370,5 +369,6 @@ def side_reach(*, chooser: ChooserState) -> tuple[Reach, int]:
     ]
     return (
         replace(reach, rows=tuple(moved)),
-        cursor + chooser.kerbs.side,
+        cursor
+        + clamped(value=chooser.kerbs.side, count=len(choices)),
     )

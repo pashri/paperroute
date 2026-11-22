@@ -8,6 +8,7 @@ from paperroute_transit.core.chooser import (
     ChooserState,
     Stage,
     StripRequest,
+    backed,
     pressed,
     pressed_from,
 )
@@ -82,6 +83,32 @@ def test_turned_from_stops_at_both_ends() -> None:
     first = replace(last, line_cursor=0)
     before = turned_from(chooser=first, steps=-3)
     assert (before.line_cursor, before.kerbs.side) == (0, 0)
+
+
+def test_turned_from_stays_on_the_last_choice_of_the_last_station() -> None:
+    """Turning down past the last station's choices stays on the last."""
+    pair = replace(QUIET, station='s4')
+    last = replace(from_stage(pairs=(pair,)), line_cursor=4)
+    after = turned_from(chooser=last, steps=5)
+    assert (after.line_cursor, after.kerbs.side) == (4, 2)
+
+
+def test_turned_from_returns_to_the_first_station_row() -> None:
+    """Turning up past the first station's choices stops on its row."""
+    pair = replace(QUIET, station='s0')
+    first = replace(
+        from_stage(pairs=(pair,), side=2), line_cursor=0,
+    )
+    after = turned_from(chooser=first, steps=-5)
+    assert (after.line_cursor, after.kerbs.side) == (0, 0)
+
+
+def test_backed_from_the_from_stage_clears_the_kerbs() -> None:
+    """Going back to the lists forgets the line's paired kerbs."""
+    chooser = from_stage(pairs=(QUIET,), side=1)
+    back = backed(chooser=chooser)
+    assert back is not None
+    assert back.kerbs == Kerbs()
 
 
 def test_pressed_side_commits_both_sides_at_once() -> None:

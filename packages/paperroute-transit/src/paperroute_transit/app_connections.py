@@ -13,6 +13,7 @@ from paperroute_transit.core.connection_model import LEG_EXTRA, direct_leg
 from paperroute_transit.core.messages import DeparturesLoaded, LoadDepartures
 from paperroute_transit.core.model import Departure, Pin, is_connection
 from paperroute_transit.core.modes import skippable_modes
+from paperroute_transit.core.sides import pin_places
 from paperroute_transit.ports import TimetableRepository
 
 
@@ -233,9 +234,7 @@ def leg_between(
         The names.
     """
     pin = effect.pin
-    ends = [pin.origin.stop_id]
-    if pin.destination is not None:
-        ends.append(pin.destination.stop_id)
+    ends = [place.stop_id for place in pin_places(pin=pin)]
     families = timetable.alert_places(route_ids=(), stop_ids=ends).stops
     patterns = (
         timetable.patterns(trip_ids=effect.trip_ids, around=effect.day)

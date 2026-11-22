@@ -10,7 +10,7 @@ from typing import Final
 import pytest
 
 from paperroute_sydney.city import SydneyFeed, SydneyMode
-from paperroute_testkit.core.factories import pin_of
+from paperroute_testkit.core.factories import pin_of, place
 from paperroute_testkit.fakes import EmptyPlacedTimetable
 from paperroute_transit.core.alert_model import (
     AlertPlaces,
@@ -241,3 +241,28 @@ async def test_bus_pin_skips_trainlink() -> None:
     )
     assert posted == [BetweenLoaded(pin=pin, names=frozenset())]
     assert not timetable.trainlink_asked
+
+
+async def test_between_reads_the_family_of_the_kerb_across() -> None:
+    """A both-sides pin reads the stops under its opposite kerb."""
+    pin = replace(
+        pin_of('s0', 'T'),
+        destination=None,
+        opposite=place('p9', name='Across'),
+    )
+    families = {'p9': frozenset({'p9', 'c9'})}
+    posted = await posted_by(
+        ports=ports_of(timetable=BetweenTimetable(families=families)),
+        effects=[
+            LoadBetween(
+                pin=pin,
+                trip_ids=frozenset(),
+                day=date(2026, 10, 24),
+            ),
+        ],
+    )
+    assert posted == [
+        BetweenLoaded(
+            pin=pin, names=frozenset(), families=families,
+        ),
+    ]

@@ -1,5 +1,6 @@
 """Build the run tables of a timetable file in a separate process."""
 
+import logging
 import sqlite3
 import subprocess
 import sys
@@ -67,6 +68,26 @@ def city_named(*, ref: str) -> City:
     if not isinstance(city, City):
         raise ValueError(f'{ref} names no city')
     return city
+
+
+logger = logging.getLogger(__name__)
+
+
+def run_pairs(*, conn: sqlite3.Connection, city: City) -> None:
+    """
+    Fill `stop_pairs`, leaving it empty when the pairing fails.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable with the run tables.
+    city : City
+        The city the timetable is for.
+    """
+    try:
+        load_pairs(conn=conn, projection=city.projection)
+    except sqlite3.Error:
+        logger.exception('stop pairing failed; stop_pairs left empty')
 
 
 def run_passed(
@@ -147,7 +168,7 @@ def run_extras(*, path: Path, city: City, tiles: Path | None) -> None:
         )
         timed(
             phase='pairs',
-            step=lambda: load_pairs(conn=conn, projection=city.projection),
+            step=lambda: run_pairs(conn=conn, city=city),
         )
         conn.commit()
         if city.timetable.compact:

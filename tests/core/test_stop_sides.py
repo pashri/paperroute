@@ -79,11 +79,24 @@ def test_each_way_with_one_kerb_empty_keeps_one_hero() -> None:
         towards=BOTH.towards,
     )
     assert view.each_way is not None
+    assert view.each_way.here.hero is not None
     assert view.each_way.across == Kerb(
         label=TOWARDS, end='Newtown', hero=None, under=None,
     )
     assert not view.rows
     assert NOTHING_THIS_SIDE == 'Nothing in the next 3 hours'
+
+
+def test_each_way_with_the_picked_kerb_empty_keeps_the_other_hero() -> None:
+    """The kerb across keeps its bus when the picked kerb has none."""
+    view = each_way(
+        inputs=inputs_of(items=(item(minutes=4, across=True),)),
+        towards=BOTH.towards,
+    )
+    assert view.each_way is not None
+    assert view.each_way.here.hero is None
+    assert view.each_way.across.hero is not None
+    assert not view.rows
 
 
 def test_each_way_passes_over_a_cancelled_bus() -> None:

@@ -208,6 +208,28 @@ def test_run_extras_prints_each_phase(
     assert RUN_TABLES <= tables_of(db=db)
 
 
+def test_run_extras_survives_a_pairing_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A pairing error is logged and leaves an empty `stop_pairs`."""
+
+    def broken(**_: object) -> int:
+        """Fail as a missing table would."""
+        raise sqlite3.OperationalError('no such table: routes')
+
+    monkeypatch.setattr(timetable, 'build_extras', skip_extras)
+    monkeypatch.setattr(extras, 'load_pairs', broken)
+    db = network_build(folder=tmp_path)
+    extras.run_extras(path=db, city=SYDNEY, tiles=None)
+    assert 'stop_pairs' in tables_of(db=db)
+    with closing(sqlite3.connect(db)) as conn:
+        assert conn.execute('SELECT COUNT(*) FROM stop_pairs').fetchone() == (
+            0,
+        )
+    assert 'stop pairing failed' in caplog.text
+
+
 def free_pages_after_extras(*, db: Path, compact: bool) -> int:
     """
     Leave free pages in a timetable, run the extras and count them.

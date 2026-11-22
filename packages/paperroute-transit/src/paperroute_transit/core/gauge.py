@@ -113,6 +113,7 @@ def arrival_call(
     pattern: TripPattern,
     departure: Departure,
     start: int,
+    station: str | None = None,
     zone: tzinfo,
 ) -> int | None:
     """
@@ -126,25 +127,26 @@ def arrival_call(
         The departure, whose `arrives` names the Destination's time.
     start : int
         Pattern index of the From.
+    station : str | None
+        The Destination's station, or None when not known.
     zone : tzinfo
         Local time zone.
 
     Returns
     -------
     int | None
-        Pattern index of the first later call arriving then, or None.
+        Pattern index of the first later call at the Destination's
+        station arriving then, else the first at that station, else the
+        first later call arriving then, or None.
     """
     seconds = service_seconds(
         day=departure.service_day, moment=departure.arrives, zone=zone,
     )
-    return next(
-        (
-            index
-            for index in range(start + 1, len(pattern.stops))
-            if pattern.stops[index].arrives == seconds
-        ),
-        None,
-    )
+    later = range(start + 1, len(pattern.stops))
+    timed = [i for i in later if pattern.stops[i].arrives == seconds]
+    there = [i for i in later if pattern.stops[i].station == station]
+    exact = [i for i in timed if i in there]
+    return next(iter(exact or there or timed), None)
 
 
 def gauge_calls(
@@ -188,7 +190,7 @@ def gauge_calls(
         stop = pattern.stops[index]
         name = base_name(name=stop.name)
         repeat = bool(calls) and calls[-1].name == name
-        if stop.passes or (index != end and (not stop.name or repeat)):
+        if index != end and (stop.passes or not stop.name or repeat):
             continue
         moment = service_time(
             day=day, seconds=stop.arrives + delay, zone=zone,

@@ -186,3 +186,21 @@ def test_reaches_keep_the_destination_within_one_slot_of_the_calls() -> None:
     assert ahead is not None
     kept = [m for m in plan.line.marks if m.slot > 0]
     assert len(kept) - 1 + ahead.count == 15
+
+
+def test_gauge_line_clamps_a_far_destination_reach() -> None:
+    """A Destination reach past one slot beyond the calls changes nothing."""
+    gauge = StopGauge(
+        origin='Hollis St',
+        calls=tuple(
+            GaugeCall(name=f'Stop {n}', minutes=':05') for n in range(5)
+        ),
+        end=4,
+    )
+    far = gauge_line(
+        gauge=gauge, reach=3, dest_reach=40, rules=NameRules(),
+    )
+    near = gauge_line(
+        gauge=gauge, reach=3, dest_reach=4, rules=NameRules(),
+    )
+    assert far.marks == near.marks

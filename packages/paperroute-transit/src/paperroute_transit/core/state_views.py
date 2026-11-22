@@ -245,9 +245,13 @@ def banner_stop_view(*, state: State, banner: Banner | None) -> StopView:
     view = build_stop_view(inputs=stop_inputs(state=state, notice=banner))
     if state.view is not LiveView.STOP:
         return view
+    pin = shown(state=state)
     return with_detail(
         view=view,
-        station=state.board.station or shown(state=state).origin.stop_id,
+        station=state.board.station or pin.origin.stop_id,
+        destination=(
+            None if pin.destination is None else pin.destination.stop_id
+        ),
         patterns=state.map.patterns,
         positions=state.map.positions,
         now=frame_time(state=state),

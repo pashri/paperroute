@@ -358,6 +358,7 @@ def gauge_line(
     """
     behind, back = behind_marks(gauge=gauge)
     after = behind[-1].slot
+    dest_reach = min(dest_reach, reach + 1)
     ahead, gap, used = ahead_marks(
         gauge=gauge, after=after, reach=reach, dest_reach=dest_reach,
     )

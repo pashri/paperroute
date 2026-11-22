@@ -11,8 +11,10 @@ from paperroute_transit.core.gauge import (
     arrival_call,
     bus_seen,
     bus_words,
+    gauge_calls,
     stop_gauge,
 )
+from paperroute_transit.core.model import Departure
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.positions import VehiclePosition
 from paperroute_transit.core.stop_under import GaugeCall, StopGauge
@@ -225,3 +227,97 @@ def test_stop_gauge_has_no_destination_off_its_own_trip() -> None:
     end = arrival_call(pattern=RUN, departure=hero, start=3, zone=SYDNEY_ZONE)
     assert end is None
     assert gauge_of(end=end).end is None
+
+
+def calls_at(*, offsets: tuple[int, ...], stations: str) -> TripPattern:
+    """
+    A trip from the From, calling at `stations` after `offsets` seconds.
+
+    Parameters
+    ----------
+    offsets : tuple[int, ...]
+        Seconds after the From's call for each later call.
+    stations : str
+        One station ID letter per later call.
+
+    Returns
+    -------
+    TripPattern
+        The trip, whose first call is the From.
+    """
+    first = stop(at=0, x=0.0, station='F', name='From St')
+    rest = tuple(
+        stop(at=at, x=100.0 * (i + 1), station=code, name=f'Stop {code}')
+        for i, (at, code) in enumerate(zip(offsets, stations))
+    )
+    return replace(RUN, stops=(first, *rest))
+
+
+def arrives_at(*, seconds: int) -> Departure:
+    """
+    The hero arriving `seconds` after eight o'clock.
+
+    Parameters
+    ----------
+    seconds : int
+        Seconds after 8:00.
+
+    Returns
+    -------
+    Departure
+        The departure.
+    """
+    return replace(HERO, arrives=START + timedelta(seconds=seconds))
+
+
+def test_arrival_call_prefers_the_destination_station_over_a_tied_time(
+) -> None:
+    """A call sharing the arrival time at another station is skipped."""
+    trip = calls_at(offsets=(60, 120, 120), stations='ABC')
+    assert arrival_call(
+        pattern=trip,
+        departure=arrives_at(seconds=120),
+        start=0,
+        station='C',
+        zone=SYDNEY_ZONE,
+    ) == 3
+
+
+def test_arrival_call_picks_the_loop_call_whose_arrival_matches() -> None:
+    """Two calls at the Destination's station: the arrival chooses."""
+    trip = calls_at(offsets=(60, 120, 240), stations='CAC')
+    assert arrival_call(
+        pattern=trip,
+        departure=arrives_at(seconds=240),
+        start=0,
+        station='C',
+        zone=SYDNEY_ZONE,
+    ) == 3
+
+
+def test_arrival_call_falls_back_to_the_time_without_a_station_match(
+) -> None:
+    """A station no call has leaves the match to the arrival time."""
+    trip = calls_at(offsets=(60, 120, 120), stations='ABC')
+    assert arrival_call(
+        pattern=trip,
+        departure=arrives_at(seconds=60),
+        start=0,
+        station='Z',
+        zone=SYDNEY_ZONE,
+    ) == 1
+
+
+def test_gauge_calls_keep_a_passing_destination_with_a_tied_neighbour(
+) -> None:
+    """A passing Destination stays when named by its index."""
+    trip = calls_at(offsets=(60, 120, 120), stations='ABC')
+    trip = replace(trip, stops=(
+        *trip.stops[:3], replace(trip.stops[3], passes=True),
+    ))
+    calls, place = gauge_calls(
+        pattern=trip, start=0, end=3, day=START.date(), delay=0,
+        zone=SYDNEY_ZONE,
+    )
+    assert place == 2
+    assert calls[-1].name == 'Stop C'

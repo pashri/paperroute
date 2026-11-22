@@ -26,6 +26,7 @@ def hero_gauge(
     vehicle: VehiclePosition | None,
     now: datetime,
     zone: tzinfo,
+    destination: str | None = None,
 ) -> StopGauge:
     """
     Work out the gauge for the hero's trip.
@@ -46,6 +47,8 @@ def hero_gauge(
         The frame time.
     zone : tzinfo
         Local time zone.
+    destination : str | None
+        The Destination's station, or None when not known.
 
     Returns
     -------
@@ -60,7 +63,11 @@ def hero_gauge(
         pattern=pattern, start=start, vehicle=vehicle, departed=departed,
     )
     end = None if view.destination is None else arrival_call(
-        pattern=pattern, departure=departure, start=start, zone=zone,
+        pattern=pattern,
+        departure=departure,
+        start=start,
+        station=destination,
+        zone=zone,
     )
     return stop_gauge(
         pattern=pattern,
@@ -82,6 +89,7 @@ def with_detail(
     now: datetime,
     limit: timedelta,
     zone: tzinfo,
+    destination: str | None = None,
 ) -> StopView:
     """
     Add the gauge of the stops ahead to a Stop view.
@@ -102,6 +110,8 @@ def with_detail(
         How old a position may be.
     zone : tzinfo
         Local time zone the times show in.
+    destination : str | None
+        The Destination's station, or None when the pin has none.
 
     Returns
     -------
@@ -134,6 +144,7 @@ def with_detail(
         vehicle=vehicle,
         now=now,
         zone=zone,
+        destination=destination,
     )
     under = view.under
     if under is not None:

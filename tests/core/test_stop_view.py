@@ -18,7 +18,6 @@ from paperroute_transit.core.banners import OFFLINE_PHRASE
 from paperroute_transit.core.city import City, Nouns
 from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.model import CarryOn, TripFacts
-from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.stop_under import UnderNumber
 from paperroute_transit.core.stop_view import (
     HORIZON,

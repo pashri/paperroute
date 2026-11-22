@@ -254,7 +254,8 @@ def trip_marker(
     Badge | None
         A solid badge at a fresh position's nearest hop, else a hollow one
         at the timetable hop, on the trip or the one it carries on as and
-        labelled with that trip's route; None without a pattern, a hop,
+        labelled with that trip's route, with no wedge at its trip's last
+        stop; None without a pattern, a hop,
         or both of the hop's rows.
     """
     legs = legs_of(departure=departure, trips=trips, heard=heard)
@@ -279,6 +280,9 @@ def trip_marker(
         fraction=fraction,
         age=None if live or not ages else min(ages) // 60 * 60,
         live=live,
+        known=not (
+            index == len(leg.pattern.stops) - 2 and fraction >= 1.0
+        ),
     )
 
 
@@ -289,6 +293,7 @@ def hop_marker(
     fraction: float,
     age: float | None,
     live: bool,
+    known: bool = True,
 ) -> Badge | None:
     """
     Make a badge part way along a hop between two strip rows.
@@ -306,12 +311,15 @@ def hop_marker(
         Seconds since a stale vehicle reported, or None.
     live : bool
         True for a fresh position.
+    known : bool
+        False when the vehicle has no next stop.
 
     Returns
     -------
     Badge | None
         The badge on the later row's track, with a wedge down the strip
-        when that row is lower and up otherwise, if live; None unless the
+        when that row is lower and up when higher, none when level or not
+        known; None unless the
         hop has two ends that are both visible rows. Bound for an exit
         row, it rides the earlier row's track until within a row of the
         exit, then sits on the exit's spot as a spur badge, its wedge
@@ -324,13 +332,14 @@ def hop_marker(
         return None
     y = start.y + (end.y - start.y) * fraction
     spur = end.exit and abs(end.y - y) < ROW_H
-    down = 180.0 if end.y > start.y else 0.0
+    down = None if end.y == start.y else 180.0 if end.y > start.y else 0.0
+    bearing = 90.0 if spur else down
     return Badge(
         marker=Marker(
             route=route,
             x=start.x if end.exit and not spur else end.x,
             y=end.y if spur else y,
-            bearing=(90.0 if spur else down) if live else None,
+            bearing=bearing if known else None,
             live=live,
             pinned=True,
             age=age,

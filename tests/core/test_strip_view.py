@@ -475,7 +475,7 @@ def test_stale_vehicle_hollow_at_timetable_hop_with_age() -> None:
     marker = only_marker(inputs=inputs)
     assert marker.y == pytest.approx((first.y + second.y) / 2)
     assert not marker.live
-    assert marker.bearing is None
+    assert marker.bearing == 180
     assert marker.age == 300
 
 
@@ -546,7 +546,7 @@ def test_vehicle_off_strip_not_drawn() -> None:
 
 
 def test_overlapping_badges_pushed_down() -> None:
-    """Two trains at one spot are drawn 22 px apart, in y order."""
+    """Two trains at one spot on a one-row hop fold into a count."""
     now = START + timedelta(minutes=4)
     inputs = east_inputs(at=None, reported=now, now=now)
     twin = live(item=train(minutes=0, trip_id='f'))
@@ -558,13 +558,12 @@ def test_overlapping_badges_pushed_down() -> None:
             'f': line_pattern(trip_id='f', stations=EAST, minutes=0),
         },
     )
-    first, second = build_strip_view(inputs=inputs).markers
-    assert second.y - first.y == 22
-    assert first.x == second.x
+    (count,) = build_strip_view(inputs=inputs).markers
+    assert (count.route, count.bearing) == ('+2', None)
 
 
 def test_crowded_hop_folds_into_a_count() -> None:
-    """Six trains on one hop show one badge and a '+5' count."""
+    """Six trains on one hop fold into two counts."""
     now = START + timedelta(minutes=4)
     trips = [f't{i}' for i in range(6)]
     inputs = inputs_of(
@@ -577,12 +576,12 @@ def test_crowded_hop_folds_into_a_count() -> None:
         now=now,
     )
     first, count = build_strip_view(inputs=inputs).markers
-    assert (first.route, count.route) == ('T1', '+5')
+    assert (first.route, count.route) == ('+2', '+4')
     assert count.y - first.y == 22
 
 
 def test_close_badges_pushed_to_one_step_apart() -> None:
-    """A badge 12 px below another is pushed to 22 px below it."""
+    """A badge 12 px below another is pushed clear of its wedge."""
     now = START + timedelta(minutes=4)
     inputs = east_inputs(at=None, reported=now, now=now)
     inputs = replace(
@@ -598,7 +597,17 @@ def test_close_badges_pushed_to_one_step_apart() -> None:
     first, second = build_strip_view(inputs=inputs).markers
     origin = row_named(rows=build_strip_view(inputs=inputs).rows, name='C')
     assert first.y == pytest.approx(origin.y + ROW_H)
-    assert second.y == pytest.approx(first.y + 22)
+    assert second.y == pytest.approx(first.y + 33)
+
+
+def test_badge_at_its_trips_last_stop_has_no_wedge() -> None:
+    """A train arrived at its last stop is drawn there with no wedge."""
+    now = START + timedelta(minutes=6)
+    inputs = east_inputs(at=None, reported=now, now=now)
+    rows = build_strip_view(inputs=inputs).rows
+    marker = only_marker(inputs=inputs)
+    assert marker.y == row_named(rows=rows, name='E2').y
+    assert marker.bearing is None
 
 
 def test_spur_badge_sits_on_the_spur_track() -> None:

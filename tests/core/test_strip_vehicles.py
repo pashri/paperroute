@@ -253,3 +253,34 @@ def test_leaving_train_disappears_past_the_exit() -> None:
     assert hop_marker(
         route='T2', ends=(off, None), fraction=0.5, age=None, live=True,
     ) is None
+
+
+def test_hop_marker_points_every_badge_along_its_hop() -> None:
+    """Live or not, a badge points down a hop going down, up going up."""
+    upper, lower = Spot(x=30, y=100), Spot(x=30, y=136)
+    for heard in (True, False):
+        down = hop_marker(
+            route='T2', ends=(upper, lower), fraction=0.5, age=None,
+            live=heard,
+        )
+        up = hop_marker(
+            route='T2', ends=(lower, upper), fraction=0.5, age=None,
+            live=heard,
+        )
+        assert down is not None and up is not None
+        assert (down.marker.bearing, up.marker.bearing) == (180.0, 0.0)
+
+
+def test_hop_marker_without_a_next_stop_has_no_wedge() -> None:
+    """At its trip's last stop, or on a hop along one row, no wedge."""
+    upper, lower = Spot(x=30, y=100), Spot(x=30, y=136)
+    ended = hop_marker(
+        route='T2', ends=(upper, lower), fraction=1.0, age=None,
+        live=True, known=False,
+    )
+    level = hop_marker(
+        route='T2', ends=(upper, upper), fraction=0.5, age=None,
+        live=True,
+    )
+    assert ended is not None and level is not None
+    assert (ended.marker.bearing, level.marker.bearing) == (None, None)

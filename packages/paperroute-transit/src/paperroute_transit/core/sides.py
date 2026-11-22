@@ -28,6 +28,24 @@ class KerbPair:
     busy: bool
 
 
+@dataclass(frozen=True)
+class Kerbs:
+    """
+    The paired kerbs of the line being picked from.
+
+    Attributes
+    ----------
+    pairs : tuple[KerbPair, ...]
+        The line's stations that have a kerb across the road.
+    side : int
+        The cursor's row among its station's choices; 0 on the station
+        row.
+    """
+
+    pairs: tuple[KerbPair, ...] = ()
+    side: int = 0
+
+
 def both_sides(*, pin: Pin) -> bool:
     """
     Say whether a pin covers both kerbs of a road.

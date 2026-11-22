@@ -25,8 +25,8 @@ from paperroute_transit.core.chooser import (
     turned,
     turned_to,
     with_column,
-    with_line,
 )
+from paperroute_transit.core.chooser_sides import with_line
 from paperroute_transit.core.chooser_station import knob_pressed
 from paperroute_transit.core.chooser_view import build_chooser_view
 from paperroute_transit.core.model import Pin

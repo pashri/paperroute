@@ -19,6 +19,7 @@ from paperroute_transit.core.chooser import (
     pressed,
     previewed,
 )
+from paperroute_transit.core.chooser_sides import pressed_side
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.reach import Reach
 from paperroute_transit.core.strip_model import ALL_TAG
@@ -187,6 +188,8 @@ def knob_pressed(
             return pressed_station(chooser=chooser)
         case Level.TO:
             return pressed_destination(chooser=chooser)
+    if chooser.stage is Stage.FROM:
+        return pressed_side(chooser=chooser)
     return pressed(chooser=chooser, reach=reach)
 
 

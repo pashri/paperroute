@@ -9,6 +9,7 @@ from typing import Final
 from paperroute_transit.core.model import Departure, Pin, StopPlace
 from paperroute_transit.core.modes import ModeSpec, spec_of
 from paperroute_transit.core.reach import TRAIN_ROWS, Reach, RowKind, StripKey
+from paperroute_transit.core.sides import Kerbs
 from paperroute_transit.core.strip_follow import origin_of
 from paperroute_transit.core.strip_model import ALL_TAG
 
@@ -239,6 +240,9 @@ class ChooserState:
         The TO stage's departures from the From.
     load : DepartureLoad
         How those departures stand.
+    kerbs : Kerbs
+        The line's paired kerbs and the cursor's row among its
+        station's choices.
     """
 
     columns: tuple[Column, ...] = ()
@@ -256,6 +260,7 @@ class ChooserState:
     failed: Failure | None = None
     departures: tuple[Departure, ...] = ()
     load: DepartureLoad = field(default_factory=DepartureLoad)
+    kerbs: Kerbs = Kerbs()
 
 
 def clamped(*, value: int, count: int) -> int:
@@ -571,46 +576,6 @@ def with_column(
     return replace(stored, waiting=following), ColumnRequest(path=following)
 
 
-def with_line(
-    *,
-    chooser: ChooserState,
-    towards: int,
-    line: tuple[StopPlace, ...] | None,
-) -> ChooserState:
-    """
-    Take in the stations of the pressed towards row.
-
-    Parameters
-    ----------
-    chooser : ChooserState
-        Chooser.
-    towards : int
-        Towards ID the stations belong to.
-    line : tuple[StopPlace, ...] | None
-        Stations in running order, or None when they could not be loaded.
-
-    Returns
-    -------
-    ChooserState
-        The chooser with the line, each station once at its first call (a
-        loop calls at some twice), and the cursor on its first station;
-        unchanged unless it is picking a From for that towards row.
-    """
-    pressed_towards = chooser.towards
-    if (
-        chooser.stage is not Stage.FROM
-        or pressed_towards is None
-        or pressed_towards.key != str(towards)
-    ):
-        return chooser
-    if line is None:
-        return replace(chooser, failed=Failure.LOAD)
-    places: dict[str, StopPlace] = {}
-    for place in line:
-        places.setdefault(place.stop_id, place)
-    return replace(chooser, line=tuple(places.values()), line_cursor=0)
-
-
 def stepped(*, column: Column, cursor: int, steps: int) -> int:
     """
     Move a cursor over the rows it may rest on.
@@ -804,7 +769,7 @@ def pressed_lists(
 
 
 def pressed_from(
-    *, chooser: ChooserState,
+    *, chooser: ChooserState, origin: StopPlace | None = None,
 ) -> tuple[ChooserState, ChooserRequest | None]:
     """
     Take the cursor's station as the From and ask for its strip.
@@ -813,6 +778,8 @@ def pressed_from(
     ----------
     chooser : ChooserState
         Chooser in the FROM stage.
+    origin : StopPlace | None
+        The From to take, or None for the cursor's station.
 
     Returns
     -------
@@ -822,7 +789,10 @@ def pressed_from(
     """
     if not chooser.line:
         return chooser, None
-    picked = replace(chooser, origin=chooser.line[chooser.line_cursor])
+    picked = replace(
+        chooser,
+        origin=chooser.line[chooser.line_cursor] if origin is None else origin,
+    )
     pin = chosen_pin(chooser=picked, destination=None)
     key = StripKey(
         station=pin.origin.stop_id, kind=pin.kind, routes=pin.routes,
@@ -946,7 +916,7 @@ def backed(*, chooser: ChooserState) -> ChooserState | None:
         case Stage.FROM:
             return replace(
                 chooser, stage=Stage.LISTS, towards=None, line=(),
-                line_cursor=0, failed=None,
+                line_cursor=0, failed=None, kerbs=Kerbs(),
             )
         case Stage.TO:
             return replace(

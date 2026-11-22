@@ -18,8 +18,8 @@ from paperroute_transit.core.chooser import (
     pressed,
     turned,
     with_column,
-    with_line,
 )
+from paperroute_transit.core.chooser_sides import with_line
 from paperroute_transit.core.chooser_station import knob_pressed
 from paperroute_transit.core.messages import ColumnLoaded, Event, LineLoaded
 from paperroute_transit.core.model import Departure, Pin, StopPlace

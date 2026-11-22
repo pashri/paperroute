@@ -22,8 +22,8 @@ from paperroute_transit.core.chooser import (
     to_row,
     turned,
     with_column,
-    with_line,
 )
+from paperroute_transit.core.chooser_sides import turned_from, with_line
 from paperroute_transit.core.chooser_station import (
     has_list_from,
     knob_backed,
@@ -381,6 +381,12 @@ def chooser_knob(
             return moved(state=state, chooser=knob_backed(chooser=chooser))
         case KnobPressed(knob=Knob.BOTTOM):
             return chooser_pressed(state=state, chooser=chooser)
+        case KnobTurned(knob=Knob.BOTTOM, steps=steps) if (
+            chooser.stage is Stage.FROM
+        ):
+            return moved(
+                state=state, chooser=turned_from(chooser=chooser, steps=steps),
+            )
         case KnobTurned(knob=Knob.BOTTOM, steps=steps):
             after, request = turned(
                 chooser=chooser,
@@ -482,8 +488,10 @@ def replied(
             )
         case ColumnFailed(path=path):
             return with_column(chooser=chooser, path=path, column=None)
-        case LineLoaded(towards=towards, line=line):
-            return with_line(chooser=chooser, towards=towards, line=line), None
+        case LineLoaded(towards=towards, line=line, pairs=pairs):
+            return with_line(
+                chooser=chooser, towards=towards, line=line, pairs=pairs,
+            ), None
         case LineFailed(towards=towards):
             return with_line(chooser=chooser, towards=towards, line=None), None
     return with_departures(chooser=chooser, event=event), None

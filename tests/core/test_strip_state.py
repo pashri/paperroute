@@ -979,3 +979,15 @@ def test_a_pick_replaces_only_its_own_side() -> None:
     picked = shown_reach(state=after)
     assert picked is not None
     assert (picked.trip, picked.above_trip) == ('later', 'north')
+
+
+def test_strip_key_names_the_kerb_across_for_both_sides() -> None:
+    """Only a both-sides pin's key names its opposite kerb."""
+    both = replace(
+        PIN, destination=None, kind=SydneyMode.BUS,
+        opposite=place('x2', name='Opposite'),
+    )
+    assert strip_key(pin=both, end_points=ENDS).across == 'x2'
+    assert strip_key(
+        pin=replace(both, destination=PIN.destination), end_points=ENDS,
+    ).across is None

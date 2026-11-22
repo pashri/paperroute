@@ -55,6 +55,9 @@ class ReachInput:
     network : TrainNetwork | None
         The hops and weekday runs of an end-point kind; None for any
         other kind.
+    across_tails : tuple[RunTail, ...]
+        The ways through the kerb across, laid out above the From; empty
+        for any other pin.
     """
 
     origin: StopPlace
@@ -63,6 +66,7 @@ class ReachInput:
     station_of: Mapping[str, str]
     exits: tuple[LineExit, ...] = ()
     network: TrainNetwork | None = None
+    across_tails: tuple[RunTail, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -78,11 +82,15 @@ class StripKey:
         Mode id of the routes, or None for every run.
     routes : tuple[str, ...]
         Route short names chosen.
+    across : str | None
+        A both-sides pin's kerb across the road, whose runs feed the
+        strip above the From; None for any other pin.
     """
 
     station: str
     kind: str | None
     routes: tuple[str, ...]
+    across: str | None = None
 
 
 def every_route(*, key: StripKey, line_kinds: Collection[str]) -> bool:
@@ -392,15 +400,25 @@ def ordered(*, data: ReachInput, places: Mapping[str, StopPlace]
     Returns
     -------
     list[tuple[RowKind, Entry]]
-        Rows top to bottom. With one side, it goes below, with the
+        Rows top to bottom; the kerb across's ways go above the From.
+        With one side, it goes below, with the
         busiest run's earlier stations above as approach rows.
     """
     trails = sorted(
-        ((each.after, each.trips) for each in data.tails if each.after),
+        (
+            (each.after, each.trips)
+            for each in (*data.tails, *data.across_tails)
+            if each.after
+        ),
         key=lambda trail: -trail[1],
     )
     sides = lay_out(
-        trails=trails, places=places, exits=exits_by_junction(data=data),
+        trails=trails,
+        places=places,
+        exits=exits_by_junction(data=data),
+        top=frozenset(
+            each.after[0] for each in data.across_tails if each.after
+        ),
     )
     above = [(kind_of(entry=entry), entry) for entry in sides.above]
     if sides.below and not sides.above and data.tails:

@@ -911,7 +911,8 @@ class SqliteNetworkRepository:
             The From's station, its tails, their places and stops; None
             for an old file. A strip following a line has each tail cut
             before its first station off the line, and the ways off it as
-            exits (see `LineTables`).
+            exits (see `LineTables`). A key with a kerb across also reads
+            that kerb's tails and places, mapping its stops to the From.
         """
         if not self.has_network():
             return None
@@ -924,8 +925,15 @@ class SqliteNetworkRepository:
         if line:
             tails = cut_to_line(tails=tails, line=line)
         network = self.train_network(key=key, station=station)
+        across = (
+            None if key.across is None
+            else self.station_for(stop_id=key.across)
+        )
+        across_tails = (
+            () if across is None else self.tails(station=across, key=key)
+        )
         named = {station, *(each.off for each in exits)}.union(
-            *(tail.before + tail.after for tail in tails),
+            *(tail.before + tail.after for tail in (*tails, *across_tails)),
             *(
                 hop.passed
                 for hop in (network.hops.values() if network else ())
@@ -940,9 +948,13 @@ class SqliteNetworkRepository:
             ),
             tails=tails,
             places=places,
-            station_of=self._station_of(stations=places),
+            station_of={
+                **self._station_of(stations=places),
+                **({} if across is None else {across: station}),
+            },
             exits=exits,
             network=network,
+            across_tails=across_tails,
         )
 
     def train_network(

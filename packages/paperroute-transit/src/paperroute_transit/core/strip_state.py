@@ -26,6 +26,7 @@ from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.reach import Reach, StripKey
 from paperroute_transit.core.rhythm import frame_time, stale_after
 from paperroute_transit.core.saved import LiveView
+from paperroute_transit.core.sides import both_sides
 from paperroute_transit.core.state_model import RETRY_AFTER, State, elapsed
 from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.core.strip_folds import folded
@@ -80,6 +81,11 @@ def strip_key(*, pin: Pin, end_points: Collection[str]) -> StripKey:
         station=pin.origin.stop_id,
         kind=pin.kind,
         routes=pin_routes(pin=pin, end_points=end_points),
+        across=(
+            pin.opposite.stop_id
+            if pin.opposite is not None and both_sides(pin=pin)
+            else None
+        ),
     )
 
 

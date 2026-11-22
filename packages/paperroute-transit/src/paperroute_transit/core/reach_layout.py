@@ -1,7 +1,8 @@
 """Lay a strip's stations out in lines and indented spurs."""
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from functools import partial
 from typing import Final
 
 from paperroute_transit.core.model import StopPlace
@@ -290,6 +291,53 @@ def side_rank(*, way: LaidWay, places: Mapping[str, StopPlace]
     return -spurs, -stations, place_of(places=places, key=way.hop).name
 
 
+def top_rank(*, way: LaidWay, places: Mapping[str, StopPlace],
+             top: Collection[str]) -> tuple[bool, int, int, str]:
+    """
+    Rank a side for the top: ways in `top` first, then `side_rank`.
+
+    Parameters
+    ----------
+    way : LaidWay
+        The side.
+    places : Mapping[str, StopPlace]
+        Every station by ID.
+    top : Collection[str]
+        First hops that must go on top.
+
+    Returns
+    -------
+    tuple[bool, int, int, str]
+        A key that sorts the top side first.
+    """
+    return (way.hop not in top, *side_rank(way=way, places=places))
+
+
+def side_pair(*, ways: Sequence[LaidWay], top: Collection[str]
+              ) -> list[LaidWay]:
+    """
+    Pick the two ways that become the sides.
+
+    Parameters
+    ----------
+    ways : Sequence[LaidWay]
+        Ways, busiest first; at least two.
+    top : Collection[str]
+        First hops that must go on top.
+
+    Returns
+    -------
+    list[LaidWay]
+        The busiest way in `top` and the busiest not in it when both
+        exist; else the two busiest.
+    """
+    high = [way for way in ways if way.hop in top]
+    low = [way for way in ways if way.hop not in top]
+    if high and low:
+        return [high[0], low[0]]
+    return list(ways[:SIDES])
+
+
 def with_spurs(*, side: Hung, others: Sequence[LaidWay]) -> Hung:
     """
     Hang further ways at the From of a side.
@@ -354,7 +402,7 @@ def hang_further(*, sides: Sequence[LaidWay], others: Sequence[LaidWay],
 
 
 def lay_out(*, trails: Sequence[Trail], places: Mapping[str, StopPlace],
-            exits: Exits) -> Sides:
+            exits: Exits, top: Collection[str] = ()) -> Sides:
     """
     Lay the stations out either side of the From.
 
@@ -362,7 +410,8 @@ def lay_out(*, trails: Sequence[Trail], places: Mapping[str, StopPlace],
     is a depth-1 spur at the From on the side whose first hop heads
     closest to its own, or on the top side without positions. The side
     with more spur rows, then more stations, goes on top, listed against
-    travel order. One way goes below. Each station's exits follow its
+    travel order. A way whose first hop is in `top` goes on top. One way
+    goes below. Each station's exits follow its
     branches; the From's go below it.
 
     Parameters
@@ -373,6 +422,8 @@ def lay_out(*, trails: Sequence[Trail], places: Mapping[str, StopPlace],
         Every station by ID, and the From under FROM_KEY.
     exits : Exits
         Exits by junction, the From's under FROM_KEY.
+    top : Collection[str]
+        First hops of ways that go above the From.
 
     Returns
     -------
@@ -387,19 +438,17 @@ def lay_out(*, trails: Sequence[Trail], places: Mapping[str, StopPlace],
             junction=FROM_KEY, depth=0, above=False, exits=exits,
         )
         return Sides(above=(), below=tuple(below))
+    rank = partial(top_rank, places=places, top=top)
+    pair = side_pair(ways=ways, top=top)
     sides = hang_further(
-        sides=sorted(ways[:SIDES], key=lambda way: side_rank(
-            way=way, places=places,
-        )),
-        others=ways[SIDES:],
+        sides=sorted(pair, key=lambda way: rank(way=way)),
+        others=[way for way in ways if way not in pair],
         places=places,
     )
-    top, bottom = sorted(sides, key=lambda way: side_rank(
-        way=way, places=places,
-    ))
+    upper, bottom = sorted(sides, key=lambda way: rank(way=way))
     return Sides(
         above=tuple(reversed(side_rows(
-            hung=top.hung, above=True, exits=exits,
+            hung=upper.hung, above=True, exits=exits,
         ))),
         below=tuple(side_rows(hung=bottom.hung, above=False, exits=exits)),
     )

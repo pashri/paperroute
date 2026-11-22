@@ -1579,3 +1579,21 @@ def test_reach_input_for_bus_reads_an_older_file(copy: Path) -> None:
     )) as repo:
         after = repo.reach_input(key=key, origin=place(stop_id='B2'))
     assert after == before
+
+
+def test_reach_input_reads_the_kerb_across(network_db: Path) -> None:
+    """A both-sides key reads the kerb across's runs, mapped to the From."""
+    with closing(SqliteNetworkRepository(
+        path=network_db, city=LINE_CITY,
+    )) as network:
+        found = network.reach_input(
+            key=StripKey(
+                station='B2', kind=SydneyMode.BUS, routes=(), across='B1',
+            ),
+            origin=place(stop_id='B2'),
+        )
+    across = tails_from(path=network_db, station='B1', kind=SydneyMode.BUS)
+    assert found is not None and across
+    assert found.across_tails == across
+    assert found.station_of['B1'] == 'B2'
+    assert {*across[0].after} <= found.places.keys()

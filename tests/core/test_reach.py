@@ -759,3 +759,20 @@ def test_ferry_routes_ignored_for_trips() -> None:
     """A Ferry strip takes every ferry through the From, as a line kind."""
     key = StripKey(station='W', kind=SydneyMode.FERRY, routes=('F1',))
     assert every_route(key=key, line_kinds=line_modes(modes=SYDNEY.modes))
+
+
+def test_build_reach_puts_the_kerb_across_on_top() -> None:
+    """The kerb across's way goes above the From, whatever it ranks."""
+    here = tail('B1 B2 B3', 6)
+    there = tail('A1', 3)
+    plain = reach_of(tails=[here, there])
+    assert ids(reach=plain) == ['B3', 'B2', 'B1', 'C', 'A1']
+    places = {row.place.stop_id: row.place for row in plain.rows}
+    reach = build_reach(data=ReachInput(
+        origin=places['C'], tails=(here,), places=places, station_of={},
+        across_tails=(there,),
+    ))
+    assert ids(reach=reach) == ['A1', 'C', 'B1', 'B2', 'B3']
+    assert [row.above for row in reach.rows] == [
+        True, False, False, False, False,
+    ]

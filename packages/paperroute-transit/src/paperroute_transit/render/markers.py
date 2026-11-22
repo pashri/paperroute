@@ -44,6 +44,31 @@ GROW_Y: Final[float] = 4.0  # pixels each side
 STOP_HALF: Final[float] = 18.0
 END_HALF: Final[float] = 15.0
 CHANGE_HALF: Final[float] = 11.0
+TAB_DROP: Final[float] = 12.0  # pixels an age tab reaches past a badge
+
+
+@dataclass(frozen=True)
+class WedgeSize:
+    """
+    The size of a heading wedge.
+
+    Attributes
+    ----------
+    tip : float
+        Pixels the apex stands past the badge's edge.
+    back : float
+        Pixels the base sits inside the badge's edge.
+    half : float
+        Half the base's width.
+    """
+
+    tip: float
+    back: float
+    half: float
+
+
+MAP_WEDGE: Final[WedgeSize] = WedgeSize(tip=10.0, back=3.0, half=7.0)
+STRIP_WEDGE: Final[WedgeSize] = WedgeSize(tip=12.0, back=3.0, half=8.0)
 
 
 @dataclass(frozen=True)
@@ -85,6 +110,7 @@ def wedge_points(
     centre: Point,
     half: tuple[float, float],
     bearing: float,
+    size: WedgeSize = MAP_WEDGE,
 ) -> list[Point]:
     """
     Find the heading wedge's triangle for a badge.
@@ -100,6 +126,8 @@ def wedge_points(
         Badge half width and half height.
     bearing : float
         Degrees clockwise from north.
+    size : WedgeSize
+        How far the wedge stands out and how wide its base is.
 
     Returns
     -------
@@ -112,10 +140,69 @@ def wedge_points(
     by = centre[1] + side(value=uy) * half[1]
     px, py = -uy, ux
     return [
-        (bx + ux * 10, by + uy * 10),
-        (bx + px * 7 - ux * 3, by + py * 7 - uy * 3),
-        (bx - px * 7 - ux * 3, by - py * 7 - uy * 3),
+        (bx + ux * size.tip, by + uy * size.tip),
+        (
+            bx + px * size.half - ux * size.back,
+            by + py * size.half - uy * size.back,
+        ),
+        (
+            bx - px * size.half - ux * size.back,
+            by - py * size.half - uy * size.back,
+        ),
     ]
+
+
+def badge_wedge(
+    *,
+    marker: Marker,
+    centre: Point,
+    size: WedgeSize,
+) -> list[Point] | None:
+    """
+    Find a badge's wedge triangle, if its heading is known.
+
+    Parameters
+    ----------
+    marker : Marker
+        The vehicle.
+    centre : Point
+        Badge centre.
+    size : WedgeSize
+        Wedge size.
+
+    Returns
+    -------
+    list[Point] | None
+        The apex then the base corners, or None with no bearing.
+    """
+    if marker.bearing is None:
+        return None
+    return wedge_points(
+        centre=centre,
+        half=badge_half(route=marker.route),
+        bearing=marker.bearing,
+        size=size,
+    )
+
+
+def tab_above(*, marker: Marker) -> bool:
+    """
+    Say whether a badge's age tab hangs above it.
+
+    Parameters
+    ----------
+    marker : Marker
+        The vehicle.
+
+    Returns
+    -------
+    bool
+        True for a hollow badge with an age whose bearing, snapped to 8
+        directions, points below it.
+    """
+    if marker.live or marker.age is None or marker.bearing is None:
+        return False
+    return round(marker.bearing / 45) % 8 in (3, 4, 5)
 
 
 def badge_half(*, route: str) -> tuple[float, float]:
@@ -156,9 +243,9 @@ def badge_box(*, route: str, centre: Point) -> Box:
     return x - half_width, y - half_height, x + half_width, y + half_height
 
 
-def tab_box(*, centre: Point, age: float) -> Box:
+def tab_box(*, centre: Point, age: float, above: bool = False) -> Box:
     """
-    Give the age tab's outer paper rectangle under a badge.
+    Give the age tab's outer paper rectangle under or above a badge.
 
     Parameters
     ----------
@@ -166,6 +253,8 @@ def tab_box(*, centre: Point, age: float) -> Box:
         Badge centre.
     age : float
         Seconds since last heard.
+    above : bool
+        Mirror the tab about the badge's centre line.
 
     Returns
     -------
@@ -173,8 +262,12 @@ def tab_box(*, centre: Point, age: float) -> Box:
         Left, top, right, bottom.
     """
     half_width = text_width(text=age_text(seconds=age), face=AGE_FACE) / 2 + 3
-    x, y = centre[0], centre[1] + BADGE_HALF_HEIGHT
-    return x - half_width - 1, y - 1, x + half_width + 1, y + 12
+    x, y = centre
+    if above:
+        top = y - BADGE_HALF_HEIGHT - TAB_DROP
+        return x - half_width - 1, top, x + half_width + 1, y - 9
+    y += BADGE_HALF_HEIGHT
+    return x - half_width - 1, y - 1, x + half_width + 1, y + TAB_DROP
 
 
 def union(*, first: Box, second: Box) -> Box:
@@ -382,9 +475,15 @@ def clear_of(*, marker: Marker, boxes: Sequence[Box]) -> bool:
     return not any(overlaps(first=spot, second=box) for box in boxes)
 
 
-def draw_tab(canvas: Canvas, *, centre: Point, age: float) -> None:
+def draw_tab(
+    canvas: Canvas,
+    *,
+    centre: Point,
+    age: float,
+    above: bool = False,
+) -> None:
     """
-    Hang an inverted age tab under a badge.
+    Hang an inverted age tab under a badge, or above it.
 
     Parameters
     ----------
@@ -394,12 +493,18 @@ def draw_tab(canvas: Canvas, *, centre: Point, age: float) -> None:
         Badge centre.
     age : float
         Seconds since last heard.
+    above : bool
+        Hang the tab above the badge.
     """
-    left, top, right, bottom = tab_box(centre=centre, age=age)
+    left, top, right, bottom = tab_box(centre=centre, age=age, above=above)
     canvas.rect(box=(left, top, right, bottom), grey=PAPER)
-    canvas.rect(box=(left + 1, top, right - 1, bottom - 1), grey=INK)
+    ink = top + 1 if above else top
+    canvas.rect(
+        box=(left + 1, ink, right - 1, ink + bottom - top - 1),
+        grey=INK,
+    )
     canvas.text(
-        at=(centre[0], top + 6),
+        at=(centre[0], ink + 6),
         text=age_text(seconds=age),
         face=AGE_FACE,
         grey=PAPER,
@@ -407,7 +512,13 @@ def draw_tab(canvas: Canvas, *, centre: Point, age: float) -> None:
     )
 
 
-def draw_live(canvas: Canvas, *, marker: Marker, centre: Point) -> None:
+def draw_live(
+    canvas: Canvas,
+    *,
+    marker: Marker,
+    centre: Point,
+    wedge: WedgeSize = MAP_WEDGE,
+) -> None:
     """
     Draw a solid badge with its heading wedge.
 
@@ -419,16 +530,14 @@ def draw_live(canvas: Canvas, *, marker: Marker, centre: Point) -> None:
         The vehicle.
     centre : Point
         Badge centre on the canvas.
+    wedge : WedgeSize
+        Size of the heading wedge.
     """
     left, top, right, bottom = badge_box(route=marker.route, centre=centre)
     canvas.rect(box=(left - 1, top - 1, right + 1, bottom + 1), grey=PAPER)
     canvas.rect(box=(left, top, right, bottom), grey=INK)
-    if marker.bearing is not None:
-        points = wedge_points(
-            centre=centre,
-            half=badge_half(route=marker.route),
-            bearing=marker.bearing,
-        )
+    points = badge_wedge(marker=marker, centre=centre, size=wedge)
+    if points is not None:
         canvas.polygon(points=points, grey=INK)
     canvas.text(
         at=(centre[0], centre[1] + 1),
@@ -439,9 +548,18 @@ def draw_live(canvas: Canvas, *, marker: Marker, centre: Point) -> None:
     )
 
 
-def draw_hollow(canvas: Canvas, *, marker: Marker, centre: Point) -> None:
+def draw_hollow(
+    canvas: Canvas,
+    *,
+    marker: Marker,
+    centre: Point,
+    wedge: WedgeSize | None = None,
+) -> None:
     """
     Draw an outlined timetable badge, with its age tab when stale.
+
+    A wedge is drawn only when a size is given, and then a tab goes above
+    a badge that points down.
 
     Parameters
     ----------
@@ -451,6 +569,8 @@ def draw_hollow(canvas: Canvas, *, marker: Marker, centre: Point) -> None:
         The vehicle.
     centre : Point
         Badge centre on the canvas.
+    wedge : WedgeSize | None
+        Size of the heading wedge, or None to draw none.
     """
     left, top, right, bottom = badge_box(route=marker.route, centre=centre)
     canvas.rect(box=(left - 1, top - 1, right + 1, bottom + 1), grey=PAPER)
@@ -463,8 +583,17 @@ def draw_hollow(canvas: Canvas, *, marker: Marker, centre: Point) -> None:
         grey=INK,
         anchor='mm',
     )
+    if wedge is not None:
+        points = badge_wedge(marker=marker, centre=centre, size=wedge)
+        if points is not None:
+            canvas.polygon(points=points, grey=INK)
     if marker.age is not None:
-        draw_tab(canvas, centre=centre, age=marker.age)
+        draw_tab(
+            canvas,
+            centre=centre,
+            age=marker.age,
+            above=wedge is not None and tab_above(marker=marker),
+        )
 
 
 def shifted(*, point: Point, origin: Point) -> Point:

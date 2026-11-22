@@ -34,10 +34,12 @@ from paperroute_transit.core.strip_model import (
 )
 from paperroute_transit.core.strip_vehicles import hop_marker
 from paperroute_transit.render.markers import (
+    STRIP_WEDGE,
     badge_box,
     badge_half,
+    badge_wedge,
+    tab_above,
     tab_box,
-    wedge_points,
 )
 from paperroute_transit.render.strip import BASELINE_DROP, DISC_RADIUS, MAIN_PX
 from paperroute_transit.render.strip_view import NAME_X
@@ -108,15 +110,13 @@ def drawn(*, marker: Marker) -> Box:
     centre = (marker.x, marker.y)
     left, top, right, bottom = badge_box(route=marker.route, centre=centre)
     boxes = [(left - 1, top - 1, right + 1, bottom + 1)]
-    if marker.live and marker.bearing is not None:
-        points = wedge_points(
-            centre=centre,
-            half=badge_half(route=marker.route),
-            bearing=marker.bearing,
-        )
+    points = badge_wedge(marker=marker, centre=centre, size=STRIP_WEDGE)
+    if points is not None:
         boxes.append(union(boxes=[(x, y, x, y) for x, y in points]))
     if not marker.live and marker.age is not None:
-        boxes.append(tab_box(centre=centre, age=marker.age))
+        boxes.append(tab_box(
+            centre=centre, age=marker.age, above=tab_above(marker=marker),
+        ))
     return union(boxes=boxes)
 
 
@@ -466,7 +466,8 @@ def exit_spot(*, junction: Spot, y: float) -> Spot:
 
 
 def hop_badge(*, rows: Sequence[Spot], start: int, end: int,
-              share: float, kind: float | None, label: str) -> Badge:
+              share: float, kind: float | None, label: str,
+              heading: float | None = None) -> Badge:
     """
     Put a badge on a hop as `hop_marker` does.
 
@@ -484,6 +485,8 @@ def hop_badge(*, rows: Sequence[Spot], start: int, end: int,
         Wedge bearing down or up, an age, or None.
     label : str
         Route label.
+    heading : float | None
+        Bearing of a badge that is not live (90 on a spur).
 
     Returns
     -------
@@ -501,7 +504,11 @@ def hop_badge(*, rows: Sequence[Spot], start: int, end: int,
             route=label,
             x=first.x if last.exit and not spur else last.x,
             y=last.y if spur else y,
-            bearing=(90.0 if spur else kind) if live else None,
+            bearing=(
+                (90.0 if spur else kind)
+                if live
+                else (90.0 if spur and heading is not None else heading)
+            ),
             live=live,
             pinned=True,
             age=kind if kind in AGES else None,
@@ -582,6 +589,7 @@ def strip_cases(draw: st.DrawFn) -> tuple[
         st.floats(0, 1),
         st.sampled_from([None, 0.0, 180.0, *AGES]),
         st.sampled_from(LABELS),
+        st.sampled_from([None, 0.0, 180.0]),
     ).filter(
         lambda hop: hop[0] != hop[1]
         and hop[0] in stations
@@ -590,9 +598,9 @@ def strip_cases(draw: st.DrawFn) -> tuple[
     badges = [
         hop_badge(
             rows=rows, start=start, end=end, share=share, kind=kind,
-            label=label,
+            label=label, heading=heading,
         )
-        for start, end, share, kind, label in draw(
+        for start, end, share, kind, label, heading in draw(
             st.lists(hops, max_size=12),
         )
     ]

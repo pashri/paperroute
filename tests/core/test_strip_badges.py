@@ -14,6 +14,7 @@ from paperroute_transit.core.strip_badges import (
     overlaps,
     pushed,
 )
+from paperroute_transit.core.strip_extents import reaches
 from paperroute_transit.core.strip_vehicles import hop_marker
 
 STEP: Final[float] = 22.0  # two plain badges' centres, one under another
@@ -240,7 +241,7 @@ def test_pushed_keeps_wedges_and_tabs_off_the_disc() -> None:
             badge(x=30, y=156, low=136, high=172, bearing=0.0),
         )
     ]
-    assert found == [105, 103, 167]
+    assert found == [103, 103, 169]
 
 
 def test_badge_at_a_disc_on_the_top_row_stays_level_with_it() -> None:
@@ -276,7 +277,7 @@ def test_badge_near_the_from_but_not_at_it_stays_on_its_hop() -> None:
         spots=spots,
         discs=discs,
     )
-    assert near == [('T1', 30, 105)]
+    assert near == [('T1', 30, 103)]
     at = shown(
         badges=[badge(x=30, y=126, low=100, high=136)],
         spots=spots,
@@ -352,7 +353,7 @@ def test_down_wedge_keeps_the_badge_below_clear() -> None:
         ],
         spots=spots,
     )
-    assert found == [('A', 30, 130), ('B', 30, 161)]
+    assert found == [('A', 30, 130), ('B', 30, 163)]
 
 
 def test_wedges_and_tabs_keep_off_names() -> None:
@@ -387,7 +388,7 @@ def test_one_count_beside_a_disc() -> None:
     )
     assert found == [
         ('V', 30, 100),
-        ('U', 30, 105),
+        ('U', 30, 103),
         ('T0', 30, 136),
         ('+3', BESIDE, 136),
     ]
@@ -497,3 +498,17 @@ def test_spur_badge_never_moves_and_others_keep_off_it() -> None:
     (moved,) = [each for each in found if not each.spur]
     assert (kept.marker.x, kept.marker.y) == (77, 136)
     assert not overlaps(one=moved.marker, other=kept.marker)
+
+
+def test_reaches_count_every_wedge_and_tab() -> None:
+    """A timetable badge's wedge counts; heading down, its tab is above."""
+    hollow = Marker(
+        route='T1', x=30, y=100, bearing=180.0, live=False, pinned=True,
+        age=120.0,
+    )
+    assert reaches(marker=hollow) == (22.0, 22.0)
+    assert reaches(marker=replace(hollow, bearing=0.0)) == (22.0, 22.0)
+    assert reaches(marker=replace(hollow, bearing=None)) == (11.0, 22.0)
+    assert reaches(
+        marker=replace(hollow, live=True, age=None),
+    ) == (11.0, 22.0)

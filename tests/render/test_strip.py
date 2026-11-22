@@ -559,6 +559,61 @@ def test_band_is_inverted_with_text() -> None:
         assert frame[y + ROW_H // 2, 2] == PAPER
 
 
+def strip_badge(*, marker: Marker) -> NDArray[np.uint8]:
+    """
+    Draw one Strip badge on a blank canvas.
+
+    Parameters
+    ----------
+    marker : Marker
+        Badge.
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        The grey frame.
+    """
+    canvas = Canvas()
+    draw_strip_markers(canvas, markers=(marker,))
+    return canvas.grey()
+
+
+def test_strip_wedge_stands_nine_pixels_past_the_badge() -> None:
+    """A timetable badge's wedge is wider than the track for 9 px."""
+    frame = strip_badge(marker=Marker(
+        route='T1', x=100.0, y=200.0, bearing=180.0, live=False,
+        pinned=True,
+    ))
+    assert all(frame[y, 98] == INK for y in range(210, 219))
+    assert frame[219, 98] == PAPER
+    assert frame[220, 100] == INK and frame[222, 100] == PAPER
+    up = strip_badge(marker=Marker(
+        route='T1', x=100.0, y=200.0, bearing=0.0, live=True, pinned=True,
+    ))
+    assert all(up[y, 98] == INK for y in range(181, 190))
+    assert up[180, 98] == PAPER
+
+
+def test_strip_badge_with_no_bearing_has_no_wedge() -> None:
+    """A badge whose next stop is not known is drawn plain."""
+    frame = strip_badge(marker=Marker(
+        route='T1', x=100.0, y=200.0, bearing=None, live=False,
+        pinned=True,
+    ))
+    assert (frame[211:] == PAPER).all()
+
+
+def test_strip_tab_goes_above_a_badge_heading_down() -> None:
+    """A stale badge heading down keeps its wedge below, its tab above."""
+    frame = strip_badge(marker=Marker(
+        route='T1', x=100.0, y=200.0, bearing=180.0, live=False,
+        pinned=True, age=180.0,
+    ))
+    assert all(frame[y, 98] == INK for y in range(210, 219))
+    assert frame[179, 92] == INK and frame[177, 92] == PAPER
+    assert (frame[219:, 88:96] == PAPER).all()
+
+
 def test_markers_drawn_on_track() -> None:
     """A live badge sits on the track; nothing is drawn far from it."""
     marker = Marker(

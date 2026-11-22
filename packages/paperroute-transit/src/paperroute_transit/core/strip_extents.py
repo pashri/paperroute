@@ -26,7 +26,7 @@ AGE_GLYPH_WIDTH: Final[Mapping[str, float]] = {  # age tab text, rounded up
 }
 BADGE_PAD: Final[float] = 5.0  # a badge's box past its text, each side
 BADGE_HALF: Final[float] = 10.0  # half a badge's height
-WEDGE_REACH: Final[float] = 10.0  # a live badge's wedge past its box
+WEDGE_REACH: Final[float] = 12.0  # a badge's wedge past its box
 TAB_REACH: Final[float] = 12.0  # a stale badge's age tab below its box
 TAB_PAD: Final[float] = 3.0  # an age tab's box past its text, each side
 OUTLINE: Final[float] = 1.0  # the paper edge drawn round a badge
@@ -127,19 +127,23 @@ def reaches(*, marker: Marker) -> tuple[float, float]:
     Returns
     -------
     tuple[float, float]
-        Pixels above and below: half the badge and its outline, or its
-        wedge on the side a live badge points to, or its age tab below.
+        Pixels above and below: half the badge and its outline, its wedge
+        on the side it points to, and a timetable badge's age tab on the
+        other side when it points down, else below.
     """
     heading = (
         0.0
-        if marker.bearing is None or not marker.live
+        if marker.bearing is None
         else round(math.cos(math.radians(marker.bearing)), 6)
     )
-    up = BADGE_HALF + max(OUTLINE, WEDGE_REACH if heading > 0 else 0.0)
+    tab = 0.0 if marker.age is None or marker.live else TAB_REACH
+    tab_up = tab if heading < 0 else 0.0
+    tab_down = 0.0 if heading < 0 else tab
+    up = BADGE_HALF + max(
+        OUTLINE, WEDGE_REACH if heading > 0 else 0.0, tab_up,
+    )
     down = BADGE_HALF + max(
-        OUTLINE,
-        WEDGE_REACH if heading < 0 else 0.0,
-        0.0 if marker.age is None else TAB_REACH,
+        OUTLINE, WEDGE_REACH if heading < 0 else 0.0, tab_down,
     )
     return up, down
 

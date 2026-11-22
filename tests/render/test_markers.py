@@ -25,8 +25,10 @@ from paperroute_transit.render.markers import (
     BADGE_FACE,
     OFFSETS,
     STOP_HALF,
+    STRIP_WEDGE,
     badge_box,
     badge_half,
+    badge_wedge,
     draw_markers,
     draw_tab,
     marker_box,
@@ -34,6 +36,7 @@ from paperroute_transit.render.markers import (
     overlaps,
     place,
     square,
+    tab_above,
     tab_box,
     wedge_points,
 )
@@ -597,3 +600,32 @@ def test_badge_crowding_a_kept_one_is_dropped_not_slid() -> None:
     reserved = [square(at=(100.0, y), half=2.0) for y in (80.0, 120.0)]
     placed = place(markers=[marker(), beside], reserved=reserved)
     assert [item.marker.route for item in placed] == ['606']
+
+
+def test_wedge_points_take_the_strip_size() -> None:
+    """The Strip's wedge stands 12 px past the edge on a 16 px base."""
+    apex, left, right = wedge_points(
+        centre=SPOT, half=(15.0, 10.0), bearing=180.0, size=STRIP_WEDGE,
+    )
+    assert apex == pytest.approx((100.0, 122.0))
+    assert left[1] == pytest.approx(107.0)
+    assert sorted((left[0], right[0])) == pytest.approx([92.0, 108.0])
+
+
+def test_tab_goes_above_a_stale_badge_heading_down() -> None:
+    """Only a stale timetable badge pointing down hangs its tab above."""
+    stale = Marker(
+        route='606', x=100.0, y=100.0, bearing=180.0, live=False,
+        pinned=True, age=180.0,
+    )
+    assert tab_above(marker=stale)
+    assert not tab_above(marker=replace(stale, bearing=0.0))
+    assert not tab_above(marker=replace(stale, bearing=None))
+    assert not tab_above(marker=replace(stale, live=True))
+    top = tab_box(centre=SPOT, age=180.0, above=True)
+    under = tab_box(centre=SPOT, age=180.0)
+    assert (top[1], top[3]) == (78.0, 91.0)
+    assert (under[1], under[3]) == (109.0, 122.0)
+    assert badge_wedge(
+        marker=replace(stale, bearing=None), centre=SPOT, size=STRIP_WEDGE,
+    ) is None

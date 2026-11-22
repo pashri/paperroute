@@ -21,7 +21,11 @@ from paperroute_transit.core.strip_model import (
 )
 from paperroute_transit.render.chrome import ARROW_WIDTH, arrow
 from paperroute_transit.render.kerb_menu import MARK_RIGHT_GAP, two_way_mark
-from paperroute_transit.render.markers import draw_hollow, draw_live
+from paperroute_transit.render.markers import (
+    STRIP_WEDGE,
+    draw_hollow,
+    draw_live,
+)
 from paperroute_transit.render.names import Naming, fit_name
 
 TRACK_WIDTH: Final[int] = 3
@@ -891,4 +895,9 @@ def draw_strip_markers(canvas: Canvas, *, markers: Sequence[Marker]) -> None:
     """
     for marker in sorted(markers, key=lambda each: each.live):
         draw = draw_live if marker.live else draw_hollow
-        draw(canvas, marker=marker, centre=(marker.x, marker.y))
+        draw(
+            canvas,
+            marker=marker,
+            centre=(marker.x, marker.y),
+            wedge=STRIP_WEDGE,
+        )

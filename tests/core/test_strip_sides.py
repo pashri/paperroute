@@ -284,3 +284,13 @@ def test_marks_keep_a_single_kerb_from_on_the_followed_bus() -> None:
     followed = laid_out(inputs=inputs)
     assert followed.reach is not None and followed.reach.trip == 'y'
     assert times_by_station(inputs=followed)['C'] == '8:06'
+
+
+def test_followed_reach_keeps_the_facing_stations() -> None:
+    """Laying the rows below along the next bus keeps the facing map."""
+    inputs = sided(across_minutes=3, here_minutes=6)
+    assert inputs.reach is not None
+    facing = replace(inputs.reach, facing={'P1': 'A1'})
+    followed = laid_out(inputs=replace(inputs, reach=facing)).reach
+    assert followed is not None and followed.trip == 'y'
+    assert followed.facing == {'P1': 'A1'}

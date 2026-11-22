@@ -1391,3 +1391,27 @@ async def test_load_previews_failure_posts_previews_failed() -> None:
         )],
     )
     assert posted == [PreviewsFailed(path=(), timetable='v1')]
+
+
+async def test_load_strip_reads_the_kerbs_facing_a_both_sides_from() -> None:
+    """A both-sides strip loads the pairs of the stops before its From."""
+    data = replace(reach_data(), tails=(
+        RunTail(before=('P2', 'P1'), after=('E1', 'E2'), trips=8),
+    ))
+    pair = KerbPair(station='P1', other=place('E1'), busy=False)
+    network = FakeNetwork(data=data, pairs={'P1': pair, 'E2': pair})
+    both = replace(STRIP_KEY, across='x2')
+    (loaded,) = await posted_by(
+        ports=ports_of(network=network),
+        effects=[LoadStrip(key=both, origin=data.origin, timetable='v1')],
+    )
+    assert isinstance(loaded, StripLoaded) and loaded.reach is not None
+    assert loaded.reach.facing == {'P1': 'E1'}
+    (plain,) = await posted_by(
+        ports=ports_of(network=network),
+        effects=[
+            LoadStrip(key=STRIP_KEY, origin=data.origin, timetable='v1'),
+        ],
+    )
+    assert isinstance(plain, StripLoaded) and plain.reach is not None
+    assert plain.reach.facing == {}

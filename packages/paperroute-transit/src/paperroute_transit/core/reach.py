@@ -1,7 +1,7 @@
 """The stations a strip reaches from its From."""
 
 from collections.abc import Collection, Iterable, Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import date
 from enum import StrEnum
 from itertools import takewhile
@@ -58,6 +58,10 @@ class ReachInput:
     across_tails : tuple[RunTail, ...]
         The ways through the kerb across, laid out above the From; empty
         for any other pin.
+    facing : Mapping[str, str]
+        The station across the road from each stop the runs call at
+        before the From; empty for a strip not fed by both kerbs, or a
+        timetable without pairs.
     """
 
     origin: StopPlace
@@ -67,6 +71,7 @@ class ReachInput:
     exits: tuple[LineExit, ...] = ()
     network: TrainNetwork | None = None
     across_tails: tuple[RunTail, ...] = ()
+    facing: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -300,6 +305,9 @@ class Reach:
         apart two passes of a trip at the From; None matches any pass.
     above_seq : int | None
         The same for the trip read upward.
+    facing : Mapping[str, str]
+        The station across the road from each stop called at before the
+        From; empty for a strip not fed by both kerbs.
     """
 
     rows: tuple[ReachRow, ...]
@@ -312,6 +320,7 @@ class Reach:
     above_day: date | None = None
     seq: int | None = None
     above_seq: int | None = None
+    facing: Mapping[str, str] = field(default_factory=dict)
 
 
 def approach_rows(*, tails: Sequence[RunTail], placed: set[str]
@@ -489,4 +498,5 @@ def build_reach(*, data: ReachInput) -> Reach:
         ),
         station_of=data.station_of,
         source=None if data.network is None else data,
+        facing=data.facing,
     )

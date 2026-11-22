@@ -865,3 +865,17 @@ def test_build_reach_hangs_a_second_way_from_across_above() -> None:
     )
     above = {row.place.stop_id for row in reach.rows if row.above}
     assert above == {'A1', 'A2'}
+
+
+def test_build_reach_keeps_the_facing_stations() -> None:
+    """The reach carries the stations facing the stops before the From."""
+    here = tail('B1 B2', 6, before='P2 P1')
+    places = {
+        row.place.stop_id: row.place for row in reach_of(tails=[here]).rows
+    }
+    reach = build_reach(data=ReachInput(
+        origin=places['C'], tails=(here,), places=places, station_of={},
+        facing={'P1': 'A1'},
+    ))
+    assert reach.facing == {'P1': 'A1'}
+    assert reach_of(tails=[here]).facing == {}

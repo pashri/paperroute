@@ -531,6 +531,7 @@ def followed_reach(*, reach: Reach, trips: TripInputs,
         station_of=reach.station_of,
         trip=first.trip_id,
         day=first.service_day,
+        facing=reach.facing,
     )
 
 

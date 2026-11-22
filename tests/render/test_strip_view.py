@@ -33,7 +33,13 @@ from paperroute_transit.core.map_view import (
 )
 from paperroute_transit.core.model import CarryOn
 from paperroute_transit.core.names import NameRules
-from paperroute_transit.core.stop_view import Estimate, Pill, PinTag, Row
+from paperroute_transit.core.stop_view import (
+    UNCERTAIN,
+    Estimate,
+    Pill,
+    PinTag,
+    Row,
+)
 from paperroute_transit.core.strip_badges import HALF_WIDE
 from paperroute_transit.core.strip_model import (
     HINTS,
@@ -69,6 +75,7 @@ from paperroute_transit.render.strip_view import (
     CANCELLED_LEFT,
     CARRY_GAP,
     COUNTDOWN_FACE,
+    FASTER_LEFT,
     HEADSIGN_FACE,
     HINT_BOX,
     HINT_FACE,
@@ -83,6 +90,7 @@ from paperroute_transit.render.strip_view import (
     draw_strip_map_view,
     draw_strip_view,
     name_room,
+    note_width,
     paint_strip_view,
     panel_heading,
 )
@@ -810,21 +818,44 @@ FASTER_BOX: Final[tuple[slice, slice]] = (
 )
 
 
-def test_faster_covers_uncertain() -> None:
-    """FASTER is an ink block on the second line, over any note."""
+def test_note_width_adds_the_word_to_faster() -> None:
+    """A FASTER row's second line loses the block, a gap and the word."""
+    row = replace(panel_row(pill=Pill.FASTER), estimate=UNSURE)
+    assert note_width(row=row) == pytest.approx(
+        RULE_RIGHT - FASTER_LEFT + NOTE_GAP + note_room(face=TAG_FACE),
+    )
+
+
+def test_row_note_sits_left_of_faster() -> None:
+    """'uncertain' ends a gap before the FASTER block, which is unchanged."""
     row = replace(
-        panel_row(pill=Pill.FASTER),
-        destination='Emu Plains',
+        panel_row(pill=Pill.FASTER), destination='Emu Plains',
         estimate=UNSURE,
     )
     drawn = painted(row=row)
-    bare = painted(row=replace(row, pill=None, estimate=None))
-    assert (drawn[PANEL_TOP + 51, 712:RULE_RIGHT] == INK).all()
-    assert (drawn[PANEL_TOP + 65, 712:RULE_RIGHT] == INK).all()
-    assert (bare[FASTER_BOX] == PAPER).all()
-    outside = drawn.copy()
-    outside[FASTER_BOX] = PAPER
-    assert (outside == bare).all()
+    plain = painted(row=replace(row, estimate=None))
+    found = np.argwhere(drawn != plain)
+    assert found.size
+    assert found[:, 1].max() <= FASTER_LEFT - NOTE_GAP
+    assert found[:, 1].min() >= FASTER_LEFT - NOTE_GAP - note_room(
+        face=TAG_FACE,
+    )
+    assert (drawn[FASTER_BOX] == plain[FASTER_BOX]).all()
+
+
+def test_row_middle_stops_a_gap_before_uncertain() -> None:
+    """An arrival with stops, or a carry-on, ends a gap before the word."""
+    then = CarryOn(route='T2', headsign='Leppington via Granville Junction')
+    word = int(
+        FASTER_LEFT - NOTE_GAP - text_width(text=UNCERTAIN, face=TAG_FACE),
+    )
+    for row in (
+        replace(panel_row(pill=Pill.FASTER), estimate=UNSURE, stops=12),
+        replace(panel_row(pill=Pill.FASTER, then=then), estimate=UNSURE),
+    ):
+        line = painted(row=row)[SECOND_LINE]
+        assert (line[:, word - NOTE_GAP + 1:word - 1] == PAPER).all()
+        assert (line[:, word - 30:word - NOTE_GAP] == INK).any()
 
 
 def test_a_carry_on_stops_short_of_faster() -> None:

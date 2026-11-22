@@ -35,6 +35,7 @@ from paperroute_transit.render.chrome import (
     BANNER,
     FASTER,
     NAME_GAP,
+    NOTE_GAP,
     arrow,
     badge,
     badge_width,
@@ -118,17 +119,19 @@ def note_width(*, row: Row) -> float:
     Returns
     -------
     float
-        The room of the FASTER block or the word, whichever the row has
-        and is wider, or 0 when it has neither.
+        The room of the FASTER block, plus the word and a gap between
+        them when the row shows the word; 0 when it has neither.
     """
-    word = note_room(face=TAG_FACE) if uncertain_row(row=row) else 0.0
     block = RULE_RIGHT - FASTER_LEFT if row.pill is Pill.FASTER else 0
-    return max(word, block)
+    if not uncertain_row(row=row):
+        return block
+    gap = NOTE_GAP if block else 0
+    return block + gap + note_room(face=TAG_FACE)
 
 
 def row_note(canvas: Canvas, *, row: Row, top: int) -> None:
     """
-    Draw 'uncertain' right-aligned under the countdown.
+    Draw 'uncertain' under the countdown, or left of a FASTER block.
 
     Parameters
     ----------
@@ -140,8 +143,11 @@ def row_note(canvas: Canvas, *, row: Row, top: int) -> None:
         The row's rule.
     """
     if uncertain_row(row=row):
+        right = TEXT_RIGHT
+        if row.pill is Pill.FASTER:
+            right = FASTER_LEFT - NOTE_GAP
         canvas.text(
-            at=(TEXT_RIGHT, top + SECOND_DROP), text=UNCERTAIN,
+            at=(right, top + SECOND_DROP), text=UNCERTAIN,
             face=TAG_FACE, grey=INK, anchor='rs',
         )
 
@@ -254,8 +260,14 @@ def row_middle(
     if whole:
         return MIDDLE_X
     arrival = canvas.text(
-        at=(MIDDLE_X, top + SECOND_DROP), text=arrival_line(row=row),
-        face=TAG_FACE, grey=INK,
+        at=(MIDDLE_X, top + SECOND_DROP),
+        text=canvas.fit(
+            text=arrival_line(row=row),
+            face=TAG_FACE,
+            width=TEXT_RIGHT - MIDDLE_X - note_width(row=row),
+        ),
+        face=TAG_FACE,
+        grey=INK,
     )
     return MIDDLE_X + round(arrival) + CARRY_GAP
 

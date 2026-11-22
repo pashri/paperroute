@@ -32,6 +32,7 @@ from paperroute_transit.core.strip_model import (
     OPEN_TAG,
     PANE_FROM_ROW,
     PANE_ROWS,
+    PANE_TOP,
     PANE_TRACK_X,
     PANEL_ROWS,
     PICK_FROM,
@@ -781,15 +782,15 @@ def build_strip_pane(*, inputs: StripInputs) -> StripPane:
     Returns
     -------
     StripPane
-        Up to `PANE_ROWS` rows, one fewer below a banner, with the From
-        in the third slot, or the top slot as far up as it is, and their
-        vehicles; nothing when there is no strip.
+        Up to `PANE_ROWS` rows from `PANE_TOP`, one fewer below a
+        banner, with the From in the third slot, or the top slot as far
+        up as it is, and their vehicles; nothing when there is no strip.
     """
     reach = shown_reach(inputs=inputs)
     if reach is None:
         return StripPane(rows=(), markers=())
     marks = marks_of(inputs=replace(inputs, cursor=None), reach=reach)
-    window = inputs_window(inputs=inputs, rows=PANE_ROWS)
+    window = inputs_window(inputs=inputs, rows=PANE_ROWS, top=PANE_TOP)
     first = max(
         0, 0 if marks.origin is None else marks.origin - PANE_FROM_ROW,
     )

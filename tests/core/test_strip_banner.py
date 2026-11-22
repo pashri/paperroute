@@ -7,6 +7,7 @@ from paperroute_testkit.core.factories import inputs_of
 from paperroute_testkit.core.strip_factories import long_reach
 from paperroute_transit.core.strip_model import (
     PANE_ROWS,
+    PANE_TOP,
     ROW_H,
     STRIP_ROWS,
     STRIP_TOP,
@@ -101,5 +102,5 @@ def test_pane_starts_below_the_banner() -> None:
     """Strip + map's pane drops a row under a banner, FROM still third."""
     pane = build_strip_pane(inputs=bannered())
     assert len(pane.rows) == PANE_ROWS - 1
-    assert pane.rows[0].y == UNDER + ROW_H / 2
+    assert pane.rows[0].y == PANE_TOP + ROW_H + ROW_H / 2
     assert pane.rows[2].name == 'S20'

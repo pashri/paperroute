@@ -56,6 +56,9 @@ from paperroute_transit.core.strip_model import (
     NEEDS_UPDATE,
     NO_STRIP,
     OPEN_HINT,
+    PANE_LIST_ROWS,
+    PANE_ROWS,
+    PANE_TOP,
     PANE_TRACK_X,
     ROW_H,
     STRIP_ROWS,
@@ -657,7 +660,7 @@ def test_pane_puts_from_on_third_row_and_never_bands() -> None:
         pane = build_strip_pane(inputs=replace(
             inputs_of(reach=long_reach()), scroll=scroll,
         ))
-        assert len(pane.rows) == 12
+        assert len(pane.rows) == PANE_ROWS
         assert pane.rows[2].name == 'S20'
     short = build_strip_pane(inputs=three_trains())
     assert [row.name for row in short.rows] == ['R1', 'J', 'C', 'E1', 'E2']
@@ -963,3 +966,11 @@ def test_build_strip_view_carries_the_name_rules() -> None:
         ),
     )
     assert result.name_rules == RULES
+
+
+def test_build_strip_pane_leaves_three_slots_for_the_list() -> None:
+    """The pane is nine slots, starting three slots down."""
+    assert (PANE_LIST_ROWS, PANE_ROWS) == (3, 9)
+    assert PANE_TOP == STRIP_TOP + 3 * ROW_H
+    pane = build_strip_pane(inputs=three_trains())
+    assert pane.rows[0].y == PANE_TOP + ROW_H / 2

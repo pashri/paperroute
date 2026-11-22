@@ -97,7 +97,9 @@ def ride_of(*, reach: Reach, target: int | None) -> frozenset[int]:
     return frozenset(path)
 
 
-def window_of(*, banner: bool, rows: int = STRIP_ROWS) -> Window:
+def window_of(
+    *, banner: bool, rows: int = STRIP_ROWS, top: int = STRIP_TOP,
+) -> Window:
     """
     Find where a strip's row slots sit.
 
@@ -107,18 +109,22 @@ def window_of(*, banner: bool, rows: int = STRIP_ROWS) -> Window:
         True while a live data banner shows under the header.
     rows : int
         Slots with no banner.
+    top : int
+        Top of the first slot.
 
     Returns
     -------
     Window
-        The slots from `STRIP_TOP`; under a banner they start below it,
+        The slots from `top`; under a banner they start below it,
         `BANNER_ROWS` fewer.
     """
     drop = BANNER_ROWS if banner else 0
-    return Window(top=STRIP_TOP + drop * ROW_H, rows=rows - drop)
+    return Window(top=top + drop * ROW_H, rows=rows - drop)
 
 
-def inputs_window(*, inputs: StripInputs, rows: int = STRIP_ROWS) -> Window:
+def inputs_window(
+    *, inputs: StripInputs, rows: int = STRIP_ROWS, top: int = STRIP_TOP,
+) -> Window:
     """
     Find where the slots sit for a view's inputs.
 
@@ -128,13 +134,17 @@ def inputs_window(*, inputs: StripInputs, rows: int = STRIP_ROWS) -> Window:
         The view's inputs; their Stop view says whether a banner shows.
     rows : int
         Slots with no banner.
+    top : int
+        Top of the first slot.
 
     Returns
     -------
     Window
         The slots.
     """
-    return window_of(banner=inputs.stop_view.banner is not None, rows=rows)
+    return window_of(
+        banner=inputs.stop_view.banner is not None, rows=rows, top=top,
+    )
 
 
 def slot_y(*, index: int, first: int, window: Window) -> float:

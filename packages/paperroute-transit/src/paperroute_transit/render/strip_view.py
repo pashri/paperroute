@@ -1,10 +1,12 @@
 """Draw the Strip and Strip + map frames."""
 
+from collections.abc import Sequence
 from typing import Final
 
 import numpy as np
 from numpy.typing import NDArray
 
+from paperroute_device.core.text import DOT
 from paperroute_device.render.canvas import (
     HEIGHT,
     INK,
@@ -24,7 +26,12 @@ from paperroute_transit.core.stop_view import (
 )
 from paperroute_transit.core.strip_badges import HALF_WIDE
 from paperroute_transit.core.strip_model import (
+    BANNER_ROWS,
+    PANE_LIST_ROWS,
+    PANE_TOP,
     PANE_TRACK_X,
+    ROW_H,
+    STRIP_TOP,
     TRACK_X,
     StripMapView,
     StripPanel,
@@ -40,6 +47,7 @@ from paperroute_transit.render.chrome import (
     badge,
     badge_width,
     countdown_slot,
+    leaves,
     note_room,
     pill,
     route_pair,
@@ -105,6 +113,14 @@ STRIP_EMPTY_Y: Final[int] = 250
 HINT_BOX: Final[tuple[int, int, int, int]] = (456, 420, 786, 464)
 HINT_FACE: Final[Face] = Face(weight=700, px=14)
 HINT_PAD: Final[int] = 4  # pixels each side of the hint text
+SHORT_TOP: Final[int] = STRIP_TOP - 4  # first row's top
+SHORT_INSET: Final[int] = 8  # pixels in from the pane's sides
+SHORT_BADGE_DROP: Final[int] = 18  # badge centre below a row's top
+SHORT_COUNT_DROP: Final[int] = 26  # countdown baseline below a row's top
+SHORT_TEXT_DROP: Final[int] = 24  # headsign baseline below a row's top
+SHORT_TEXT_GAP: Final[int] = 10  # pixels from the headsign to the countdown
+SHORT_RULE_DROP: Final[int] = 3  # rule top below the last slot
+SHORT_RULE: Final[int] = 2  # rule thickness in pixels
 
 
 def note_width(*, row: Row) -> float:
@@ -664,9 +680,151 @@ def draw_strip_view(*, view: StripView) -> NDArray[np.uint8]:
     return finish(canvas)
 
 
+def short_rows(*, rows: Sequence[Row]) -> tuple[Row, ...]:
+    """
+    Pick the departures the short list shows.
+
+    Parameters
+    ----------
+    rows : Sequence[Row]
+        Departures, soonest first.
+
+    Returns
+    -------
+    tuple[Row, ...]
+        The first `PANE_LIST_ROWS` that are not cancelled.
+    """
+    live = (row for row in rows if row.pill is not Pill.CANCELLED)
+    return tuple(live)[:PANE_LIST_ROWS]
+
+
+def short_text(
+    *, row: Row, width: float, naming: Naming, destination: bool,
+) -> str:
+    """
+    Write the text beside a short-list row's badge.
+
+    Parameters
+    ----------
+    row : Row
+        Departure.
+    width : float
+        Pixels available.
+    naming : Naming
+        How the headsign is shortened.
+    destination : bool
+        True when the view has a Destination, so the arrival leads.
+
+    Returns
+    -------
+    str
+        The fitted headsign, or the arrival and the headsign.
+    """
+    if not destination:
+        return fit_headsign(
+            text=row.destination, face=HEADSIGN_FACE, width=width,
+            naming=naming,
+        )[0]
+    lead = f'arr {row.arrives_at}'
+    if not row.destination:
+        return lead
+    room = width - text_width(text=lead + DOT, face=HEADSIGN_FACE)
+    return lead + DOT + fit_headsign(
+        text=row.destination, face=HEADSIGN_FACE, width=room, naming=naming,
+    )[0]
+
+
+def short_row(
+    canvas: Canvas,
+    *,
+    row: Row,
+    top: float,
+    left: float,
+    destination: bool,
+    naming: Naming,
+) -> None:
+    """
+    Draw one short-list row: badge, text and countdown.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Departure.
+    top : float
+        The row's top.
+    left : float
+        Left edge of the pane.
+    destination : bool
+        True when the view has a Destination.
+    naming : Naming
+        How the headsign is shortened.
+    """
+    group = marked_countdown(
+        canvas,
+        row=row,
+        text=leaves(row=row),
+        at=(PANE_TIME_RIGHT, top + SHORT_COUNT_DROP),
+        face=COUNTDOWN_FACE,
+        mark_face=MARK_FACE,
+    )
+    start = left + SHORT_INSET
+    wide = badge(
+        canvas, x=start, y=top + SHORT_BADGE_DROP, route=row.route,
+        px=BADGE_PX,
+    )
+    x = start + wide + 8
+    text = short_text(
+        row=row,
+        width=PANE_TIME_RIGHT - group - SHORT_TEXT_GAP - x,
+        naming=naming,
+        destination=destination,
+    )
+    canvas.text(
+        at=(x, top + SHORT_TEXT_DROP), text=text, face=HEADSIGN_FACE,
+        grey=INK,
+    )
+
+
+def draw_short_list(canvas: Canvas, *, view: StripMapView) -> None:
+    """
+    Draw the next departures above the strip, over a closing rule.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    view : StripMapView
+        The view; nothing is drawn without a departure to show.
+    """
+    rows = short_rows(rows=view.map.sidebar)
+    if not rows:
+        return
+    top = SHORT_TOP + (BANNER_ROWS * ROW_H if view.map.banner else 0)
+    left = view.map.base.width + RULE_WIDTH
+    naming = Naming(
+        rules=view.map.name_rules,
+        siblings=tuple(row.destination for row in rows),
+    )
+    for index, row in enumerate(rows):
+        y = top + index * ROW_H
+        if index:
+            canvas.rect(
+                box=(left + SHORT_INSET, y, WIDTH - SHORT_INSET, y + 1),
+                grey=INK,
+            )
+        short_row(
+            canvas, row=row, top=y, left=left,
+            destination=view.map.destination is not None, naming=naming,
+        )
+    bottom = top + PANE_LIST_ROWS * ROW_H + SHORT_RULE_DROP
+    canvas.rect(box=(left, bottom, WIDTH, bottom + SHORT_RULE), grey=INK)
+
+
 def draw_pane(canvas: Canvas, *, view: StripMapView) -> None:
     """
-    Draw the rule and the strip right of the map.
+    Draw the rule, the short list and the strip right of the map.
 
     Parameters
     ----------
@@ -677,7 +835,8 @@ def draw_pane(canvas: Canvas, *, view: StripMapView) -> None:
     """
     left = view.map.base.width
     canvas.rect(box=(left, HEADER, left + RULE_WIDTH, HEIGHT), grey=INK)
-    with canvas.clipped(box=(left + RULE_WIDTH, HEADER, WIDTH, HEIGHT)):
+    window = PANE_TOP + (BANNER_ROWS * ROW_H if view.map.banner else 0)
+    with canvas.clipped(box=(left + RULE_WIDTH, window, WIDTH, HEIGHT)):
         draw_rows(
             canvas,
             rows=view.pane.rows,
@@ -688,6 +847,7 @@ def draw_pane(canvas: Canvas, *, view: StripMapView) -> None:
             rules=view.map.name_rules,
         )
         draw_strip_markers(canvas, markers=view.pane.markers)
+    draw_short_list(canvas, view=view)
 
 
 def draw_strip_map_view(

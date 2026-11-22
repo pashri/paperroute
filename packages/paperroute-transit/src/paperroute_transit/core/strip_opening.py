@@ -12,8 +12,14 @@ from paperroute_transit.core.reach import Reach, RowKind
 from paperroute_transit.core.saved import LiveView
 from paperroute_transit.core.state_model import FoldContext, State
 from paperroute_transit.core.strip_follow import origin_of
-from paperroute_transit.core.strip_model import PANE_FROM_ROW, PANE_ROWS
-from paperroute_transit.core.strip_slots import first_row, home_of, window_of
+from paperroute_transit.core.strip_model import PANE_ROWS
+from paperroute_transit.core.strip_slots import (
+    both_kerbs,
+    first_row,
+    from_slot,
+    home_of,
+    window_of,
+)
 from paperroute_transit.core.strip_state import (
     STRIP_VIEWS,
     destination_id,
@@ -192,6 +198,7 @@ def strip_opened(state: State, banner: bool) -> State | None:
             destination=destination,
             rows=rows,
             end_points=end_points,
+            middle=both_kerbs(key=shown_key(state=state)),
         ),
         rows=rows,
         end_points=end_points,
@@ -231,6 +238,7 @@ def rescrolled(*, state: State, first: int, rows: int) -> State:
         destination=destination_id(state=state),
         rows=rows,
         end_points=on_end_points(state=state),
+        middle=both_kerbs(key=shown_key(state=state)),
     )
     scroll = first - home
     return replace(
@@ -258,11 +266,11 @@ def pane_opened(state: State, banner: bool) -> State | None:
     origin = None if reach is None else origin_of(reach=reach)
     if reach is None or origin is None:
         return None
-    fold = fold_in(
-        reach=reach,
-        first=max(0, origin - PANE_FROM_ROW),
-        rows=window_of(banner=banner, rows=PANE_ROWS).rows,
+    rows = window_of(banner=banner, rows=PANE_ROWS).rows
+    slot = from_slot(
+        rows=rows, middle=both_kerbs(key=shown_key(state=state)),
     )
+    fold = fold_in(reach=reach, first=max(0, origin - slot), rows=rows)
     return None if fold is None else with_opened(
         state=state, reach=reach, index=fold,
     )

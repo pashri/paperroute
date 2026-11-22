@@ -2,7 +2,7 @@
 
 from paperroute_device.core.text import DOT
 from paperroute_transit.core.names import base_name
-from paperroute_transit.core.reach import Reach, RowKind
+from paperroute_transit.core.reach import Reach, RowKind, StripKey
 from paperroute_transit.core.strip_follow import origin_of
 from paperroute_transit.core.strip_model import (
     BANNER_ROWS,
@@ -196,12 +196,49 @@ def end_point_home(*, reach: Reach, origin: int, destination: bool) -> int:
     return origin
 
 
+def both_kerbs(*, key: StripKey | None) -> bool:
+    """
+    Tell whether a strip is fed by both kerbs of a road.
+
+    Parameters
+    ----------
+    key : StripKey | None
+        The strip's key, or None.
+
+    Returns
+    -------
+    bool
+        True when the key names a kerb across the road.
+    """
+    return key is not None and key.across is not None
+
+
+def from_slot(*, rows: int, middle: bool) -> int:
+    """
+    Find the slot the From rests in.
+
+    Parameters
+    ----------
+    rows : int
+        Row slots on the strip.
+    middle : bool
+        Whether both kerbs feed the strip.
+
+    Returns
+    -------
+    int
+        The upper middle slot when `middle`, else `PANE_FROM_ROW`.
+    """
+    return (rows - 1) // 2 if middle else PANE_FROM_ROW
+
+
 def home_of(
     *,
     reach: Reach,
     destination: str | None,
     rows: int,
     end_points: bool = False,
+    middle: bool = False,
 ) -> int:
     """
     Find the unscrolled, unclamped top row of the Strip.
@@ -217,11 +254,13 @@ def home_of(
     end_points : bool
         Whether the pin's kind is chosen by end points, which ignores
         the ride (see `end_point_home`).
+    middle : bool
+        Whether both kerbs feed the strip.
 
     Returns
     -------
     int
-        The row that puts the From in the third slot. With a Destination
+        The row that puts the From in its `from_slot`. With a Destination
         on the strip, moved the least that shows the ride from the From
         to it when the ride fits; otherwise the From in the top slot for
         a ride down the strip, the bottom slot for one up it. Rows
@@ -236,7 +275,7 @@ def home_of(
         return end_point_home(
             reach=reach, origin=origin, destination=destination is not None,
         )
-    start = origin - PANE_FROM_ROW
+    start = origin - from_slot(rows=rows, middle=middle)
     if reach.trip is not None:
         return start
     target = target_of(reach=reach, destination=destination)

@@ -389,14 +389,39 @@ def test_board_modes_from_specs() -> None:
     ) == {'train'}
 
 
-def test_window_departures_keeps_to_the_picked_kerb() -> None:
-    """A departure from the kerb across never feeds the strip."""
+def across_departure(*, minutes: int, trip_id: str) -> Departure:
+    """Make a bus departure from the kerb across."""
+    there = departure(
+        departs=START + timedelta(minutes=minutes), trip_id=trip_id,
+        kind=SydneyMode.BUS,
+    )
+    return replace(there, facts=replace(there.facts, across=True))
+
+
+BOTH: Final[StripKey] = StripKey(
+    station='C', kind=SydneyMode.BUS, routes=(), across='x2',
+)
+
+
+def test_window_departures_keeps_both_kerbs() -> None:
+    """Departures from both kerbs feed the strip, in order."""
     here = departure(departs=START, trip_id='a', kind=SydneyMode.BUS)
-    there = departure(departs=START, trip_id='b', kind=SydneyMode.BUS)
-    there = replace(there, facts=replace(there.facts, across=True))
+    there = across_departure(minutes=3, trip_id='b')
     assert window_departures(
         departures=[here, there],
-        key=StripKey(station='C', kind=SydneyMode.BUS, routes=()),
+        key=BOTH,
+        now=START,
+        line_kinds=line_modes(modes=SYDNEY.modes),
+    ) == [here, there]
+
+
+def test_window_departures_follows_a_loop_once() -> None:
+    """A trip calling at both kerbs is kept once, at its earlier call."""
+    here = departure(departs=START, trip_id='loop', kind=SydneyMode.BUS)
+    there = across_departure(minutes=9, trip_id='loop')
+    assert window_departures(
+        departures=[here, there],
+        key=BOTH,
         now=START,
         line_kinds=line_modes(modes=SYDNEY.modes),
     ) == [here]

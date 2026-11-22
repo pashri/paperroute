@@ -360,8 +360,8 @@ def window_departures(
     Returns
     -------
     list[Departure]
-        The first departure of each trip leaving from `STRIP_LOOKBACK`
-        before now to `STRIP_AHEAD` after, in order.
+        The first departure of each trip, from either kerb, leaving from
+        `STRIP_LOOKBACK` before now to `STRIP_AHEAD` after, in order.
     """
     start = (now - STRIP_LOOKBACK).timestamp()
     end = (now + STRIP_AHEAD).timestamp()
@@ -369,8 +369,6 @@ def window_departures(
     for departure in strip_departures(
         departures=departures, key=key, line_kinds=line_kinds,
     ):
-        if departure.facts.across:
-            continue
         if start <= departure.departs.timestamp() <= end:
             kept.setdefault(departure.trip_id, departure)
     return list(kept.values())

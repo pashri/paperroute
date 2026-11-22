@@ -30,7 +30,6 @@ from paperroute_transit.core.strip_model import (
     NO_STRIP,
     OPEN_HINT,
     OPEN_TAG,
-    PANE_FROM_ROW,
     PANE_ROWS,
     PANE_TOP,
     PANE_TRACK_X,
@@ -53,10 +52,13 @@ from paperroute_transit.core.strip_model import (
     selected_index,
 )
 from paperroute_transit.core.strip_notes import carry_note
+from paperroute_transit.core.strip_sides import across_times
 from paperroute_transit.core.strip_slots import (
     band_of,
+    both_kerbs,
     destination_station,
     first_row,
+    from_slot,
     home_of,
     inputs_window,
     ride_of,
@@ -165,6 +167,7 @@ def row_times(
         **trip_text(
             item=item, trips=trips, reach=reach, rows=range(len(reach.rows)),
         ),
+        **across_times(trips=trips, reach=reach),
         origin: clock_text(moment=item.departs, zone=inputs.zone),
     }
 
@@ -196,7 +199,8 @@ def followed_times(
         Clock time by row: the picked train's at the From, at its calls
         still to come above the From, and at the line rows below it;
         the next train's at the From and above when the rows no longer
-        match the trains.
+        match the trains. The next bus from a kerb across times the rows
+        above the From, and the From shows the next bus from either kerb.
     """
     origin = origin_of(reach=reach) or 0
     picked = picked_calls(
@@ -213,6 +217,7 @@ def followed_times(
     below = {} if picked is None else picked[1]
     return {
         **trip_text(item=item, trips=trips, reach=reach, rows=range(origin)),
+        **across_times(trips=trips, reach=reach),
         **{
             index: clock_text(moment=at, zone=trips.zone)
             for index, at in below.items()
@@ -456,6 +461,7 @@ def strip_rows(*, inputs: StripInputs, reach: Reach
         destination=inputs.destination,
         rows=window.rows,
         end_points=inputs.end_points,
+        middle=both_kerbs(key=inputs.key),
     )
     first = first_row(
         scroll=inputs.scroll,
@@ -791,9 +797,10 @@ def build_strip_pane(*, inputs: StripInputs) -> StripPane:
         return StripPane(rows=(), markers=())
     marks = marks_of(inputs=replace(inputs, cursor=None), reach=reach)
     window = inputs_window(inputs=inputs, rows=PANE_ROWS, top=PANE_TOP)
-    first = max(
-        0, 0 if marks.origin is None else marks.origin - PANE_FROM_ROW,
+    slot = from_slot(
+        rows=window.rows, middle=both_kerbs(key=inputs.key),
     )
+    first = max(0, 0 if marks.origin is None else marks.origin - slot)
     rows = tuple(
         strip_row(
             reach=reach, index=index, first=first, marks=marks, window=window,

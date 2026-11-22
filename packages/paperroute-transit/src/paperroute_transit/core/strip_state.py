@@ -37,6 +37,7 @@ from paperroute_transit.core.strip_model import (
     StripInputs,
 )
 from paperroute_transit.core.strip_slots import (
+    both_kerbs,
     destination_station,
     home_of,
     window_of,
@@ -504,6 +505,7 @@ def scroll_range(
     destination: str | None,
     banner: bool,
     end_points: bool = False,
+    middle: bool = False,
 ) -> tuple[int, int]:
     """
     Find how far the Strip scrolls before its rows stop moving.
@@ -518,6 +520,8 @@ def scroll_range(
         True while a live data banner shortens the strip.
     end_points : bool
         Whether the shown pin's kind is chosen by end points.
+    middle : bool
+        Whether both kerbs feed the shown strip.
 
     Returns
     -------
@@ -532,7 +536,11 @@ def scroll_range(
         return 0, 0
     rows = window_of(banner=banner).rows
     shift = home_of(
-        reach=reach, destination=destination, rows=rows, end_points=end_points,
+        reach=reach,
+        destination=destination,
+        rows=rows,
+        end_points=end_points,
+        middle=middle,
     )
     low, high = min(0, -shift), len(reach.rows) - rows - shift
     if end_points:
@@ -567,6 +575,7 @@ def clamped(*, state: State, banner: bool) -> State:
         destination=destination_id(state=state),
         banner=banner,
         end_points=end_points,
+        middle=both_kerbs(key=shown_key(state=state)),
     )
     strip = state.strip
     followed = followed_of(reach=reach, before=strip.followed)

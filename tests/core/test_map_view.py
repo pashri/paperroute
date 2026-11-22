@@ -69,8 +69,7 @@ def row(*, route: str = '606') -> Row:
     return Row(
         route=route,
         vehicle='bus',
-        bay='stand',
-        platform='',
+        where='',
         destination='Parramatta',
         countdown='5',
         leaves_at='8:05',

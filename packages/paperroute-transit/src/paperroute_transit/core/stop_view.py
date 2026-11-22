@@ -62,14 +62,14 @@ class Row:
     """
     One departure as shown.
 
+    `where` is the bay word and platform, empty without a platform.
     `stops` counts the stations stopped at up to the Destination, None
     without one.
     """
 
     route: str
     vehicle: str
-    bay: str
-    platform: str
+    where: str
     destination: str
     countdown: str
     leaves_at: str
@@ -82,6 +82,7 @@ class Row:
     stops: int | None = None
     estimate: Estimate | None = None
     note: str = ''
+    late: int | None = None  # minutes late, negative early; None if timetable
 
 
 def late_minutes(*, item: LiveDeparture) -> int:
@@ -494,8 +495,7 @@ def to_row(
     return Row(
         route=dep.route,
         vehicle=words.vehicle,
-        bay=words.bay,
-        platform=dep.platform,
+        where=f'{words.bay} {dep.platform}' if dep.platform else '',
         destination=tidy_headsign(
             text=onto.headsign if onto else dep.headsign,
             rules=city.name_rules,
@@ -511,6 +511,7 @@ def to_row(
         stops=dep.stops,
         estimate=row_estimate(item=item, zone=zone),
         note=platform_note(city=city, departure=dep, bay=words.bay),
+        late=late_minutes(item=item) if item.live else None,
     )
 
 
@@ -834,7 +835,7 @@ def under_number(
     ]
     return UnderNumber(
         status=status,
-        platform=f'{row.bay} {row.platform}' if row.platform else '',
+        platform=row.where,
         then=tuple(same[:THEN_COUNT]),
         delay=int(
             item.departs.timestamp() - item.departure.departs.timestamp()

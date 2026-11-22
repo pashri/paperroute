@@ -41,7 +41,7 @@ def stop_row(
         Row.
     """
     return Row(
-        route='606', vehicle='bus', bay='stand', platform='B4',
+        route='606', vehicle='bus', where='stand B4',
         destination=destination,
         countdown='9', leaves_at='8:09', arrives_at='8:45', ride_minutes=36,
         live=True, pill=pill, then=then, onto=onto)
@@ -73,7 +73,7 @@ def panel_row(*, then: CarryOn | None = None,
         The departure.
     """
     return Row(
-        route='T1', vehicle='train', bay='platform', platform='3',
+        route='T1', vehicle='train', where='platform 3',
         destination='Emu Plains',
         countdown='6', leaves_at='8:11', arrives_at='8:47', ride_minutes=36,
         live=True, pill=pill, then=then, onto=onto)

@@ -164,7 +164,7 @@ def hero_footer(canvas: Canvas, *, row: Row, top: int) -> None:
     canvas.text(
         at=(18, top + 216), text=f'arrives {row.arrives_at}',
         face=Face(weight=700, px=24), grey=INK)
-    where = f'{DOT}{row.bay} {row.platform}' if row.platform else ''
+    where = f'{DOT}{row.where}' if row.where else ''
     ride = Face(weight=400, px=15)
     count = (
         '' if row.stops is None else f'{DOT}{stops_text(stops=row.stops)}'

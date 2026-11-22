@@ -2,7 +2,7 @@
 
 from dataclasses import replace
 from datetime import timedelta
-from typing import Final
+from typing import Any, Final
 
 import numpy as np
 import pytest
@@ -58,6 +58,7 @@ from paperroute_transit.core.strip_model import (
     StripView,
 )
 from paperroute_transit.core.strip_view import build_strip_view
+from paperroute_transit.render import strip_view
 from paperroute_transit.render.chrome import (
     ARROW_WIDTH,
     BANNER,
@@ -1036,6 +1037,28 @@ def test_continuing_middle_drops_the_arrival_for_a_long_name() -> None:
     assert not any('arr ' in text for text in canvas.drawn)
 
 
+def test_continuing_middle_limits_the_pair_to_the_name_room(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The route pair gets the width the name has before the countdown."""
+    rooms: list[float | None] = []
+
+    def record(canvas: Canvas, **kwargs: Any) -> float:
+        """Note the room the pair was given."""
+        rooms.append(kwargs['room'])
+        return 0.0
+
+    monkeypatch.setattr(strip_view, 'route_pair', record)
+    row = replace(
+        central(onto='T8'),
+        estimate=Estimate(due='8:07', late=45, uncertain=True),
+    )
+    paint_panel_row(
+        Recording(), row=row, top=PANEL_TOP, whole=True, naming=NAMING,
+    )
+    assert rooms == [name_room(row=row, left=MIDDLE_X)]
+
+
 def test_leave_note_sits_under_the_leave_time() -> None:
     """'platform 4' is drawn left of the middle, on the second line."""
     row = replace(panel_row(), note='platform 4')
@@ -1120,6 +1143,18 @@ def test_draw_short_list_marks_lateness() -> None:
     """A row four minutes late reads +4."""
     assert '+4' in short_texts(
         short_view(rows=(replace(panel_row(), estimate=LATE),)),
+    )
+
+
+def test_draw_short_list_leads_with_uncertain_when_unmarked() -> None:
+    """An uncertain row with no mark reads 'uncertain' before its text."""
+    row = replace(
+        panel_row(), estimate=Estimate(due='8:07', late=0, uncertain=True),
+    )
+    assert any(
+        text.startswith('uncertain') for text in short_texts(
+            short_view(rows=(row,)),
+        )
     )
 
 

@@ -122,7 +122,7 @@ def test_rows_never_run_off_the_bottom() -> None:
 def test_ferry_hero_says_ferry() -> None:
     """The hero names the vehicle and stop part by mode alone."""
     ferry = replace(
-        BASE, hero=replace(row(), vehicle='ferry', bay='wharf'),
+        BASE, hero=replace(row(), vehicle='ferry', where='wharf B4'),
     )
     bus = draw_stop_view(view=BASE)
     drawn = draw_stop_view(view=ferry)

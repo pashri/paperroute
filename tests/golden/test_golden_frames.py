@@ -236,14 +236,13 @@ def test_cambridge_trains_show_timetable_platforms() -> None:
     assert (
         view.hero.route,
         view.hero.vehicle,
-        view.hero.bay,
-        view.hero.platform,
+        view.hero.where,
         view.hero.arrives_at,
-    ) == ('XC', 'train', 'platform', '4', '7:22')
-    assert [(row.route, row.platform) for row in view.rows] == [
-        ('GN', '4'),
-        ('GA', '5'),
-        ('GN', '1'),
+    ) == ('XC', 'train', 'platform 4', '7:22')
+    assert [(row.route, row.where) for row in view.rows] == [
+        ('GN', 'platform 4'),
+        ('GA', 'platform 5'),
+        ('GN', 'platform 1'),
     ]
     assert [row.note for row in view.rows] == [
         'platform 4', 'platform 5', 'platform 1',

@@ -45,3 +45,21 @@ def test_row_mark_needs_a_live_countdown() -> None:
     assert row_mark(row=replace(marked, live=False)) == ''
     assert row_mark(row=replace(marked, pill=Pill.CANCELLED)) == ''
     assert row_mark(row=replace(marked, pill=Pill.FASTER)) == '+4'
+
+
+def test_row_mark_uses_the_feed_lateness_without_an_estimate() -> None:
+    """A live row with only a feed lateness takes its number from it."""
+    row = stop_row()
+    assert row_mark(row=replace(row, late=5)) == '+5'
+    assert row_mark(row=replace(row, late=-3)) == f'{MINUS}3'
+    assert row_mark(row=replace(row, late=1)) == ''
+    assert row_mark(row=replace(row, live=False, late=None)) == ''
+    assert row_mark(row=row) == ''
+
+
+def test_row_mark_keeps_the_estimate_number_when_both_are_set() -> None:
+    """An estimated row marks the estimate's lateness and uncertainty."""
+    row = replace(
+        stop_row(), late=9, estimate=estimate(late=4, uncertain=True),
+    )
+    assert row_mark(row=row) == '+4?'

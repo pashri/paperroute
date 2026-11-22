@@ -118,6 +118,7 @@ SHORT_INSET: Final[int] = 8  # pixels in from the pane's sides
 SHORT_BADGE_DROP: Final[int] = 18  # badge centre below a row's top
 SHORT_COUNT_DROP: Final[int] = 26  # countdown baseline below a row's top
 SHORT_TEXT_DROP: Final[int] = 24  # headsign baseline below a row's top
+SHORT_BADGE_GAP: Final[int] = 8  # pixels from the badge to the text
 SHORT_TEXT_GAP: Final[int] = 10  # pixels from the headsign to the countdown
 SHORT_RULE_DROP: Final[int] = 3  # rule top below the last slot
 SHORT_RULE: Final[int] = 2  # rule thickness in pixels
@@ -317,6 +318,7 @@ def continuing_middle(
         route=row.route,
         onto=row.onto,
         px=BADGE_PX,
+        room=name_room(row=row, left=MIDDLE_X),
     )
     room = CARRY_ROOM if row.then is not None else 0
     width = TEXT_RIGHT - MIDDLE_X - room - note_width(row=row)
@@ -720,12 +722,14 @@ def short_text(
     str
         The fitted headsign, or the arrival and the headsign.
     """
-    if not destination:
+    lead = f'arr {row.arrives_at}' if destination else ''
+    if uncertain_row(row=row):
+        lead = f'{UNCERTAIN}{DOT}{lead}'.removesuffix(DOT)
+    if not lead:
         return fit_headsign(
             text=row.destination, face=HEADSIGN_FACE, width=width,
             naming=naming,
         )[0]
-    lead = f'arr {row.arrives_at}'
     if not row.destination:
         return lead
     room = width - text_width(text=lead + DOT, face=HEADSIGN_FACE)
@@ -774,7 +778,7 @@ def short_row(
         canvas, x=start, y=top + SHORT_BADGE_DROP, route=row.route,
         px=BADGE_PX,
     )
-    x = start + wide + 8
+    x = start + wide + SHORT_BADGE_GAP
     text = short_text(
         row=row,
         width=PANE_TIME_RIGHT - group - SHORT_TEXT_GAP - x,

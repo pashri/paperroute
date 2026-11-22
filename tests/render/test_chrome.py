@@ -301,8 +301,7 @@ def test_header_cuts_the_from_without_dropping_words(
         view=Titles(
             origin=origin,
             destination=destination,
-            tag=PinTag(text=tag,
-            pinned=True),
+            tag=PinTag(text=tag, pinned=True),
             clock='9:20',
         ),
         active='Stop',
@@ -376,7 +375,7 @@ def test_view_header_passes_picking() -> None:
 def test_countdown_slot_shows_only_live_counts() -> None:
     """A live row fills the slot at any distance; a timetable row doesn't."""
     near = Row(
-        route='T1', vehicle='train', bay='platform', platform='3',
+        route='T1', vehicle='train', where='platform 3',
         destination='Emu Plains',
         countdown='9', leaves_at='8:09', arrives_at='8:45', ride_minutes=36,
         live=True, pill=None,
@@ -390,7 +389,7 @@ def test_countdown_slot_shows_only_live_counts() -> None:
 def test_leaves_names_its_minutes() -> None:
     """A live count reads '<n> min'; 'now' and clock times stay as they are."""
     near = Row(
-        route='T1', vehicle='train', bay='platform', platform='3',
+        route='T1', vehicle='train', where='platform 3',
         destination='Emu Plains',
         countdown='12', leaves_at='8:17', arrives_at='8:45', ride_minutes=28,
         live=True, pill=None,
@@ -505,8 +504,7 @@ def test_long_nickname_tag_keeps_titles() -> None:
         view=Titles(
             origin='Hollis St',
             destination=None,
-            tag=PinTag(text=f'{"W" * 20} 2/3',
-            pinned=True),
+            tag=PinTag(text=f'{"W" * 20} 2/3', pinned=True),
             clock='8:41',
         ),
         active='Map',

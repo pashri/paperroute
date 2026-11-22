@@ -141,8 +141,7 @@ def row(
     return Row(
         route=route,
         vehicle='bus',
-        bay='stand',
-        platform='',
+        where='',
         destination='Parramatta',
         countdown=countdown,
         leaves_at='8:09',

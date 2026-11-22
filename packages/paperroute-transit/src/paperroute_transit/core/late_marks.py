@@ -23,17 +23,39 @@ def late_mark(*, estimate: Estimate | None) -> str:
         For example ``+4``, ``−3`` or ``+12?``; empty when there is no
         estimate or it is under the floor.
     """
-    if estimate is None or abs(estimate.late) < MARK_FLOOR:
+    if estimate is None:
         return ''
-    sign = f'+{estimate.late}' if estimate.late > 0 else (
-        f'{MINUS}{-estimate.late}'
-    )
-    return f'{sign}?' if estimate.uncertain else sign
+    return signed(late=estimate.late, uncertain=estimate.uncertain)
+
+
+def signed(*, late: int, uncertain: bool) -> str:
+    """
+    Write minutes late as a signed number, with ``?`` when uncertain.
+
+    Parameters
+    ----------
+    late : int
+        Minutes late, negative when early.
+    uncertain : bool
+        True when the lateness is a guess.
+
+    Returns
+    -------
+    str
+        For example ``+4``, ``−3`` or ``+12?``; empty under the floor.
+    """
+    if abs(late) < MARK_FLOOR:
+        return ''
+    sign = f'+{late}' if late > 0 else f'{MINUS}{-late}'
+    return f'{sign}?' if uncertain else sign
 
 
 def row_mark(*, row: Row) -> str:
     """
     Give the mark for a row.
+
+    The number is the estimate's when the row has one, else the feed's
+    lateness; only an estimate can make it uncertain.
 
     Parameters
     ----------
@@ -47,4 +69,8 @@ def row_mark(*, row: Row) -> str:
     """
     if not row.live or row.pill is Pill.CANCELLED:
         return ''
-    return late_mark(estimate=row.estimate)
+    if row.estimate is not None:
+        return late_mark(estimate=row.estimate)
+    if row.late is None:
+        return ''
+    return signed(late=row.late, uncertain=False)

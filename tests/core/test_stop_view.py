@@ -230,7 +230,7 @@ def test_view_hero_and_rows() -> None:
 def test_view_row_fields() -> None:
     """A row carries the route, times, ride length and live flag."""
     row = hero(result=view(departures=(live(minutes=3, ride=25),)))
-    assert (row.route, row.vehicle, row.bay) == ('606', 'bus', 'stand')
+    assert (row.route, row.vehicle, row.where) == ('606', 'bus', '')
     assert row.destination == 'Parramatta'
     assert (row.leaves_at, row.arrives_at) == ('8:03', '8:28')
     assert (row.ride_minutes, row.live, row.pill) == (25, True, None)
@@ -1174,6 +1174,20 @@ def test_to_row_tidies_the_headsign() -> None:
         item=item, now=START, pill=None, zone=SYDNEY_ZONE, city=SYDNEY,
     )
     assert row.destination == "Addenbrooke's Hospital"
+
+
+def test_to_row_sets_late_for_a_live_item_only() -> None:
+    """A live item carries its feed delay; a timetable item has none."""
+    delayed = to_row(
+        item=live(minutes=3, late=5), now=START, pill=None,
+        zone=SYDNEY_ZONE, city=SYDNEY,
+    )
+    timetable = to_row(
+        item=live(minutes=3, is_live=False), now=START, pill=None,
+        zone=SYDNEY_ZONE, city=SYDNEY,
+    )
+    assert delayed.late == 5
+    assert timetable.late is None
 
 
 def test_to_row_cuts_at_the_dash_for_a_city_that_asks() -> None:

@@ -24,6 +24,7 @@ from paperroute_transit.core.city import (
 from paperroute_transit.core.geo import DegreeBox, Projection, to_metres
 from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.modes import ModeSpec, RouteClass
+from paperroute_transit.core.names import JOINING_WORDS, NameRules
 
 
 class SydneyFeed(StrEnum):
@@ -413,6 +414,10 @@ NOUN_OVERRIDES: Final[dict[tuple[str, str], Nouns]] = {
         vehicle='train', bay='platform', connection='train',
     ),
 }
+SYDNEY_NAMES: Final[NameRules] = NameRules(
+    joining=JOINING_WORDS,
+    centres=('Sydney',),
+)
 SYDNEY_REF: Final[str] = 'paperroute_sydney.city:SYDNEY'
 SYDNEY: Final[City] = City(
     name='Sydney',
@@ -430,4 +435,5 @@ SYDNEY: Final[City] = City(
     noun_overrides=NOUN_OVERRIDES,
     feeds=SydneyFeeds(projection=SYDNEY_PROJECTION),
     loop_name='City Circle',
+    name_rules=SYDNEY_NAMES,
 )

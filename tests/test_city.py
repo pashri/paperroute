@@ -10,6 +10,7 @@ from paperroute_device_testkit.css_rules import css_rules
 from paperroute_sydney.city import (
     SYDNEY,
     SYDNEY_MODES,
+    SYDNEY_NAMES,
     TRAINLINK,
     SydneyFeed,
     SydneyMode,
@@ -19,6 +20,7 @@ from paperroute_transit.adapters.board_web import BOARD_WEB
 from paperroute_transit.adapters.mode_css import MODES_MARK, board_css
 from paperroute_transit.core.city import Nouns
 from paperroute_transit.core.modes import RouteClass, mode_problems
+from paperroute_transit.core.names import JOINING_WORDS
 
 MODE_IDS: Final[frozenset[str]] = frozenset({
     'bus', 'train', 'metro', 'light_rail', 'ferry', 'school', 'coach',
@@ -305,3 +307,10 @@ def test_sydney_fetches_stop_view_positions_for_every_mode() -> None:
     """Every Sydney mode fetches its hero's positions on the Stop view."""
     assert all(spec.stop_positions for spec in SYDNEY_MODES)
     assert {spec.id for spec in SYDNEY_MODES} == MODE_IDS
+
+
+def test_sydney_name_rules_join_and_keep_the_dash() -> None:
+    """Sydney uses the joining words and does not cut at the dash."""
+    assert SYDNEY.name_rules == SYDNEY_NAMES
+    assert SYDNEY_NAMES.joining == JOINING_WORDS
+    assert not SYDNEY_NAMES.dash

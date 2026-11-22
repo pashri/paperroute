@@ -9,6 +9,7 @@ import pytest
 from paperroute_cambridge.build.bods_sources import CAMBRIDGE_SOURCES
 from paperroute_cambridge.city import (
     CAMBRIDGE,
+    CAMBRIDGE_NAMES,
     DRUMMER_STREET,
     CambridgeMode,
     classify_cambridge,
@@ -191,3 +192,11 @@ def test_map_places_drop_localities_and_add_the_named_places() -> None:
 def test_cambridge_fetches_no_extra_stop_view_positions() -> None:
     """No Cambridge mode fetches its hero's positions on the Stop view."""
     assert not any(spec.stop_positions for spec in CAMBRIDGE.modes)
+
+
+def test_cambridge_name_rules_cut_at_the_dash_with_no_joining_words() -> None:
+    """Cambridge cuts at the dash and keeps joining words as written."""
+    assert CAMBRIDGE.name_rules == CAMBRIDGE_NAMES
+    assert CAMBRIDGE_NAMES.dash
+    assert CAMBRIDGE_NAMES.joining == ()
+    assert 'London' in CAMBRIDGE_NAMES.centres

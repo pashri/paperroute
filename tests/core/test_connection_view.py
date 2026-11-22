@@ -30,6 +30,7 @@ from paperroute_transit.core.connection_view import (
     via_text,
 )
 from paperroute_transit.core.model import Change, Pin, Way
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.rides import Ride
 from paperroute_transit.core.stop_view import StopView, empty_text
 
@@ -356,3 +357,19 @@ def test_a_chain_is_uncertain_when_any_leg_is() -> None:
     assert not chain_row(
         chain=TWO_CHANGES, pin=TWO, now=now, zone=SYDNEY_ZONE,
     ).uncertain
+
+RULES: Final[NameRules] = NameRules(centres=('Here',))
+
+
+def test_build_connection_view_carries_the_name_rules() -> None:
+    """The Connection view copies the Stop view's name rules."""
+    result = build_connection_view(
+        stop_view=replace(STOP, name_rules=RULES),
+        pin=WORK,
+        chains=CHAINS,
+        scroll=0,
+        now=at(7, 30),
+        zone=SYDNEY_ZONE,
+        city=SYDNEY,
+    )
+    assert result.name_rules == RULES

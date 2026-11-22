@@ -9,6 +9,7 @@ from paperroute_device.core.text import HINT_DOT
 from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.map_view import MapView, Marker
 from paperroute_transit.core.model import Departure
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.reach import Reach, RowKind, StripKey
@@ -252,6 +253,8 @@ class StripView:
         Live data banner, or None.
     warning : bool
         True when the banner is a device warning, drawn inverted.
+    name_rules : NameRules
+        The word lists that shorten this city's stop names.
     """
 
     origin: str
@@ -268,6 +271,7 @@ class StripView:
     warning: bool = False
     more: int = 0
     planned: bool = False
+    name_rules: NameRules = NameRules()
 
 
 @dataclass(frozen=True)

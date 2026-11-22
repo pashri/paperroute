@@ -37,6 +37,7 @@ from paperroute_transit.core.geo import to_metres
 from paperroute_transit.core.map_places import MapPlaces, StationSource
 from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.modes import ModeSpec, RouteClass
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.positions import ParkedAge
 
 logger = logging.getLogger(__name__)
@@ -300,6 +301,10 @@ SOURCE_NOUNS: Final[dict[str, Nouns]] = {
         vehicle='service', bay='stop', connection='service',
     ),
 }
+CAMBRIDGE_NAMES: Final[NameRules] = NameRules(
+    centres=('Cambridge', 'Heathrow Airport', 'London', 'Norwich'),
+    dash=True,
+)
 CAMBRIDGE_REF: Final[str] = 'paperroute_cambridge.city:CAMBRIDGE'
 CAMBRIDGE: Final[City] = City(
     name='Cambridge',
@@ -318,6 +323,7 @@ CAMBRIDGE: Final[City] = City(
     source_nouns=SOURCE_NOUNS,
     noun_overrides={},
     feeds=CambridgeFeeds(projection=CAMBRIDGE_PROJECTION),
+    name_rules=CAMBRIDGE_NAMES,
     parked_age=ParkedAge.TEN,
     route_fallback=True,
 )

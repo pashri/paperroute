@@ -10,6 +10,7 @@ from paperroute_transit.core.chains import Chain
 from paperroute_transit.core.city import City
 from paperroute_transit.core.connection_model import change_walk
 from paperroute_transit.core.model import Pin
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.rides import Ride, rides_of
 from paperroute_transit.core.stop_view import (
     HORIZON_TEXT,
@@ -130,6 +131,8 @@ class ConnectionView:
         The chains after it, scrolled, at most `PAIR_ROWS`.
     empty : str | None
         Why there is no hero, or None.
+    name_rules : NameRules
+        The word lists that shorten this city's stop names.
     """
 
     origin: str
@@ -143,6 +146,7 @@ class ConnectionView:
     warning: bool
     more: int
     planned: bool
+    name_rules: NameRules = NameRules()
 
 
 def ride_line(*, ride: Ride, zone: tzinfo, city: City) -> HeroLine:
@@ -480,4 +484,5 @@ def build_connection_view(
         warning=stop_view.warning,
         more=stop_view.more,
         planned=stop_view.planned,
+        name_rules=stop_view.name_rules,
     )

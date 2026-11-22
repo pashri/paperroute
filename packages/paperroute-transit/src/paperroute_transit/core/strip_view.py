@@ -764,6 +764,7 @@ def build_strip_view(*, inputs: StripInputs) -> StripView:
         warning=stop.warning,
         more=stop.more,
         planned=stop.planned,
+        name_rules=stop.name_rules,
     )
 
 

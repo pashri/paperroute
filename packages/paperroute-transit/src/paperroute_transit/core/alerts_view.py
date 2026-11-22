@@ -13,6 +13,7 @@ from paperroute_transit.core.alert_match import (
     window_key,
 )
 from paperroute_transit.core.alert_model import Alert, Period
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.stop_view import PinTag, StopView
 
 ALERT_ROWS: Final[int] = 6
@@ -85,6 +86,8 @@ class AlertsView:
         The selected alert's text.
     page : int
         Page counter for its text; the renderer wraps it.
+    name_rules : NameRules
+        The word lists that shorten this city's stop names.
     """
 
     origin: str
@@ -95,6 +98,7 @@ class AlertsView:
     selected: int
     text: AlertText
     page: int
+    name_rules: NameRules = NameRules()
 
 
 def also_line(*, window: Period, now: datetime, zone: tzinfo) -> str:
@@ -275,4 +279,5 @@ def build_alerts_view(
         selected=index - first,
         text=alert_text(listed=listed[index], now=now, zone=zone),
         page=page,
+        name_rules=stop_view.name_rules,
     )

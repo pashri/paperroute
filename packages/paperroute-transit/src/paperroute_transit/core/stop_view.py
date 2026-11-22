@@ -12,6 +12,7 @@ from paperroute_transit.core.alert_model import AlertBanner
 from paperroute_transit.core.city import City, Nouns
 from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.model import CarryOn, Departure
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.stop_under import UnderNumber
 
 VISIBLE_ROWS: Final[int] = 8
@@ -293,6 +294,8 @@ class StopView:
     under : UnderNumber | None
         The block under the hero's number, for a view with no
         Destination.
+    name_rules : NameRules
+        The word lists that shorten this city's stop names.
     """
 
     origin: str
@@ -312,6 +315,7 @@ class StopView:
     more: int = 0
     planned: bool = False
     under: UnderNumber | None = None
+    name_rules: NameRules = NameRules()
 
 
 @dataclass(frozen=True)
@@ -938,4 +942,5 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
         more=0 if banner is None else banner.more,
         planned=banner is not None and banner.planned,
         under=under,
+        name_rules=inputs.city.name_rules,
     )

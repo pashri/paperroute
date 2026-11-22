@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import datetime, timedelta
+from typing import Final
 
 import pytest
 
@@ -37,6 +38,7 @@ from paperroute_testkit.core.strip_factories import (
 from paperroute_transit.core.map_view import Marker
 from paperroute_transit.core.model import CarryOn, StopPlace
 from paperroute_transit.core.modes import line_modes
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.reach import (
     Reach,
     ReachInput,
@@ -948,3 +950,16 @@ def test_hints_name_the_knob() -> None:
     )
     for hint in (*HINTS.values(), OPEN_HINT, footer):
         assert DOT not in hint
+
+RULES: Final[NameRules] = NameRules(centres=('Here',))
+
+
+def test_build_strip_view_carries_the_name_rules() -> None:
+    """The Strip view copies the Stop view's name rules."""
+    base = three_trains()
+    result = build_strip_view(
+        inputs=replace(
+            base, stop_view=replace(base.stop_view, name_rules=RULES),
+        ),
+    )
+    assert result.name_rules == RULES

@@ -13,6 +13,7 @@ from paperroute_transit.core.geo import DegreeBox, Projection
 from paperroute_transit.core.map_places import MapPlaces
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.modes import Classifier, ModeSpec, spec_of
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.positions import ParkedAge
 
 
@@ -272,6 +273,8 @@ class City:
         ``alerts.route_prefixes``.
     loop_name : str
         The name of the city's circular line, or '' for none.
+    name_rules : NameRules
+        The word lists that shorten the city's stop names.
     """
 
     name: str
@@ -291,6 +294,7 @@ class City:
     parked_age: ParkedAge = ParkedAge.OFF
     route_fallback: bool = False
     loop_name: str = ''
+    name_rules: NameRules = NameRules()
 
     def mode(self, *, mode_id: str | None) -> ModeSpec | None:
         """

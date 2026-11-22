@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import datetime, timedelta
+from typing import Final
 
 from paperroute_device.core.kit_effects import Render
 from paperroute_device.core.kit_events import Tick
@@ -31,6 +32,7 @@ from paperroute_transit.core.alerts_view import (
 from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.messages import FetchFeed
 from paperroute_transit.core.model import Pin
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.places import shown
 from paperroute_transit.core.saved import LiveView, Lookahead
 from paperroute_transit.core.state_model import State
@@ -389,3 +391,19 @@ def test_identical_alerts_are_listed_once() -> None:
     assert [item.matched.alert.alert_id for item in listed] == [
         min(WESTERN.alert_id, 'twin'),
     ]
+
+RULES: Final[NameRules] = NameRules(centres=('Here',))
+
+
+def test_build_alerts_view_carries_the_name_rules() -> None:
+    """The Alerts view copies the Stop view's name rules."""
+    now = sydney(day=26, hour=12)
+    result = build_alerts_view(
+        listed=listed_of(alerts=(PENRITH_CENTRAL,), now=now),
+        selected=None,
+        page=0,
+        stop_view=replace(stop_view(), name_rules=RULES),
+        now=now,
+        zone=SYDNEY_ZONE,
+    )
+    assert result.name_rules == RULES

@@ -18,6 +18,7 @@ from paperroute_transit.core.banners import OFFLINE_PHRASE
 from paperroute_transit.core.city import City, Nouns
 from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.model import CarryOn, TripFacts
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.stop_under import UnderNumber
 from paperroute_transit.core.stop_view import (
     HORIZON,
@@ -1160,3 +1161,8 @@ def test_a_destination_view_has_nothing_under_the_number() -> None:
     """With a Destination nothing changes."""
     result = view(departures=(live(minutes=3),))
     assert result.under is None
+
+
+def test_build_stop_view_carries_the_city_name_rules() -> None:
+    """The view holds the city's name rules."""
+    assert view().name_rules == SYDNEY.name_rules

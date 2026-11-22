@@ -24,6 +24,7 @@ from paperroute_transit.core.model import (
     service_time,
     shifted,
 )
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.patterns import PatternStop, TripPattern, hop_near
 from paperroute_transit.core.positions import (
     PositionsSnapshot,
@@ -113,6 +114,8 @@ class ConnectionStripView:
         Index of the selected pair.
     empty : str | None
         Why there is no pair, or None.
+    name_rules : NameRules
+        The word lists that shorten this city's stop names.
     """
 
     origin: str
@@ -127,6 +130,7 @@ class ConnectionStripView:
     pairs: tuple[PairRow, ...]
     selected: int
     empty: str | None
+    name_rules: NameRules = NameRules()
 
 
 @dataclass(frozen=True)
@@ -757,4 +761,5 @@ def build_connection_strip(  # pylint: disable=too-many-arguments
         pairs=chain_rows(chains=chains, pin=pin, now=now, zone=zone),
         selected=index,
         empty=no_pair_text(stop_view=stop_view, chains=chains),
+        name_rules=stop_view.name_rules,
     )

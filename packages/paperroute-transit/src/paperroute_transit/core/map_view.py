@@ -10,6 +10,7 @@ from paperroute_transit.core.connection_view import PairRow
 from paperroute_transit.core.geo import Point, Projection, Shape
 from paperroute_transit.core.map_line import MapLine
 from paperroute_transit.core.model import Departure
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.patterns import TripPattern, timetable_point
 from paperroute_transit.core.positions import (
     PositionsSnapshot,
@@ -138,6 +139,8 @@ class MapView:
 
     With `panes`, this map and each pane are drawn side by side across
     the frame, with no sidebar.
+    name_rules : NameRules
+        The word lists that shorten this city's stop names.
     """
 
     origin: str
@@ -155,6 +158,7 @@ class MapView:
     planned: bool = False
     pairs: tuple[PairRow, ...] = ()
     panes: tuple['MapView', ...] = ()
+    name_rules: NameRules = NameRules()
 
 
 @dataclass(frozen=True)
@@ -953,6 +957,7 @@ def build_map_view(*, inputs: MapInputs) -> MapView:
         warning=stop.warning,
         more=stop.more,
         planned=stop.planned,
+        name_rules=stop.name_rules,
     )
 
 

@@ -1,8 +1,15 @@
 """Tests for the values that fit the engine to a city."""
 
 import math
+from dataclasses import fields
 
+from paperroute_transit.core.city import City
 from paperroute_transit.core.geo import Projection, to_metres
+from paperroute_transit.core.names import (
+    FACILITY_WORDS,
+    STREET_WORDS,
+    NameRules,
+)
 
 
 def test_projection_matches_old_constants() -> None:
@@ -20,3 +27,15 @@ def test_projection_matches_old_constants() -> None:
     )
     assert projection.grid_origin == (-157991.90412900544, 206640.69120000003)
     assert projection.origin_text == '151.2093,-33.8688'
+
+
+def test_city_name_rules_default_to_the_shared_words() -> None:
+    """A city with no rules of its own gets the shared word lists."""
+    assert NameRules() == NameRules(
+        street=STREET_WORDS,
+        facility=FACILITY_WORDS,
+        joining=(),
+        centres=(),
+        dash=False,
+    )
+    assert fields(City)[-1].name == 'name_rules'

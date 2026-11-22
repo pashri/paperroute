@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import datetime, timedelta
+from typing import Final
 
 import pytest
 
@@ -37,6 +38,7 @@ from paperroute_transit.core.map_view import (
     visible,
 )
 from paperroute_transit.core.model import Departure
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.patterns import timetable_point
 from paperroute_transit.core.positions import VehiclePosition
 from paperroute_transit.core.stop_view import SIDEBAR_ROWS, Row, StopView
@@ -667,3 +669,16 @@ def test_plain_marks_letter_a_pin_with_a_destination() -> None:
     assert bullseye is not None
     assert lettered.lettered is True
     assert bullseye.lettered is False
+
+RULES: Final[NameRules] = NameRules(centres=('Here',))
+
+
+def test_build_map_view_carries_the_name_rules() -> None:
+    """The Map view copies the Stop view's name rules."""
+    base = inputs()
+    result = build_map_view(
+        inputs=replace(
+            base, stop_view=replace(base.stop_view, name_rules=RULES),
+        ),
+    )
+    assert result.name_rules == RULES

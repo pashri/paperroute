@@ -34,6 +34,7 @@ from paperroute_transit.core.connection_strip import (
 )
 from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.model import Change, StopPlace
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.core.strip_model import LOADING, NO_LEG_STOPS
@@ -544,3 +545,21 @@ def test_change_without_a_walk_says_change() -> None:
     assert walk_note(
         change=Change(alight=nowhere, board=here, allow=2),
     ) == 'change, 2 min'
+
+RULES: Final[NameRules] = NameRules(centres=('Here',))
+
+
+def test_build_connection_strip_carries_the_name_rules() -> None:
+    """The Connection strip copies the Stop view's name rules."""
+    result = build_connection_strip(
+        stop_view=replace(STOP, name_rules=RULES),
+        pin=WORK,
+        chains=CHAINS,
+        selected=0,
+        patterns=PATTERNS,
+        positions={},
+        now=at(7, 30),
+        stale_after=STALE_LIMIT,
+        zone=SYDNEY_ZONE,
+    )
+    assert result.name_rules == RULES

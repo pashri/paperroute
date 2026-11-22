@@ -16,7 +16,7 @@ MENU_HINT: Final[str] = (
     f'Bottom: press to choose{HINT_DOT}Top: press to cancel'
 )
 PAIRED_HINT: Final[str] = (
-    f'Bottom: press for directions{HINT_DOT}Top: press to go back'
+    f'Bottom: press to choose{HINT_DOT}Top: press to go back'
 )
 
 

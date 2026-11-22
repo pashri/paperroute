@@ -63,6 +63,11 @@ from paperroute_transit.render.markers import (
 )
 from paperroute_transit.render.names import Naming, fit_name
 from paperroute_transit.render.pair_list import draw_pair_list
+from paperroute_transit.render.stop_view import (
+    headline,
+    headsign_arrival,
+    note_text,
+)
 from paperroute_transit.render.tile_codec import THRESHOLD, quantise4
 from paperroute_transit.render.trip_marks import draw_trip_points
 
@@ -424,7 +429,71 @@ def arrival_note(canvas: Canvas, *, row: Row, y: int) -> None:
     )
 
 
-def sidebar_row(canvas: Canvas, *, row: Row, y: int) -> None:
+def note_slot(canvas: Canvas, *, row: Row, y: int) -> float:
+    """
+    Draw the row's note at the right of the small line.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Departure.
+    y : int
+        The badge's vertical centre.
+
+    Returns
+    -------
+    float
+        The right end left for text: the slot's right edge, less the
+        note's room when a note was drawn.
+    """
+    right = SIDEBAR_RIGHT
+    if row.pill is Pill.FASTER:
+        right = FASTER_LEFT - NOTE_GAP
+    text = note_text(row=row)
+    if not text:
+        return right
+    canvas.text(
+        at=(right, y + ARRIVES_DROP), text=text,
+        face=SIDEBAR_NOTE_FACE, grey=INK, anchor='rs',
+    )
+    return right - note_room(face=SIDEBAR_NOTE_FACE, text=text)
+
+
+def headsign_note(
+    canvas: Canvas, *, row: Row, y: int, naming: Naming
+) -> None:
+    """
+    Draw the headsign, with its arrival when both fit, and the note.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Departure.
+    y : int
+        The badge's vertical centre.
+    naming : Naming
+        The rules and sibling headsigns for fitting names.
+    """
+    right = note_slot(canvas, row=row, y=y)
+    at = (SIDEBAR_TEXT, y + ARRIVES_DROP)
+    text = headsign_arrival(row=row)
+    width = right - SIDEBAR_TEXT
+    if row.then is None and text_width(text=text, face=ARRIVES_FACE) <= width:
+        canvas.text(at=at, text=text, face=ARRIVES_FACE, grey=INK)
+        return
+    headline(
+        canvas, row=row, at=at, text=row.destination, face=ARRIVES_FACE,
+        width=width, naming=naming,
+    )
+
+
+def sidebar_row(
+    canvas: Canvas, *, row: Row, y: int, naming: Naming | None = None
+) -> None:
     """
     Draw one sidebar departure.
 
@@ -436,6 +505,8 @@ def sidebar_row(canvas: Canvas, *, row: Row, y: int) -> None:
         Departure.
     y : int
         The badge's vertical centre.
+    naming : Naming | None
+        None draws the arrival line; naming rules draw the headsign line.
     """
     route_pair(
         canvas,
@@ -447,7 +518,10 @@ def sidebar_row(canvas: Canvas, *, row: Row, y: int) -> None:
         room=SIDEBAR_PAIR_ROOM - mark_room(row=row, face=MARK_FACE),
     )
     row_time(canvas, row=row, y=y)
-    arrival_note(canvas, row=row, y=y)
+    if naming is None:
+        arrival_note(canvas, row=row, y=y)
+    else:
+        headsign_note(canvas, row=row, y=y, naming=naming)
     if row.pill is Pill.FASTER:
         pill(
             canvas,
@@ -536,8 +610,17 @@ def draw_sidebar(canvas: Canvas, *, view: MapView) -> None:
             face=DESTINATION_FACE,
             grey=INK,
         )
+    naming = None
+    if view.destination is None:
+        naming = Naming(
+            rules=view.name_rules,
+            siblings=tuple(row.destination for row in view.sidebar),
+        )
     for index, row in enumerate(view.sidebar):
-        sidebar_row(canvas, row=row, y=ROWS_TOP + drop + index * ROW_STEP)
+        sidebar_row(
+            canvas, row=row, y=ROWS_TOP + drop + index * ROW_STEP,
+            naming=naming,
+        )
 
 
 def snap(

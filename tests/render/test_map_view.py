@@ -4,11 +4,13 @@ import math
 from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
+from typing import Final
 
 import numpy as np
 import pytest
 from numpy.typing import NDArray
 
+from paperroute_device.core.text import DOT
 from paperroute_device.render.canvas import (
     ELLIPSIS,
     HEIGHT,
@@ -35,6 +37,7 @@ from paperroute_transit.core.map_view import (
     TripMarks,
     screen_point,
 )
+from paperroute_transit.core.model import CarryOn
 from paperroute_transit.core.names import JOINING_WORDS, NameRules
 from paperroute_transit.core.stop_view import (
     UNCERTAIN,
@@ -51,7 +54,12 @@ from paperroute_transit.core.tiles import (
     tile_of,
     to_pixels,
 )
-from paperroute_transit.render.chrome import BANNER, badge, view_header
+from paperroute_transit.render.chrome import (
+    BANNER,
+    NOTE_GAP,
+    badge,
+    view_header,
+)
 from paperroute_transit.render.late_marks import mark_room
 from paperroute_transit.render.map_base import draw_map_base
 from paperroute_transit.render.map_view import (
@@ -976,3 +984,76 @@ def test_sidebar_pair_yields_to_a_marked_countdown() -> None:
     start = int(SIDEBAR_RIGHT - group)
     band = frame[top - 8:top - 4, SIDEBAR_TEXT:start - 2] == INK
     assert SIDEBAR_TEXT + np.flatnonzero(band.any(axis=0)).max() < start - 4
+
+
+FROM_ONLY: Final[MapView] = replace(VIEW, destination=None)
+LONG: Final[str] = 'Oakington Manor Farm Close Westwick Hall Road'
+
+
+def sidebar_texts(*rows: Row, view: MapView = FROM_ONLY) -> list[str]:
+    """Draw a sidebar of these rows and list its texts."""
+    canvas = Recording()
+    draw_sidebar(canvas, view=replace(view, sidebar=rows))
+    return canvas.drawn
+
+
+def test_headsign_note_puts_the_headsign_before_its_arrival() -> None:
+    """A short headsign is followed by its arrival."""
+    assert f'Parramatta{DOT}arr 8:45' in sidebar_texts(row())
+
+
+def test_headsign_note_drops_the_arrival_for_a_long_headsign() -> None:
+    """A headsign that fills the line keeps it to itself."""
+    drawn = sidebar_texts(replace(row(), destination=LONG))
+    assert not any('arr ' in text for text in drawn)
+    assert any(text.startswith('Oakington') for text in drawn)
+
+
+def test_headsign_note_keeps_the_carry_on_tag() -> None:
+    """A run-on tag follows the headsign; the arrival gives way."""
+    carried = replace(
+        row(), then=CarryOn(route='7', headsign='Saffron Walden'),
+    )
+    drawn = sidebar_texts(carried)
+    assert {'Parramatta', '7 Saffron Walden'} <= set(drawn)
+    assert not any('arr ' in text for text in drawn)
+
+
+def test_note_slot_shows_the_platform() -> None:
+    """A train's platform sits at the right of the small line."""
+    assert 'platform 3' in sidebar_texts(replace(row(), note='platform 3'))
+
+
+def test_note_slot_gives_the_platform_way_to_uncertain() -> None:
+    """'uncertain' wins the slot when no mark carries it."""
+    drawn = sidebar_texts(
+        replace(row(), note='platform 3', estimate=UNSURE),
+    )
+    assert UNCERTAIN in drawn
+    assert 'platform 3' not in drawn
+
+
+def test_headsign_note_stops_short_of_faster() -> None:
+    """A long headsign ends a gap before the FASTER block."""
+    top = ROW_TOPS[0]
+    frame = draw_map_view(
+        view=replace(
+            FROM_ONLY,
+            sidebar=(replace(row(pill=Pill.FASTER), destination=LONG),),
+        ),
+        base=paper(),
+    )
+    gap = frame[top + 14:top + 30, FASTER_LEFT - NOTE_GAP + 1:FASTER_LEFT]
+    assert (gap == PAPER).all()
+
+
+def test_headsign_note_with_no_headsign_reads_its_arrival() -> None:
+    """With no headsign the line is the arrival alone."""
+    assert 'arr 8:45' in sidebar_texts(replace(row(), destination=''))
+
+
+def test_sidebar_row_with_a_destination_keeps_the_arrival_line() -> None:
+    """A pin with a destination draws today's line, without the platform."""
+    drawn = sidebar_texts(replace(row(), note='platform 3'), view=VIEW)
+    assert 'arr 8:45' in drawn
+    assert 'platform 3' not in drawn

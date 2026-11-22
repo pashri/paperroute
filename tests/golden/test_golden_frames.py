@@ -25,6 +25,7 @@ from paperroute_transit.core.connection_strip import (
     ConnectionStripMapView,
     ConnectionStripView,
 )
+from paperroute_transit.core.kerb_menu import MENU_HINT
 from paperroute_transit.core.map_view import MapView
 from paperroute_transit.core.messages import ScreenView
 from paperroute_transit.core.reach import RowKind
@@ -326,3 +327,18 @@ def test_chooser_routes_scene_keeps_the_preview_in_place() -> None:
     ]
     assert [c.focused for c in view.columns] == [False, True, False]
     assert view.columns[-1].total == 14
+
+
+def test_chooser_kerbs_scenes_mark_the_pair_and_open_the_box() -> None:
+    """Mark the paired row in the list scene and open the box in the other."""
+    listed = view_of(state=SCENES['chooser_kerbs']())
+    boxed = view_of(state=SCENES['chooser_kerbs_menu']())
+    assert isinstance(listed, StripView) and isinstance(boxed, StripView)
+    assert [row.paired for row in listed.rows] == [
+        False, False, True, False, False,
+    ]
+    assert listed.menu is None
+    assert boxed.menu is not None and boxed.menu.labels == (
+        'Towards Emmanuel Street', 'Towards Oakington', 'Both directions',
+    )
+    assert boxed.panel.hint == MENU_HINT

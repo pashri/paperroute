@@ -51,6 +51,7 @@ from paperroute_transit.core.strip_model import (
     STRIP_TOP,
     TRACK_X,
     Band,
+    KerbMenu,
     StripMapView,
     StripPane,
     StripPanel,
@@ -69,6 +70,7 @@ from paperroute_transit.render.chrome import (
     note_room,
     route_pair,
 )
+from paperroute_transit.render.kerb_menu import MENU_BOX
 from paperroute_transit.render.late_marks import mark_room
 from paperroute_transit.render.markers import badge_box
 from paperroute_transit.render.names import Naming, fit_headsign
@@ -1213,3 +1215,15 @@ def test_draw_pane_keeps_the_track_out_of_the_list() -> None:
     )
     assert (frame[HEADER:PANE_TOP - 2, PANE_LEFT + 1:] == PAPER).all()
     assert (frame[PANE_TOP:PANE_TOP + ROW_H, PANE_LEFT:] == INK).any()
+
+
+def test_paint_strip_view_draws_the_box_over_the_list() -> None:
+    """Draw the box inside its bounds and leave the rest alone."""
+    menu = KerbMenu(title='Orchard Close', labels=('Both directions',),
+                    cursor=0)
+    boxed = draw_strip_view(view=replace(VIEW, menu=menu))
+    plain = draw_strip_view(view=VIEW)
+    left, top, _, bottom = MENU_BOX
+    assert boxed[(top + bottom) // 2, left + 1] == INK
+    assert np.array_equal(boxed[:top], plain[:top])
+    assert np.array_equal(boxed[bottom:], plain[bottom:])

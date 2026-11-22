@@ -20,6 +20,7 @@ from paperroute_transit.core.strip_model import (
     StripRow,
 )
 from paperroute_transit.render.chrome import ARROW_WIDTH, arrow
+from paperroute_transit.render.kerb_menu import MARK_RIGHT_GAP, two_way_mark
 from paperroute_transit.render.markers import draw_hollow, draw_live
 from paperroute_transit.render.names import Naming, fit_name
 
@@ -585,6 +586,16 @@ def draw_row(canvas: Canvas, *, row: StripRow, columns: Columns) -> None:
         )
     draw_station(canvas, row=row, x=columns.track_x + INDENT * row.depth)
     edge: float = draw_end(canvas, row=row, columns=columns)
+    if row.paired:
+        edge = min(
+            edge,
+            two_way_mark(
+                canvas,
+                right=columns.time_right - MARK_RIGHT_GAP,
+                y=row.y,
+                grey=PAPER if row.cursor else INK,
+            ) - TAG_GAP,
+        )
     left, face = name_start(canvas, row=row, columns=columns)
     if not row.tag and not row.cursor:
         edge = noted_edge(

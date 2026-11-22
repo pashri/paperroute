@@ -123,7 +123,7 @@ from paperroute_transit.core.tiles import (
     TileVariant,
 )
 from paperroute_transit.transit_app import TransitApp
-from tests.core.chooser_walks import at_routes, at_towards
+from tests.core.chooser_walks import BUSY_PAIR, at_kerbs, at_routes, at_towards
 from tests.core.test_alerts_view import on_alerts
 from tests.core.test_chains import TRAINS
 from tests.core.test_connection_screens import started, with_legs
@@ -1326,6 +1326,10 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     ),
     'chooser': chooser,
     'chooser_routes': chooser_routes,
+    'chooser_kerbs': lambda: replace(stop(), chooser=at_kerbs()),
+    'chooser_kerbs_menu': lambda: replace(
+        stop(), chooser=at_kerbs(pairs=(BUSY_PAIR,), menu=0),
+    ),
     'building': building,
     'notice': notice,
     'menu': lambda: panel(menu=Menu()),

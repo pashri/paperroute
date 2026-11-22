@@ -56,6 +56,7 @@ from paperroute_transit.render.chrome import (
     view_header,
 )
 from paperroute_transit.render.keep_out import NO_KEEP_OUT, KeepOut
+from paperroute_transit.render.kerb_menu import draw_kerb_menu
 from paperroute_transit.render.late_marks import mark_room, marked_countdown
 from paperroute_transit.render.map_view import draw_overlay, snap
 from paperroute_transit.render.names import Naming, fit_headsign, fit_name
@@ -661,6 +662,8 @@ def paint_strip_view(canvas: Canvas, *, view: StripView) -> None:
     )
     view_header(canvas, view=view, active='Strip', picking=view.picking)
     view_banner(canvas, view=view)
+    if view.menu is not None:
+        draw_kerb_menu(canvas, menu=view.menu, rules=view.name_rules)
 
 
 def draw_strip_view(*, view: StripView) -> NDArray[np.uint8]:

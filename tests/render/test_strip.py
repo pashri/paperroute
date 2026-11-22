@@ -24,6 +24,11 @@ from paperroute_transit.core.strip_model import (
     CarryNote,
     StripRow,
 )
+from paperroute_transit.render.kerb_menu import (
+    MARK_RIGHT_GAP,
+    MARK_SPLIT,
+    MARK_WIDTH,
+)
 from paperroute_transit.render.strip import (
     DASH,
     DASH_GAP,
@@ -725,3 +730,30 @@ def test_draw_rows_shortens_a_name_by_the_rules() -> None:
         rules=NameRules(joining=JOINING_WORDS),
     )
     assert any(text.startswith('Great Western Hwy') for text in canvas.drawn)
+
+
+def test_draw_row_marks_a_paired_row_and_cuts_its_name() -> None:
+    """Draw the two-way mark and keep the name clear of it."""
+    name = 'Orchard Close Shopping Parade Northbound'
+    plain = drawn(rows=(strip_row(y=FROM_Y, name=name),))
+    paired = drawn(
+        rows=(replace(strip_row(y=FROM_Y, name=name), paired=True),),
+    )
+    right = TIME_RIGHT - MARK_RIGHT_GAP
+    mark_left = right - MARK_WIDTH
+    y = int(FROM_Y)
+    assert paired[y - MARK_SPLIT, right - 13] == INK
+    gap = paired[y - 10:y + 10, int(mark_left - TAG_GAP):mark_left - 1]
+    assert (gap == PAPER).all()
+    assert (plain[y - 10:y + 10, int(mark_left - TAG_GAP):mark_left - 1]
+            == INK).any()
+
+
+def test_draw_row_marks_a_paired_cursor_row_in_paper() -> None:
+    """Draw the mark in paper on the cursor bar."""
+    row = replace(
+        strip_row(y=FROM_Y, cursor=True, tag='FROM?'), paired=True,
+    )
+    frame = drawn(rows=(row,))
+    right = TIME_RIGHT - MARK_RIGHT_GAP
+    assert frame[int(FROM_Y) - MARK_SPLIT, right - 13] == PAPER

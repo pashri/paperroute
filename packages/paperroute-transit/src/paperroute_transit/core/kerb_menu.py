@@ -15,6 +15,9 @@ from paperroute_transit.core.strip_model import KerbMenu, StripView
 MENU_HINT: Final[str] = (
     f'Bottom: press to choose{HINT_DOT}Top: press to cancel'
 )
+PAIRED_HINT: Final[str] = (
+    f'Bottom: press for directions{HINT_DOT}Top: press to go back'
+)
 
 
 def kerb_menu(*, chooser: ChooserState) -> KerbMenu | None:
@@ -62,13 +65,15 @@ def with_kerbs(*, view: StripView, chooser: ChooserState) -> StripView:
     -------
     StripView
         The view with paired rows marked, the box when it is open, and
-        the box's hint on the panel.
+        the hint for the open box or the paired cursor row on the panel.
     """
     paired = {pair.station for pair in chooser.kerbs.pairs}
     menu = kerb_menu(chooser=chooser)
     panel = view.panel
     if menu is not None:
         panel = replace(panel, hint=MENU_HINT)
+    elif pair_at(chooser=chooser) is not None:
+        panel = replace(panel, hint=PAIRED_HINT)
     return replace(
         view,
         rows=tuple(

@@ -22,6 +22,7 @@ from paperroute_transit.core.chooser import (
     pressed_to,
     turned_to,
 )
+from paperroute_transit.core.chooser_sides import turned_from
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.reach import Reach
 from paperroute_transit.core.sides import Kerbs
@@ -349,11 +350,34 @@ def stepped(*, column: Column, cursor: int, steps: int) -> int:
     return rows[clamped(value=at + steps, count=len(rows))]
 
 
+def retried(
+    *, chooser: ChooserState,
+) -> tuple[ChooserState, ChooserRequest | None]:
+    """
+    Ask again for the focus's previews when it has none.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser in the LISTS stage with at least one column.
+
+    Returns
+    -------
+    tuple[ChooserState, ChooserRequest | None]
+        What `previewed` gives when the focus reserves a preview and has
+        none; otherwise the chooser unchanged and no request.
+    """
+    focus = chooser.columns[chooser.focus]
+    if reserves_preview(chooser=chooser) and focus.previews is None:
+        return previewed(chooser=chooser)
+    return chooser, None
+
+
 def turned_lists(
     *, chooser: ChooserState, steps: int,
 ) -> tuple[ChooserState, ChooserRequest | None]:
     """
-    Move the focus's cursor and ask for its preview.
+    Move the focus's cursor and show its preloaded preview.
 
     Parameters
     ----------
@@ -365,8 +389,10 @@ def turned_lists(
     Returns
     -------
     tuple[ChooserState, ChooserRequest | None]
-        The chooser and its request; unchanged when the cursor stays put.
-        A TO column keeps its From and asks for nothing.
+        The chooser and its request. The request is the focus's previews
+        read, and only when they are missing. A cursor that stays put
+        changes nothing, except that missing previews are asked for
+        again. A TO column keeps its From and asks for nothing.
     """
     if not chooser.columns:
         return chooser, None
@@ -375,7 +401,7 @@ def turned_lists(
     column = chooser.columns[focus]
     cursor = stepped(column=column, cursor=old, steps=steps)
     if cursor == old:
-        return chooser, None
+        return retried(chooser=chooser)
     cursors = (*chooser.cursors[:focus], cursor, *chooser.cursors[focus + 1:])
     if column.level is Level.TO:
         return replace(chooser, cursors=cursors), None
@@ -400,16 +426,14 @@ def turned(
     Returns
     -------
     tuple[ChooserState, ChooserRequest | None]
-        The chooser and, in the LISTS stage, its preview request.
+        The chooser and, in the LISTS stage, a previews request when the
+        focus's previews are missing.
     """
     match chooser.stage:
         case Stage.LISTS:
             return turned_lists(chooser=chooser, steps=steps)
         case Stage.FROM:
-            cursor = clamped(
-                value=chooser.line_cursor + steps, count=len(chooser.line),
-            )
-            return replace(chooser, line_cursor=cursor), None
+            return turned_from(chooser=chooser, steps=steps), None
         case Stage.TO:
             moved = turned_to(chooser=chooser, steps=steps, reach=reach)
             return moved, None

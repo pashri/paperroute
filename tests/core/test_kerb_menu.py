@@ -4,7 +4,12 @@ from dataclasses import replace
 
 from paperroute_testkit.core.factories import place
 from paperroute_transit.core.chooser_steps import chooser_view, from_inputs
-from paperroute_transit.core.kerb_menu import MENU_HINT, kerb_menu, with_kerbs
+from paperroute_transit.core.kerb_menu import (
+    MENU_HINT,
+    PAIRED_HINT,
+    kerb_menu,
+    with_kerbs,
+)
 from paperroute_transit.core.strip_model import HINTS, KerbMenu, StripView
 from paperroute_transit.core.strip_view import build_strip_view
 from tests.core.chooser_walks import BUSY_PAIR, QUIET_PAIR, at_kerbs
@@ -66,3 +71,25 @@ def test_with_kerbs_leaves_a_line_without_pairs_as_built() -> None:
     built = build_strip_view(inputs=from_inputs(state=state, chooser=chooser))
     assert with_kerbs(view=built, chooser=chooser) == built
     assert (built.menu, built.panel.hint) == (None, HINTS['FROM'])
+
+
+def test_with_kerbs_hints_directions_on_a_paired_cursor_row() -> None:
+    """A paired cursor row with the box closed says a press gives choices."""
+    chooser = at_kerbs()
+    built = build_strip_view(
+        inputs=from_inputs(
+            state=replace(pinned(), chooser=chooser), chooser=chooser,
+        ),
+    )
+    assert with_kerbs(view=built, chooser=chooser).panel.hint == PAIRED_HINT
+
+
+def test_with_kerbs_keeps_the_from_hint_on_an_unpaired_cursor_row() -> None:
+    """An unpaired cursor row keeps the FROM hint."""
+    chooser = replace(at_kerbs(), line_cursor=1)
+    built = build_strip_view(
+        inputs=from_inputs(
+            state=replace(pinned(), chooser=chooser), chooser=chooser,
+        ),
+    )
+    assert with_kerbs(view=built, chooser=chooser).panel.hint == HINTS['FROM']

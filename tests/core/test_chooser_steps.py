@@ -632,6 +632,29 @@ def test_from_stage_opens_the_box_on_a_paired_stop() -> None:
     assert draw_strip_view(view=view).shape == (HEIGHT, WIDTH)
 
 
+def test_new_timetable_leaves_an_open_box_open() -> None:
+    """A new timetable in the FROM stage keeps the box open, asking nothing."""
+    pair = KerbPair(
+        station=LINE[1].stop_id, other=place('X2', name='Across'),
+        busy=False,
+    )
+    events = (
+        *TO_STAGE[:-3],
+        LineLoaded(towards=11, line=LINE, pairs=(pair,)),
+        DOWN,
+        NEXT,
+    )
+    state, _ = run_events(state=loaded(state=pinned()), events=events)
+    before = state.chooser
+    assert before is not None and before.kerbs.menu == 0
+    state, effects = step(state, TimetableSeen(version='v1'))
+    assert state.chooser is not None
+    assert state.chooser.stage is Stage.FROM
+    assert state.chooser.kerbs.menu == 0
+    assert not effects_of(effects=effects, kind=LoadLine)
+    assert not effects_of(effects=effects, kind=LoadColumn)
+
+
 def test_replied_takes_previews_and_drops_old_ones() -> None:
     """Previews for the open timetable attach; old ones are dropped."""
     state = replace(pinned(), chooser=ASKING)

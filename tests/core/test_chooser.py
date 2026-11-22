@@ -145,6 +145,31 @@ def test_a_turn_after_failed_previews_asks_again() -> None:
     assert (chooser.failed, chooser.columns[0].previews) == (None, ())
 
 
+def test_a_turn_against_the_end_after_failed_previews_asks_again() -> None:
+    """A turn that cannot move the cursor still retries a failed read."""
+    chooser, asked = opened(shown=Pin(origin=place('X')), modes=SYDNEY.modes)
+    chooser, first = fed(chooser, asked, KINDS)
+    chooser = previews_failed(chooser=chooser, path=())
+    chooser, request = turned(chooser=chooser, steps=-1, reach=None)
+    assert request == first
+    assert chooser.failed is None
+
+
+def test_a_turn_against_the_end_with_previews_in_asks_nothing() -> None:
+    """Turning against the end of a list with previews loaded asks nothing."""
+    chooser, _ = turned(chooser=opened_at_kind(), steps=-20, reach=None)
+    again, request = turned(chooser=chooser, steps=-1, reach=None)
+    assert (again, request) == (chooser, None)
+
+
+def test_a_turn_against_the_end_while_previews_load_asks_nothing() -> None:
+    """Turning against the end while previews load asks nothing."""
+    chooser, asked = opened(shown=Pin(origin=place('X')), modes=SYDNEY.modes)
+    chooser, _ = fed(chooser, asked, KINDS)
+    again, request = turned(chooser=chooser, steps=-1, reach=None)
+    assert (again, request) == (chooser, None)
+
+
 def test_a_failed_read_after_a_new_timetable_drops_the_old_preview() -> None:
     """A failed read after a new timetable drops the old preview."""
     chooser, request = previews_again(chooser=opened_at_kind())

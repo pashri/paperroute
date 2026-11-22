@@ -31,6 +31,7 @@ from paperroute_transit.core.map_view import (
     Marker,
 )
 from paperroute_transit.core.model import CarryOn
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.stop_view import Estimate, Pill, PinTag, Row
 from paperroute_transit.core.strip_badges import HALF_WIDE
 from paperroute_transit.core.strip_model import (
@@ -54,12 +55,15 @@ from paperroute_transit.render.chrome import (
     NAME_GAP,
     NOTE_GAP,
     badge,
+    badge_width,
     note_room,
     route_pair,
 )
 from paperroute_transit.render.markers import badge_box
+from paperroute_transit.render.names import Naming, fit_headsign
 from paperroute_transit.render.stop_view import TAG_FACE, WIDEST_COUNT
 from paperroute_transit.render.strip_view import (
+    BADGE_PX,
     CANCELLED_LEFT,
     CARRY_GAP,
     COUNTDOWN_FACE,
@@ -67,6 +71,7 @@ from paperroute_transit.render.strip_view import (
     HINT_BOX,
     HINT_FACE,
     HINT_PAD,
+    MIDDLE_X,
     NAME_X,
     PANE_NAME_X,
     RULE_RIGHT,
@@ -74,12 +79,13 @@ from paperroute_transit.render.strip_view import (
     TIME_DROP,
     draw_strip_map_view,
     draw_strip_view,
-    name_lines,
     name_room,
     paint_strip_view,
+    panel_heading,
 )
 from paperroute_transit.render.strip_view import panel_row as paint_panel_row
 from paperroute_transit.render.tile_codec import GREYS
+from tests.render.test_chrome import Recording
 
 CENTRE: Point = to_metres(
     lon=151.0036,
@@ -87,6 +93,8 @@ CENTRE: Point = to_metres(
     projection=SYDNEY_PROJECTION,
 )
 PANEL_TOP = 128
+NAMING: Final[Naming] = Naming(rules=NameRules())
+LONG_STOP: Final[str] = 'Macquarie University Station, Herring Road Interchange'
 PANEL_STEP = 70
 
 
@@ -461,7 +469,9 @@ def drawn_row(
     """
     canvas = Canvas()
     row = replace(panel_row(then=then), destination=destination)
-    paint_panel_row(canvas, row=row, top=PANEL_TOP, whole=whole)
+    paint_panel_row(
+        canvas, row=row, top=PANEL_TOP, whole=whole, naming=NAMING,
+    )
     return canvas.grey()
 
 
@@ -591,7 +601,7 @@ def test_whole_board_carry_on_after_long_destination_fits() -> None:
     then = CarryOn(route='T9', headsign='Hornsby')
     row = replace(
         central(onto='T8', then=then),
-        destination='Macarthur via Airport and Sydenham',
+        destination='Macarthur Airport Sydenham Hornsby Parramatta',
     )
     frame = panel_frame(panel=WHOLE, row=row)
     assert (frame[SECOND_LINE, TEXT_RIGHT + 1:] == PAPER).all()
@@ -760,7 +770,9 @@ def painted(*, row: Row) -> NDArray[np.uint8]:
         The grey frame.
     """
     canvas = Canvas()
-    paint_panel_row(canvas, row=row, top=PANEL_TOP, whole=False)
+    paint_panel_row(
+        canvas, row=row, top=PANEL_TOP, whole=False, naming=NAMING,
+    )
     return canvas.grey()
 
 
@@ -824,24 +836,6 @@ LONGEST = (
 )
 
 
-def test_name_lines_keeps_a_name_that_fits() -> None:
-    """A name that fits stays whole on one line, an empty one too."""
-    assert name_lines(text='Emu Plains', width=200.0) == ('Emu Plains',)
-    assert name_lines(text='', width=200.0) == ('',)
-
-
-def test_name_lines_wraps_at_the_last_space_that_fits() -> None:
-    """The first line takes all the words that fit; the rest go second."""
-    width = text_width(text='London Kings', face=HEADSIGN_FACE) + 1
-    assert name_lines(text='London Kings Cross', width=width) == (
-        'London Kings', 'Cross',
-    )
-    first = text_width(text='Mount Victoria', face=HEADSIGN_FACE) + 1
-    assert name_lines(
-        text='Mount Victoria Via Parramatta And Penrith', width=first,
-    ) == ('Mount Victoria', 'Via Parramatta And Penrith')
-
-
 def test_name_room_ends_at_the_countdowns_left_edge() -> None:
     """Room runs to the count less the gap, to the block, or to the edge."""
     count = text_width(text='6 min', face=COUNTDOWN_FACE)
@@ -895,3 +889,40 @@ def test_a_name_still_too_long_never_takes_a_third_line() -> None:
     frame = panel_frame(panel=PANEL, row=row)
     slot = frame[PANEL_TOP + 47:PANEL_TOP + 68, RULE_RIGHT - 74:RULE_RIGHT]
     assert (slot == PAPER).all()
+
+
+def test_panel_heading_wraps_a_title_without_a_destination() -> None:
+    """Without a destination the title takes both lines."""
+    canvas = Recording()
+    panel_heading(
+        canvas, panel=replace(PANEL, title=LONG_STOP, destination=None),
+        drop=0, rules=NameRules(),
+    )
+    first, second = canvas.drawn[-2:]
+    assert f'{first} {second}' == LONG_STOP
+
+
+def test_panel_heading_keeps_one_title_line_beside_a_destination() -> None:
+    """With a destination the title is one line."""
+    canvas = Recording()
+    panel_heading(
+        canvas, panel=replace(PANEL, title=LONG_STOP, destination='Wx'),
+        drop=0, rules=NameRules(),
+    )
+    assert canvas.drawn[-1] == 'Wx'
+    assert canvas.drawn[-2] != LONG_STOP
+
+
+def test_panel_row_fits_its_headsign_by_the_rules() -> None:
+    """A panel row draws the lines the headsign fitter gives."""
+    row = replace(panel_row(), destination='Heathrow Airport Terminal 5')
+    canvas = Recording()
+    paint_panel_row(
+        canvas, row=row, top=PANEL_TOP, whole=False, naming=NAMING,
+    )
+    left = MIDDLE_X + badge_width(px=BADGE_PX) + 8
+    expected = fit_headsign(
+        text=row.destination, face=HEADSIGN_FACE,
+        width=name_room(row=row, left=left), naming=NAMING, two_lines=True,
+    )
+    assert all(line in canvas.drawn for line in expected)

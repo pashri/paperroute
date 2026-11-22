@@ -7,6 +7,7 @@ from typing import Final
 
 from paperroute_device.render.canvas import INK, PAPER, Canvas, Face
 from paperroute_transit.core.map_view import Marker
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.reach import RowKind
 from paperroute_transit.core.strip_model import (
     HOOK_GAP,
@@ -20,6 +21,7 @@ from paperroute_transit.core.strip_model import (
 )
 from paperroute_transit.render.chrome import ARROW_WIDTH, arrow
 from paperroute_transit.render.markers import draw_hollow, draw_live
+from paperroute_transit.render.names import Naming, fit_name
 
 TRACK_WIDTH: Final[int] = 3
 RIDE_WIDTH: Final[int] = 9
@@ -88,12 +90,15 @@ class Columns:
         Right edge of the times and tags.
     right : int
         Right edge of the strip.
+    naming : Naming
+        How row names are shortened.
     """
 
     track_x: int
     name_x: int
     time_right: int
     right: int
+    naming: Naming
 
 
 def track_points(*, row: StripRow, parent_y: float, track_x: int
@@ -585,11 +590,24 @@ def draw_row(canvas: Canvas, *, row: StripRow, columns: Columns) -> None:
         edge = noted_edge(
             canvas, row=row, columns=columns, left=left, edge=edge,
         )
-    draw_name(canvas, row=row, left=left, face=face, edge=edge)
+    draw_name(
+        canvas,
+        row=row,
+        left=left,
+        face=face,
+        edge=edge,
+        naming=columns.naming,
+    )
 
 
 def draw_name(
-    canvas: Canvas, *, row: StripRow, left: float, face: Face, edge: float,
+    canvas: Canvas,
+    *,
+    row: StripRow,
+    left: float,
+    face: Face,
+    edge: float,
+    naming: Naming,
 ) -> None:
     """
     Draw a row's name, or an exit's label of place names.
@@ -606,6 +624,8 @@ def draw_name(
         The name's face.
     edge : float
         Where the name must end.
+    naming : Naming
+        How the name is shortened.
     """
     if row.names:
         lines = exit_lines(canvas=canvas, names=row.names, width=edge - left)
@@ -620,7 +640,9 @@ def draw_name(
     elif row.name:
         canvas.text(
             at=(left, row.y + BASELINE_DROP),
-            text=canvas.fit(text=row.name, face=face, width=edge - left),
+            text=fit_name(
+                text=row.name, face=face, width=edge - left, naming=naming,
+            )[0],
             face=face,
             grey=PAPER if row.cursor else INK,
         )
@@ -739,6 +761,7 @@ def draw_rows(
     name_x: int,
     time_right: int,
     right: int,
+    rules: NameRules,
 ) -> None:
     """
     Draw a strip's track, then each row over it.
@@ -757,9 +780,18 @@ def draw_rows(
         Right edge of the times and tags.
     right : int
         Right edge of the strip.
+    rules : NameRules
+        Word lists and options for shortening row names.
     """
     columns = Columns(
-        track_x=track_x, name_x=name_x, time_right=time_right, right=right,
+        track_x=track_x,
+        name_x=name_x,
+        time_right=time_right,
+        right=right,
+        naming=Naming(
+            rules=rules,
+            siblings=tuple(row.name for row in rows if row.name),
+        ),
     )
     stubs = {row.y for row in rows if row.kind is RowKind.DASHED}
     for row in rows:

@@ -15,6 +15,7 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER, finish, wrap
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.stop_view import (
     UNCERTAIN,
     Pill,
@@ -47,6 +48,7 @@ from paperroute_transit.render.chrome import (
 )
 from paperroute_transit.render.keep_out import NO_KEEP_OUT, KeepOut
 from paperroute_transit.render.map_view import draw_overlay, snap
+from paperroute_transit.render.names import Naming, fit_headsign, fit_name
 from paperroute_transit.render.stop_view import TAG_FACE
 from paperroute_transit.render.strip import (
     draw_band,
@@ -190,32 +192,9 @@ def name_room(*, row: Row, left: float) -> float:
     return TEXT_RIGHT - left
 
 
-def name_lines(*, text: str, width: float) -> tuple[str, ...]:
-    """
-    Split a destination into at most two lines.
-
-    Parameters
-    ----------
-    text : str
-        Destination.
-    width : float
-        Room for each line.
-
-    Returns
-    -------
-    tuple[str, ...]
-        The text alone when it fits, else its first wrapped line and
-        the rest joined as the second.
-    """
-    if text_width(text=text, face=HEADSIGN_FACE) <= width:
-        return (text,)
-    lines = wrap(text=text, face=HEADSIGN_FACE, width=width)
-    if len(lines) <= len(TWO_LINE_DROPS):
-        return lines
-    return lines[0], ' '.join(lines[1:])
-
-
-def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> int:
+def row_middle(
+    canvas: Canvas, *, row: Row, top: int, whole: bool, naming: Naming,
+) -> int:
     """
     Draw a departure's route badge and headsign, and its arrival if any.
 
@@ -234,6 +213,8 @@ def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> int:
         The row's rule.
     whole : bool
         True on the whole-stop board, which shows no arrival.
+    naming : Naming
+        How the destination is shortened.
 
     Returns
     -------
@@ -241,10 +222,16 @@ def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> int:
         Where a carry-on line starts.
     """
     if whole and row.onto is not None:
-        return continuing_middle(canvas, row=row, top=top)
+        return continuing_middle(canvas, row=row, top=top, naming=naming)
     x = MIDDLE_X + badge_width(px=BADGE_PX) + 8
     room = name_room(row=row, left=x)
-    lines = name_lines(text=row.destination, width=room)
+    lines = fit_headsign(
+        text=row.destination,
+        face=HEADSIGN_FACE,
+        width=room,
+        naming=naming,
+        two_lines=True,
+    )
     two = len(lines) == len(TWO_LINE_DROPS)
     badge(
         canvas,
@@ -270,7 +257,9 @@ def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> int:
     return MIDDLE_X + round(arrival) + CARRY_GAP
 
 
-def continuing_middle(canvas: Canvas, *, row: Row, top: int) -> int:
+def continuing_middle(
+    canvas: Canvas, *, row: Row, top: int, naming: Naming,
+) -> int:
     """
     Draw a continuing train's route pair, then its destination below.
 
@@ -282,6 +271,8 @@ def continuing_middle(canvas: Canvas, *, row: Row, top: int) -> int:
         Departure with an onto route.
     top : int
         The row's rule.
+    naming : Naming
+        How the destination is shortened.
 
     Returns
     -------
@@ -297,11 +288,12 @@ def continuing_middle(canvas: Canvas, *, row: Row, top: int) -> int:
         px=BADGE_PX,
     )
     room = CARRY_ROOM if row.then is not None else 0
-    shown = canvas.fit(
+    shown = fit_headsign(
         text=row.destination,
         face=HEADSIGN_FACE,
         width=TEXT_RIGHT - MIDDLE_X - room - note_width(row=row),
-    )
+        naming=naming,
+    )[0]
     used = canvas.text(
         at=(MIDDLE_X, top + SECOND_DROP),
         text=shown,
@@ -375,7 +367,13 @@ def carry_on(canvas: Canvas, *, row: Row, top: int, left: int) -> None:
 
 
 def panel_row(
-    canvas: Canvas, *, row: Row, top: int, whole: bool, picked: bool = False,
+    canvas: Canvas,
+    *,
+    row: Row,
+    top: int,
+    whole: bool,
+    naming: Naming,
+    picked: bool = False,
 ) -> None:
     """
     Draw one departure in the panel under its rule.
@@ -390,6 +388,8 @@ def panel_row(
         The row's rule.
     whole : bool
         True on the whole-stop board.
+    naming : Naming
+        How the destination is shortened.
     picked : bool
         True for the picked train, drawn paper on ink.
     """
@@ -398,7 +398,9 @@ def panel_row(
         at=(TEXT_LEFT, top + TIME_DROP), text=row.leaves_at,
         face=LEAVES_FACE, grey=INK,
     )
-    left = row_middle(canvas, row=row, top=top, whole=whole)
+    left = row_middle(
+        canvas, row=row, top=top, whole=whole, naming=naming,
+    )
     row_countdown(canvas, row=row, top=top)
     row_note(canvas, row=row, top=top)
     row_faster(canvas, row=row, top=top)
@@ -407,7 +409,9 @@ def panel_row(
         canvas.invert(box=(RULE_LEFT, top, RULE_RIGHT, top + PICKED_DEPTH))
 
 
-def panel_heading(canvas: Canvas, *, panel: StripPanel, drop: int) -> None:
+def panel_heading(
+    canvas: Canvas, *, panel: StripPanel, drop: int, rules: NameRules,
+) -> None:
     """
     Draw the From and the Destination line.
 
@@ -419,23 +423,31 @@ def panel_heading(canvas: Canvas, *, panel: StripPanel, drop: int) -> None:
         The panel.
     drop : int
         Pixels to move it all down.
+    rules : NameRules
+        Word lists and options for shortening names.
     """
-    canvas.text(
-        at=(TEXT_LEFT, TITLE_Y + drop),
-        text=canvas.fit(text=panel.title, face=TITLE_FACE, width=TEXT_WIDTH),
+    lines = fit_name(
+        text=panel.title,
         face=TITLE_FACE,
-        grey=INK,
+        width=TEXT_WIDTH,
+        naming=Naming(rules=rules),
+        two_lines=panel.destination is None,
     )
+    for line, y in zip(lines, (TITLE_Y, SUBTITLE_Y)):
+        canvas.text(
+            at=(TEXT_LEFT, y + drop), text=line, face=TITLE_FACE, grey=INK,
+        )
     if panel.destination is not None:
         y = SUBTITLE_Y + drop
         x = TEXT_LEFT + arrow(canvas, x=TEXT_LEFT, y=y - 5, grey=INK)
         canvas.text(
             at=(x, y),
-            text=canvas.fit(
+            text=fit_name(
                 text=panel.destination,
                 face=SUBTITLE_FACE,
                 width=TEXT_RIGHT - x,
-            ),
+                naming=Naming(rules=rules),
+            )[0],
             face=SUBTITLE_FACE,
             grey=INK,
         )
@@ -488,7 +500,9 @@ def hint_box(canvas: Canvas, *, text: str) -> None:
     )
 
 
-def draw_panel(canvas: Canvas, *, panel: StripPanel, drop: int) -> None:
+def draw_panel(
+    canvas: Canvas, *, panel: StripPanel, drop: int, rules: NameRules,
+) -> None:
     """
     Draw the departures panel right of the strip.
 
@@ -500,14 +514,21 @@ def draw_panel(canvas: Canvas, *, panel: StripPanel, drop: int) -> None:
         The panel.
     drop : int
         Pixels to move all but the hint down, below a banner.
+    rules : NameRules
+        Word lists and options for shortening names.
     """
-    panel_heading(canvas, panel=panel, drop=drop)
+    panel_heading(canvas, panel=panel, drop=drop, rules=rules)
+    naming = Naming(
+        rules=rules,
+        siblings=tuple(row.destination for row in panel.rows),
+    )
     for index, row in enumerate(panel.rows):
         panel_row(
             canvas,
             row=row,
             top=ROWS_TOP + drop + index * ROW_STEP,
             whole=panel.no_destination,
+            naming=naming,
             picked=index == panel.selected,
         )
     if not panel.rows and panel.empty:
@@ -535,6 +556,7 @@ def draw_strip(canvas: Canvas, *, view: StripView) -> None:
             name_x=NAME_X,
             time_right=TIME_RIGHT,
             right=STRIP_RIGHT,
+            rules=view.name_rules,
         )
         draw_strip_markers(canvas, markers=view.markers)
         if view.band is not None:
@@ -566,7 +588,12 @@ def paint_strip_view(canvas: Canvas, *, view: StripView) -> None:
     canvas.rect(
         box=(STRIP_RIGHT, HEADER, STRIP_RIGHT + RULE_WIDTH, HEIGHT), grey=INK,
     )
-    draw_panel(canvas, panel=view.panel, drop=BANNER if view.banner else 0)
+    draw_panel(
+        canvas,
+        panel=view.panel,
+        drop=BANNER if view.banner else 0,
+        rules=view.name_rules,
+    )
     view_header(canvas, view=view, active='Strip', picking=view.picking)
     view_banner(canvas, view=view)
 
@@ -611,6 +638,7 @@ def draw_pane(canvas: Canvas, *, view: StripMapView) -> None:
             name_x=PANE_NAME_X,
             time_right=PANE_TIME_RIGHT,
             right=WIDTH,
+            rules=view.map.name_rules,
         )
         draw_strip_markers(canvas, markers=view.pane.markers)
 

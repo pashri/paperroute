@@ -8,6 +8,7 @@ from numpy.typing import NDArray
 
 from paperroute_device.render.canvas import INK, PAPER, Canvas, Face
 from paperroute_transit.core.map_view import Marker
+from paperroute_transit.core.names import JOINING_WORDS, NameRules
 from paperroute_transit.core.reach import RowKind
 from paperroute_transit.core.strip_model import (
     HOOK_GAP,
@@ -42,6 +43,7 @@ from paperroute_transit.render.strip import (
     hook_arrow,
     track_points,
 )
+from tests.render.test_chrome import Recording
 
 NAME_X = 52
 TIME_RIGHT = 424
@@ -132,6 +134,7 @@ def drawn(*, rows: tuple[StripRow, ...]) -> NDArray[np.uint8]:
         name_x=NAME_X,
         time_right=TIME_RIGHT,
         right=RIGHT,
+        rules=NameRules(),
     )
     return canvas.grey()
 
@@ -710,3 +713,15 @@ def test_a_named_exit_draws_its_lines_about_the_row() -> None:
             ]
             assert (band < 128).any(), (names, offset)
         assert not (frame[:int(row.y) - 24, int(start):] < 128).any()
+
+
+def test_draw_rows_shortens_a_name_by_the_rules() -> None:
+    """A row's name is fitted with the rules."""
+    name = 'Great Western Highway Opp Rooty Hill Road North'
+    canvas = Recording()
+    draw_rows(
+        canvas, rows=(strip_row(y=FROM_Y, name=name),), track_x=TRACK_X,
+        name_x=NAME_X, time_right=TIME_RIGHT, right=RIGHT,
+        rules=NameRules(joining=JOINING_WORDS),
+    )
+    assert any(text.startswith('Great Western Hwy') for text in canvas.drawn)

@@ -53,9 +53,16 @@ from paperroute_transit.core.chooser import (
     ChooserState,
     ColumnRequest,
     Level,
+    PreviewsRequest,
     opened,
 )
-from paperroute_transit.core.chooser_lists import pressed, turned, with_column
+from paperroute_transit.core.chooser_lists import (
+    pressed,
+    turned,
+    with_column,
+    with_previews,
+)
+from paperroute_transit.core.chooser_previews import read_previews
 from paperroute_transit.core.chooser_station import knob_pressed
 from paperroute_transit.core.city import MergeReport
 from paperroute_transit.core.model import Pin, StopPlace
@@ -480,35 +487,43 @@ def fed_from(
     network: SqliteNetworkRepository,
 ) -> ChooserState:
     """
-    Answer a column request from the repository.
+    Answer column and previews requests from the repository.
 
     Parameters
     ----------
     chooser : ChooserState
-        Chooser waiting for a column.
+        Chooser waiting for a column or previews.
     request : ChooserRequest | Pin | None
-        Its request; must be a ColumnRequest.
+        Its request.
     network : SqliteNetworkRepository
-        Where the column comes from.
+        Where the answers come from.
 
     Returns
     -------
     ChooserState
-        The chooser with the column.
+        The chooser with the answers, once it asks for nothing more.
     """
-    assert isinstance(request, ColumnRequest)
-    column = network.choices(path=request.path)
-    return with_column(chooser=chooser, path=request.path, column=column)[0]
+    while isinstance(request, ColumnRequest | PreviewsRequest):
+        if isinstance(request, ColumnRequest):
+            chooser, request = with_column(
+                chooser=chooser,
+                path=request.path,
+                column=network.choices(path=request.path),
+            )
+        else:
+            previews = read_previews(
+                network=network, path=request.path, steps=request.steps,
+            )
+            chooser = with_previews(
+                chooser=chooser, path=request.path, previews=previews,
+            )
+            request = None
+    return chooser
 
 
-def turned_to_key(
-    *,
-    chooser: ChooserState,
-    key: str,
-    network: SqliteNetworkRepository,
-) -> ChooserState:
+def turned_to_key(*, chooser: ChooserState, key: str) -> ChooserState:
     """
-    Turn the focused column's cursor onto a key and load its preview.
+    Turn the focused column's cursor onto a key.
 
     Parameters
     ----------
@@ -516,8 +531,6 @@ def turned_to_key(
         Chooser in the LISTS stage.
     key : str
         The row's key.
-    network : SqliteNetworkRepository
-        Where a preview column comes from.
 
     Returns
     -------
@@ -526,10 +539,7 @@ def turned_to_key(
     """
     keys = [c.key for c in chooser.columns[chooser.focus].items]
     steps = keys.index(key) - chooser.cursors[chooser.focus]
-    chooser, request = turned(chooser=chooser, steps=steps, reach=None)
-    if request is None:
-        return chooser
-    return fed_from(chooser=chooser, request=request, network=network)
+    return turned(chooser=chooser, steps=steps, reach=None)[0]
 
 
 def test_the_train_chooser_walks_kind_station_to(
@@ -544,18 +554,12 @@ def test_the_train_chooser_walks_kind_station_to(
             modes=CAMBRIDGE.modes,
         )
         chooser = fed_from(chooser=chooser, request=request, network=network)
-        chooser = turned_to_key(
-            chooser=chooser, key='train', network=network,
-        )
+        chooser = turned_to_key(chooser=chooser, key='train')
         chooser, _ = pressed(chooser=chooser, reach=None)
-        chooser = turned_to_key(
-            chooser=chooser, key='rail:CBG', network=network,
-        )
+        chooser = turned_to_key(chooser=chooser, key='rail:CBG')
         chooser, asked = knob_pressed(chooser=chooser, reach=None)
         chooser = fed_from(chooser=chooser, request=asked, network=network)
-        chooser = turned_to_key(
-            chooser=chooser, key='rail:ELY', network=network,
-        )
+        chooser = turned_to_key(chooser=chooser, key='rail:ELY')
         _, pin = knob_pressed(chooser=chooser, reach=None)
     assert [column.level for column in chooser.columns] == [
         Level.KIND, Level.STATION, Level.TO,

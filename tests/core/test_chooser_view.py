@@ -2,23 +2,23 @@
 
 from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.factories import place
-from paperroute_transit.core.chooser import (
-    Choice,
-    Column,
-    ColumnRequest,
-    Level,
-    opened,
+from paperroute_transit.core.chooser import Choice, Column, Level, opened
+from paperroute_transit.core.chooser_lists import (
+    pressed,
+    previews_failed,
+    turned,
 )
-from paperroute_transit.core.chooser_lists import pressed, turned
 from paperroute_transit.core.chooser_view import (
     build_chooser_view,
     route_title,
 )
 from paperroute_transit.core.model import Pin
 from tests.core.chooser_walks import (
+    BUS,
     BUS_606,
-    GROUPS,
-    TOWARDS,
+    KINDS,
+    Catalogue,
+    answered,
     at_to,
     at_towards,
     fed,
@@ -27,18 +27,18 @@ from tests.core.chooser_walks import (
 
 
 def test_view_shows_last_three_columns_with_preview() -> None:
-    chooser = opened_at_kind()
-    chooser, _ = fed(chooser, ColumnRequest(path=BUS_606[:1]), GROUPS)
-    chooser, _ = pressed(chooser=chooser, reach=None)
-    chooser, _ = turned(chooser=chooser, steps=1, reach=None)
     many = Column(level=Level.ROUTE, items=tuple(
         Choice(key=f'r{number}', label='Somewhere', badge=str(number))
         for number in range(600, 630)
     ))
-    chooser, _ = fed(chooser, ColumnRequest(path=BUS_606[:2]), many)
-    chooser, _ = pressed(chooser=chooser, reach=None)
-    chooser, request = turned(chooser=chooser, steps=20, reach=None)
-    chooser, _ = fed(chooser, request, TOWARDS)
+    catalogue = Catalogue(columns={BUS_606[:2]: many})
+    chooser = opened_at_kind(catalogue=catalogue)
+    chooser, request = pressed(chooser=chooser, reach=None)
+    chooser, _ = answered(chooser, request, catalogue)
+    chooser, _ = turned(chooser=chooser, steps=1, reach=None)
+    chooser, request = pressed(chooser=chooser, reach=None)
+    chooser, _ = answered(chooser, request, catalogue)
+    chooser, _ = turned(chooser=chooser, steps=20, reach=None)
     view = build_chooser_view(chooser=chooser)
     assert [column.level for column in view.columns] == [
         Level.GROUP, Level.ROUTE, Level.TOWARDS,
@@ -75,7 +75,9 @@ def test_empty_text_while_loading_and_failed() -> None:
 
 
 def test_failed_preview_blanks_only_that_column() -> None:
-    chooser, _ = fed(opened_at_kind(), ColumnRequest(path=BUS_606[:1]), None)
+    chooser, asked = opened(shown=Pin(origin=place('X')), modes=SYDNEY.modes)
+    chooser, _ = fed(chooser, asked, KINDS)
+    chooser = previews_failed(chooser=chooser, path=())
     view = build_chooser_view(chooser=chooser)
     assert view.empty is None
     assert [column.level for column in view.columns] == [Level.KIND, None]
@@ -84,10 +86,9 @@ def test_failed_preview_blanks_only_that_column() -> None:
 
 
 def test_empty_preview_shows_a_note() -> None:
-    chooser, _ = fed(
-        opened_at_kind(), ColumnRequest(path=BUS_606[:1]),
-        Column(level=Level.GROUP, items=()),
-    )
+    chooser = opened_at_kind(catalogue=Catalogue(columns={
+        BUS: Column(level=Level.GROUP, items=()),
+    }))
     preview = build_chooser_view(chooser=chooser).columns[1]
     assert (preview.note, preview.total, preview.items) == (
         'Nothing here', 0, (),

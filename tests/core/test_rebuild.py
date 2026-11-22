@@ -35,6 +35,7 @@ from paperroute_transit.core.messages import (
     Event,
     FetchFeed,
     LoadColumn,
+    LoadPreviews,
     RebuildTimetable,
     SettingsChanged,
     TimetableRebuilt,
@@ -52,7 +53,14 @@ from paperroute_transit.core.rebuild import (
 )
 from paperroute_transit.core.saved import LiveView, Saved, default_settings
 from paperroute_transit.core.state_model import Rebuild, State
-from tests.core.chooser_walks import DOWN, KINDS, NEXT, OPEN
+from tests.core.chooser_walks import (
+    DOWN,
+    KINDS,
+    NEXT,
+    OPEN,
+    TRAIN,
+    previews_of,
+)
 
 OLD = TimetableSeen(version='v', schema='4')
 CURRENT = TimetableSeen(version='v', schema=TIMETABLE_SCHEMA)
@@ -286,7 +294,11 @@ def test_current_schema_clears_outdated() -> None:
 def test_chooser_works_while_outdated() -> None:
     """With the timetable outdated, picking Train loads its column."""
     walk: list[Event] = [
-        OPEN, ColumnLoaded(path=(), column=KINDS), DOWN, NEXT,
+        OPEN,
+        ColumnLoaded(path=(), column=KINDS, timetable='v'),
+        replace(previews_of(path=(), column=KINDS), timetable='v'),
+        DOWN,
+        NEXT,
     ]
     current = step(pinned(), TimetableSeen(version='v', schema=TIMETABLE_SCHEMA))[0]
     outdated = step(pinned(), OLD)[0]
@@ -299,10 +311,11 @@ def test_chooser_works_while_outdated() -> None:
     )
     _, expected = run_events(state=current, events=walk)
     _, effects = run_events(state=outdated, events=walk)
-    loads = [effect for effect in effects if isinstance(effect, LoadColumn)]
-    assert loads
+    kinds = (LoadColumn, LoadPreviews)
+    loads = [effect for effect in effects if isinstance(effect, kinds)]
+    assert [load.path for load in loads] == [(), (), TRAIN]
     assert loads == [
-        effect for effect in expected if isinstance(effect, LoadColumn)
+        effect for effect in expected if isinstance(effect, kinds)
     ]
 
 

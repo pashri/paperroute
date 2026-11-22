@@ -22,7 +22,11 @@ from paperroute_transit.core.chooser import (
     opened,
     to_row,
 )
-from paperroute_transit.core.chooser_lists import turned, with_column
+from paperroute_transit.core.chooser_lists import (
+    previews_again,
+    turned,
+    with_column,
+)
 from paperroute_transit.core.chooser_previews import previews_replied
 from paperroute_transit.core.chooser_sides import (
     side_reach,
@@ -590,9 +594,11 @@ def chooser_retimed(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     if chooser.failed:
         return replace(state, chooser=None), ()
     request = asked_again(chooser=chooser)
-    fresh = replace(chooser, to_cursor=0, load=DepartureLoad())
+    fresh, again = previews_again(
+        chooser=replace(chooser, to_cursor=0, load=DepartureLoad()),
+    )
     state = replace(state, chooser=fresh)
-    state, effects = asked(state=state, request=request)
+    state, effects = asked(state=state, request=request or again)
     if not has_list_from(chooser=fresh):
         return state, effects
     state, load = picked_load(state=state, chooser=fresh)

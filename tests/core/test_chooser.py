@@ -11,8 +11,10 @@ from paperroute_transit.core.chooser import (
     Choice,
     Column,
     ColumnRequest,
+    Failure,
     Level,
     LineRequest,
+    PreviewsRequest,
     Stage,
     StripRequest,
     chosen_pin,
@@ -25,6 +27,9 @@ from paperroute_transit.core.chooser import (
 from paperroute_transit.core.chooser_lists import (
     backed,
     pressed,
+    preview_steps,
+    previews_again,
+    previews_failed,
     turned,
     with_column,
 )
@@ -35,7 +40,7 @@ from paperroute_transit.core.model import Pin
 from paperroute_transit.core.pin_choices import PinDraft
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
 from tests.core.chooser_walks import (
-    BUS_606,
+    BUS,
     GROUPS,
     KINDS,
     LINE,
@@ -50,6 +55,8 @@ from tests.core.chooser_walks import (
     TRAIN_LINES,
     TRAIN_STATIONS,
     TRAIN_TO,
+    Catalogue,
+    answered,
     at_from,
     at_replacement_towards,
     at_stations,
@@ -81,24 +88,77 @@ def test_kind_cursor_starts_on_current_kind() -> None:
     )
     chooser, request = fed(chooser, asked, KINDS)
     assert chooser.cursors == (1,)
-    assert request == ColumnRequest(path=((Level.KIND, 'train'),))
-    assert chooser.waiting == ((Level.KIND, 'train'),)
+    assert chooser.waiting is None
+    assert request == PreviewsRequest(
+        path=(), steps=preview_steps(column=KINDS),
+    )
 
 
-def test_turn_requests_preview_of_new_cursor() -> None:
-    chooser = opened_at_kind()
-    chooser, _ = fed(chooser, ColumnRequest(path=BUS_606[:1]), GROUPS)
-    chooser, request = turned(chooser=chooser, steps=1, reach=None)
-    assert request == ColumnRequest(path=((Level.KIND, 'train'),))
-    assert chooser.cursors == (1,)
-    assert len(chooser.columns) == 1
+def test_kind_column_asks_for_every_kinds_preview() -> None:
+    chooser, asked = opened(
+        shown=Pin(origin=place('X'), kind=SydneyMode.TRAIN),
+        modes=SYDNEY.modes,
+    )
+    chooser, request = fed(chooser, asked, KINDS)
+    assert request == PreviewsRequest(path=(), steps=(
+        (Level.KIND, 'bus'), (Level.KIND, 'train'), (Level.KIND, 'metro'),
+    ))
+    assert (chooser.columns, chooser.waiting) == (
+        (replace(KINDS, previews=()),), None,
+    )
+
+
+def test_turned_shows_the_preloaded_preview_and_asks_nothing() -> None:
+    chooser, request = turned(
+        chooser=opened_at_kind(), steps=1, reach=None,
+    )
+    assert request is None
+    assert (chooser.cursors, chooser.columns[1:]) == ((1, 0), (TRAIN_LINES,))
     chooser, request = turned(chooser=chooser, steps=5, reach=None)
-    assert chooser.cursors == (2,)
-    assert request == ColumnRequest(path=((Level.KIND, 'metro'),))
-    unchanged, request = turned(chooser=chooser, steps=1, reach=None)
-    assert (unchanged, request) == (chooser, None)
+    assert request is None
+    assert chooser.columns[1:] == (
+        replace(METRO_LINES, collapsed=True), TOWARDS,
+    )
+    assert turned(chooser=chooser, steps=1, reach=None) == (chooser, None)
 
 
+def test_turns_while_previews_load_ask_nothing_more() -> None:
+    chooser, asked = opened(shown=Pin(origin=place('X')), modes=SYDNEY.modes)
+    chooser, _ = fed(chooser, asked, KINDS)
+    for steps in (1, 1, -2):
+        chooser, request = turned(chooser=chooser, steps=steps, reach=None)
+        assert request is None
+        assert len(chooser.columns) == 1
+
+
+def test_a_turn_after_failed_previews_asks_again() -> None:
+    chooser, asked = opened(shown=Pin(origin=place('X')), modes=SYDNEY.modes)
+    chooser, first = fed(chooser, asked, KINDS)
+    chooser = previews_failed(chooser=chooser, path=())
+    assert chooser.failed is Failure.LOAD
+    chooser, request = turned(chooser=chooser, steps=1, reach=None)
+    assert request == first
+    assert (chooser.failed, chooser.columns[0].previews) == (None, ())
+
+
+def test_a_failed_read_after_a_new_timetable_drops_the_old_preview() -> None:
+    chooser, request = previews_again(chooser=opened_at_kind())
+    assert isinstance(request, PreviewsRequest)
+    assert chooser.columns[1:] == (GROUPS,)
+    chooser = previews_failed(chooser=chooser, path=request.path)
+    assert (chooser.columns, chooser.failed) == ((KINDS,), Failure.LOAD)
+
+
+def test_press_asks_for_the_new_focus_and_back_keeps_previews() -> None:
+    chooser, request = pressed(chooser=opened_at_kind(), reach=None)
+    assert request == PreviewsRequest(
+        path=BUS, steps=preview_steps(column=GROUPS),
+    )
+    chooser, _ = answered(chooser, request)
+    back = backed(chooser=chooser)
+    assert back is not None
+    chooser, request = turned(chooser=back, steps=1, reach=None)
+    assert (request, chooser.columns[1:]) == (None, (TRAIN_LINES,))
 def test_stale_column_is_ignored() -> None:
     chooser = opened_at_kind()
     chooser, _ = turned(chooser=chooser, steps=1, reach=None)
@@ -109,7 +169,8 @@ def test_stale_column_is_ignored() -> None:
 
 
 def test_press_before_preview_loaded_does_nothing() -> None:
-    chooser = opened_at_kind()
+    chooser, asked = opened(shown=Pin(origin=place('X')), modes=SYDNEY.modes)
+    chooser, _ = fed(chooser, asked, KINDS)
     after, request = pressed(chooser=chooser, reach=None)
     assert (after, request) == (chooser, None)
     empty, _ = opened(shown=Pin(origin=place('X')), modes=SYDNEY.modes)
@@ -119,32 +180,24 @@ def test_press_before_preview_loaded_does_nothing() -> None:
     assert pressed(chooser=loading, reach=None) == (loading, None)
     with pytest.raises(ValueError, match='no From'):
         chosen_pin(chooser=loading, destination=None)
-
-
 def test_single_line_column_collapses() -> None:
-    chooser = opened_at_kind(kind=SydneyMode.METRO)
-    chooser, request = fed(chooser, ColumnRequest(
-        path=((Level.KIND, 'metro'),),
-    ), METRO_LINES)
-    assert chooser.columns[1].collapsed
-    assert request == ColumnRequest(
-        path=((Level.KIND, 'metro'), (Level.LINE, 'm1')),
+    chooser, request = turned(
+        chooser=opened_at_kind(), steps=2, reach=None,
     )
-    chooser, request = fed(chooser, request, TOWARDS)
     assert request is None
+    assert chooser.columns[1:] == (
+        replace(METRO_LINES, collapsed=True), TOWARDS,
+    )
     view = build_chooser_view(chooser=chooser)
     assert [column.level for column in view.columns] == [
         Level.KIND, Level.TOWARDS,
     ]
-    chooser, request = pressed(chooser=chooser, reach=None)
+    chooser, _ = pressed(chooser=chooser, reach=None)
     assert chooser.focus == 2
-    assert request is None
     assert build_chooser_view(chooser=chooser).trail == 'Metro · M1'
     chooser, _ = pressed(chooser=chooser, reach=None)
     view = build_chooser_view(chooser=chooser)
     assert view.trail == 'Metro · M1 · Parramatta'
-
-
 def test_towards_press_asks_for_line() -> None:
     chooser, request = pressed(chooser=at_towards(), reach=None)
     assert request == LineRequest(towards=11)
@@ -243,8 +296,10 @@ def test_station_first_walk_commits_line_kind() -> None:
 
 def test_the_train_walk_skips_the_line_step() -> None:
     """A train walk has no line step and commits a pin with no routes."""
-    chooser = opened_at_kind(kind=SydneyMode.TRAIN)
-    chooser, _ = fed(chooser, ColumnRequest(path=TRAIN), TRAIN_STATIONS)
+    chooser = opened_at_kind(
+        kind=SydneyMode.TRAIN,
+        catalogue=Catalogue(columns={TRAIN: TRAIN_STATIONS}),
+    )
     chooser, request = pressed(chooser=chooser, reach=None)
     assert request is None
     chooser, request = turned(chooser=chooser, steps=1, reach=None)
@@ -260,8 +315,10 @@ def test_the_train_walk_skips_the_line_step() -> None:
 
 def test_a_knob_train_pin_has_no_routes() -> None:
     """The knobs make the same pin as the phone editor does."""
-    chooser = opened_at_kind(kind=SydneyMode.TRAIN)
-    chooser, _ = fed(chooser, ColumnRequest(path=TRAIN), TRAIN_STATIONS)
+    chooser = opened_at_kind(
+        kind=SydneyMode.TRAIN,
+        catalogue=Catalogue(columns={TRAIN: TRAIN_STATIONS}),
+    )
     chooser, _ = pressed(chooser=chooser, reach=None)
     chooser, _ = turned(chooser=chooser, steps=1, reach=None)
     chooser, request = knob_pressed(chooser=chooser, reach=None)
@@ -281,8 +338,10 @@ def test_a_knob_train_pin_has_no_routes() -> None:
 
 def test_a_knob_train_pin_without_a_destination_stores_the_from() -> None:
     """Pressing the From's own row stores no Destination and no routes."""
-    chooser = opened_at_kind(kind=SydneyMode.TRAIN)
-    chooser, _ = fed(chooser, ColumnRequest(path=TRAIN), TRAIN_STATIONS)
+    chooser = opened_at_kind(
+        kind=SydneyMode.TRAIN,
+        catalogue=Catalogue(columns={TRAIN: TRAIN_STATIONS}),
+    )
     chooser, _ = pressed(chooser=chooser, reach=None)
     chooser, _ = turned(chooser=chooser, steps=1, reach=None)
     chooser, request = knob_pressed(chooser=chooser, reach=None)
@@ -316,8 +375,8 @@ def test_path_to_uses_choice_level() -> None:
             level=Level.REPLACEMENTS,
         ),
     ))
-    chooser, _ = fed(
-        opened_at_kind(), ColumnRequest(path=BUS_606[:1]), replacements,
+    chooser = opened_at_kind(
+        catalogue=Catalogue(columns={BUS: replacements}),
     )
     assert path_to(chooser=chooser, index=1)[-1] == (
         Level.REPLACEMENTS, 'replacement',
@@ -332,11 +391,9 @@ def test_empty_column_is_never_focused() -> None:
     assert chooser.columns == (empty,)
     assert pressed(chooser=chooser, reach=None) == (chooser, None)
     assert turned(chooser=chooser, steps=1, reach=None) == (chooser, None)
-    chooser, preview = fed(
-        opened_at_kind(), ColumnRequest(path=BUS_606[:1]),
-        Column(level=Level.GROUP, items=()),
-    )
-    assert preview is None
+    chooser = opened_at_kind(catalogue=Catalogue(columns={
+        BUS: Column(level=Level.GROUP, items=()),
+    }))
     assert pressed(chooser=chooser, reach=None) == (chooser, None)
 
 
@@ -390,7 +447,9 @@ def test_a_named_line_commits_its_value() -> None:
             TRAIN_LINES.items[1],
         ),
     )
-    chooser = at_to_column(lines=named)
+    chooser = at_to_column(
+        catalogue=Catalogue(columns={TRAIN: named}),
+    )
     _, pin = knob_pressed(chooser=chooser, reach=None)
     assert pin == Pin(
         origin=T1_PLACES['E2'],

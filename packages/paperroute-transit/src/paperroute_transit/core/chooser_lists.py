@@ -3,17 +3,16 @@
 from dataclasses import replace
 
 from paperroute_transit.core.chooser import (
-    COLLAPSIBLE,
     PRESS_ONLY,
     ChooserPath,
     ChooserRequest,
     ChooserState,
     Column,
-    ColumnRequest,
     DepartureLoad,
     Failure,
     Level,
     LineRequest,
+    PreviewsRequest,
     Stage,
     chosen,
     clamped,
@@ -94,11 +93,65 @@ def is_empty(*, chooser: ChooserState, index: int) -> bool:
     return not chooser.columns[index].items
 
 
+def reserves_preview(*, chooser: ChooserState) -> bool:
+    """
+    Say whether the focus's level has a preview to show.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser.
+
+    Returns
+    -------
+    bool
+        True when the chooser has columns and its focus has rows and is
+        not a column whose press opens the next stage.
+    """
+    return (
+        bool(chooser.columns)
+        and not is_empty(chooser=chooser, index=chooser.focus)
+        and not opens_line(chooser=chooser)
+    )
+
+
+def previews_asked(
+    *, chooser: ChooserState,
+) -> tuple[ChooserState, PreviewsRequest]:
+    """
+    Mark the focus column's previews as being read and ask for them.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser whose focus has rows.
+
+    Returns
+    -------
+    tuple[ChooserState, PreviewsRequest]
+        The chooser with the focus's previews set to (), and the request
+        for every row's preview.
+    """
+    focus = chooser.focus
+    column = chooser.columns[focus]
+    request = PreviewsRequest(
+        path=path_to(chooser=chooser, index=focus - 1),
+        steps=preview_steps(column=column),
+    )
+    marked = replace(column, previews=())
+    return replace(
+        chooser,
+        columns=(
+            *chooser.columns[:focus], marked, *chooser.columns[focus + 1:],
+        ),
+    ), request
+
+
 def previewed(
     *, chooser: ChooserState,
 ) -> tuple[ChooserState, ChooserRequest | None]:
     """
-    Drop the columns after the focus and ask for its cursor's preview.
+    Drop the columns after the focus and show its cursor's preview.
 
     Parameters
     ----------
@@ -108,8 +161,9 @@ def previewed(
     Returns
     -------
     tuple[ChooserState, ChooserRequest | None]
-        The chooser, with no From, and its column request; no request for
-        an empty column, or one whose next step loads on the press.
+        The chooser, with no From; the focus's previews request when it
+        has none and its level has a preview; none while they are being
+        read or once loaded, when the cursor's preview is installed.
     """
     end = chooser.focus + 1
     trimmed = replace(
@@ -122,12 +176,47 @@ def previewed(
         departures=(),
         load=DepartureLoad(),
     )
-    if is_empty(chooser=trimmed, index=chooser.focus) or opens_line(
-        chooser=trimmed,
-    ):
+    if not reserves_preview(chooser=trimmed):
         return trimmed, None
-    path = path_to(chooser=trimmed, index=chooser.focus)
-    return replace(trimmed, waiting=path), ColumnRequest(path=path)
+    previews = trimmed.columns[trimmed.focus].previews
+    if previews is None:
+        return previews_asked(chooser=trimmed)
+    if not previews:
+        return trimmed, None
+    return opened_preview(chooser=trimmed), None
+
+
+def previews_again(
+    *, chooser: ChooserState,
+) -> tuple[ChooserState, PreviewsRequest | None]:
+    """
+    Drop every column's previews and ask for the focus's again.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser.
+
+    Returns
+    -------
+    tuple[ChooserState, PreviewsRequest | None]
+        The chooser with the columns on screen kept and no previews; the
+        focus's request in the LISTS stage with no column waited for and
+        a level that has a preview, else none.
+    """
+    cleared = replace(
+        chooser,
+        columns=tuple(
+            replace(column, previews=None) for column in chooser.columns
+        ),
+    )
+    if (
+        cleared.stage is not Stage.LISTS
+        or cleared.waiting is not None
+        or not reserves_preview(chooser=cleared)
+    ):
+        return cleared, None
+    return previews_asked(chooser=cleared)
 
 
 def preview_steps(*, column: Column) -> tuple[tuple[Level, str], ...]:
@@ -205,9 +294,9 @@ def with_column(
     -------
     tuple[ChooserState, ChooserRequest | None]
         The chooser and its next request. A path other than the one
-        waited for changes nothing. A single-row GROUP, ROUTE or LINE
-        column is stored collapsed and its own next column asked for. A
-        TO column, asked for by a press, takes the focus.
+        waited for changes nothing. The column is stored as given; the
+        KIND column then has its previews asked for. A TO column, asked
+        for by a press, takes the focus.
     """
     if path != chooser.waiting:
         return chooser, None
@@ -215,12 +304,9 @@ def with_column(
         failure = Failure.ABSENT if absent else Failure.LOAD
         return replace(chooser, waiting=None, failed=failure), None
     index = len(path)
-    collapsed = column.level in COLLAPSIBLE and len(column.items) == 1
     stored = replace(
         chooser,
-        columns=(
-            *chooser.columns[:index], replace(column, collapsed=collapsed),
-        ),
+        columns=(*chooser.columns[:index], column),
         cursors=(
             *chooser.cursors[:index],
             first_cursor(column=column, prefer=chooser.prefer),
@@ -230,10 +316,7 @@ def with_column(
     )
     if index == 0:
         return previewed(chooser=stored)
-    if not collapsed:
-        return stored, None
-    following = path_to(chooser=stored, index=index)
-    return replace(stored, waiting=following), ColumnRequest(path=following)
+    return stored, None
 
 
 def stepped(*, column: Column, cursor: int, steps: int) -> int:

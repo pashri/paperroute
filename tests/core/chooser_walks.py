@@ -16,12 +16,28 @@ from paperroute_transit.core.chooser import (
     Column,
     ColumnRequest,
     Level,
+    PreviewsRequest,
     opened,
 )
-from paperroute_transit.core.chooser_lists import pressed, turned, with_column
+from paperroute_transit.core.chooser_lists import (
+    pressed,
+    preview_steps,
+    turned,
+    with_column,
+    with_previews,
+)
+from paperroute_transit.core.chooser_previews import (
+    ColumnReader,
+    read_previews,
+)
 from paperroute_transit.core.chooser_sides import with_line
 from paperroute_transit.core.chooser_station import knob_pressed
-from paperroute_transit.core.messages import ColumnLoaded, Event, LineLoaded
+from paperroute_transit.core.messages import (
+    ColumnLoaded,
+    Event,
+    LineLoaded,
+    PreviewsLoaded,
+)
 from paperroute_transit.core.model import Departure, Pin, StopPlace
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
 from paperroute_transit.core.state_model import RELOAD_BEFORE
@@ -218,36 +234,6 @@ DOWN: Final[KnobTurned] = KnobTurned(knob=Knob.BOTTOM, steps=1)
 PENRITH: Final[Pin] = Pin(
     origin=T1_PLACES['E2'], kind=SydneyMode.TRAIN, routes=('T1',),
 )
-TO_COLUMN: Final[tuple[Event, ...]] = (
-    OPEN,
-    ColumnLoaded(path=(), column=KINDS),
-    ColumnLoaded(path=BUS_606[:1], column=GROUPS),
-    DOWN,
-    ColumnLoaded(path=T1[:1], column=TRAIN_LINES),
-    NEXT,
-    ColumnLoaded(path=T1, column=T1_STATIONS),
-    NEXT,
-    KnobTurned(knob=Knob.BOTTOM, steps=3),
-    NEXT,
-    ColumnLoaded(path=(*T1, (Level.STATION, 'E2')), column=T1_TO),
-)
-TO_STAGE: Final[tuple[Event, ...]] = (
-    OPEN,
-    ColumnLoaded(path=(), column=KINDS),
-    ColumnLoaded(path=BUS_606[:1], column=GROUPS),
-    NEXT,
-    DOWN,
-    ColumnLoaded(path=BUS_606[:2], column=ROUTES),
-    NEXT,
-    ColumnLoaded(path=BUS_606, column=TOWARDS),
-    NEXT,
-    NEXT,
-    LineLoaded(towards=11, line=LINE),
-    DOWN,
-    NEXT,
-)
-
-
 def row(stop_id: str, kind: RowKind) -> ReachRow:
     """
     A strip row with no indent.
@@ -281,6 +267,73 @@ REACH: Final[Reach] = Reach(
 )
 
 
+@dataclass(frozen=True)
+class Catalogue:
+    """
+    A network that answers the walks' paths.
+
+    Attributes
+    ----------
+    columns : Mapping[ChooserPath, Column | None]
+        Answers that replace the walks' own, by path.
+    """
+
+    columns: Mapping[ChooserPath, Column | None] = field(
+        default_factory=dict,
+    )
+
+    def choices(self, *, path: ChooserPath) -> Column | None:
+        """
+        Give the column after a path.
+
+        Parameters
+        ----------
+        path : ChooserPath
+            Steps chosen so far.
+
+        Returns
+        -------
+        Column | None
+            The listed answer, else the walks' column.
+        """
+        if path in self.columns:
+            return self.columns[path]
+        return walk_column(path=path)
+
+
+WALK: Final[Catalogue] = Catalogue()
+
+
+def previews_of(
+    *, path: ChooserPath, column: Column, catalogue: ColumnReader = WALK,
+) -> PreviewsLoaded:
+    """
+    Make the reply to a column's previews request.
+
+    Parameters
+    ----------
+    path : ChooserPath
+        Steps leading to the column.
+    column : Column
+        The column whose rows are read.
+    catalogue : ColumnReader
+        The network that answers.
+
+    Returns
+    -------
+    PreviewsLoaded
+        What each row of the column opens.
+    """
+    return PreviewsLoaded(
+        path=path,
+        previews=read_previews(
+            network=catalogue,
+            path=path,
+            steps=preview_steps(column=column),
+        ),
+    )
+
+
 def fed(
     chooser: ChooserState,
     request: ChooserRequest | Pin | None,
@@ -307,45 +360,93 @@ def fed(
     return with_column(chooser=chooser, path=request.path, column=column)
 
 
-def opened_at_kind(kind: SydneyMode | None = None) -> ChooserState:
+def answered(
+    chooser: ChooserState,
+    request: ChooserRequest | Pin | None,
+    catalogue: ColumnReader = WALK,
+) -> tuple[ChooserState, ChooserRequest | Pin | None]:
     """
-    Open the chooser and load the KIND column.
+    Answer a column or previews request from a catalogue.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser waiting for the answer.
+    request : ChooserRequest | Pin | None
+        Its request.
+    catalogue : ColumnReader
+        The network that answers.
+
+    Returns
+    -------
+    tuple[ChooserState, ChooserRequest | Pin | None]
+        The chooser and its next request; a previews answer asks for
+        nothing, and any other request is returned unchanged.
+    """
+    if isinstance(request, ColumnRequest):
+        return with_column(
+            chooser=chooser,
+            path=request.path,
+            column=catalogue.choices(path=request.path),
+        )
+    if isinstance(request, PreviewsRequest):
+        previews = read_previews(
+            network=catalogue, path=request.path, steps=request.steps,
+        )
+        return with_previews(
+            chooser=chooser, path=request.path, previews=previews,
+        ), None
+    return chooser, request
+
+
+def opened_at_kind(
+    kind: SydneyMode | None = None, catalogue: ColumnReader = WALK,
+) -> ChooserState:
+    """
+    Open the chooser and load the KIND column and its previews.
 
     Parameters
     ----------
     kind : SydneyMode | None
         Shown place's kind.
+    catalogue : ColumnReader
+        The network that answers.
 
     Returns
     -------
     ChooserState
-        The chooser, waiting for the KIND cursor's preview.
+        The chooser on the KIND column with the cursor's preview shown.
     """
-    chooser, request = opened(
+    chooser, asked = opened(
         shown=Pin(origin=place('X'), kind=kind),
         modes=SYDNEY.modes,
     )
-    chooser, _ = fed(chooser, request, KINDS)
+    chooser, request = answered(chooser, asked, catalogue)
+    chooser, request = answered(chooser, request, catalogue)
+    assert request is None
     return chooser
 
 
-def at_towards() -> ChooserState:
+def at_towards(*, catalogue: ColumnReader = WALK) -> ChooserState:
     """
     Walk Bus, 600s, 606 to the focused TOWARDS column.
+
+    Parameters
+    ----------
+    catalogue : ColumnReader
+        The network that answers.
 
     Returns
     -------
     ChooserState
         The chooser focused on 606's TOWARDS column.
     """
-    chooser = opened_at_kind()
-    chooser, request = fed(chooser, ColumnRequest(path=BUS_606[:1]), GROUPS)
+    chooser = opened_at_kind(catalogue=catalogue)
     chooser, request = pressed(chooser=chooser, reach=None)
-    chooser, request = fed(chooser, request, None)  # 1-99 fails
+    chooser, request = answered(chooser, request, catalogue)
     chooser, request = turned(chooser=chooser, steps=1, reach=None)
-    chooser, request = fed(chooser, request, ROUTES)
     chooser, request = pressed(chooser=chooser, reach=None)
-    chooser, request = fed(chooser, request, TOWARDS)
+    chooser, request = answered(chooser, request, catalogue)
     chooser, request = pressed(chooser=chooser, reach=None)
     assert request is None
     return chooser
@@ -360,15 +461,12 @@ def at_replacement_towards() -> ChooserState:
     ChooserState
         The chooser focused on the replacement route's TOWARDS column.
     """
-    chooser = opened_at_kind()
-    chooser, _ = fed(chooser, ColumnRequest(path=BUS), REPLACEMENT_GROUPS)
+    catalogue = Catalogue(columns={BUS: REPLACEMENT_GROUPS})
+    chooser = opened_at_kind(catalogue=catalogue)
     chooser, request = pressed(chooser=chooser, reach=None)
-    chooser, request = fed(chooser, request, None)  # 1-99 fails
+    chooser, request = answered(chooser, request, catalogue)
     chooser, request = turned(chooser=chooser, steps=2, reach=None)
-    assert request == ColumnRequest(path=REPLACEMENTS_PATH)
-    chooser, request = fed(chooser, request, REPLACEMENT_LINES)
-    chooser, request = fed(chooser, request, REPLACEMENT_ROUTES)
-    chooser, request = fed(chooser, request, TOWARDS)
+    assert request is None
     for _ in range(3):
         chooser, request = pressed(chooser=chooser, reach=None)
     assert request is None
@@ -403,34 +501,30 @@ def at_to() -> ChooserState:
     return chooser
 
 
-def at_stations(*, lines: Column = TRAIN_LINES) -> ChooserState:
+def at_stations(*, catalogue: ColumnReader = WALK) -> ChooserState:
     """
     Walk Train and T1 to the focused STATION column.
 
     Parameters
     ----------
-    lines : Column
-        The LINE column answered.
+    catalogue : ColumnReader
+        The network that answers.
 
     Returns
     -------
     ChooserState
         The chooser focused on T1's stations, cursor on Richmond.
     """
-    chooser = opened_at_kind(kind=SydneyMode.TRAIN)
-    chooser, request = fed(chooser, ColumnRequest(path=T1[:1]), lines)
+    chooser = opened_at_kind(kind=SydneyMode.TRAIN, catalogue=catalogue)
     chooser, request = pressed(chooser=chooser, reach=None)
-    chooser, request = fed(chooser, request, T1_STATIONS)
+    chooser, request = answered(chooser, request, catalogue)
     chooser, request = pressed(chooser=chooser, reach=None)
     assert request is None
     return chooser
 
 
 def at_to_column(
-    *,
-    steps: int = 3,
-    column: Column = T1_TO,
-    lines: Column = TRAIN_LINES,
+    *, steps: int = 3, catalogue: ColumnReader = WALK,
 ) -> ChooserState:
     """
     Press a T1 station and load its TO column.
@@ -439,10 +533,8 @@ def at_to_column(
     ----------
     steps : int
         Detents from Richmond to the From; 3 reaches Penrith.
-    column : Column
-        The TO column answered.
-    lines : Column
-        The LINE column answered.
+    catalogue : ColumnReader
+        The network that answers.
 
     Returns
     -------
@@ -450,10 +542,10 @@ def at_to_column(
         The chooser focused on the TO column.
     """
     chooser, _ = turned(
-        chooser=at_stations(lines=lines), steps=steps, reach=None,
+        chooser=at_stations(catalogue=catalogue), steps=steps, reach=None,
     )
     chooser, request = knob_pressed(chooser=chooser, reach=None)
-    chooser, _ = fed(chooser, request, column)
+    chooser, _ = answered(chooser, request, catalogue)
     return chooser
 
 
@@ -522,38 +614,30 @@ def walk_column(*, path: ChooserPath) -> Column | None:
     return None
 
 
-@dataclass(frozen=True)
-class Catalogue:
-    """
-    A network that answers the walks' paths.
-
-    Attributes
-    ----------
-    columns : Mapping[ChooserPath, Column | None]
-        Answers that replace the walks' own, by path.
-    """
-
-    columns: Mapping[ChooserPath, Column | None] = field(
-        default_factory=dict,
-    )
-
-    def choices(self, *, path: ChooserPath) -> Column | None:
-        """
-        Give the column after a path.
-
-        Parameters
-        ----------
-        path : ChooserPath
-            Steps chosen so far.
-
-        Returns
-        -------
-        Column | None
-            The listed answer, else the walks' column.
-        """
-        if path in self.columns:
-            return self.columns[path]
-        return walk_column(path=path)
-
-
-WALK: Final[Catalogue] = Catalogue()
+TO_COLUMN: Final[tuple[Event, ...]] = (
+    OPEN,
+    ColumnLoaded(path=(), column=KINDS),
+    previews_of(path=(), column=KINDS),
+    DOWN,
+    NEXT,
+    previews_of(path=TRAIN, column=TRAIN_LINES),
+    NEXT,
+    KnobTurned(knob=Knob.BOTTOM, steps=3),
+    NEXT,
+    ColumnLoaded(path=(*T1, (Level.STATION, 'E2')), column=T1_TO),
+)
+TO_STAGE: Final[tuple[Event, ...]] = (
+    OPEN,
+    ColumnLoaded(path=(), column=KINDS),
+    previews_of(path=(), column=KINDS),
+    NEXT,
+    previews_of(path=BUS, column=GROUPS),
+    DOWN,
+    NEXT,
+    previews_of(path=BUS_606[:2], column=ROUTES),
+    NEXT,
+    NEXT,
+    LineLoaded(towards=11, line=LINE),
+    DOWN,
+    NEXT,
+)

@@ -1,7 +1,7 @@
 """Tests for picking a station and a destination on one line."""
 
 from collections.abc import Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Final
 
 import pytest
@@ -15,6 +15,8 @@ from paperroute_testkit.core.factories import START, begun, pin_at, place
 from paperroute_testkit.core.kit_steps import step
 from paperroute_transit.core.chooser import (
     Choice,
+    ChooserPath,
+    ChooserRequest,
     ChooserState,
     Column,
     ColumnRequest,
@@ -33,12 +35,13 @@ from paperroute_transit.core.chooser_view import (
 )
 from paperroute_transit.core.messages import (
     ChooserDeparturesLoaded,
-    ColumnFailed,
     ColumnLoaded,
     Effect,
     Event,
     LoadChooserDepartures,
     LoadColumn,
+    PreviewsFailed,
+    PreviewsLoaded,
     TimetableSeen,
 )
 from paperroute_transit.core.model import Pin, shifted
@@ -47,6 +50,7 @@ from paperroute_transit.core.saved import LiveView, Saved, default_settings
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.stop_view import HORIZON
 from tests.core.chooser_walks import (
+    KINDS,
     NEXT,
     OPEN,
     PENRITH,
@@ -54,14 +58,14 @@ from tests.core.chooser_walks import (
     T1_PLACES,
     T1_STATIONS,
     T1_TO,
-    T1_TO_END,
     TO_COLUMN,
+    TRAIN,
     TRAIN_LINES,
     UNTIL,
+    answered,
     at_stations,
     at_to_column,
     chooser_departures,
-    fed,
     opened_at_kind,
 )
 
@@ -168,7 +172,7 @@ def test_to_cursor_starts_on_from_and_skips_dim() -> None:
 
 
 def test_to_cursor_with_no_pickable_rows_stays_on_from() -> None:
-    chooser = at_to_column(steps=2, column=T1_TO_END)
+    chooser = at_to_column(steps=2)
     assert focused(chooser=chooser).key == 'E1'
     for steps in (-1, 1, -9, 9):
         after, request = turned(chooser=chooser, steps=steps, reach=None)
@@ -307,14 +311,12 @@ def test_back_from_station_forgets_the_from() -> None:
 
 
 def test_other_line_reply_at_same_station_is_ignored() -> None:
-    t2 = ((Level.KIND, 'train'), (Level.LINE, 't2'))
     state, _ = run_events(
         state=started(),
         events=[
             *TO_COLUMN[:-1],
             OPEN,
             KnobTurned(knob=Knob.BOTTOM, steps=1),
-            ColumnLoaded(path=t2, column=T1_STATIONS),
             NEXT,
             KnobTurned(knob=Knob.BOTTOM, steps=3),
             NEXT,
@@ -334,13 +336,13 @@ def test_other_line_reply_at_same_station_is_ignored() -> None:
 @pytest.mark.parametrize(
     ('event', 'note'),
     [
-        (ColumnLoaded(path=T1, column=None), NEEDS_UPDATE),
-        (ColumnFailed(path=T1), CANT_LOAD),
+        (PreviewsLoaded(path=TRAIN, previews=((), ())), NEEDS_UPDATE),
+        (PreviewsFailed(path=TRAIN), CANT_LOAD),
     ],
 )
 def test_missing_station_column_note(event: Event, note: str) -> None:
     state, _ = run_events(
-        state=started(), events=[*TO_COLUMN[:6], event],
+        state=started(), events=[*TO_COLUMN[:5], event],
     )
     view = state.last_view
     assert isinstance(view, ChooserView)
@@ -461,30 +463,36 @@ def made_rows(*, kinds: list[str], level: Level) -> Column:
     return Column(level=level, items=items)
 
 
-def answer(
-    *, chooser: ChooserState, request: object, columns: tuple[Column, ...],
-) -> ChooserState:
+@dataclass(frozen=True)
+class ByDepth:
     """
-    Answer a column request from the KIND, LINE, STATION and TO columns.
+    A network that answers a path by its length.
 
-    Parameters
+    Attributes
     ----------
-    chooser : ChooserState
-        Chooser.
-    request : object
-        What it asked for.
     columns : tuple[Column, ...]
-        The LINE, STATION and TO columns to answer with.
-
-    Returns
-    -------
-    ChooserState
-        The chooser after the answer; unchanged for anything else.
+        The LINE, STATION and TO columns.
     """
-    if not isinstance(request, ColumnRequest) or not request.path:
-        return chooser
-    depth = min(len(request.path), len(columns)) - 1
-    return fed(chooser, request, columns[depth])[0]
+
+    columns: tuple[Column, ...]
+
+    def choices(self, *, path: ChooserPath) -> Column | None:
+        """
+        Give the column after a path.
+
+        Parameters
+        ----------
+        path : ChooserPath
+            Steps chosen so far.
+
+        Returns
+        -------
+        Column | None
+            The KIND column for (), else the column at the path's depth.
+        """
+        if not path:
+            return KINDS
+        return self.columns[min(len(path), len(self.columns)) - 1]
 
 
 @given(
@@ -502,12 +510,10 @@ def test_station_and_to_cursors_stay_focusable(
         made_rows(kinds=stations, level=Level.STATION),
         made_rows(kinds=tos, level=Level.TO),
     )
-    chooser = opened_at_kind(kind=SydneyMode.TRAIN)
-    chooser = answer(
-        chooser=chooser, request=ColumnRequest(path=T1[:1]), columns=columns,
-    )
+    reader = ByDepth(columns=columns)
+    chooser = opened_at_kind(kind=SydneyMode.TRAIN, catalogue=reader)
     for move, detents in zip(moves, steps, strict=False):
-        request: object = None
+        request: ChooserRequest | Pin | None = None
         if move == 'press':
             chooser, request = knob_pressed(chooser=chooser, reach=None)
             if isinstance(request, Pin):
@@ -521,7 +527,7 @@ def test_station_and_to_cursors_stay_focusable(
             chooser, request = turned(
                 chooser=chooser, steps=detents, reach=None,
             )
-        chooser = answer(chooser=chooser, request=request, columns=columns)
+        chooser, _ = answered(chooser, request, reader)
         level = chooser.columns[chooser.focus].level
         if level in {Level.STATION, Level.TO}:
             assert focusable(choice=focused(chooser=chooser))

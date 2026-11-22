@@ -80,7 +80,10 @@ from paperroute_transit.core.chooser import (
     chosen,
     chosen_pin,
     focusable,
+    path_to,
 )
+from paperroute_transit.core.chooser_lists import preview_steps
+from paperroute_transit.core.chooser_previews import read_previews
 from paperroute_transit.core.chooser_steps import trip_feeds
 from paperroute_transit.core.chooser_view import ChooserView
 from paperroute_transit.core.connection_strip import (
@@ -115,6 +118,7 @@ from paperroute_transit.core.messages import (
     LoadHolidays,
     LoadModes,
     LoadPatterns,
+    LoadPreviews,
     LoadShapes,
     LoadStrip,
     MapData,
@@ -126,6 +130,8 @@ from paperroute_transit.core.messages import (
     PlacesFailed,
     PlacesMatched,
     PositionsFetched,
+    PreviewsFailed,
+    PreviewsLoaded,
     ScreenView,
     SettingsChanged,
     ShapesLoaded,
@@ -1334,6 +1340,61 @@ def column_for(*, path: ChooserPath) -> Column:
     return TOWARDS
 
 
+@dataclass(frozen=True)
+class SmallCatalogue:
+    """A network that answers every path from the small catalogue."""
+
+    def choices(self, *, path: ChooserPath) -> Column | None:
+        """
+        Give the column after a path.
+
+        Parameters
+        ----------
+        path : ChooserPath
+            Steps chosen so far.
+
+        Returns
+        -------
+        Column | None
+            The small catalogue's column.
+        """
+        return column_for(path=path)
+
+
+def previews_reply(
+    *, chooser: ChooserState, answer: Answer, timetable: str | None,
+) -> Event:
+    """
+    Answer the previews load a focus asked for.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser whose focus has its previews being read.
+    answer : Answer
+        The stand-in.
+    timetable : str | None
+        The version the reply comes from.
+
+    Returns
+    -------
+    Event
+        The previews, empty for every row when unexpected, or the failure.
+    """
+    path = path_to(chooser=chooser, index=chooser.focus - 1)
+    if answer.outcome is Outcome.FAILED:
+        return PreviewsFailed(path=path, timetable=timetable)
+    column = chooser.columns[chooser.focus]
+    steps = preview_steps(column=column)
+    if answer.outcome is Outcome.EXPECTED:
+        previews = read_previews(
+            network=SmallCatalogue(), path=path, steps=steps,
+        )
+    else:
+        previews = tuple(() for _ in steps)
+    return PreviewsLoaded(path=path, previews=previews, timetable=timetable)
+
+
 def picked_reply(
     *, state: State, answer: Answer, timetable: str | None
 ) -> Event:
@@ -1447,6 +1508,15 @@ def answered(*, state: State, answer: Answer) -> Event:
         line = LINE if answer.outcome is Outcome.EXPECTED else None
         return LineLoaded(towards=towards, line=line, timetable=timetable)
     path = chooser.waiting
+    if (
+        path is None
+        and chooser.stage is Stage.LISTS
+        and chooser.columns
+        and chooser.columns[chooser.focus].previews == ()
+    ):
+        return previews_reply(
+            chooser=chooser, answer=answer, timetable=timetable,
+        )
     if path is None:
         return Tick(now=state.now)
     if answer.outcome is Outcome.FAILED:
@@ -1484,6 +1554,16 @@ def chooser_events(draw: st.DrawFn) -> Event:
             path=path, column=column_for(path=path), timetable=timetable,
         ),
         ColumnFailed(path=path, timetable=timetable),
+        PreviewsLoaded(
+            path=path,
+            previews=read_previews(
+                network=SmallCatalogue(),
+                path=path,
+                steps=preview_steps(column=column_for(path=path)),
+            ),
+            timetable=timetable,
+        ),
+        PreviewsFailed(path=path, timetable=timetable),
         LineLoaded(towards=towards, line=LINE, timetable=timetable),
         LineFailed(towards=towards, timetable=timetable),
         ChooserDeparturesLoaded(
@@ -1767,6 +1847,8 @@ def check_chooser(
     for load in effects_of(effects=effects, kind=LoadColumn):
         assert load.timetable == after.saving.timetable
         assert swapped or waiting is None or load.path != waiting
+    for reading in effects_of(effects=effects, kind=LoadPreviews):
+        assert reading.timetable == after.saving.timetable
     for asked in effects_of(effects=effects, kind=LoadChooserDepartures):
         assert chooser is not None and chooser.origin is not None
         assert chooser.stage is Stage.TO or chooser.stage is Stage.LISTS

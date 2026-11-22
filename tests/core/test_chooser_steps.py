@@ -24,6 +24,7 @@ from paperroute_testkit.core.factories import (
 )
 from paperroute_testkit.core.kit_steps import step
 from paperroute_transit.core.chooser import ChooserState, Failure, Level, Stage
+from paperroute_transit.core.chooser_lists import preview_steps
 from paperroute_transit.core.chooser_steps import (
     DEPARTURES_FAILED,
     LINE_FAILED,
@@ -46,6 +47,7 @@ from paperroute_transit.core.messages import (
     LoadDepartures,
     LoadLine,
     LoadPatterns,
+    LoadPreviews,
     LoadStrip,
     PatternsLoaded,
     PreviewsFailed,
@@ -68,6 +70,7 @@ from tests.core.chooser_walks import (
     CHOSEN,
     CHOSEN_KEY,
     DOWN,
+    GROUPS,
     KINDS,
     LINE,
     NEXT,
@@ -77,6 +80,7 @@ from tests.core.chooser_walks import (
     TO_STAGE,
     UNTIL,
     chooser_departures,
+    previews_of,
 )
 from tests.core.test_chooser_lists import ASKING
 
@@ -310,11 +314,10 @@ def test_to_stage_asks_for_the_strip_and_departures() -> None:
     )
     assert effects_of(effects=effects, kind=LoadColumn) == [
         LoadColumn(path=()),
-        LoadColumn(path=BUS_606[:1]),
-        LoadColumn(path=(*BUS_606[:1], (Level.GROUP, '1-99'))),
-        LoadColumn(path=BUS_606[:2]),
-        LoadColumn(path=BUS_606),
     ]
+    assert [
+        load.path for load in effects_of(effects=effects, kind=LoadPreviews)
+    ] == [(), BUS, BUS_606[:2]]
     assert effects_of(effects=effects, kind=LoadLine) == [
         LoadLine(towards=11),
     ]
@@ -482,16 +485,34 @@ def test_new_timetable_asks_the_chooser_again() -> None:
     assert (load.pin, load.timetable) == (CHOSEN, 'v1')
 
 
-def test_turning_past_the_last_row_asks_nothing() -> None:
-    """Each new KIND row asks for its preview once; the end asks nothing."""
-    state, _ = run_events(
+def test_turning_reads_nothing_once_previews_are_in() -> None:
+    """A turn installs the preview it already holds and asks for nothing."""
+    state, effects = run_events(
         state=pinned(), events=[OPEN, ColumnLoaded(path=(), column=KINDS)],
     )
+    assert [load.path for load in effects_of(
+        effects=effects, kind=LoadPreviews,
+    )] == [()]
+    state, _ = step(state, previews_of(path=(), column=KINDS))
     _, effects = run_events(state=state, events=[DOWN, DOWN, DOWN])
-    assert effects_of(effects=effects, kind=LoadColumn) == [
-        LoadColumn(path=((Level.KIND, 'train'),)),
-        LoadColumn(path=((Level.KIND, 'metro'),)),
+    assert not effects_of(effects=effects, kind=LoadColumn)
+    assert not effects_of(effects=effects, kind=LoadPreviews)
+
+
+def test_new_timetable_drops_previews_and_asks_for_the_focus() -> None:
+    """A new timetable drops every column's previews and asks the focus's."""
+    state, _ = run_events(state=pinned(), events=TO_STAGE[:6])
+    before = state.chooser
+    state, effects = step(state, TimetableSeen(version='v1'))
+    chooser = state.chooser
+    assert chooser is not None and before is not None
+    assert [c.previews for c in chooser.columns] == [None, (), None]
+    assert [c.items for c in chooser.columns] == [
+        c.items for c in before.columns
     ]
+    assert effects_of(effects=effects, kind=LoadPreviews) == [LoadPreviews(
+        path=BUS, steps=preview_steps(column=GROUPS), timetable='v1',
+    )]
 
 
 @pytest.mark.parametrize('failed', [False, True])
@@ -515,7 +536,7 @@ def test_new_timetable_closes_a_failed_chooser(failed: bool) -> None:
             state, ColumnLoaded(path=(), column=KINDS, timetable='v1'),
         )
         assert state.chooser is not None
-        assert state.chooser.columns == (KINDS,)
+        assert state.chooser.columns == (replace(KINDS, previews=()),)
 
 
 def test_to_panel_says_when_no_service_runs() -> None:

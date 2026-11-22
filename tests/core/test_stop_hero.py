@@ -323,3 +323,12 @@ def test_a_from_under_a_station_finds_its_call(
     under = live_stop_view(state=state).under
     assert under is not None
     assert under.calls == ON_TIME
+
+
+def test_next_calls_name_the_station_not_its_platform() -> None:
+    """A call to a platform stop shows the bare station name."""
+    last = replace(RUN.stops[-1], name='Parramatta Station Platform 3')
+    run = replace(RUN, stops=(*RUN.stops[:-1], last))
+    assert next_calls(
+        pattern=run, start=6, day=START.date(), delay=0, zone=SYDNEY_ZONE,
+    ) == (NextCall(at='8:12', name='Parramatta'),)

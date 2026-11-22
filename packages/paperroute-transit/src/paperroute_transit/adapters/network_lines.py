@@ -12,6 +12,7 @@ from paperroute_transit.adapters.timetable_db import to_point
 from paperroute_transit.core.chooser import Choice, Column, Level
 from paperroute_transit.core.geo import Projection
 from paperroute_transit.core.model import StopPlace, until_revisit
+from paperroute_transit.core.names import base_name
 from paperroute_transit.core.reach import RunTail, StripKey, line_key_of
 from paperroute_transit.core.reach_exits import (
     exit_leads,
@@ -147,7 +148,7 @@ def short_name(*, name: object) -> str:
     str
         The name.
     """
-    return str(name).removesuffix(' Station')
+    return base_name(name=str(name))
 
 
 def station_choices(

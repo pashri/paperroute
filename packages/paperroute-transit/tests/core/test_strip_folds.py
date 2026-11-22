@@ -15,7 +15,12 @@ from paperroute_testkit.core.reach_factories import (
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind, RunTail
 from paperroute_transit.core.reach_layout import LineExit
-from paperroute_transit.core.strip_folds import floor_of, folded, folds_of
+from paperroute_transit.core.strip_folds import (
+    floor_of,
+    folded,
+    folds_of,
+    short_name,
+)
 
 type RowSpec = tuple[str, int, int | None, int]
 
@@ -266,3 +271,11 @@ def test_approach_rows_never_fold() -> None:
     reach = reach_of(tails=[tail('E1', 1, before=before)])
     shown = folded(reach=reach)
     assert ids(reach=shown)[:40] == ids(reach=reach)[:40]
+
+
+def test_short_name_drops_the_platform_and_station() -> None:
+    """A platform stop is named by its bare station."""
+    place = StopPlace(
+        stop_id='1', name='Strathfield Station Platform 3', point=None,
+    )
+    assert short_name(place=place) == 'Strathfield'

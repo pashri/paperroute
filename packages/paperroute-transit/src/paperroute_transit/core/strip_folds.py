@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 from typing import Final
 
 from paperroute_transit.core.model import StopPlace
+from paperroute_transit.core.names import base_name
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind
 
 FOLD_SHARE: Final[float] = 0.05  # of the busiest first link's trips
@@ -332,7 +333,7 @@ def short_name(*, place: StopPlace) -> str:
     str
         The name.
     """
-    return place.name.removesuffix(' Station')
+    return base_name(name=place.name)
 
 
 def fold_row(*, reach: Reach, fold: Fold, children: Sequence[list[int]]

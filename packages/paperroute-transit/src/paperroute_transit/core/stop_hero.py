@@ -8,6 +8,7 @@ from typing import Final
 from paperroute_device.core.text import clock_text
 from paperroute_transit.core.connection_strip import leg_vehicle
 from paperroute_transit.core.model import service_time
+from paperroute_transit.core.names import base_name
 from paperroute_transit.core.patterns import TripPattern, hop_near
 from paperroute_transit.core.positions import (
     PositionsSnapshot,
@@ -22,25 +23,7 @@ from paperroute_transit.core.stop_view import (
 from paperroute_transit.core.strip_times import from_call
 
 CALL_COUNT: Final[int] = 3  # calls shown after the From
-STATION_SUFFIX: Final[str] = ' Station'
 HERE: Final[str] = 'at the stop now'
-
-
-def short_name(*, name: str) -> str:
-    """
-    Drop the ' Station' suffix from a stop name.
-
-    Parameters
-    ----------
-    name : str
-        Stop name.
-
-    Returns
-    -------
-    str
-        The name without a trailing ' Station'.
-    """
-    return name.removesuffix(STATION_SUFFIX)
 
 
 def hero_place(
@@ -70,7 +53,7 @@ def hero_place(
     if hop is None or hop[0] >= start:
         return ''
     seen = hop[0] + int(hop[1] >= 1.0)
-    name = short_name(name=pattern.stops[seen].name)
+    name = base_name(name=pattern.stops[seen].name)
     count = sum(
         not stop.passes for stop in pattern.stops[seen + 1 : start + 1]
     )
@@ -112,9 +95,9 @@ def next_calls(
         with no name and a stop named as the call before it.
     """
     calls: list[NextCall] = []
-    before = short_name(name=pattern.stops[start].name)
+    before = base_name(name=pattern.stops[start].name)
     for stop in pattern.stops[start + 1 :]:
-        name = short_name(name=stop.name)
+        name = base_name(name=stop.name)
         if len(calls) == CALL_COUNT:
             break
         if stop.passes or not name or name == before:

@@ -6,6 +6,7 @@ from dataclasses import replace
 from paperroute_device.core.text import clock_text
 from paperroute_transit.core.map_view import Marker
 from paperroute_transit.core.model import StopPlace
+from paperroute_transit.core.names import base_name
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind
 from paperroute_transit.core.reach_exits import exit_name
 from paperroute_transit.core.strip_badges import (
@@ -344,7 +345,7 @@ def strip_row(
     plain = row.kind is not RowKind.EXIT
     return StripRow(
         name=(
-            row.place.name.removesuffix(' Station')
+            base_name(name=row.place.name)
             if plain
             else exit_name(place=row.place, lines=row.lines)
         ),

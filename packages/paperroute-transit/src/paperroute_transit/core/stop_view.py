@@ -10,6 +10,7 @@ from paperroute_device.core.device_state import Banner
 from paperroute_device.core.text import DOT, clock_text
 from paperroute_transit.core.alert_model import AlertBanner
 from paperroute_transit.core.city import City, Nouns
+from paperroute_transit.core.headsigns import tidy_headsign
 from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.model import CarryOn, Departure
 from paperroute_transit.core.names import NameRules
@@ -495,8 +496,9 @@ def to_row(
         vehicle=words.vehicle,
         bay=words.bay,
         platform=dep.platform,
-        destination=(onto.headsign if onto else dep.headsign).removesuffix(
-            ' Station'
+        destination=tidy_headsign(
+            text=onto.headsign if onto else dep.headsign,
+            rules=city.name_rules,
         ),
         countdown=countdown(departs=item.departs, now=now),
         leaves_at=clock_text(moment=item.departs, zone=zone),

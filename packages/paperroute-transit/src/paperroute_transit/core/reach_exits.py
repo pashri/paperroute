@@ -6,6 +6,7 @@ from itertools import chain
 
 from paperroute_device.core.text import DOT
 from paperroute_transit.core.model import StopPlace
+from paperroute_transit.core.names import base_name
 from paperroute_transit.core.reach import RunTail
 from paperroute_transit.core.reach_layout import LineExit
 
@@ -267,5 +268,5 @@ def exit_name(*, place: StopPlace, lines: Sequence[str]) -> str:
         '<name> · <lines>', the name without ' Station' and the lines
         space-separated; just the name with no lines.
     """
-    name = place.name.removesuffix(' Station')
+    name = base_name(name=place.name)
     return f'{name}{DOT}{" ".join(lines)}' if lines else name

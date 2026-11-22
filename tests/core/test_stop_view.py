@@ -1166,3 +1166,23 @@ def test_a_destination_view_has_nothing_under_the_number() -> None:
 def test_build_stop_view_carries_the_city_name_rules() -> None:
     """The view holds the city's name rules."""
     assert view().name_rules == SYDNEY.name_rules
+
+
+def test_to_row_tidies_the_headsign() -> None:
+    """Entities and double spaces in a headsign are cleaned."""
+    item = on(item=live(minutes=3), headsign='Addenbrooke&#39;s  Hospital')
+    row = to_row(
+        item=item, now=START, pill=None, zone=SYDNEY_ZONE, city=SYDNEY,
+    )
+    assert row.destination == "Addenbrooke's Hospital"
+
+
+def test_to_row_cuts_at_the_dash_for_a_city_that_asks() -> None:
+    """A city with the dash rule keeps the part after the dash."""
+    city = replace(
+        SYDNEY, name_rules=replace(SYDNEY.name_rules, dash=True),
+    )
+    item = on(item=live(minutes=3), headsign='Acle - Norwich Station')
+    assert to_row(
+        item=item, now=START, pill=None, zone=SYDNEY_ZONE, city=city,
+    ).destination == 'Norwich'

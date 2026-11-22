@@ -1,6 +1,7 @@
 """Where the Strip's row slots sit and which rows fill them."""
 
 from paperroute_device.core.text import DOT
+from paperroute_transit.core.names import base_name
 from paperroute_transit.core.reach import Reach, RowKind
 from paperroute_transit.core.strip_follow import origin_of
 from paperroute_transit.core.strip_model import (
@@ -335,7 +336,7 @@ def band_of(*, reach: Reach, first: int, window: Window) -> Band | None:
     if origin is None or first <= origin < first + window.rows:
         return None
     top = origin < first
-    name = reach.rows[origin].place.name.removesuffix(' Station')
+    name = base_name(name=reach.rows[origin].place.name)
     stops = stops_away(
         reach=reach,
         origin=origin,

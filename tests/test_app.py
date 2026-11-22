@@ -24,7 +24,6 @@ from paperroute_device.core.device_model import (
     DeviceStatus,
     PowerAction,
     ResetKind,
-    menu_rows,
 )
 from paperroute_device.core.device_settings import DeviceSettings
 from paperroute_device.core.device_state import KitSaved
@@ -134,7 +133,7 @@ from paperroute_transit.core.model import Departure, Pin, StopPlace
 from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.places import shown
-from paperroute_transit.core.rebuild import REBUILD_ROW
+from paperroute_transit.core.rebuild import TRANSIT_ROWS
 from paperroute_transit.core.saved import (
     BoardSettings,
     LiveView,
@@ -2605,7 +2604,7 @@ async def test_app_runs_with_no_timetable(tmp_path: Path) -> None:
     finally:
         timetable.close()
         network.close()
-    rows = menu_rows(app_rows=(REBUILD_ROW,))
+    rows = TRANSIT_ROWS
     view = menu_view(device=kit.device, rows=rows, zone=SYDNEY_ZONE)
     menu = draw_panel_view(view=view)
     first = frame_index(frames=display.frames, frame=building)

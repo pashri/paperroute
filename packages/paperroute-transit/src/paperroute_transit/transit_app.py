@@ -22,8 +22,18 @@ from paperroute_transit.app_pins import pins_shown, report_pins
 from paperroute_transit.app_render import View, drawing
 from paperroute_transit.core.auto_model import holds_awake
 from paperroute_transit.core.banners import OFFLINE_PHRASE
-from paperroute_transit.core.device import app_status, power_guard, quiet_guard
-from paperroute_transit.core.messages import Effect, Event, ScreenView
+from paperroute_transit.core.device import (
+    app_status,
+    on_settings,
+    power_guard,
+    quiet_guard,
+)
+from paperroute_transit.core.messages import (
+    Effect,
+    Event,
+    ScreenView,
+    SettingsChanged,
+)
 from paperroute_transit.core.panel_screens import (
     TRANSIT_CONFIRM_COPY,
     transit_rows,
@@ -45,7 +55,13 @@ from paperroute_transit.core.reducers import (
     ticked,
 )
 from paperroute_transit.core.refresh import needs_greys, noted
-from paperroute_transit.core.saved import Saved, default_saved, seeded
+from paperroute_transit.core.saved import (
+    Saved,
+    StopSides,
+    default_saved,
+    seeded,
+)
+from paperroute_transit.core.sides import SIDES_ROWS, flipped, sides_row
 from paperroute_transit.core.state_model import (
     Board,
     Cycle,
@@ -190,7 +206,7 @@ class TransitApp(TransitRun, App[State]):
 
     offline_phrase = OFFLINE_PHRASE
     quiet_label = QUIET_LABEL
-    menu_rows = (REBUILD_ROW,)
+    menu_rows = (REBUILD_ROW, SIDES_ROWS[StopSides.TIME_ORDER])
     reset_hint = RESET_HINT
     confirm_copy = TRANSIT_CONFIRM_COPY
 
@@ -455,11 +471,28 @@ class TransitApp(TransitRun, App[State]):
             return state, ()
         return settled(state=state)
 
+    def rows_for(self, *, state: State) -> tuple[AppRow, ...]:
+        """
+        List the rows, the both-sides row naming the view shown.
+
+        Parameters
+        ----------
+        state : State
+            State.
+
+        Returns
+        -------
+        tuple[AppRow, ...]
+            The rebuild row and the both-sides row.
+        """
+        sides = state.settings.board.stop_sides
+        return (REBUILD_ROW, sides_row(sides=sides))
+
     def on_row(
         self, *, state: State, device: DeviceState, row: AppRow,
     ) -> Step[State]:
         """
-        Rebuild the timetable now, for its row.
+        Flip the both-sides view or rebuild the timetable, for a row.
 
         Parameters
         ----------
@@ -473,9 +506,15 @@ class TransitApp(TransitRun, App[State]):
         Returns
         -------
         Step[State]
-            A forced rebuild unless one runs.
+            The flipped setting for the both-sides row, else a forced
+            rebuild unless one runs.
         """
         state = with_device(state=state, device=device)
+        if row in SIDES_ROWS.values():
+            sides = flipped(sides=state.settings.board.stop_sides)
+            return on_settings(
+                state=state, event=SettingsChanged(stop_sides=sides),
+            )
         if row != REBUILD_ROW:
             return state, ()
         return forced(state=state)

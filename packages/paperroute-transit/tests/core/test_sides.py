@@ -7,12 +7,15 @@ import pytest
 
 from paperroute_testkit.core.factories import place
 from paperroute_transit.core.model import Pin, StopPlace
+from paperroute_transit.core.saved import StopSides
 from paperroute_transit.core.sides import (
     KerbPair,
     both_sides,
+    flipped,
     kept_sides,
     pin_places,
     pin_title,
+    sides_row,
 )
 
 
@@ -68,3 +71,13 @@ def test_kept_sides_keeps_the_opposite_kerb_on_an_edit() -> None:
     routed = replace(edited, destination=TO)
     assert kept_sides(old=BOTH, new=routed).opposite is None
     assert kept_sides(old=None, new=edited) == edited
+
+
+def test_flipped_swaps_the_two_views() -> None:
+    """The menu row flips between the two views and names the one shown."""
+    assert flipped(sides=StopSides.TIME_ORDER) is StopSides.EACH_WAY
+    assert flipped(sides=StopSides.EACH_WAY) is StopSides.TIME_ORDER
+    assert sides_row(sides=StopSides.EACH_WAY).label == (
+        'Both sides: next bus each way'
+    )
+    assert sides_row(sides=StopSides.TIME_ORDER).stays

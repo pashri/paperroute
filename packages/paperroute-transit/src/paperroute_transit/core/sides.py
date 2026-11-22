@@ -3,9 +3,19 @@
 from dataclasses import dataclass, replace
 from typing import Final
 
+from paperroute_device.core.device_model import AppRow
 from paperroute_transit.core.model import Pin, StopPlace
+from paperroute_transit.core.saved import StopSides
 
 BOTH_SUFFIX: Final[str] = ', both sides'
+SIDES_ROWS: Final[dict[StopSides, AppRow]] = {
+    StopSides.TIME_ORDER: AppRow(
+        label='Both sides: time order', stays=True,
+    ),
+    StopSides.EACH_WAY: AppRow(
+        label='Both sides: next bus each way', stays=True,
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -44,6 +54,42 @@ class Kerbs:
 
     pairs: tuple[KerbPair, ...] = ()
     side: int = 0
+
+
+def sides_row(*, sides: StopSides) -> AppRow:
+    """
+    Give the menu row that names the view shown.
+
+    Parameters
+    ----------
+    sides : StopSides
+        The view the setting holds.
+
+    Returns
+    -------
+    AppRow
+        The row, which stays on the menu when pressed.
+    """
+    return SIDES_ROWS[sides]
+
+
+def flipped(*, sides: StopSides) -> StopSides:
+    """
+    Give the other view.
+
+    Parameters
+    ----------
+    sides : StopSides
+        The view the setting holds.
+
+    Returns
+    -------
+    StopSides
+        The other of the two views.
+    """
+    if sides is StopSides.TIME_ORDER:
+        return StopSides.EACH_WAY
+    return StopSides.TIME_ORDER
 
 
 def both_sides(*, pin: Pin) -> bool:

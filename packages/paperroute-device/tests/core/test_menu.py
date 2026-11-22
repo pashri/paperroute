@@ -31,7 +31,7 @@ from paperroute_device.core.kit_effects import (
     SaveState,
 )
 from paperroute_device.core.kit_events import DeviceProbed, Tick
-from paperroute_device.core.kit_state import KitState
+from paperroute_device.core.kit_state import KitState, KitStep
 from paperroute_device.core.menu import CONFIRM_WAIT, MENU_IDLE
 from paperroute_device.core.panel_screens import device_view
 from paperroute_device.core.panel_views import (
@@ -487,3 +487,64 @@ def test_device_screen_lists_kit_and_app_rows() -> None:
     )
     empty = device_view(device=DeviceState(now=START), app_rows=(), zone=ZONE)
     assert [row.value for row in empty.rows] == ['-', '-', '-', '-']
+
+
+STAY: Final[AppRow] = AppRow(label='Stay', stays=True)
+
+
+class StayApp(FakeApp):
+    """The fake app with a second row that stays and names its presses."""
+
+    def rows_for(self, *, state: FakeState) -> tuple[AppRow, ...]:
+        """
+        Name the second row by the presses counted.
+
+        Parameters
+        ----------
+        state : FakeState
+            The app's state.
+
+        Returns
+        -------
+        tuple[AppRow, ...]
+            The two rows.
+        """
+        return DO_IT, replace(STAY, label=f'Stay {state.rows}')
+
+
+def stay_run(*, events: tuple[object, ...]) -> KitStep[FakeState]:
+    """
+    Run events through the app whose second row stays.
+
+    Parameters
+    ----------
+    events : tuple[object, ...]
+        The events.
+
+    Returns
+    -------
+    KitStep[FakeState]
+        The kit state and the last event's effects.
+    """
+    kit = drawn()
+    effects: tuple[object, ...] = ()
+    for event in events:
+        kit, effects = step(kit=kit, app=StayApp(), zone=ZONE, event=event)
+    return kit, effects
+
+
+def test_row_chosen_keeps_the_menu_open_on_a_row_that_stays() -> None:
+    """A row that stays runs the app's row and leaves the menu as it was."""
+    opened, _ = stay_run(events=(BOTH, turn(steps=5)))
+    kit, effects = stay_run(events=(BOTH, turn(steps=5), DOWN))
+    assert kit.app.rows == 1
+    assert kit.device.panel.menu == opened.device.panel.menu == Menu(cursor=5)
+    assert effects[0] == 'work'
+
+
+def test_menu_lists_the_rows_the_state_gives() -> None:
+    """The menu names the app's rows as its state gives them."""
+    _, effects = stay_run(events=(BOTH, turn(steps=5), DOWN))
+    view = renders(effects=effects)[-1]
+    assert isinstance(view, MenuView)
+    assert view.rows[5] == 'Stay 1'

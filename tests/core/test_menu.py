@@ -49,6 +49,8 @@ from paperroute_testkit.core.kit_steps import device_of, step
 from paperroute_transit.core.chooser_view import ChooserView
 from paperroute_transit.core.messages import Effect, Event
 from paperroute_transit.core.rebuild import TRANSIT_ROWS
+from paperroute_transit.core.saved import StopSides
+from paperroute_transit.core.sides import SIDES_ROWS
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.stop_view import StopView
 from tests.core.test_rebuild import pinned
@@ -154,15 +156,15 @@ def test_cursor_moves_and_clamps() -> None:
     assert state.panel.menu == Menu(cursor=0)
     assert not effects
     state, _ = step(state, turn(steps=20))
-    assert state.panel.menu == Menu(cursor=7)
+    assert state.panel.menu == Menu(cursor=len(TRANSIT_ROWS) - 1)
 
 
 def test_menu_scrolls_to_reset() -> None:
-    """The last row scrolls the list by one."""
+    """The last row scrolls the list by two."""
     state = opened_at(row=MenuRow.RESET)
     assert isinstance(state.last_view, MenuView)
-    assert state.last_view.first == 1
-    assert state.last_view.cursor == 7
+    assert state.last_view.first == 2
+    assert state.last_view.cursor == 8
 
 
 def test_top_press_closes_menu() -> None:
@@ -411,7 +413,7 @@ def test_menu_invariants(events: list[Event]) -> None:
         shown = state.last_view
         state, effects = step(state, event)
         if state.panel.menu is not None:
-            assert 0 <= state.panel.menu.cursor <= 7
+            assert 0 <= state.panel.menu.cursor < len(TRANSIT_ROWS)
         if any(isinstance(e, ControlPower | ResetDevice) for e in effects):
             assert event == DOWN
             assert isinstance(shown, ConfirmView)
@@ -420,7 +422,7 @@ def test_menu_invariants(events: list[Event]) -> None:
 
 
 def test_menu_rows_read_as_before() -> None:
-    """The menu lists today's eight rows in today's order."""
+    """The menu lists its nine rows in today's order."""
     assert tuple(
         row.value if isinstance(row, MenuRow) else row.label
         for row in TRANSIT_ROWS
@@ -430,7 +432,22 @@ def test_menu_rows_read_as_before() -> None:
         'Open on your phone',
         'Sleep now',
         'Rebuild timetable now',
+        'Both sides: time order',
         'Restart',
         'Shut down',
         'Reset settings',
+    )
+
+
+def test_sides_row_flips_the_setting_and_stays_on_the_menu() -> None:
+    """The both-sides row flips the view and the menu stays on it."""
+    row = SIDES_ROWS[StopSides.TIME_ORDER]
+    before = opened_at(row=row)
+    state, effects = step(before, DOWN)
+    assert state.settings.board.stop_sides is StopSides.EACH_WAY
+    assert state.panel.menu == before.panel.menu
+    view = renders(effects=effects)[-1]
+    assert isinstance(view, MenuView)
+    assert view.rows[TRANSIT_ROWS.index(row)] == (
+        'Both sides: next bus each way'
     )

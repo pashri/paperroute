@@ -48,7 +48,8 @@ from paperroute_transit.core.model import Pin
 from paperroute_transit.core.panel_screens import TRANSIT_CONFIRM_COPY
 from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.rebuild import REBUILD_ROW
-from paperroute_transit.core.saved import BoardSettings, Settings
+from paperroute_transit.core.saved import BoardSettings, Settings, StopSides
+from paperroute_transit.core.sides import SIDES_ROWS
 from paperroute_transit.observers import Timings
 from paperroute_transit.transit_app import TransitApp
 from tests.app_factories import REAL
@@ -101,7 +102,9 @@ def test_hooks_match_the_spec() -> None:
     """Transit's phrase, label, rows and confirm copy are today's."""
     assert APP.offline_phrase == 'timetable times'
     assert APP.quiet_label == 'Follow the timetable'
-    assert APP.menu_rows == (REBUILD_ROW,)
+    assert APP.menu_rows == (
+        REBUILD_ROW, SIDES_ROWS[StopSides.TIME_ORDER],
+    )
     assert APP.reset_hint.startswith('Reset settings clears pins')
     assert APP.confirm_copy == TRANSIT_CONFIRM_COPY
 

@@ -236,5 +236,5 @@ def panel_view[S](
             return device_view(device=device, app_rows=rows, zone=zone)
         case PanelScreen.PHONE:
             return phone_view(device=device, zone=zone)
-    listed = menu_rows(app_rows=app.menu_rows)
+    listed = menu_rows(app_rows=app.rows_for(state=state))
     return menu_view(device=device, rows=listed, zone=zone)

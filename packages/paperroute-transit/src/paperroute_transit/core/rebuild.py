@@ -15,6 +15,8 @@ from paperroute_transit.core.messages import (
     TimetableSeen,
 )
 from paperroute_transit.core.model import TIMETABLE_SCHEMA
+from paperroute_transit.core.saved import StopSides
+from paperroute_transit.core.sides import SIDES_ROWS
 from paperroute_transit.core.state_model import Rebuild, State
 
 BUILDING: Final[str] = 'Building the timetable'
@@ -29,7 +31,9 @@ WAITING_KEY: Final[str] = (
     f'Waiting for the API key{DOT}set it on your phone'
 )
 REBUILD_ROW: Final[AppRow] = AppRow(label='Rebuild timetable now')
-TRANSIT_ROWS: Final = menu_rows(app_rows=(REBUILD_ROW,))
+TRANSIT_ROWS: Final = menu_rows(
+    app_rows=(REBUILD_ROW, SIDES_ROWS[StopSides.TIME_ORDER]),
+)
 BACKOFF_FIRST: Final[timedelta] = timedelta(hours=1)
 BACKOFF_MAX: Final[timedelta] = timedelta(hours=24)
 

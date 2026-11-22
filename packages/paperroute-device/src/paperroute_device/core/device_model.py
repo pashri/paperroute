@@ -245,9 +245,13 @@ class AppRow:
     ----------
     label : str
         The row's text.
+    stays : bool
+        Whether pressing the row runs the app's row and leaves the menu
+        open on it.
     """
 
     label: str
+    stays: bool = False
 
 
 KIT_HEAD: Final[tuple[MenuRow, ...]] = (

@@ -522,6 +522,23 @@ class App[S](ABC):
         del before, after
         return state, ()
 
+    def rows_for(self, *, state: S) -> tuple[AppRow, ...]:
+        """
+        List the app's rows on the Settings menu for a state.
+
+        Parameters
+        ----------
+        state : S
+            The app's state.
+
+        Returns
+        -------
+        tuple[AppRow, ...]
+            By default `menu_rows`.
+        """
+        del state
+        return self.menu_rows
+
     def on_row(
         self, *, state: S, device: DeviceState, row: AppRow,
     ) -> Step[S]:
@@ -541,7 +558,7 @@ class App[S](ABC):
         -------
         Step[S]
             By default the state unchanged and no effects; the kit then
-            shows the Device screen.
+            shows the Device screen, unless the row stays.
         """
         del device, row
         return state, ()

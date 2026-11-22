@@ -147,7 +147,7 @@ def menu_knob[S](
     """
     device = kit.device
     menu = device.panel.menu or Menu()
-    rows = menu_rows(app_rows=app.menu_rows)
+    rows = menu_rows(app_rows=app.rows_for(state=kit.app))
     if menu.screen is not PanelScreen.MENU:
         if event != TOP_PRESS:
             return kit, ()
@@ -217,8 +217,9 @@ def row_chosen[S](
     -------
     KitStep[S]
         For an app's row, what `App.on_row` does and then the Device
-        screen; the Device screen with a probe when one is due, the phone
-        screen, a confirm, the sleep screen, or Wi-Fi setup scanning.
+        screen, or the menu as it was when the row stays; the Device
+        screen with a probe when one is due, the phone screen, a
+        confirm, the sleep screen, or Wi-Fi setup scanning.
     """
     device = kit.device
     menu = device.panel.menu or Menu()
@@ -226,6 +227,8 @@ def row_chosen[S](
     if isinstance(row, AppRow):
         state, effects = app.on_row(state=kit.app, device=device, row=row)
         kit = with_app(kit=kit, app=state)
+        if row.stays:
+            return kit, effects
     if isinstance(row, AppRow) or row is MenuRow.DEVICE:
         device, probes = device_shown(device=device, menu=menu)
         return with_device(kit=kit, device=device), (*effects, *probes)

@@ -9,6 +9,7 @@ from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.names import base_name
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind
 from paperroute_transit.core.reach_exits import exit_name
+from paperroute_transit.core.strip_approach import approach_of
 from paperroute_transit.core.strip_badges import (
     HALF_WIDE,
     NAME_REACH,
@@ -552,7 +553,7 @@ def spot_of(*, row: StripRow, track_x: int) -> Spot:
 
 
 def strip_markers(*, inputs: StripInputs, rows: Sequence[StripRow],
-                  track_x: int) -> tuple[Marker, ...]:
+                  track_x: int, reach: Reach | None) -> tuple[Marker, ...]:
     """
     Place the strip's vehicles on its rows.
 
@@ -564,12 +565,15 @@ def strip_markers(*, inputs: StripInputs, rows: Sequence[StripRow],
         Visible rows.
     track_x : int
         Track x at depth 0.
+    reach : Reach | None
+        The reach drawn, or None.
 
     Returns
     -------
     tuple[Marker, ...]
-        One badge per strip trip that can be placed, on its own hop and
-        off the names, the From and Destination discs and each other.
+        One badge per strip trip that can be placed, on its own hop, or
+        on a both-sides strip facing the stop it approaches by, and off
+        the names, the From and Destination discs and each other.
     """
     spots = {
         row.station: spot_of(row=row, track_x=track_x)
@@ -582,6 +586,7 @@ def strip_markers(*, inputs: StripInputs, rows: Sequence[StripRow],
             discs=[spots[row.station] for row in rows if row.bold],
             top=min((row.y for row in rows), default=0.0) - ROW_H / 2,
         ),
+        approach=approach_of(reach=reach, key=inputs.key),
     )
 
 
@@ -624,7 +629,7 @@ def names_clear(*, rows: Sequence[StripRow], markers: Sequence[Marker],
 
 
 def with_vehicles(*, inputs: StripInputs, rows: Sequence[StripRow],
-                  track_x: int
+                  track_x: int, reach: Reach | None
                   ) -> tuple[tuple[StripRow, ...], tuple[Marker, ...]]:
     """
     Place the vehicles on the rows and keep the names clear of them.
@@ -637,6 +642,8 @@ def with_vehicles(*, inputs: StripInputs, rows: Sequence[StripRow],
         Visible rows.
     track_x : int
         Track x at depth 0.
+    reach : Reach | None
+        The reach drawn, or None.
 
     Returns
     -------
@@ -644,7 +651,9 @@ def with_vehicles(*, inputs: StripInputs, rows: Sequence[StripRow],
         The rows, names past any badges beside their discs, and the
         badges.
     """
-    markers = strip_markers(inputs=inputs, rows=rows, track_x=track_x)
+    markers = strip_markers(
+        inputs=inputs, rows=rows, track_x=track_x, reach=reach,
+    )
     return (
         names_clear(rows=rows, markers=markers, track_x=track_x),
         markers,
@@ -772,7 +781,9 @@ def build_strip_view(*, inputs: StripInputs) -> StripView:
         ((), None) if reach is None else strip_rows(inputs=inputs, reach=reach)
     )
     stop = inputs.stop_view
-    rows, markers = with_vehicles(inputs=inputs, rows=rows, track_x=TRACK_X)
+    rows, markers = with_vehicles(
+        inputs=inputs, rows=rows, track_x=TRACK_X, reach=reach,
+    )
     return StripView(
         origin=stop.origin,
         destination=stop.destination,
@@ -824,6 +835,6 @@ def build_strip_pane(*, inputs: StripInputs) -> StripPane:
         for index in range(first, min(first + window.rows, len(reach.rows)))
     )
     rows, markers = with_vehicles(
-        inputs=inputs, rows=rows, track_x=PANE_TRACK_X,
+        inputs=inputs, rows=rows, track_x=PANE_TRACK_X, reach=reach,
     )
     return StripPane(rows=rows, markers=markers)

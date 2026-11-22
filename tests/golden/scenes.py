@@ -524,6 +524,9 @@ STREETS: Final[dict[str, str]] = {
     'N6': 'Camperdown Rd',
 }
 STOP_SPACING: Final[float] = 250.0  # metres
+FACING: Final[dict[str, str]] = {
+    'H3': 'N3', 'H2': 'N2', 'H1': 'N1', 'M3': 'L3', 'M2': 'L2', 'M1': 'L1',
+}  # the stop across the road from each stop before a kerb
 
 
 def both_departures() -> tuple[Departure, ...]:
@@ -602,6 +605,7 @@ def both_sides_reach() -> Reach:
         across_tails=(
             RunTail(before=ACROSS_WAY[:3], after=ACROSS_WAY[4:], trips=40),
         ),
+        facing=FACING,
     ))
 
 

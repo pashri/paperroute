@@ -9,6 +9,12 @@ from paperroute_transit.core.map_view import Marker, is_fresh, position_age
 from paperroute_transit.core.model import Departure, service_seconds
 from paperroute_transit.core.patterns import TripPattern, hop_at, hop_near
 from paperroute_transit.core.positions import VehiclePosition
+from paperroute_transit.core.strip_approach import (
+    Approach,
+    facing_spot,
+    stop_reached,
+    toward_from,
+)
 from paperroute_transit.core.strip_badges import Badge, Keepouts, Spot, pushed
 from paperroute_transit.core.strip_model import ROW_H
 from paperroute_transit.core.strip_times import TripInputs, window_departures
@@ -228,12 +234,111 @@ def timetable_leg(
     return None if hop is None else (after, hop)
 
 
+def hop_spots(
+    *,
+    pattern: TripPattern,
+    index: int,
+    trips: TripInputs,
+    spots: Mapping[str, Spot],
+) -> tuple[Spot | None, ...]:
+    """
+    Find the spots of a hop's two stops.
+
+    Parameters
+    ----------
+    pattern : TripPattern
+        The trip.
+    index : int
+        The index of the hop's first stop.
+    trips : TripInputs
+        The strip's departures and live data.
+    spots : Mapping[str, Spot]
+        Visible rows' track spots by station.
+
+    Returns
+    -------
+    tuple[Spot | None, ...]
+        Each stop's spot, None when not a visible row; one or none past
+        the trip's last stop.
+    """
+    return tuple(
+        spots.get(trips.station_of.get(stop.station, stop.station))
+        for stop in pattern.stops[index:index + 2]
+    )
+
+
+def approach_marker(
+    *,
+    departure: Departure,
+    pattern: TripPattern,
+    hop: tuple[int, float],
+    trips: TripInputs,
+    spots: Mapping[str, Spot],
+    approach: Approach,
+    look: Marker,
+) -> Badge | None:
+    """
+    Place a bus approaching a both-sides From.
+
+    Parameters
+    ----------
+    departure : Departure
+        The bus's departure from the From.
+    pattern : TripPattern
+        Its trip.
+    hop : tuple[int, float]
+        The index of its hop's first stop and the share of it run.
+    trips : TripInputs
+        The strip's departures and live data.
+    spots : Mapping[str, Spot]
+        Visible rows' track spots by station.
+    approach : Approach
+        The rows either side of the From.
+    look : Marker
+        The badge's route, age and liveness.
+
+    Returns
+    -------
+    Badge | None
+        A badge on the hop on from the stop it is at or last left when
+        both of that hop's rows are visible, as for a bus standing at the
+        From; else a facing badge on the row facing that stop (see
+        `facing_spot`), its wedge towards the From; else None.
+    """
+    at = stop_reached(hop=hop)
+    badge = hop_marker(
+        route=look.route,
+        ends=hop_spots(pattern=pattern, index=at, trips=trips, spots=spots),
+        fraction=0.0,
+        age=look.age,
+        live=look.live,
+    )
+    if badge is not None:
+        return badge
+    spot = facing_spot(
+        departure=departure, pattern=pattern, at=at, trips=trips,
+        approach=approach, spots=spots,
+    )
+    if spot is None:
+        return None
+    return Badge(
+        marker=replace(
+            look, x=spot.x, y=spot.y,
+            bearing=toward_from(departure=departure),
+        ),
+        low=spot.y,
+        high=spot.y,
+        facing=True,
+    )
+
+
 def trip_marker(
     *,
     departure: Departure,
     trips: TripInputs,
     spots: Mapping[str, Spot],
     heard: Heard,
+    approach: Approach | None = None,
 ) -> Badge | None:
     """
     Place one trip's badge on the strip.
@@ -248,6 +353,8 @@ def trip_marker(
         Visible rows' track spots by station.
     heard : Heard
         Each trip's vehicle and age.
+    approach : Approach | None
+        The rows either side of a both-sides From, or None.
 
     Returns
     -------
@@ -255,8 +362,9 @@ def trip_marker(
         A solid badge at a fresh position's nearest hop, else a hollow one
         at the timetable hop, on the trip or the one it carries on as and
         labelled with that trip's route, with no wedge at its trip's last
-        stop; None without a pattern, a hop,
-        or both of the hop's rows.
+        stop. On a both-sides strip, a bus on its own trip whose hop has
+        no badge is placed by `approach_marker`. None without a pattern,
+        a hop, or a place to draw it.
     """
     legs = legs_of(departure=departure, trips=trips, heard=heard)
     current = current_leg(
@@ -271,18 +379,32 @@ def trip_marker(
     leg, (index, fraction) = current
     ages = [each.found[1] for each in legs if each.found is not None]
     live = bool(ages) and is_fresh(age=min(ages), limit=trips.stale_after)
-    return hop_marker(
+    look = Marker(
         route=leg.pattern.route,
-        ends=tuple(
-            spots.get(trips.station_of.get(stop.station, stop.station))
-            for stop in leg.pattern.stops[index:index + 2]
+        x=0.0,
+        y=0.0,
+        bearing=None,
+        live=live,
+        pinned=True,
+        age=None if live or not ages else min(ages) // 60 * 60,
+    )
+    badge = hop_marker(
+        route=look.route,
+        ends=hop_spots(
+            pattern=leg.pattern, index=index, trips=trips, spots=spots,
         ),
         fraction=fraction,
-        age=None if live or not ages else min(ages) // 60 * 60,
+        age=look.age,
         live=live,
         known=not (
             index == len(leg.pattern.stops) - 2 and fraction >= 1.0
         ),
+    )
+    if badge is not None or approach is None or leg is not legs[0]:
+        return badge
+    return approach_marker(
+        departure=departure, pattern=leg.pattern, hop=(index, fraction),
+        trips=trips, spots=spots, approach=approach, look=look,
     )
 
 
@@ -380,8 +502,9 @@ def without_shown_next(
     ]
 
 
-def vehicle_markers(*, trips: TripInputs, keep: Keepouts
-                    ) -> tuple[Marker, ...]:
+def vehicle_markers(
+    *, trips: TripInputs, keep: Keepouts, approach: Approach | None = None,
+) -> tuple[Marker, ...]:
     """
     Place the strip's vehicles on its visible rows.
 
@@ -391,6 +514,8 @@ def vehicle_markers(*, trips: TripInputs, keep: Keepouts
         The strip's departures and live data.
     keep : Keepouts
         The visible rows' spots, the discs and the top.
+    approach : Approach | None
+        The rows either side of a both-sides From, or None.
 
     Returns
     -------
@@ -417,6 +542,7 @@ def vehicle_markers(*, trips: TripInputs, keep: Keepouts
     placed = (
         trip_marker(
             departure=departure, trips=trips, spots=spots, heard=heard,
+            approach=approach,
         )
         for departure in departures
     )

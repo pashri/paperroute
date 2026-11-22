@@ -9,6 +9,7 @@ baselines. ``GOLDEN_UPDATE=1`` redraws this platform's; on a Mac,
 import hashlib
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Final, get_args
 
@@ -26,7 +27,7 @@ from paperroute_transit.core.connection_strip import (
     ConnectionStripView,
 )
 from paperroute_transit.core.kerb_menu import MENU_HINT
-from paperroute_transit.core.map_view import MapView
+from paperroute_transit.core.map_view import MapView, Marker
 from paperroute_transit.core.messages import ScreenView
 from paperroute_transit.core.reach import RowKind
 from paperroute_transit.core.stop_under import UnderNumber
@@ -35,6 +36,7 @@ from paperroute_transit.core.strip_model import (
     PANE_ROWS,
     STRIP_ROWS,
     StripMapView,
+    StripRow,
     StripView,
 )
 from tests.golden.scenes import (
@@ -296,6 +298,28 @@ def test_both_sides_scenes_build_their_views() -> None:
     assert each.each_way.across.end == 'Newtown'
 
 
+def badge_rows(
+    *, rows: Sequence[StripRow], markers: Sequence[Marker],
+) -> list[tuple[str, float | None]]:
+    """
+    Name the row each badge sits on, with its wedge's bearing.
+
+    Parameters
+    ----------
+    rows : Sequence[StripRow]
+        Visible rows.
+    markers : Sequence[Marker]
+        Their badges, each level with a row.
+
+    Returns
+    -------
+    list[tuple[str, float | None]]
+        Each badge's row name and bearing.
+    """
+    at = {row.y: row.name for row in rows}
+    return [(at[marker.y], marker.bearing) for marker in markers]
+
+
 def test_both_sides_live_scenes_build_their_views() -> None:
     """The Map joins the kerbs; both strips put the From in the middle."""
     shown = view_of(state=SCENES['map_both_sides']())
@@ -310,12 +334,17 @@ def test_both_sides_live_scenes_build_their_views() -> None:
     assert names.index('King St At Missenden Rd') == (rows - 1) // 2
     assert names[0] == 'Erskineville Rd'
     assert strip.rows[4].time == '8:03'  # the 8:02 from across
-    assert strip.markers == ()
+    assert badge_rows(rows=strip.rows, markers=strip.markers) == [
+        ('Egan St', 180.0), ('Cardigan St', 0.0),
+    ]
     pane = view_of(state=SCENES['strip_map_both_sides']())
     assert isinstance(pane, StripMapView)
     rows = PANE_ROWS - (pane.map.banner is not None)
     kinds = [row.kind for row in pane.pane.rows]
     assert kinds.index(RowKind.ORIGIN) == (rows - 1) // 2
+    assert badge_rows(rows=pane.pane.rows, markers=pane.pane.markers) == [
+        ('Egan St', 180.0), ('Cardigan St', 0.0),
+    ]
 
 
 def test_chooser_routes_scene_keeps_the_preview_in_place() -> None:

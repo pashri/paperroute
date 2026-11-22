@@ -313,6 +313,7 @@ def loaded(
     count: int = 3,
     mode: SydneyFeed = SydneyFeed.BUS,
     shaped: bool = False,
+    kind: str | None = None,
 ) -> State:
     """
     Apply a DeparturesLoaded event.
@@ -327,6 +328,8 @@ def loaded(
         Their mode.
     shaped : bool
         Give each departure its own shape ID.
+    kind : str | None
+        Their transport mode, if set.
 
     Returns
     -------
@@ -338,6 +341,7 @@ def loaded(
             departure(
                 departs=START + timedelta(minutes=3 * (i + 1)),
                 mode=mode,
+                kind=kind,
             ),
             shape_id=f'b:{i}' if shaped else None,
         )
@@ -802,19 +806,22 @@ def test_map_polls_positions_with_trip_updates() -> None:
     ]
 
 
-def test_stop_view_never_polls_positions() -> None:
-    """With a Destination, the Stop view fetches trip updates only."""
-    state = loaded(state=fresh(centre=CENTRE))
+def test_stop_view_polls_trips_and_its_heros_positions() -> None:
+    """With a Destination, the Stop view fetches trips and positions."""
+    state = loaded(state=fresh(centre=CENTRE), kind=SydneyMode.BUS)
     for seconds in (30, 60, 90):
         now = START + timedelta(seconds=seconds)
         state, effects = step(state, Tick(now=now))
         fetched = effects_of(effects=effects, kind=FetchFeed)
         assert [
             each for each in fetched if each.kind != FeedKind.ALERTS
-        ] == [FetchFeed(feed=BUSES)]
+        ] == [
+            FetchFeed(feed=BUSES),
+            FetchFeed(feed=BUS_POSITIONS, kind=FeedKind.POSITIONS),
+        ]
     assert needed_feeds(
         state=state, stop_view=live_stop_view(state=state),
-    ) == (BUSES,)
+    ) == (BUSES, BUS_POSITIONS)
 
 
 def test_map_polls_positions_for_a_ferry_pin() -> None:

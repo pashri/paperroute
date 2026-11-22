@@ -16,6 +16,7 @@ from paperroute_device.core.panel_views import NoticeView
 from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_sydney.city import SYDNEY as SYDNEY_CITY
+from paperroute_sydney.city import SydneyMode
 from paperroute_testkit.core.factories import START, begun, departure, snapshot
 from paperroute_testkit.core.kit_steps import settings_posted, step
 from paperroute_testkit.core.steps import slept
@@ -216,11 +217,13 @@ def test_no_second_cycle_before_next_boundary() -> None:
     assert FetchFeed(feed=BUSES) in effects
 
 
-def test_stop_view_cycle_has_no_positions() -> None:
-    """The Stop view's cycle fetches no positions."""
-    state = loaded(state=fresh(centre=CENTRE))
+def test_stop_view_cycle_polls_its_heros_positions() -> None:
+    """The Stop view's cycle fetches its hero's positions."""
+    state = loaded(state=fresh(centre=CENTRE), kind=SydneyMode.BUS)
     _, effects = _ticked(state=state, seconds=5 * 60)
-    assert _kinds(effects=effects) == {FeedKind.TRIPS, FeedKind.ALERTS}
+    assert _kinds(effects=effects) == {
+        FeedKind.TRIPS, FeedKind.ALERTS, FeedKind.POSITIONS,
+    }
 
 
 def test_new_feed_fetched_at_once() -> None:

@@ -809,6 +809,14 @@ def test_the_stop_view_polls_its_heros_positions() -> None:
     )
 
 
+def test_a_destination_stop_view_polls_its_heros_positions() -> None:
+    """With a Destination, a bus hero's positions join the poll too."""
+    _, fetched = stop_positions_after_a_tick(
+        pin=TO_TOWN, departures=hero_of(mode='bus', source='bus'),
+    )
+    assert fetched == {BUS_POSITIONS}
+
+
 def test_an_unflagged_mode_polls_no_positions_on_the_stop_view() -> None:
     """A hero whose mode does not fetch positions adds no positions feed."""
     state, _ = on_view(

@@ -250,6 +250,17 @@ def test_a_view_with_a_destination_gains_a_gauge_with_its_end() -> None:
     )
 
 
+def test_a_destination_gauge_carries_the_live_bus() -> None:
+    """With a Destination, a fresh position 2 stops back is on the gauge."""
+    hero = replace(HERO, arrives=START + timedelta(minutes=9))
+    view = replace(
+        open_view(hero=hero), destination='Rosehill', under=None,
+    )
+    gauge = detail(view=view, positions=seen_at(x=-450.0)).gauge
+    assert gauge is not None
+    assert gauge.bus is not None
+
+
 def test_the_stand_alone_finds_no_call() -> None:
     """A stand's own ID matches no call, as a pin's origin would be."""
     view = open_view()

@@ -855,9 +855,8 @@ def stop_feeds(
     tuple[str, ...]
         The positions feeds of the hero's feed source, a light rail
         source's only the line near the From (every line when the From has
-        no point); none unless the view is Stop with the chooser closed,
-        the pin has no Destination and the hero's mode fetches
-        positions.
+        no point); none unless the view is Stop with the chooser closed
+        and the hero's mode fetches positions.
     """
     hero = hero_departure(view=stop_view)
     pin = shown(state=state)
@@ -865,7 +864,6 @@ def stop_feeds(
     if (
         state.view is not LiveView.STOP
         or state.chooser is not None
-        or pin.destination is not None
         or hero is None
     ):
         return ()

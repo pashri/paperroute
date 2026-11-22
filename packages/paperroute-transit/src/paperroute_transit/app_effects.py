@@ -198,7 +198,7 @@ def strip_built(
     Gather a strip's runs and lay out its reach, logging how long it took.
 
     The data also holds, for a strip fed by both kerbs, the stations facing
-    the stops before its From.
+    the stops before its From; none when the pairs read fails.
 
     Parameters
     ----------
@@ -215,8 +215,12 @@ def strip_built(
     started = time.perf_counter()
     data = network.reach_input(key=effect.key, origin=effect.origin)
     if data is not None and effect.key.across is not None:
-        pairs = network.kerb_pairs(stations=approach_stations(data=data))
-        data = replace(data, facing=facing_of(pairs=pairs))
+        try:
+            pairs = network.kerb_pairs(stations=approach_stations(data=data))
+        except sqlite3.Error:
+            logger.warning('reading the kerb pairs failed', exc_info=True)
+        else:
+            data = replace(data, facing=facing_of(pairs=pairs))
     reach = None if data is None else build_reach(data=data)
     elapsed = (time.perf_counter() - started) * MS_PER_SECOND
     logger.info(

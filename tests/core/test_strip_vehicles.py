@@ -204,6 +204,20 @@ def test_fresh_own_leg_after_its_last_arrival() -> None:
     assert marker.y == pytest.approx(rows['C'].y)
 
 
+def test_badge_nearly_at_its_trips_last_stop_has_no_wedge() -> None:
+    """At 0.97 of the B to C hop, trip a's last, a live badge is plain."""
+    now = START + timedelta(minutes=9)
+    heard = vehicle(
+        timestamp=int(now.timestamp()), trip_id='a', point=(0.0, -1970.0),
+    )
+    marker, rows = badge_at(minutes=9, next_loaded=False, vehicles=(heard,))
+    assert marker is not None
+    assert marker.y == pytest.approx(
+        rows['B'].y + (rows['C'].y - rows['B'].y) * 0.97,
+    )
+    assert (marker.live, marker.bearing) == (True, None)
+
+
 def hook_ends() -> tuple[Spot, Spot]:
     """
     Give a junction's spot and its exit's spot three rows below.

@@ -10,6 +10,7 @@ from paperroute_transit.core.model import Departure, service_seconds
 from paperroute_transit.core.patterns import TripPattern, hop_at, hop_near
 from paperroute_transit.core.positions import VehiclePosition
 from paperroute_transit.core.strip_approach import (
+    REACHED,
     Approach,
     facing_spot,
     stop_reached,
@@ -361,10 +362,10 @@ def trip_marker(
     Badge | None
         A solid badge at a fresh position's nearest hop, else a hollow one
         at the timetable hop, on the trip or the one it carries on as and
-        labelled with that trip's route, with no wedge at its trip's last
-        stop. On a both-sides strip, a bus on its own trip whose hop has
-        no badge is placed by `approach_marker`. None without a pattern,
-        a hop, or a place to draw it.
+        labelled with that trip's route, with no wedge once `REACHED` of
+        its trip's last hop is run. On a both-sides strip, a bus on its
+        own trip whose hop has no badge is placed by `approach_marker`.
+        None without a pattern, a hop, or a place to draw it.
     """
     legs = legs_of(departure=departure, trips=trips, heard=heard)
     current = current_leg(
@@ -397,7 +398,7 @@ def trip_marker(
         age=look.age,
         live=live,
         known=not (
-            index == len(leg.pattern.stops) - 2 and fraction >= 1.0
+            index == len(leg.pattern.stops) - 2 and fraction >= REACHED
         ),
     )
     if badge is not None or approach is None or leg is not legs[0]:

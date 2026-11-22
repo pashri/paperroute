@@ -54,6 +54,8 @@ class FakeNetwork:
         The runs through every strip's From.
     error : sqlite3.Error | None
         Raised by every read when set.
+    pairs_error : sqlite3.Error | None
+        Raised by the kerb pairs read alone when set.
     """
 
     column: Column | None = None
@@ -61,6 +63,7 @@ class FakeNetwork:
     pairs: dict[str, KerbPair] = field(default_factory=dict)
     data: ReachInput | None = None
     error: sqlite3.Error | None = None
+    pairs_error: sqlite3.Error | None = None
 
     def check(self) -> None:
         """
@@ -106,8 +109,15 @@ class FakeNetwork:
         -------
         dict[str, KerbPair]
             The fixed pairs of those stations.
+
+        Raises
+        ------
+        sqlite3.Error
+            The pairs error, when set.
         """
         self.check()
+        if self.pairs_error is not None:
+            raise self.pairs_error
         return {
             station: pair
             for station, pair in self.pairs.items()

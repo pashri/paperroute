@@ -1415,3 +1415,34 @@ async def test_load_strip_reads_the_kerbs_facing_a_both_sides_from() -> None:
     )
     assert isinstance(plain, StripLoaded) and plain.reach is not None
     assert plain.reach.facing == {}
+
+
+async def test_load_strip_keeps_the_strip_when_the_pairs_read_fails(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failed pairs read gives a Strip with no facing; a runs one fails."""
+    data = replace(reach_data(), tails=(
+        RunTail(before=('P2', 'P1'), after=('E1', 'E2'), trips=8),
+    ))
+    both = replace(STRIP_KEY, across='x2')
+    load = LoadStrip(key=both, origin=data.origin, timetable='v1')
+    locked = sqlite3.OperationalError('locked')
+    with caplog.at_level(logging.WARNING):
+        (loaded,) = await posted_by(
+            ports=ports_of(
+                network=FakeNetwork(data=data, pairs_error=locked),
+            ),
+            effects=[load],
+        )
+    assert isinstance(loaded, StripLoaded) and loaded.reach is not None
+    assert loaded.reach.facing == {}
+    assert [
+        record.levelno
+        for record in caplog.records
+        if record.message == 'reading the kerb pairs failed'
+    ] == [logging.WARNING]
+    failed = await posted_by(
+        ports=ports_of(network=FakeNetwork(data=data, error=locked)),
+        effects=[load],
+    )
+    assert failed == [StripFailed(key=both, timetable='v1')]

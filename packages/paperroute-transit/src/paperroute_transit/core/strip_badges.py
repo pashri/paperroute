@@ -14,6 +14,7 @@ DISC_REACH: Final[float] = 11.0  # a disc's radius
 AT_REACH: Final[float] = 12.0  # a vehicle this near a disc is at it
 HALF_WIDE: Final[float] = 28.0  # half a five-letter badge, and a pixel
 SLOT_SPAN: Final[float] = 2 * HALF_WIDE  # badge centres side by side
+FACING_CAP: Final[int] = 2  # labelled facing badges on one row
 
 
 @dataclass(frozen=True)
@@ -157,13 +158,68 @@ def counted(*, marker: Marker, extra: int) -> Marker:
     """
     if not extra:
         return marker
+    return as_count(marker=marker, count=extra + 1)
+
+
+def as_count(*, marker: Marker, count: int) -> Marker:
+    """
+    Make a hollow count badge where a badge is.
+
+    Parameters
+    ----------
+    marker : Marker
+        The badge.
+    count : int
+        Badges counted.
+
+    Returns
+    -------
+    Marker
+        A hollow '+<count>' badge with no wedge or age, at its place.
+    """
     return replace(
         marker,
-        route=f'+{extra + 1}',
+        route=f'+{count}',
         bearing=None,
         live=False,
         age=None,
     )
+
+
+def capped(*, badges: Sequence[Badge]) -> list[Badge]:
+    """
+    Keep at most `FACING_CAP` labelled facing badges on each row.
+
+    Parameters
+    ----------
+    badges : Sequence[Badge]
+        Badges, facing ones among them.
+
+    Returns
+    -------
+    list[Badge]
+        The facing badges in order, the first `FACING_CAP` on each row
+        as they are and the next one a '+<n>' counting it and the rest
+        on that row, which are dropped.
+    """
+    facing = [each for each in badges if each.facing]
+    rows = [each.marker.y for each in facing]
+    ranks = [rows[:index].count(y) for index, y in enumerate(rows)]
+    return [
+        (
+            each
+            if rank < FACING_CAP
+            else replace(
+                each,
+                marker=as_count(
+                    marker=each.marker, count=rows.count(y) - FACING_CAP,
+                ),
+                extra=rows.count(y) - FACING_CAP - 1,
+            )
+        )
+        for each, y, rank in zip(facing, rows, ranks)
+        if rank <= FACING_CAP
+    ]
 
 
 def clear_of(*, marker: Marker, disc: Spot) -> bool:
@@ -661,7 +717,8 @@ def pushed(*, badges: Sequence[Badge], keep: Keepouts) -> tuple[Badge, ...]:
         on its hop is counted in a badge on the same hop, which becomes a
         '+<n>', or with none there is drawn on its hop anyway. A facing
         badge keeps its y and moves right a slot at a time off the
-        badges placed before it; it is never counted.
+        badges placed before it; past `FACING_CAP` on a row, the rest
+        become one '+<n>' (see `capped`).
     """
     order = sorted(
         (
@@ -680,9 +737,8 @@ def pushed(*, badges: Sequence[Badge], keep: Keepouts) -> tuple[Badge, ...]:
         badges=rest, placed=placed, keep=keep, first=len(placed),
     )
     retried(placed=placed, forced=again, keep=keep)
-    for each in badges:
-        if each.facing:
-            placed.extend(off_lined(lineup=[each], lined=placed))
+    for each in capped(badges=badges):
+        placed.extend(off_lined(lineup=[each], lined=placed))
     return tuple(sorted(
         placed, key=lambda each: (each.marker.x, each.marker.y),
     ))

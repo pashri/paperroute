@@ -1,6 +1,6 @@
 """The stations facing the stops a both-sides strip's buses approach by."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
 
@@ -15,6 +15,7 @@ from paperroute_transit.core.strip_times import TripInputs, from_call
 
 UP: Final[float] = 0.0  # wedge bearing up the strip
 DOWN: Final[float] = 180.0  # down it
+REACHED: Final[float] = 0.95  # share of a hop that puts a bus at its next stop
 
 
 @dataclass(frozen=True)
@@ -33,12 +34,18 @@ class Approach:
         Station IDs of the main rows above the From, nearest it first.
     below : tuple[str, ...]
         Station IDs of the main rows below the From, nearest it first.
+    upper : frozenset[str]
+        Station IDs of every row above the From, of any kind.
+    lower : frozenset[str]
+        Station IDs of every row below the From, of any kind.
     """
 
     origin: str
     facing: Mapping[str, str]
     above: tuple[str, ...]
     below: tuple[str, ...]
+    upper: frozenset[str]
+    lower: frozenset[str]
 
 
 def approach_stations(*, data: ReachInput) -> frozenset[str]:
@@ -81,7 +88,6 @@ def facing_of(*, pairs: Mapping[str, KerbPair]) -> dict[str, str]:
     }
 
 
-
 def approach_of(
     *, reach: Reach | None, key: StripKey | None,
 ) -> Approach | None:
@@ -98,8 +104,8 @@ def approach_of(
     Returns
     -------
     Approach | None
-        The From and the main rows either side of it; None without a
-        reach or a From row, or for a strip not fed by both kerbs.
+        The From and the rows either side of it; None without a reach or
+        a From row, or for a strip not fed by both kerbs.
     """
     if reach is None or not both_kerbs(key=key):
         return None
@@ -124,6 +130,10 @@ def approach_of(
             for index in main
             if index > origin
         ),
+        upper=frozenset(row.place.stop_id for row in reach.rows[:origin]),
+        lower=frozenset(
+            row.place.stop_id for row in reach.rows[origin + 1:]
+        ),
     )
 
 
@@ -139,16 +149,17 @@ def stop_reached(*, hop: tuple[int, float]) -> int:
     Returns
     -------
     int
-        The hop's next stop when the hop is run to its end, else its
+        The hop's next stop once `REACHED` of the hop is run, else its
         first stop.
     """
     index, fraction = hop
-    return index + 1 if fraction >= 1.0 else index
+    return index + 1 if fraction >= REACHED else index
 
 
 def facing_station(
     *,
     lane: Sequence[str],
+    side: Collection[str],
     facing: Mapping[str, str],
     station: str,
     count: int,
@@ -159,7 +170,10 @@ def facing_station(
     Parameters
     ----------
     lane : Sequence[str]
-        Station IDs of the rows on the bus's side, nearest the From first.
+        Station IDs of the main rows on the bus's side, nearest the From
+        first.
+    side : Collection[str]
+        Station IDs of every row on the bus's side.
     facing : Mapping[str, str]
         The station across the road from each stop.
     station : str
@@ -170,9 +184,12 @@ def facing_station(
     Returns
     -------
     str | None
-        The stop's partner when it is in the lane, else the row as many
-        stops from the From, else None.
+        The stop itself when it is a row on the bus's side; else its
+        partner when that is in the lane; else the lane's row as many
+        stops from the From; else None.
     """
+    if station in side:
+        return station
     partner = facing.get(station)
     if partner in lane:
         return partner
@@ -185,6 +202,7 @@ def facing_row(
     index: int,
     origin: int,
     lane: Sequence[str],
+    side: Collection[str],
     trips: TripInputs,
     facing: Mapping[str, str],
 ) -> str | None:
@@ -200,7 +218,10 @@ def facing_row(
     origin : int
         The index of the call at the From.
     lane : Sequence[str]
-        Station IDs of the rows on the bus's side, nearest the From first.
+        Station IDs of the main rows on the bus's side, nearest the From
+        first.
+    side : Collection[str]
+        Station IDs of every row on the bus's side.
     trips : TripInputs
         The strip's departures and live data.
     facing : Mapping[str, str]
@@ -214,6 +235,7 @@ def facing_row(
     stop = pattern.stops[index].station
     return facing_station(
         lane=lane,
+        side=side,
         facing=facing,
         station=trips.station_of.get(stop, stop),
         count=origin - index,
@@ -250,11 +272,11 @@ def facing_spot(
     Returns
     -------
     Spot | None
-        The spot of the row facing that call, above the From for the
-        picked kerb's buses and below it for the kerb across's; else
-        midway between the rows facing the nearest calls before and after
-        it that have one; None at or past the From, or when a row needed
-        is not visible.
+        The spot of the row facing that call (see `facing_station`),
+        above the From for the picked kerb's buses and below it for the
+        kerb across's; else midway between the rows facing the nearest
+        calls before and after it that have one; None at or past the
+        From, or when a row needed is not visible.
     """
     origin = from_call(
         departure=departure, pattern=pattern, origin=approach.origin,
@@ -266,6 +288,7 @@ def facing_spot(
         facing_row(
             pattern=pattern, index=index, origin=origin, trips=trips,
             lane=approach.below if departure.facts.across else approach.above,
+            side=approach.lower if departure.facts.across else approach.upper,
             facing=approach.facing,
         )
         for index in range(origin)

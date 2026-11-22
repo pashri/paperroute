@@ -526,3 +526,81 @@ def test_pushed_lines_a_facing_badge_up_beside_a_badge_on_its_row() -> None:
     assert shown(badges=[facing, facing], spots=spots) == [
         ('T1', 30, 100), ('T1', BESIDE, 100),
     ]
+
+
+def facing_row(*, routes: str, y: float = 100) -> list[Badge]:
+    """
+    Make facing badges on one row, one per route.
+
+    Parameters
+    ----------
+    routes : str
+        Space-separated route labels, in order.
+    y : float
+        The row's y.
+
+    Returns
+    -------
+    list[Badge]
+        The badges at x 30.
+    """
+    return [
+        replace(badge(x=30, y=y, low=y, high=y, route=route), facing=True)
+        for route in routes.split()
+    ]
+
+
+def test_pushed_caps_facing_badges_on_a_row_at_two() -> None:
+    """Past two on a row, the rest fold into a '+<n>' in the third slot."""
+    spots = {'A': Spot(x=30, y=100)}
+    third = 30 + 2 * SLOT_SPAN
+    assert shown(badges=facing_row(routes='T1'), spots=spots) == [
+        ('T1', 30, 100),
+    ]
+    assert shown(badges=facing_row(routes='T1 T2'), spots=spots) == [
+        ('T1', 30, 100), ('T2', BESIDE, 100),
+    ]
+    assert shown(badges=facing_row(routes='T1 T2 T3'), spots=spots) == [
+        ('T1', 30, 100), ('T2', BESIDE, 100), ('+1', third, 100),
+    ]
+    assert shown(
+        badges=facing_row(routes='T1 T2 T3 T4 T5'), spots=spots,
+    ) == [
+        ('T1', 30, 100), ('T2', BESIDE, 100), ('+3', third, 100),
+    ]
+
+
+def test_pushed_folded_facing_count_is_hollow_and_plain() -> None:
+    """The count badge has no wedge and is not live."""
+    spots = {'A': Spot(x=30, y=100)}
+    *_, count = pushed(
+        badges=facing_row(routes='T1 T2 T3 T4'), keep=Keepouts(spots=spots),
+    )
+    assert (count.marker.route, count.marker.bearing, count.marker.live) == (
+        '+2', None, False,
+    )
+
+
+def test_pushed_caps_facing_badges_row_by_row() -> None:
+    """Each row keeps two facing badges and its own count."""
+    spots = {'A': Spot(x=30, y=100), 'B': Spot(x=30, y=136)}
+    third = 30 + 2 * SLOT_SPAN
+    found = shown(
+        badges=[
+            *facing_row(routes='T1 T2 T3', y=100),
+            *facing_row(routes='T4 T5 T6 T7', y=136),
+        ],
+        spots=spots,
+    )
+    assert found == [
+        ('T1', 30, 100), ('T4', 30, 136),
+        ('T2', BESIDE, 100), ('T5', BESIDE, 136),
+        ('+1', third, 100), ('+2', third, 136),
+    ]
+
+
+def test_pushed_without_facing_badges_is_unchanged_by_the_cap() -> None:
+    """Hop badges alone place as before."""
+    spots = {'A': Spot(x=30, y=100), 'C': Spot(x=30, y=136)}
+    departed = badge(x=30, y=112, low=100, high=136, bearing=0.0)
+    assert shown(badges=[departed], spots=spots) == [('T1', 30, 112)]

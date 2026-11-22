@@ -9,6 +9,7 @@ import pytest
 
 from paperroute_device.core.kit_effects import Render
 from paperroute_device.core.kit_events import Tick
+from paperroute_device.render.canvas import HEIGHT, WIDTH
 from paperroute_hardware.core.knob_events import Knob, KnobHeld, KnobTurned
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_testkit.core.factories import (
@@ -39,6 +40,7 @@ from paperroute_transit.core.messages import (
     Effect,
     Event,
     LineFailed,
+    LineLoaded,
     LoadChooserDepartures,
     LoadColumn,
     LoadDepartures,
@@ -52,10 +54,12 @@ from paperroute_transit.core.messages import (
 from paperroute_transit.core.model import Departure, Pin, shifted
 from paperroute_transit.core.places import shown
 from paperroute_transit.core.saved import LiveView, Saved, default_settings
+from paperroute_transit.core.sides import KerbPair
 from paperroute_transit.core.state_model import LOOKBACK, RELOAD_BEFORE, State
 from paperroute_transit.core.state_views import saved_of
 from paperroute_transit.core.stop_view import HORIZON, StopView
 from paperroute_transit.core.strip_model import HINTS, StripView
+from paperroute_transit.render.strip_view import draw_strip_view
 from tests.core.chooser_walks import (
     BUS_606,
     CHOSEN,
@@ -576,3 +580,29 @@ def test_chooser_replies_with_it_closed_are_ignored() -> None:
     state, _ = run_events(state=pinned(), events=[OPEN, OPEN])
     assert state.chooser is None
     assert step(state, ColumnLoaded(path=(), column=KINDS)) == (state, ())
+
+
+def test_from_stage_opens_a_paired_stop_under_the_cursor() -> None:
+    """A paired From opens its kerbs under it, and the frame draws."""
+    pair = KerbPair(
+        station=LINE[1].stop_id, other=place('X2', name='Across'),
+        busy=False,
+    )
+    events = (
+        *TO_STAGE[:-3],
+        LineLoaded(towards=11, line=LINE, pairs=(pair,)),
+        DOWN,
+        DOWN,
+    )
+    state, _ = run_events(state=loaded(state=pinned()), events=events)
+    view = state.last_view
+    assert isinstance(view, StripView)
+    assert [row.name for row in view.rows] == [
+        'Parramatta', 'Northmead, both sides',
+        'only towards Baulkham Hills', 'only towards Parramatta',
+        'Baulkham Hills',
+    ]
+    assert [row.cursor for row in view.rows] == [
+        False, False, True, False, False,
+    ]
+    assert draw_strip_view(view=view).shape == (HEIGHT, WIDTH)

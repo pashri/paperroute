@@ -12,14 +12,20 @@ from paperroute_transit.core.chooser import (
     pressed_from,
 )
 from paperroute_transit.core.chooser_sides import (
+    ONLY_HERE,
+    OTHER_SIDE,
     SideChoice,
+    choice_label,
     pressed_side,
     side_choices,
+    side_reach,
     turned_from,
     with_line,
 )
 from paperroute_transit.core.model import Pin, StopPlace
+from paperroute_transit.core.reach import RowKind
 from paperroute_transit.core.sides import KerbPair, Kerbs
+from paperroute_transit.core.strip_view import line_reach
 from tests.core.chooser_walks import at_towards
 
 LINE: Final[tuple[StopPlace, ...]] = (
@@ -108,3 +114,46 @@ def test_pressed_side_without_pairs_is_today() -> None:
     """With no pairs a press is the plain From press."""
     chooser = from_stage(pairs=())
     assert pressed_side(chooser=chooser) == pressed_from(chooser=chooser)
+
+
+def test_side_reach_opens_a_quiet_stop_under_the_cursor() -> None:
+    """A quiet pair's station means both sides; its kerbs follow it."""
+    reach, cursor = side_reach(chooser=from_stage(pairs=(QUIET,)))
+    names = [row.place.name for row in reach.rows]
+    assert names[2:5] == [
+        'Orchard Close, both sides',
+        'only towards Emmanuel Street',
+        'only towards Oakington',
+    ]
+    assert reach.rows[2].place.stop_id == 's2'
+    assert [row.kind for row in reach.rows[3:5]] == [RowKind.PASSED] * 2
+    assert [row.parent for row in reach.rows[3:5]] == [None, None]
+    assert [row.parent for row in reach.rows[5:]] == [2, 5]
+    assert (reach.stations, cursor) == (5, 2)
+
+
+def test_side_reach_at_a_busy_stop_offers_both_sides_last() -> None:
+    """A busy pair's station is this kerb; both sides comes last."""
+    chooser = from_stage(pairs=(BUSY,), side=2)
+    reach, cursor = side_reach(chooser=chooser)
+    names = [row.place.name for row in reach.rows]
+    assert names[2:5] == [
+        'Orchard Close', 'only towards Oakington', 'both sides',
+    ]
+    assert cursor == 4
+
+
+def test_side_reach_without_pairs_is_the_line() -> None:
+    """With no pair at the cursor the strip is the plain line."""
+    chooser = from_stage(pairs=())
+    assert side_reach(chooser=chooser) == (line_reach(line=LINE), 2)
+
+
+def test_choice_label_at_either_end_names_no_station_itself() -> None:
+    """At the line's ends a kerb is named by its side."""
+    assert choice_label(
+        choice=SideChoice.ACROSS, line=LINE, cursor=0,
+    ) == OTHER_SIDE
+    assert choice_label(
+        choice=SideChoice.HERE, line=LINE, cursor=4,
+    ) == ONLY_HERE

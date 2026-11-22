@@ -23,7 +23,11 @@ from paperroute_transit.core.chooser import (
     turned,
     with_column,
 )
-from paperroute_transit.core.chooser_sides import turned_from, with_line
+from paperroute_transit.core.chooser_sides import (
+    side_reach,
+    turned_from,
+    with_line,
+)
 from paperroute_transit.core.chooser_station import (
     has_list_from,
     knob_backed,
@@ -73,7 +77,7 @@ from paperroute_transit.core.strip_model import (
     StripView,
 )
 from paperroute_transit.core.strip_state import folded_reach, picking_to
-from paperroute_transit.core.strip_view import build_strip_view, line_reach
+from paperroute_transit.core.strip_view import build_strip_view
 
 LINE_FAILED: Final[str] = "Can't load the line"
 DEPARTURES_FAILED: Final[str] = "Can't load departures"
@@ -623,8 +627,9 @@ def from_inputs(*, state: State, chooser: ChooserState) -> StripInputs:
         be read.
     """
     line = chooser.line
+    reach, cursor = side_reach(chooser=chooser) if line else (None, None)
     return StripInputs(
-        reach=line_reach(line=line) if line else None,
+        reach=reach,
         unavailable=LINE_FAILED if chooser.failed else None,
         departures=(),
         patterns={},
@@ -634,7 +639,7 @@ def from_inputs(*, state: State, chooser: ChooserState) -> StripInputs:
         stale_after=stale_after(state=state),
         line_kinds=line_modes(modes=state.city.modes),
         scroll=0,
-        cursor=chooser.line_cursor if line else None,
+        cursor=cursor,
         picking=PICK_FROM,
         destination=None,
         tag=NOT_PINNED,

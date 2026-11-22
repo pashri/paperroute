@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 from dataclasses import replace
 from enum import StrEnum
+from typing import Final
 
 from paperroute_transit.core.chooser import (
     ChooserRequest,
@@ -14,7 +15,14 @@ from paperroute_transit.core.chooser import (
     pressed_from,
 )
 from paperroute_transit.core.model import Pin, StopPlace
-from paperroute_transit.core.sides import KerbPair, Kerbs
+from paperroute_transit.core.reach import Reach, ReachRow, RowKind
+from paperroute_transit.core.sides import BOTH_SUFFIX, KerbPair, Kerbs
+from paperroute_transit.core.strip_view import line_reach
+
+ONLY_TOWARDS: Final[str] = 'only towards {name}'
+ONLY_HERE: Final[str] = 'only this side'
+OTHER_SIDE: Final[str] = 'only the other side'
+BOTH_LABEL: Final[str] = 'both sides'
 
 
 class SideChoice(StrEnum):
@@ -250,3 +258,117 @@ def pressed_side(
     if choice is SideChoice.ACROSS:
         return pressed_from(chooser=chooser, origin=pair.other)
     return chooser, both_pin(chooser=chooser, pair=pair)
+
+
+def choice_label(
+    *, choice: SideChoice, line: Sequence[StopPlace], cursor: int,
+) -> str:
+    """
+    Word one choice of kerb.
+
+    Parameters
+    ----------
+    choice : SideChoice
+        The choice.
+    line : Sequence[StopPlace]
+        Stations in running order.
+    cursor : int
+        Index of the station the choice is under.
+
+    Returns
+    -------
+    str
+        The label; a kerb at either end of the line is named by its side,
+        so no label names the station it sits under.
+    """
+    if choice is SideChoice.BOTH:
+        return BOTH_LABEL
+    if choice is SideChoice.HERE:
+        if cursor == len(line) - 1:
+            return ONLY_HERE
+        return ONLY_TOWARDS.format(name=line[-1].name)
+    if cursor == 0:
+        return OTHER_SIDE
+    return ONLY_TOWARDS.format(name=line[0].name)
+
+
+def choice_rows(
+    *, chooser: ChooserState, choices: Sequence[SideChoice],
+) -> list[ReachRow]:
+    """
+    Make the rows for some choices under the cursor's station.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser in the FROM stage with a line.
+    choices : Sequence[SideChoice]
+        The choices to draw, in order.
+
+    Returns
+    -------
+    list[ReachRow]
+        One indented row per choice.
+    """
+    station = chooser.line[chooser.line_cursor].stop_id
+    return [
+        ReachRow(
+            place=StopPlace(
+                stop_id=f'{station}:{choice}',
+                name=choice_label(
+                    choice=choice,
+                    line=chooser.line,
+                    cursor=chooser.line_cursor,
+                ),
+                point=None,
+            ),
+            kind=RowKind.PASSED,
+            depth=1,
+            above=False,
+            parent=None,
+        )
+        for choice in choices
+    ]
+
+
+def side_reach(*, chooser: ChooserState) -> tuple[Reach, int]:
+    """
+    Lay out the line with the cursor station's choices under it.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser in the FROM stage with a line.
+
+    Returns
+    -------
+    tuple[Reach, int]
+        The reach and the cursor's row.
+    """
+    reach = line_reach(line=chooser.line)
+    cursor = chooser.line_cursor
+    choices = side_choices(pair=pair_at(chooser=chooser))
+    if len(choices) == 1:
+        return reach, cursor
+    rows = list(reach.rows)
+    station = rows[cursor]
+    if choices[0] is SideChoice.BOTH:
+        station = replace(
+            station,
+            place=replace(
+                station.place, name=station.place.name + BOTH_SUFFIX,
+            ),
+        )
+    extra = choice_rows(chooser=chooser, choices=choices[1:])
+    rows[cursor] = station
+    rows[cursor + 1:cursor + 1] = extra
+    moved = [
+        replace(row, parent=row.parent + len(extra))
+        if row.parent is not None and row.parent > cursor
+        else row
+        for row in rows
+    ]
+    return (
+        replace(reach, rows=tuple(moved)),
+        cursor + chooser.kerbs.side,
+    )

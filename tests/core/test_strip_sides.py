@@ -3,20 +3,26 @@
 from dataclasses import replace
 from typing import Final
 
+from paperroute_sydney.city import SydneyMode
 from paperroute_testkit.core.factories import (
-    START,
     TRAIN,
     inputs_of,
     line_pattern,
     live,
+    place,
     train,
 )
+from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.reach_factories import both_reach
+from paperroute_testkit.core.strip_factories import PIN, on_view
+from paperroute_transit.core.messages import StripLoaded
 from paperroute_transit.core.model import Departure
 from paperroute_transit.core.reach import RowKind, StripKey
+from paperroute_transit.core.saved import LiveView
 from paperroute_transit.core.strip_follow import followed_reach, origin_of
-from paperroute_transit.core.strip_model import StripInputs
+from paperroute_transit.core.strip_model import StripInputs, StripView
 from paperroute_transit.core.strip_sides import across_times
+from paperroute_transit.core.strip_state import shown_key
 from paperroute_transit.core.strip_view import (
     build_strip_pane,
     marks_of,
@@ -174,7 +180,7 @@ def test_followed_runs_pass_over_a_bus_from_across_without_a_pattern() -> None:
 
 def test_strip_rows_put_a_both_sides_from_in_slot_five() -> None:
     """The From rests in the sixth of twelve slots."""
-    inputs = sided(across_minutes=3, here_minutes=6, stations=6)
+    inputs = sided(across_minutes=3, here_minutes=6, stations=8)
     assert inputs.reach is not None
     rows, _ = strip_rows(inputs=inputs, reach=inputs.reach)
     assert [row.kind for row in rows].index(RowKind.ORIGIN) == 5
@@ -190,3 +196,23 @@ def test_build_strip_pane_puts_a_both_sides_from_in_slot_four() -> None:
     ))
     pane = build_strip_pane(inputs=bannered)
     assert [row.kind for row in pane.rows].index(RowKind.ORIGIN) == 3
+
+
+def test_strip_scroll_bounds_centre_a_both_sides_from() -> None:
+    """The From rests in slot 5, so the scroll runs from -3 to 3.
+
+    The reach has 17 rows with the From in row 8 and the banner leaves
+    11 slots, so the From sits at slot 5 when the scroll is 0.
+    """
+    both = replace(
+        PIN, destination=None, kind=SydneyMode.BUS,
+        opposite=place('x2', name='Opposite'),
+    )
+    state, _ = on_view(view=LiveView.STRIP, pin=both)
+    state, _ = step(state, StripLoaded(
+        key=shown_key(state=state), reach=both_reach(stations=8),
+    ))
+    assert isinstance(state.last_view, StripView)
+    kinds_shown = [row.kind for row in state.last_view.rows]
+    assert kinds_shown.index(RowKind.ORIGIN) == 5
+    assert state.strip.bounds == (-3, 3)

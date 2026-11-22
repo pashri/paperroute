@@ -45,7 +45,13 @@ from paperroute_transit.core.strip_model import (
     StripMapView,
     StripView,
 )
+from paperroute_transit.core.strip_opening import (
+    pane_opened,
+    rescrolled,
+    strip_opened,
+)
 from paperroute_transit.core.strip_slots import home_of, window_of
+from paperroute_transit.core.strip_state import shown_key
 from paperroute_transit.core.strip_view import build_strip_view
 from tests.core.chooser_walks import CHOSEN_KEY, DOWN, TO_STAGE, at_to
 from tests.core.real_reach import (
@@ -502,3 +508,55 @@ def test_opening_the_chooser_sends_the_strip_home() -> None:
     state, _ = run(state=state, events=[TOP_PRESS])
     assert state.chooser is None
     assert names(state=state)[0] == names(state=home)[0] == 'S18'
+
+QUIET_ROWS: Final[int] = 6  # quiet stations at each far end
+
+
+def both_sides_fold_state(*, at: int) -> State:
+    """
+    Show a both-sides Strip over a reach with folds at both far ends.
+
+    Parameters
+    ----------
+    at : int
+        The From row before the quiet rows above it fold into one.
+
+    Returns
+    -------
+    State
+        State on the Strip at rest with no fold open, the first row a
+        fold and the From `at - QUIET_ROWS + 1` rows below it.
+    """
+    both = replace(
+        PIN, destination=None, kind=SydneyMode.BUS,
+        opposite=place('x2', name='Opposite'),
+    )
+    state, _ = on_view(view=LiveView.STRIP, pin=both)
+    state, _ = run(state=state, events=[StripLoaded(
+        key=shown_key(state=state),
+        reach=fold_reach(size=30, at=at, quiet=QUIET_ROWS),
+    )])
+    return replace(state, strip=replace(state.strip, opened=frozenset()))
+
+
+def test_strip_opened_centres_a_both_sides_from_in_slot_five() -> None:
+    """With the From in slot 5 a fold in the top row is on screen."""
+    state = both_sides_fold_state(at=10)
+    opened = strip_opened(state, False)
+    assert opened is not None
+    assert opened.strip.opened == {'S5'}
+
+
+def test_rescrolled_puts_a_both_sides_from_in_slot_five() -> None:
+    """The row for the top slot scrolls against the centred home row."""
+    state = both_sides_fold_state(at=10)
+    scrolled = rescrolled(state=state, first=0, rows=12)
+    assert scrolled.strip.scroll == 0
+
+
+def test_pane_opened_centres_a_both_sides_from_in_slot_three() -> None:
+    """With the From in slot 4 of the pane a fold in the top row shows."""
+    state = both_sides_fold_state(at=9)
+    opened = pane_opened(state, False)
+    assert opened is not None
+    assert opened.strip.opened == {'S5'}

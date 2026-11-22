@@ -33,14 +33,16 @@ from paperroute_transit.core.reach import (
 )
 from paperroute_transit.core.sides import KerbPair
 from paperroute_transit.core.strip_approach import (
+    approach_of,
     approach_stations,
     facing_of,
+    facing_spot,
     facing_station,
     stop_reached,
 )
-from paperroute_transit.core.strip_badges import HALF_WIDE, SLOT_SPAN
+from paperroute_transit.core.strip_badges import HALF_WIDE, SLOT_SPAN, Spot
 from paperroute_transit.core.strip_model import TRACK_X, StripInputs, StripRow
-from paperroute_transit.core.strip_view import build_strip_view
+from paperroute_transit.core.strip_view import build_strip_view, trips_of
 
 BOTH: Final[StripKey] = replace(TRAIN, across='x2')
 HERE: Final[tuple[str, ...]] = ('P5', 'P4', 'P3', 'P2', 'P1', 'C', 'B1', 'B2')
@@ -351,6 +353,26 @@ def test_reached_main_row_beats_its_partner() -> None:
         facing={'A2': 'A1'},
     ))
     assert marker.y == rows['A2'].y
+
+
+def test_reached_row_not_drawn_gives_way_to_its_partners_row() -> None:
+    """At A2, scrolled off, the bus sits on A1, its partner's row."""
+    inputs = approaching(
+        minutes=3, stations=('P3', 'A2', 'P1', 'C', 'B1'),
+        facing={'A2': 'A1'},
+    )
+    approach = approach_of(reach=inputs.reach, key=inputs.key)
+    assert approach is not None
+    departure = inputs.departures[0].departure
+    pattern = inputs.patterns['y']
+    assert pattern is not None
+    spot = Spot(x=TRACK_X, y=50.0)
+    assert facing_spot(
+        departure=departure, pattern=pattern, at=1,
+        trips=trips_of(inputs=inputs),
+        approach=approach,
+        spots={'A1': spot},
+    ) == spot
 
 
 def test_reached_row_across_the_from_is_not_taken() -> None:

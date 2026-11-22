@@ -284,11 +284,14 @@ def facing_spot(
     )
     if origin is None or at >= origin:
         return None
+    drawn = spots.keys()
     rows = [
         facing_row(
             pattern=pattern, index=index, origin=origin, trips=trips,
             lane=approach.below if departure.facts.across else approach.above,
-            side=approach.lower if departure.facts.across else approach.upper,
+            side=(
+                approach.lower if departure.facts.across else approach.upper
+            ) & drawn,
             facing=approach.facing,
         )
         for index in range(origin)

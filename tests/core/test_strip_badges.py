@@ -550,8 +550,8 @@ def facing_row(*, routes: str, y: float = 100) -> list[Badge]:
     ]
 
 
-def test_pushed_caps_facing_badges_on_a_row_at_two() -> None:
-    """Past two on a row, the rest fold into a '+<n>' in the third slot."""
+def test_pushed_shows_three_facing_badges_and_folds_past_them() -> None:
+    """Up to three on a row are labelled; four or more fold after two."""
     spots = {'A': Spot(x=30, y=100)}
     third = 30 + 2 * SLOT_SPAN
     assert shown(badges=facing_row(routes='T1'), spots=spots) == [
@@ -561,7 +561,10 @@ def test_pushed_caps_facing_badges_on_a_row_at_two() -> None:
         ('T1', 30, 100), ('T2', BESIDE, 100),
     ]
     assert shown(badges=facing_row(routes='T1 T2 T3'), spots=spots) == [
-        ('T1', 30, 100), ('T2', BESIDE, 100), ('+1', third, 100),
+        ('T1', 30, 100), ('T2', BESIDE, 100), ('T3', third, 100),
+    ]
+    assert shown(badges=facing_row(routes='T1 T2 T3 T4'), spots=spots) == [
+        ('T1', 30, 100), ('T2', BESIDE, 100), ('+2', third, 100),
     ]
     assert shown(
         badges=facing_row(routes='T1 T2 T3 T4 T5'), spots=spots,
@@ -582,7 +585,7 @@ def test_pushed_folded_facing_count_is_hollow_and_plain() -> None:
 
 
 def test_pushed_caps_facing_badges_row_by_row() -> None:
-    """Each row keeps two facing badges and its own count."""
+    """Each row folds on its own: three show, four fold after two."""
     spots = {'A': Spot(x=30, y=100), 'B': Spot(x=30, y=136)}
     third = 30 + 2 * SLOT_SPAN
     found = shown(
@@ -595,8 +598,24 @@ def test_pushed_caps_facing_badges_row_by_row() -> None:
     assert found == [
         ('T1', 30, 100), ('T4', 30, 136),
         ('T2', BESIDE, 100), ('T5', BESIDE, 136),
-        ('+1', third, 100), ('+2', third, 136),
+        ('T3', third, 100), ('+2', third, 136),
     ]
+
+
+def test_pushed_puts_the_count_right_of_the_labelled_facing_badges() -> None:
+    """Beside a hop badge, the count still reads after the labels."""
+    spots = {'A': Spot(x=30, y=100), 'C': Spot(x=30, y=136)}
+    departed = badge(x=30, y=125, low=100, high=136, bearing=None)
+    found = pushed(
+        badges=[departed, *facing_row(routes='T1 T2 T3 T4')],
+        keep=Keepouts(spots=spots),
+    )
+    row = sorted(
+        (each.marker for each in found if each.marker.y == 100),
+        key=lambda marker: marker.x,
+    )
+    assert [marker.route for marker in row] == ['T1', 'T2', '+2']
+    assert row[0].x < row[1].x < row[2].x
 
 
 def test_pushed_without_facing_badges_is_unchanged_by_the_cap() -> None:

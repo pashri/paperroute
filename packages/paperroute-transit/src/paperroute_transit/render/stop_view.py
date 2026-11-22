@@ -44,6 +44,7 @@ from paperroute_transit.render.chrome import (
     view_banner,
     view_header,
 )
+from paperroute_transit.render.gauge_draw import draw_gauge
 from paperroute_transit.render.late_marks import mark_room, marked_countdown
 from paperroute_transit.render.names import Naming, fit_headsign
 
@@ -167,9 +168,11 @@ def hero_footer(canvas: Canvas, *, row: Row, top: int) -> None:
         face=ride, grey=INK)
 
 
-def hero_due(canvas: Canvas, *, row: Row, top: int) -> None:
+def hero_due(
+    canvas: Canvas, *, row: Row, top: int, place: str
+) -> None:
     """
-    Draw the due line under the ride line, for an estimated row.
+    Draw the due line and how far the bus is under the ride line.
 
     Parameters
     ----------
@@ -179,10 +182,15 @@ def hero_due(canvas: Canvas, *, row: Row, top: int) -> None:
         Next service.
     top : int
         Top of the panel.
+    place : str
+        How far the bus is, in words; empty for none.
     """
-    if row.estimate is None:
+    parts = [place] if place else []
+    if row.estimate is not None:
+        parts.insert(0, due_line(estimate=row.estimate))
+    if not parts:
         return
-    text = due_line(estimate=row.estimate)
+    text = small_text(parts=parts, face=DUE_FACE, width=400)
     canvas.text(
         at=(18, top + DUE_DROP),
         text=canvas.fit(text=text, face=DUE_FACE, width=400),
@@ -365,6 +373,7 @@ def hero(
     row: Row,
     top: int,
     naming: Naming,
+    place: str = '',
     under: UnderNumber | None = None,
 ) -> None:
     """
@@ -380,6 +389,8 @@ def hero(
         Top of the panel.
     naming : Naming
         How names are shortened.
+    place : str
+        How far the bus is, in words; empty for none.
     under : UnderNumber | None
         The block to draw under the number, in place of the arrival
         footer and due line.
@@ -390,7 +401,7 @@ def hero(
         hero_under(canvas, under=under, row=row, top=top)
         return
     hero_footer(canvas, row=row, top=top)
-    hero_due(canvas, row=row, top=top)
+    hero_due(canvas, row=row, top=top, place=place)
 
 
 def headsign_arrival(*, row: Row) -> str:
@@ -781,11 +792,20 @@ def draw_stop_view(*, view: StopView) -> NDArray[np.uint8]:
     if view.hero:
         names.append(view.hero.destination)
     naming = Naming(rules=view.name_rules, siblings=tuple(names))
+    gauge = view.gauge
     if view.hero:
         hero_split(
             canvas, row=view.hero, top=top, under=view.under, naming=naming,
+            place=gauge.words if gauge else '',
         )
-    return finish_view(canvas, view=view, top=top, naming=naming)
+    gauge_ink = np.zeros((HEIGHT, WIDTH), dtype=bool)
+    if view.hero and gauge and (gauge.calls or gauge.behind):
+        gauge_ink = draw_gauge(
+            canvas, gauge=gauge, route=view.hero.route,
+            naming=Naming(rules=view.name_rules),
+        )
+    frame = finish_view(canvas, view=view, top=top, naming=naming)
+    return np.where(gauge_ink, INK, frame).astype(np.uint8)
 
 
 def empty_message(canvas: Canvas, *, text: str) -> None:
@@ -813,6 +833,7 @@ def hero_split(
     top: int,
     under: UnderNumber | None,
     naming: Naming,
+    place: str,
 ) -> None:
     """
     Draw the hero, the rule beside it and the list's column heads.
@@ -830,8 +851,12 @@ def hero_split(
         headed LEAVES alone, at the right edge.
     naming : Naming
         How names are shortened.
+    place : str
+        How far the bus is, in words; empty for none.
     """
-    hero(canvas, row=row, top=top, under=under, naming=naming)
+    hero(
+        canvas, row=row, top=top, under=under, naming=naming, place=place,
+    )
     canvas.rect(box=(SPLIT, top, SPLIT + 3, HEIGHT), grey=INK)
     head = Face(weight=700, px=11)
     if under is not None:

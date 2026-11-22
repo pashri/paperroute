@@ -20,7 +20,11 @@ from paperroute_testkit.render.factories import STOP_VIEW as BASE
 from paperroute_testkit.render.factories import stop_row as row
 from paperroute_transit.core.model import CarryOn
 from paperroute_transit.core.names import NameRules
-from paperroute_transit.core.stop_under import UnderNumber
+from paperroute_transit.core.stop_under import (
+    GaugeCall,
+    StopGauge,
+    UnderNumber,
+)
 from paperroute_transit.core.stop_view import (
     HORIZON_TEXT,
     UNCERTAIN,
@@ -59,6 +63,7 @@ from paperroute_transit.render.stop_view import (
     draw_stop_view,
     headline_width,
     headsign_arrival,
+    hero_due,
     hero_headline,
     hero_under,
     list_row,
@@ -867,3 +872,56 @@ def test_headsign_arrival_joins_the_headsign_and_the_arrival() -> None:
     """The headsign, a dot and the arrival; the arrival alone without one."""
     assert headsign_arrival(row=row()) == f'Parramatta{DOT}arr 8:45'
     assert headsign_arrival(row=row(destination='')) == 'arr 8:45'
+
+
+GAUGE: Final[StopGauge] = StopGauge(
+    origin='Hollis St', behind=('Mays Hill',), bus=0.5,
+    calls=(
+        GaugeCall(name='Harris Park', minutes=':08'),
+        GaugeCall(name='Rosehill', minutes=':11'),
+    ),
+    words='1 stop away',
+)
+
+
+def test_a_gauge_draws_below_the_small_line() -> None:
+    """A gauge puts ink under the small line of the open view."""
+    frame = draw_stop_view(view=replace(OPEN, gauge=GAUGE))
+    assert (frame[HEADER + 290:, 0:SPLIT] == INK).any()
+    bare = draw_stop_view(view=OPEN)
+    assert (bare[HEADER + 250:, 0:SPLIT] == PAPER).all()
+
+
+def test_hero_due_adds_the_words_to_the_due_line() -> None:
+    """The words follow the due line after a dot."""
+    canvas = Recording()
+    hero_due(
+        canvas, row=replace(row(), estimate=LATE), top=100,
+        place='2 stops away',
+    )
+    assert canvas.drawn[-1].endswith(f'{DOT}2 stops away')
+
+
+def test_hero_due_shows_the_words_alone_without_an_estimate() -> None:
+    """Without an estimate the words stand alone; with none, nothing."""
+    canvas = Recording()
+    hero_due(canvas, row=row(), top=100, place='2 stops away')
+    assert canvas.drawn == ['2 stops away']
+    quiet = Recording()
+    hero_due(quiet, row=row(), top=100, place='')
+    assert quiet.drawn == []
+
+
+def test_a_destination_view_draws_its_gauge_under_the_due_line() -> None:
+    """A view with a destination draws its gauge under the due line."""
+    frame = draw_stop_view(view=replace(BASE, gauge=GAUGE))
+    assert (frame[HEADER + 300:, 0:SPLIT] == INK).any()
+
+
+def test_a_gauge_with_only_the_from_is_not_drawn() -> None:
+    """A gauge with no calls and nothing behind leaves the frame alone."""
+    lone = StopGauge(origin='Hollis St')
+    assert (
+        draw_stop_view(view=replace(OPEN, gauge=lone))
+        == draw_stop_view(view=OPEN)
+    ).all()

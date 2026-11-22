@@ -31,6 +31,7 @@ from paperroute_transit.render.gauge_plan import (
     keep_out,
     mark_lines,
     name_room,
+    plan_at,
     reaches,
 )
 from paperroute_transit.render.names import Naming
@@ -90,9 +91,12 @@ def test_reaches_leave_the_last_call_its_shortest_label() -> None:
     )
     assert reach == 14
     width = text_width(text='Call 19', face=BOLD_FACE)
-    assert dest_reach == math.floor(
-        (EDGE - width / 2 - cap_height(face=BOLD_FACE) - 2 - FIRST_X)
-        / PITCH
+    assert dest_reach == min(
+        math.floor(
+            (EDGE - width / 2 - cap_height(face=BOLD_FACE) - 2 - FIRST_X)
+            / PITCH
+        ),
+        reach + 1,
     )
 
 
@@ -164,3 +168,21 @@ def test_mark_lines_wrap_a_name_too_long_for_one_line() -> None:
     assert (plan.pitch, plan.wrap) == (WIDE_PITCH, True)
     assert lines[0] == ('Hollis St',)
     assert lines[1] == ('Cottenham Rampton', 'Road Histon')
+
+
+def test_reaches_keep_the_destination_within_one_slot_of_the_calls() -> None:
+    """A short Destination label never leaves a dropped slot."""
+    gauge = StopGauge(
+        origin='F',
+        calls=(*numbered(15), GaugeCall(name='Ryde', minutes=':16')),
+        end=15,
+    )
+    reach, dest_reach = reaches(
+        gauge=gauge, first=FIRST_X, pitch=PITCH, naming=PLAIN,
+    )
+    assert dest_reach <= reach + 1
+    plan = plan_at(gauge=gauge, route='606', naming=PLAIN, pitch=PITCH)
+    ahead = plan.line.ahead
+    assert ahead is not None
+    kept = [m for m in plan.line.marks if m.slot > 0]
+    assert len(kept) - 1 + ahead.count == 15

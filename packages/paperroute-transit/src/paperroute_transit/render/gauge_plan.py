@@ -315,7 +315,7 @@ def reaches(
     width = min(text_width(text=forms[-1], face=BOLD_FACE), DEST_LONGEST)
     bold_cap = cap_height(face=BOLD_FACE)
     dest = math.floor((EDGE - width * COS - bold_cap - 2 - first) / pitch)
-    return reach, dest
+    return reach, min(dest, reach + 1)
 
 
 def badge_hang(*, line: GaugeLine, pitch: float, route: str) -> float:

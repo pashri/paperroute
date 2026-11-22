@@ -179,10 +179,12 @@ def followed_runs(
         not above the From, earliest first, each with the stops it makes
         after the From (see `served_after`). Empty when the first one
         that can be taken has no loaded pattern yet; a later one without
-        one is passed over.
+        one is passed over. Departures from a kerb across are skipped.
     """
     found: list[tuple[LiveDeparture, Served]] = []
     for item in boardable_items(trips=trips, origin=origin, target=target):
+        if item.departure.facts.across:
+            continue
         calls = list(served_after(item=item, trips=trips, origin=origin))
         if not calls and not found:
             return []

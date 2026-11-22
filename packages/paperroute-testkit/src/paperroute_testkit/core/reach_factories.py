@@ -131,3 +131,30 @@ def random_tails(draw: st.DrawFn) -> list[RunTail]:
         ),
         max_size=8,
     ))
+
+
+def both_reach(*, stations: int = 3) -> Reach:
+    """
+    Build a both-sides reach from C: A stations above, B stations below.
+
+    Parameters
+    ----------
+    stations : int
+        Stations each way.
+
+    Returns
+    -------
+    Reach
+        The reach, with A`stations` to A1 above C and B1 to B`stations`
+        below.
+    """
+    here = tail(' '.join(f'B{k}' for k in range(1, stations + 1)), 6)
+    there = tail(' '.join(f'A{k}' for k in range(1, stations + 1)), 6)
+    places = {
+        row.place.stop_id: row.place
+        for row in reach_of(tails=[here, there]).rows
+    }
+    return build_reach(data=ReachInput(
+        origin=places['C'], tails=(here,), places=places, station_of={},
+        across_tails=(there,),
+    ))

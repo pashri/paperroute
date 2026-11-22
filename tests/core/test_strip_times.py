@@ -36,6 +36,10 @@ TRAIN: Final[StripKey] = StripKey(
     station='C', kind=SydneyMode.TRAIN, routes=(),
 )
 
+BOTH: Final[StripKey] = StripKey(
+    station='C', kind=SydneyMode.BUS, routes=(), across='x2',
+)
+
 
 def train(*, minutes: int, trip_id: str) -> Departure:
     """
@@ -396,11 +400,6 @@ def across_departure(*, minutes: int, trip_id: str) -> Departure:
         kind=SydneyMode.BUS,
     )
     return replace(there, facts=replace(there.facts, across=True))
-
-
-BOTH: Final[StripKey] = StripKey(
-    station='C', kind=SydneyMode.BUS, routes=(), across='x2',
-)
 
 
 def test_window_departures_keeps_both_kerbs() -> None:

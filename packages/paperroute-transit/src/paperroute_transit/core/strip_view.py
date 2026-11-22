@@ -52,7 +52,7 @@ from paperroute_transit.core.strip_model import (
     selected_index,
 )
 from paperroute_transit.core.strip_notes import carry_note
-from paperroute_transit.core.strip_sides import across_times
+from paperroute_transit.core.strip_sides import across_times, kerb_item
 from paperroute_transit.core.strip_slots import (
     band_of,
     both_kerbs,
@@ -155,18 +155,20 @@ def row_times(
         return followed_times(
             trips=trips, reach=reach, target=target, selected=inputs.selected,
         )
+    station = reach.rows[origin].place.stop_id
     item = shown_item(
-        trips=trips,
-        origin=reach.rows[origin].place.stop_id,
-        target=target,
-        selected=inputs.selected,
+        trips=trips, origin=station, target=target, selected=inputs.selected,
     )
     if item is None:
         return {}
+    here = kerb_item(
+        trips=trips, origin=station, target=target, selected=inputs.selected,
+    )
+    below = {} if here is None else trip_text(
+        item=here, trips=trips, reach=reach, rows=range(len(reach.rows)),
+    )
     return {
-        **trip_text(
-            item=item, trips=trips, reach=reach, rows=range(len(reach.rows)),
-        ),
+        **below,
         **across_times(trips=trips, reach=reach),
         origin: clock_text(moment=item.departs, zone=inputs.zone),
     }
@@ -206,23 +208,28 @@ def followed_times(
     picked = picked_calls(
         trips=trips, reach=reach, target=target, selected=selected,
     )
-    item = picked[0] if picked is not None else shown_item(
-        trips=trips,
-        origin=reach.rows[origin].place.stop_id,
-        target=target,
-        selected=selected,
+    station = reach.rows[origin].place.stop_id
+    shown = shown_item(
+        trips=trips, origin=station, target=target, selected=selected,
     )
-    if item is None:
+    item = picked[0] if picked is not None else kerb_item(
+        trips=trips, origin=station, target=target, selected=selected,
+    )
+    stamp = shown or item
+    if stamp is None:
         return {}
     below = {} if picked is None else picked[1]
+    here = {} if item is None else trip_text(
+        item=item, trips=trips, reach=reach, rows=range(origin),
+    )
     return {
-        **trip_text(item=item, trips=trips, reach=reach, rows=range(origin)),
+        **here,
         **across_times(trips=trips, reach=reach),
         **{
             index: clock_text(moment=at, zone=trips.zone)
             for index, at in below.items()
         },
-        origin: clock_text(moment=item.departs, zone=trips.zone),
+        origin: clock_text(moment=stamp.departs, zone=trips.zone),
     }
 
 

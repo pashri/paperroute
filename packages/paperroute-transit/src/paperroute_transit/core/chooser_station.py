@@ -17,7 +17,7 @@ from paperroute_transit.core.chooser import (
     path_to,
 )
 from paperroute_transit.core.chooser_lists import backed, pressed, previewed
-from paperroute_transit.core.chooser_sides import pressed_side
+from paperroute_transit.core.chooser_sides import menu_closed, pressed_side
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.reach import Reach
 from paperroute_transit.core.strip_model import ALL_TAG
@@ -207,4 +207,6 @@ def knob_backed(*, chooser: ChooserState) -> ChooserState | None:
     """
     if focus_level(chooser=chooser) is Level.TO:
         return backed_to(chooser=chooser)
+    if chooser.stage is Stage.FROM and chooser.kerbs.menu is not None:
+        return menu_closed(chooser=chooser)
     return backed(chooser=chooser)

@@ -47,13 +47,13 @@ class Kerbs:
     ----------
     pairs : tuple[KerbPair, ...]
         The line's stations that have a kerb across the road.
-    side : int
-        The cursor's row among its station's choices; 0 on the station
-        row.
+    menu : int | None
+        The box's cursor row while it is open over the cursor's station;
+        None while it is closed.
     """
 
     pairs: tuple[KerbPair, ...] = ()
-    side: int = 0
+    menu: int | None = None
 
 
 def sides_row(*, sides: StopSides) -> AppRow:

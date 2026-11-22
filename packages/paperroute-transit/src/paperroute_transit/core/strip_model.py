@@ -136,6 +136,8 @@ class StripRow:
         The carry-on note drawn on the row, if any.
     names : tuple[str, ...]
         The places an exit row names, in order; empty for any other row.
+    paired : bool
+        True on a FROM row whose stop has a kerb across the road.
     """
 
     name: str
@@ -153,6 +155,7 @@ class StripRow:
     name_after: float | None = None
     note: CarryNote | None = None
     names: tuple[str, ...] = ()
+    paired: bool = False
 
 
 @dataclass(frozen=True)
@@ -226,6 +229,26 @@ class StripPanel:
 
 
 @dataclass(frozen=True)
+class KerbMenu:
+    """
+    The box over the FROM list offering one direction or both.
+
+    Attributes
+    ----------
+    title : str
+        The station's name.
+    labels : tuple[str, ...]
+        The rows, top to bottom.
+    cursor : int
+        The row the knob is on.
+    """
+
+    title: str
+    labels: tuple[str, ...]
+    cursor: int
+
+
+@dataclass(frozen=True)
 class StripView:
     """
     Everything the Strip view draws.
@@ -258,6 +281,8 @@ class StripView:
         True when the banner is a device warning, drawn inverted.
     name_rules : NameRules
         The word lists that shorten this city's stop names.
+    menu : KerbMenu | None
+        The box over the FROM list, or None while it is closed.
     """
 
     origin: str
@@ -275,6 +300,7 @@ class StripView:
     more: int = 0
     planned: bool = False
     name_rules: NameRules = NameRules()
+    menu: KerbMenu | None = None
 
 
 @dataclass(frozen=True)

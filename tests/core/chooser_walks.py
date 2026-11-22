@@ -1,7 +1,7 @@
 """Chooser columns, a strip and walks through the chooser for tests."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Final
 
@@ -41,6 +41,7 @@ from paperroute_transit.core.messages import (
 )
 from paperroute_transit.core.model import Departure, Pin, StopPlace
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
+from paperroute_transit.core.sides import KerbPair, Kerbs
 from paperroute_transit.core.state_model import RELOAD_BEFORE
 from paperroute_transit.core.stop_view import HORIZON
 
@@ -693,3 +694,47 @@ TO_STAGE: Final[tuple[Event, ...]] = (
     DOWN,
     NEXT,
 )
+
+
+KERB_LINE: Final[tuple[StopPlace, ...]] = (
+    place('s0', name='Oakington'),
+    place('s1', name='Histon'),
+    place('s2', name='Orchard Close'),
+    place('s3', name='Mitcham'),
+    place('s4', name='Emmanuel Street'),
+)
+QUIET_PAIR: Final[KerbPair] = KerbPair(
+    station='s2', other=place('x2', name='Orchard Close'), busy=False,
+)
+BUSY_PAIR: Final[KerbPair] = replace(QUIET_PAIR, busy=True)
+
+
+def at_kerbs(
+    *,
+    pairs: tuple[KerbPair, ...] = (QUIET_PAIR,),
+    menu: int | None = None,
+) -> ChooserState:
+    """
+    Open 606's first towards row on `KERB_LINE`, cursor on Orchard Close.
+
+    Parameters
+    ----------
+    pairs : tuple[KerbPair, ...]
+        The line's paired kerbs.
+    menu : int | None
+        The box's cursor row, or None for a closed box.
+
+    Returns
+    -------
+    ChooserState
+        The chooser in the FROM stage.
+    """
+    chooser, _ = pressed(chooser=at_towards(), reach=None)
+    chooser = with_line(
+        chooser=chooser, towards=11, line=KERB_LINE, pairs=pairs,
+    )
+    return replace(
+        chooser,
+        line_cursor=2,
+        kerbs=Kerbs(pairs=pairs, menu=menu),
+    )

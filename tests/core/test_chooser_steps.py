@@ -608,8 +608,8 @@ def test_chooser_replies_with_it_closed_are_ignored() -> None:
     assert step(state, ColumnLoaded(path=(), column=KINDS)) == (state, ())
 
 
-def test_from_stage_opens_a_paired_stop_under_the_cursor() -> None:
-    """A paired From opens its kerbs under it, and the frame draws."""
+def test_from_stage_opens_the_box_on_a_paired_stop() -> None:
+    """A paired From opens the box over its row, and the frame draws."""
     pair = KerbPair(
         station=LINE[1].stop_id, other=place('X2', name='Across'),
         busy=False,
@@ -618,19 +618,16 @@ def test_from_stage_opens_a_paired_stop_under_the_cursor() -> None:
         *TO_STAGE[:-3],
         LineLoaded(towards=11, line=LINE, pairs=(pair,)),
         DOWN,
-        DOWN,
+        NEXT,
     )
     state, _ = run_events(state=loaded(state=pinned()), events=events)
     view = state.last_view
     assert isinstance(view, StripView)
     assert [row.name for row in view.rows] == [
-        'Parramatta', 'Northmead, both sides',
-        'only towards Baulkham Hills', 'only towards Parramatta',
-        'Baulkham Hills',
+        'Parramatta', 'Northmead', 'Baulkham Hills',
     ]
-    assert [row.cursor for row in view.rows] == [
-        False, False, True, False, False,
-    ]
+    assert [row.paired for row in view.rows] == [False, True, False]
+    assert view.menu is not None and view.menu.cursor == 0
     assert draw_strip_view(view=view).shape == (HEIGHT, WIDTH)
 
 

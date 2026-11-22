@@ -28,11 +28,7 @@ from paperroute_transit.core.chooser_lists import (
     with_column,
 )
 from paperroute_transit.core.chooser_previews import previews_replied
-from paperroute_transit.core.chooser_sides import (
-    side_reach,
-    turned_from,
-    with_line,
-)
+from paperroute_transit.core.chooser_sides import turned_from, with_line
 from paperroute_transit.core.chooser_station import (
     has_list_from,
     knob_backed,
@@ -44,6 +40,7 @@ from paperroute_transit.core.chooser_view import (
     build_chooser_view,
     route_title,
 )
+from paperroute_transit.core.kerb_menu import with_kerbs
 from paperroute_transit.core.live import live_since, resolved
 from paperroute_transit.core.map_requests import polled_positions
 from paperroute_transit.core.messages import (
@@ -85,7 +82,7 @@ from paperroute_transit.core.strip_model import (
     StripView,
 )
 from paperroute_transit.core.strip_state import folded_reach, picking_to
-from paperroute_transit.core.strip_view import build_strip_view
+from paperroute_transit.core.strip_view import build_strip_view, line_reach
 
 LINE_FAILED: Final[str] = "Can't load the line"
 DEPARTURES_FAILED: Final[str] = "Can't load departures"
@@ -646,7 +643,11 @@ def from_inputs(*, state: State, chooser: ChooserState) -> StripInputs:
         be read.
     """
     line = chooser.line
-    reach, cursor = side_reach(chooser=chooser) if line else (None, None)
+    reach, cursor = (
+        (line_reach(line=line), chooser.line_cursor)
+        if line
+        else (None, None)
+    )
     return StripInputs(
         reach=reach,
         unavailable=LINE_FAILED if chooser.failed else None,
@@ -810,7 +811,10 @@ def chooser_view(
         case Stage.LISTS:
             return build_chooser_view(chooser=chooser)
         case Stage.FROM:
-            return build_strip_view(
-                inputs=from_inputs(state=state, chooser=chooser),
+            return with_kerbs(
+                view=build_strip_view(
+                    inputs=from_inputs(state=state, chooser=chooser),
+                ),
+                chooser=chooser,
             )
     return build_strip_view(inputs=to_inputs(state=state, chooser=chooser))

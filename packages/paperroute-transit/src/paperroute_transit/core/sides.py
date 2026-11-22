@@ -1,8 +1,11 @@
-"""The kerb across the road from a station."""
+"""The kerb across the road from a station, and pins that cover both."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from typing import Final
 
-from paperroute_transit.core.model import StopPlace
+from paperroute_transit.core.model import Pin, StopPlace
+
+BOTH_SUFFIX: Final[str] = ', both sides'
 
 
 @dataclass(frozen=True)
@@ -23,3 +26,90 @@ class KerbPair:
     station: str
     other: StopPlace
     busy: bool
+
+
+def both_sides(*, pin: Pin) -> bool:
+    """
+    Say whether a pin covers both kerbs of a road.
+
+    Parameters
+    ----------
+    pin : Pin
+        Pin.
+
+    Returns
+    -------
+    bool
+        True when the pin has an opposite kerb and no Destination.
+    """
+    return pin.opposite is not None and pin.destination is None
+
+
+def pin_places(*, pin: Pin) -> tuple[StopPlace, ...]:
+    """
+    List the places a pin reads from the timetable.
+
+    Parameters
+    ----------
+    pin : Pin
+        Pin.
+
+    Returns
+    -------
+    tuple[StopPlace, ...]
+        The From, then the opposite kerb when the pin is both-sides,
+        then the Destination when there is one.
+    """
+    places = (
+        pin.origin,
+        pin.opposite if both_sides(pin=pin) else None,
+        pin.destination,
+    )
+    return tuple(place for place in places if place is not None)
+
+
+def pin_title(*, pin: Pin) -> str:
+    """
+    Name a pin's place for a heading.
+
+    Parameters
+    ----------
+    pin : Pin
+        Pin.
+
+    Returns
+    -------
+    str
+        The From name, with the both-sides suffix when the pin is
+        both-sides.
+    """
+    suffix = BOTH_SUFFIX if both_sides(pin=pin) else ''
+    return f'{pin.origin.name}{suffix}'
+
+
+def kept_sides(*, old: Pin | None, new: Pin) -> Pin:
+    """
+    Carry an edited pin's opposite kerb over from the pin it replaces.
+
+    Parameters
+    ----------
+    old : Pin | None
+        The pin before the edit, or None for a new pin.
+    new : Pin
+        The pin after the edit.
+
+    Returns
+    -------
+    Pin
+        The new pin with the old one's opposite kerb and towards names
+        when the old pin was both-sides, the new one has no Destination
+        and the same From; otherwise the new pin unchanged.
+    """
+    if (
+        old is None
+        or not both_sides(pin=old)
+        or new.destination is not None
+        or new.origin.stop_id != old.origin.stop_id
+    ):
+        return new
+    return replace(new, opposite=old.opposite, towards=old.towards)

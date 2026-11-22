@@ -93,7 +93,9 @@
             "ticked": true
           }
         ],
-        "never": []
+        "never": [],
+        "opposite": null,
+        "towards": []
       },
       {
         "origin": {
@@ -128,7 +130,9 @@
         "ways": [],
         "never": [
           "660"
-        ]
+        ],
+        "opposite": null,
+        "towards": []
       }
     ],
     "current": 1,
@@ -237,7 +241,9 @@
               "ticked": true
             }
           ],
-          "never": []
+          "never": [],
+          "opposite": null,
+          "towards": []
         },
         "pinned": true
       },

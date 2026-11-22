@@ -281,3 +281,18 @@ def test_modes_reply_for_the_frame_is_kept() -> None:
     assert not is_stale(state=state, event=reply)
     away = replace(reply, box=area_box(centre=start, mpp=mpp))
     assert is_stale(state=state, event=away)
+
+
+def test_rematched_drops_a_vanished_opposite_kerb() -> None:
+    """A kerb across that is gone leaves a pin of one kerb, not missing."""
+    both = replace(
+        pin_at('home', x=0.0), opposite=place('across'), towards=('A', 'B'),
+    )
+    after = rematched(
+        pin=both, found={'home': both.origin, 'across': None},
+    )
+    assert (after.opposite, after.towards, after.missing) == (
+        None, (), False,
+    )
+    moved = rematched(pin=both, found={'across': place('across2')})
+    assert moved.opposite == place('across2')

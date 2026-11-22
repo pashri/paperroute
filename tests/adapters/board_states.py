@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any
 
 from paperroute_device.adapters.migrations import (
     KIT_MIGRATIONS,
@@ -131,3 +132,21 @@ class BoardStates:
             The board's state, device settings included.
         """
         self.file.save(saved=KitSaved(device=saved.settings.device, app=saved))
+
+
+def without_sides(*, board: dict[str, Any]) -> None:
+    """
+    Remove the both-sides keys from a board's stored pins.
+
+    Parameters
+    ----------
+    board : dict[str, Any]
+        The decoded board section; changed in place.
+    """
+    places = list(board['pins'])
+    before = (board.get('auto') or {}).get('before')
+    if before is not None:
+        places.append(before['place'])
+    for stored in places:
+        stored.pop('opposite', None)
+        stored.pop('towards', None)

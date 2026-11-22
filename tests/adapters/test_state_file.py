@@ -28,6 +28,11 @@ from paperroute_sydney.city import (
 )
 from paperroute_testkit.core.connection_factories import WORK, WORK_CHANGE
 from paperroute_testkit.core.factories import pin_at
+from paperroute_transit.adapters.state_file import (
+    PinModel,
+    pin_from_model,
+    pin_to_model,
+)
 from paperroute_transit.adapters.state_migrations import regional_to_coach
 from paperroute_transit.core.auto_model import AutoState, Before, Occurrence
 from paperroute_transit.core.model import AutoWindow, Pin, StopPlace, Way
@@ -391,6 +396,7 @@ FILE_KEYS: Final[frozenset[str]] = frozenset({
     'skip_school_on_route_pins', 'parked_age', 'map_framing', 'start', 'end',
     'pins', 'current', 'unpinned', 'view', 'quota', 'auto',
     'origin', 'destination', 'kind', 'routes', 'nickname', 'only',
+    'opposite', 'towards',
     'windows', 'ways', 'never', 'stop_id', 'name', 'x', 'y', 'days',
     'changes', 'ticked', 'alight', 'allow',
     'day', 'calls', 'occurrence', 'before', 'overridden_at', 'ref',
@@ -449,6 +455,8 @@ def test_file_holds_no_secret_keys(path: Path) -> None:
         'windows',
         'ways',
         'never',
+        'opposite',
+        'towards',
     }
 
 
@@ -1424,3 +1432,32 @@ def test_file_without_map_framing_loads_as_approach(path: Path) -> None:
     loaded = states.load()
     assert loaded.stored
     assert loaded.saved.settings.board.map_framing is MapFraming.APPROACH
+
+
+ACROSS: Final[StopPlace] = StopPlace(
+    stop_id='across', name='Across', point=(100.0, 40.0),
+)
+BOTH: Final[Pin] = replace(
+    pin_at('home', x=100.0), kind=SydneyMode.BUS, opposite=ACROSS,
+    towards=('Town', ''),
+)
+
+
+def test_pin_from_model_loads_a_pin_stored_before_both_sides() -> None:
+    """A pin stored before both-sides pins loads as one kerb."""
+    plain = pin_at('home', x=100.0)
+    stored = pin_to_model(pin=plain).model_dump()
+    del stored['opposite'], stored['towards']
+    assert pin_from_model(model=PinModel.model_validate(stored)) == plain
+
+
+def test_pin_round_trips_its_opposite_kerb() -> None:
+    """A both-sides pin keeps its kerb across and towards names."""
+    assert pin_from_model(model=pin_to_model(pin=BOTH)) == BOTH
+
+
+def test_pin_from_model_drops_an_opposite_beside_a_destination() -> None:
+    """A stored pin with a Destination and a kerb across loads one kerb."""
+    routed = replace(BOTH, destination=ACROSS)
+    loaded = pin_from_model(model=pin_to_model(pin=routed))
+    assert (loaded.opposite, loaded.towards) == (None, ())

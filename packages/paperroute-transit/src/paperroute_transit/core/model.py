@@ -167,6 +167,14 @@ class Pin:
         that is not a connection. They are not part of its identity.
     never : tuple[str, ...]
         Route short names never used on any leg.
+    opposite : StopPlace | None
+        The kerb across the road, for a pin with no Destination that
+        shows both kerbs; None for one kerb.
+    towards : tuple[str, ...]
+        For a pin with an opposite kerb, the place the From's buses run
+        towards, then the place the kerb across's buses run towards,
+        '' where none was named; empty otherwise. Not part of the pin's
+        identity.
     """
 
     origin: StopPlace
@@ -179,6 +187,8 @@ class Pin:
     windows: tuple[AutoWindow, ...] = ()
     ways: tuple[Way, ...] = ()
     never: tuple[str, ...] = ()
+    opposite: StopPlace | None = None
+    towards: tuple[str, ...] = ()
 
 
 def is_connection(*, pin: Pin) -> bool:
@@ -264,6 +274,7 @@ type PinKey = tuple[
     str | None,
     tuple[str, ...],
     tuple[str, ...],
+    str | None,
 ]
 
 
@@ -279,10 +290,11 @@ def pin_key(*, pin: Pin) -> PinKey:
     Returns
     -------
     PinKey
-        From stop ID, Destination stop ID or None, kind, routes and
-        route filter. A pin with a Destination has no routes or route
-        filter in its identity. Ways and the never list are not part of
-        it, so editing them keeps the pin's ref.
+        From stop ID, Destination stop ID or None, kind, routes, route
+        filter and the opposite kerb's stop ID or None. A pin with a
+        Destination has no routes, route filter or opposite kerb in its
+        identity. Ways, the never list and towards are not part of it,
+        so editing them keeps the pin's ref.
     """
     destination = pin.destination
     open_ended = destination is None
@@ -292,6 +304,8 @@ def pin_key(*, pin: Pin) -> PinKey:
         pin.kind,
         pin.routes if open_ended else (),
         pin.only if open_ended else (),
+        None if not open_ended or pin.opposite is None
+        else pin.opposite.stop_id,
     )
 
 
@@ -330,13 +344,15 @@ def pin_ref(*, pin: Pin) -> str:
     -------
     str
         Twelve lowercase hex digits taken from the pin's identity, so
-        two pins that are the same place share a ref. A pin without a
-        Destination hashes as it did before ways existed.
+        two pins that are the same place share a ref. A pin without an
+        opposite kerb hashes as it did before both-sides pins existed.
     """
-    origin, destination, kind, routes, only = pin_key(pin=pin)
+    origin, destination, kind, routes, only, opposite = pin_key(pin=pin)
     parts: list[object] = [
         origin, destination, kind, list(routes), list(only),
     ]
+    if opposite is not None:
+        parts.append(opposite)
     text = json.dumps(parts)
     return hashlib.sha1(text.encode()).hexdigest()[:12]
 

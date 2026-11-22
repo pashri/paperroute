@@ -194,3 +194,16 @@ def test_ticked_ways_and_is_connection() -> None:
     assert ticked_ways(pin=pin) == (WORK.ways[0],)
     assert is_connection(pin=replace(WORK, ways=(off,)))
     assert not is_connection(pin=replace(WORK, ways=()))
+
+
+def test_pin_key_tells_both_sides_from_one_kerb() -> None:
+    """A pin with an opposite kerb is a different place with its own ref."""
+    plain = Pin(origin=place('A'), kind='bus')
+    both = replace(plain, opposite=place('X'), towards=('Town', 'Beach'))
+    assert not same_place(first=plain, second=both)
+    assert pin_ref(pin=both) != pin_ref(pin=plain)
+    assert same_place(first=both, second=replace(both, towards=()))
+    routed = replace(plain, destination=place('B'))
+    assert pin_ref(pin=replace(routed, opposite=place('X'))) == pin_ref(
+        pin=routed,
+    )

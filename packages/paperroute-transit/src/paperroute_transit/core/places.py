@@ -37,6 +37,7 @@ from paperroute_transit.core.model import (
     same_place,
 )
 from paperroute_transit.core.saved import Saved
+from paperroute_transit.core.sides import pin_places
 from paperroute_transit.core.state_model import (
     RETRY_AFTER,
     Board,
@@ -449,9 +450,8 @@ def stops_to_match(*, state: State) -> tuple[StopPlace, ...]:
         pins = (*pins, places.unpinned)
     stops: dict[str, StopPlace] = {}
     for pin in pins:
-        for stop in (pin.origin, pin.destination):
-            if stop is not None:
-                stops.setdefault(stop.stop_id, stop)
+        for stop in pin_places(pin=pin):
+            stops.setdefault(stop.stop_id, stop)
     return tuple(stops.values())
 
 
@@ -496,11 +496,7 @@ def rematched(*, pin: Pin, found: Mapping[str, StopPlace | None]) -> Pin:
         is cleared only when every stop was looked up and found. Unchanged
         when none of its stops was looked up.
     """
-    looked = [
-        stop.stop_id in found
-        for stop in (pin.origin, pin.destination)
-        if stop is not None
-    ]
+    looked = [stop.stop_id in found for stop in pin_places(pin=pin)]
     if not any(looked):
         return pin
     origin = looked_up(stop=pin.origin, found=found)
@@ -511,10 +507,17 @@ def rematched(*, pin: Pin, found: Mapping[str, StopPlace | None]) -> Pin:
     )
     if origin is None or (pin.destination is not None and destination is None):
         return replace(pin, missing=True)
+    opposite = (
+        None
+        if pin.opposite is None
+        else looked_up(stop=pin.opposite, found=found)
+    )
     return replace(
         pin,
         origin=origin,
         destination=destination,
+        opposite=opposite,
+        towards=() if opposite is None else pin.towards,
         missing=pin.missing and not all(looked),
     )
 

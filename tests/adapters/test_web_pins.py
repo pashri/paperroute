@@ -1273,3 +1273,28 @@ async def test_save_with_a_stale_suggestion_is_still_refused(
     }))
     assert response.status == HTTPStatus.BAD_REQUEST
     assert not pins.posted
+
+
+async def test_edit_keeps_the_kerb_across(pins: Pins, editor: Client) -> None:
+    """Saving a both-sides pin's nickname keeps its kerb across."""
+    across = StopPlace(stop_id='B3', name='Across', point=(1.0, 2.0))
+    both = replace(
+        SAVED, destination=None, opposite=across, towards=('Town', 'Bay'),
+    )
+    pins.seen = PinsSeen(pins=(both, LOST), shown=0, revision=3)
+    ref = pin_ref(pin=both)
+    response = await editor.post('/pins/save', data=_form({
+        'ref': ref, 'stop': 'B2', 'kind': 'bus', 'route': '811',
+        'nickname': 'Shopping',
+    }), allow_redirects=False)
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert pins.posted == [
+        PinSaved(ref=ref, pin=replace(both, nickname='Shopping')),
+    ]
+
+
+def test_pin_label_names_both_sides() -> None:
+    """A both-sides pin without a nickname is listed as both sides."""
+    both = replace(HOME, opposite=SAVED.origin)
+    assert pin_label(pin=both) == 'Home Stop, both sides'
+    assert pin_line(pin=both, end_points=ENDS) == 'Home Stop, both sides'

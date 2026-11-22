@@ -12,6 +12,7 @@ from paperroute_transit.adapters.route_chips import (
 from paperroute_transit.core.model import Pin, pin_ref, ticked_ways
 from paperroute_transit.core.modes import ModeSpec, end_point_modes, line_badge
 from paperroute_transit.core.route_colours import RouteColour
+from paperroute_transit.core.sides import pin_title
 from paperroute_transit.observers import PinsSeen
 
 EMPTY: Final[str] = (
@@ -57,7 +58,7 @@ def pin_label(*, pin: Pin) -> str:
     str
         The nickname, else the From name; not escaped.
     """
-    return pin.nickname or pin.origin.name
+    return pin.nickname or pin_title(pin=pin)
 
 
 def pin_line(*, pin: Pin, end_points: Collection[str]) -> str:
@@ -80,7 +81,7 @@ def pin_line(*, pin: Pin, end_points: Collection[str]) -> str:
         where its ticked ways change.
         Not escaped.
     """
-    line = pin.origin.name
+    line = pin_title(pin=pin)
     if pin.destination is not None:
         line += f' → {pin.destination.name}'
     routes = tuple(

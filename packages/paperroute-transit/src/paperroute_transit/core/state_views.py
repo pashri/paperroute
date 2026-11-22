@@ -31,6 +31,7 @@ from paperroute_transit.core.places import shown, shown_index
 from paperroute_transit.core.rebuild import building_view
 from paperroute_transit.core.rhythm import frame_time, stale_after
 from paperroute_transit.core.saved import LiveView, Saved
+from paperroute_transit.core.sides import pin_title
 from paperroute_transit.core.sleep import sleep_view
 from paperroute_transit.core.state_model import State, clock_waiting, elapsed
 from paperroute_transit.core.stop_hero import with_detail
@@ -132,7 +133,7 @@ def stop_inputs(*, state: State, notice: Banner | None) -> StopInputs:
     destination = pin.destination
     frame = frame_time(state=state)
     return StopInputs(
-        origin=pin.origin.name,
+        origin=pin_title(pin=pin),
         destination=None if destination is None else destination.name,
         departures=live_departures(state=state),
         now=frame,

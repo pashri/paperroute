@@ -45,7 +45,12 @@ from paperroute_transit.core.model import (
     pin_ref,
 )
 from paperroute_transit.core.saved import ConnectionMap, Saved, default_saved
-from tests.adapters.board_states import BoardStates, migrated, schema_of
+from tests.adapters.board_states import (
+    BoardStates,
+    migrated,
+    schema_of,
+    without_sides,
+)
 from tests.adapters.state_layout import (
     STATE_V11,
     STATE_V11_KINDS,
@@ -69,6 +74,7 @@ def golden_before_new_settings() -> dict[str, Any]:
     golden: dict[str, Any] = json.loads(GOLDEN_STATE.read_text())
     del golden['board']['settings']['parked_age']
     del golden['board']['settings']['map_framing']
+    without_sides(board=golden['board'])
     return golden
 
 

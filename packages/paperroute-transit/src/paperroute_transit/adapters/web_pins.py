@@ -54,6 +54,7 @@ from paperroute_transit.core.model import Pin, pin_ref, same_place
 from paperroute_transit.core.modes import ModeSpec
 from paperroute_transit.core.pin_choices import PinDraft, PinEditor
 from paperroute_transit.core.route_colours import RouteColour
+from paperroute_transit.core.sides import kept_sides
 from paperroute_transit.observers import PinsSeen
 from paperroute_transit.ports import PinOptions
 
@@ -894,7 +895,11 @@ class PinsPages:
                 draft=draft, rows=rows, notice=notice_alert(text=windows),
                 status=HTTPStatus.BAD_REQUEST,
             )
-        pin = replace(editor.pin, windows=windows)
+        found = None if draft.ref is None else self.find(ref=draft.ref)
+        pin = kept_sides(
+            old=None if found is None else found[1],
+            new=replace(editor.pin, windows=windows),
+        )
         raise self.saved(seen=latest, ref=draft.ref, pin=pin)
 
     def _missing(self, *, ref: str | None) -> Pin | None:

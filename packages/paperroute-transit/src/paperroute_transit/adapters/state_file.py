@@ -108,6 +108,8 @@ class PinModel(BaseModel):
     windows: tuple[AutoWindowModel, ...]
     ways: tuple[WayModel, ...]
     never: tuple[str, ...]
+    opposite: StopModel | None = None
+    towards: tuple[str, ...] = Field(default=(), max_length=2)
 
 
 class BeforeModel(BaseModel):
@@ -277,6 +279,12 @@ def pin_to_model(*, pin: Pin) -> PinModel:
             for way in pin.ways
         ),
         never=pin.never,
+        opposite=(
+            None
+            if pin.opposite is None
+            else stop_to_model(place=pin.opposite)
+        ),
+        towards=pin.towards,
     )
 
 
@@ -295,6 +303,8 @@ def pin_from_model(*, model: PinModel) -> Pin:
         The pin, not marked missing.
     """
     destination = model.destination
+    opposite = model.opposite
+    kept = opposite is not None and destination is None
     return Pin(
         origin=stop_from_model(model=model.origin),
         destination=(
@@ -319,6 +329,12 @@ def pin_from_model(*, model: PinModel) -> Pin:
             for way in model.ways
         ),
         never=model.never,
+        opposite=(
+            None
+            if opposite is None or destination is not None
+            else stop_from_model(model=opposite)
+        ),
+        towards=model.towards if kept else (),
     )
 
 

@@ -13,7 +13,7 @@ from paperroute_device.ports import Frame
 from paperroute_hardware.core.knob_events import KnobEvent
 from paperroute_sydney.city import SYDNEY
 from paperroute_transit.adapters.state_migrations import transit_migrations
-from tests.adapters.board_states import BoardStates
+from tests.adapters.board_states import BoardStates, without_sides
 from tests.adapters.state_layout import STATE_V12
 from tests.golden.scenes import GOLDEN
 
@@ -207,4 +207,5 @@ def test_v12_file_reaches_13_as_the_board_migrates_it(tmp_path: Path) -> None:
     written = json.loads(board_path.read_text())
     del written['board']['settings']['parked_age']
     del written['board']['settings']['map_framing']
+    without_sides(board=written['board'])
     assert json.loads(kit_path.read_text()) == written

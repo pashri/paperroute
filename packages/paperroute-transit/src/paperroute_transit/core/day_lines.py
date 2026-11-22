@@ -5,6 +5,7 @@ from datetime import date, datetime, tzinfo
 
 from paperroute_transit.core.alert_state import service_date
 from paperroute_transit.core.map_lines import LineChoice
+from paperroute_transit.core.map_sides import kerb_across
 from paperroute_transit.core.map_state import DayLines
 from paperroute_transit.core.messages import Effect, LoadDayLines, MapData
 from paperroute_transit.core.model import Departure, Pin, is_connection
@@ -178,4 +179,5 @@ def line_choice(*, state: State, stop_view: StopView) -> LineChoice:
         station=state.board.station or shown(state=state).origin.stop_id,
         extras=day_extras(state=state, stop_view=stop_view),
         hidden=hidden,
+        across=kerb_across(pin=shown(state=state)),
     )

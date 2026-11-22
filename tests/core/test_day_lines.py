@@ -5,7 +5,7 @@ from datetime import date, timedelta
 
 from paperroute_device.core.kit_events import Tick
 from paperroute_sydney.city import SydneyMode
-from paperroute_testkit.core.factories import START, departure
+from paperroute_testkit.core.factories import START, departure, place
 from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.strip_factories import CENTRE, PIN, on_view
 from paperroute_transit.core.day_lines import (
@@ -406,3 +406,19 @@ def test_previous_extras_are_drawn_while_a_new_request_loads() -> None:
     held = state.map.day_lines
     assert held is not None and held.departures is None
     assert day_extras(state=state, stop_view=stop_view) == (extra_line(),)
+
+
+def test_line_choice_names_the_kerb_across_for_both_sides() -> None:
+    """A both-sides pin's choice carries its opposite kerb; others none."""
+    kerb = place('x2', name='Opposite', point=(CENTRE[0], CENTRE[1] + 37.0))
+    pin = replace(PIN, destination=None, opposite=kerb)
+    state, _ = on_view(view=LiveView.MAP, pin=pin, departures=bus_pin())
+    shown = live_stop_view(state=state)
+    assert line_choice(state=state, stop_view=shown).across == kerb
+    plain, _ = on_view(
+        view=LiveView.MAP, pin=replace(PIN, destination=None),
+        departures=bus_pin(),
+    )
+    assert line_choice(
+        state=plain, stop_view=live_stop_view(state=plain),
+    ).across is None

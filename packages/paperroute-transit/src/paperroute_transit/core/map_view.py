@@ -50,6 +50,8 @@ class TripMarks:
         change mark at the midpoint.
     lettered : bool
         True when the From and the To are drawn as the A and B discs.
+    across : Point | None
+        A both-sides pin's kerb across the road, joined to the From.
     """
 
     origin: Point | None
@@ -59,6 +61,7 @@ class TripMarks:
     end: Point | None
     others: tuple[tuple[Point, Point], ...] = ()
     lettered: bool = False
+    across: Point | None = None
 
 
 @dataclass(frozen=True)

@@ -13,6 +13,7 @@ from paperroute_transit.core.geo import (
     point_along,
 )
 from paperroute_transit.core.map_line import MapLine
+from paperroute_transit.core.map_sides import with_across
 from paperroute_transit.core.map_view import (
     MapInputs,
     MapView,
@@ -20,7 +21,7 @@ from paperroute_transit.core.map_view import (
     input_point,
     visible,
 )
-from paperroute_transit.core.model import Departure, service_seconds
+from paperroute_transit.core.model import Departure, StopPlace, service_seconds
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.strip_times import from_call
 
@@ -80,11 +81,14 @@ class LineChoice:
         The day's other lines, one departure each.
     hidden : frozenset[str]
         Kinds with no line and no rings.
+    across : StopPlace | None
+        A both-sides pin's kerb across the road; None for any other pin.
     """
 
     station: str = ''
     extras: tuple[Departure, ...] = ()
     hidden: frozenset[str] = frozenset()
+    across: StopPlace | None = None
 
 
 def line_shape(
@@ -526,5 +530,6 @@ def plain_map_view(
             lines=lines,
             stops=solid,
             dashed_stops=dashed,
+            trip=with_across(trip=built.base.trip, across=choice.across),
         ),
     )

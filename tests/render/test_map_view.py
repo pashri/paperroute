@@ -85,6 +85,7 @@ from paperroute_transit.render.map_view import (
 )
 from paperroute_transit.render.markers import (
     END_HALF,
+    STOP_HALF,
     badge_half,
     grown_box,
     nearest_first,
@@ -1056,3 +1057,42 @@ def test_sidebar_row_with_a_destination_keeps_the_arrival_line() -> None:
     drawn = sidebar_texts(replace(row(), note='platform 3'), view=VIEW)
     assert 'arr 8:45' in drawn
     assert 'platform 3' not in drawn
+
+
+def test_badges_keep_clear_of_a_both_sides_capsule() -> None:
+    """The capsule's box spans both kerbs; a badge on it slides off."""
+    across = (CENTRE[0], CENTRE[1] + 160.0)
+    trip = TripMarks(
+        origin=CENTRE, second=(), walk=None, change=None, end=None,
+        across=across,
+    )
+    map_base = replace(VIEW.base, trip=trip)
+    x, y = screen_point(
+        centre=CENTRE, mpp=MPP, point=CENTRE, projection=SYDNEY_PROJECTION,
+    )
+    _, low = screen_point(
+        centre=CENTRE, mpp=MPP, point=across, projection=SYDNEY_PROJECTION,
+    )
+    boxes = end_boxes(base=map_base)
+    assert boxes == [
+        (x - STOP_HALF, low - STOP_HALF, x + STOP_HALF, y + STOP_HALF),
+    ]
+    middle = (x, (y + low) / 2)
+    (placed,) = place(markers=[live(at=middle)], reserved=boxes)
+    assert placed.centre != middle
+
+
+def test_both_sides_from_is_drawn_as_a_capsule() -> None:
+    """The overlay joins the From to the kerb across with paper between."""
+    across = (CENTRE[0], CENTRE[1] + 160.0)
+    trip = TripMarks(
+        origin=CENTRE, second=(), walk=None, change=None, end=None,
+        across=across,
+    )
+    frame = draw_map_view(
+        view=replace(VIEW, base=replace(VIEW.base, trip=trip)), base=paper(),
+    )
+    x, y = stop_pixel()
+    assert frame[y, x] == INK and frame[y - 20, x] == INK
+    assert frame[y - 10, x] == PAPER
+    assert frame[y - 10, x + 12] == INK

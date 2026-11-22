@@ -230,6 +230,32 @@ def map_pixels(*, base: MapBase, points: Sequence[Point]) -> list[Point]:
     ]
 
 
+def capsule_box(*, ends: tuple[Point, Point], scale: float = 1.0) -> Box:
+    """
+    Give the box of a both-sides From capsule, in map pixels.
+
+    Parameters
+    ----------
+    ends : tuple[Point, Point]
+        Each kerb's centre in map pixels.
+    scale : float
+        Size of the From mark, 1 for full size.
+
+    Returns
+    -------
+    Box
+        Both kerbs' squares of half `STOP_HALF * scale`, joined.
+    """
+    half = STOP_HALF * scale
+    (ax, ay), (bx, by) = ends
+    return (
+        min(ax, bx) - half,
+        min(ay, by) - half,
+        max(ax, bx) + half,
+        max(ay, by) + half,
+    )
+
+
 def end_boxes(*, base: MapBase) -> list[Box]:
     """
     Give the boxes of the From, the To and each change, in map pixels.
@@ -251,6 +277,9 @@ def end_boxes(*, base: MapBase) -> list[Box]:
         [] if stop is None else [square(at=stop, half=STOP_HALF * scale)]
     )
     trip = base.trip
+    if stop is not None and trip is not None and trip.across is not None:
+        (across,) = map_pixels(base=base, points=(trip.across,))
+        boxes = [capsule_box(ends=(stop, across), scale=scale)]
     if trip is None:
         return boxes
     ends = () if trip.end is None else (trip.end,)

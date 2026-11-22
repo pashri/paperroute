@@ -11,6 +11,7 @@ from paperroute_testkit.core.factories import (
     calls,
     departure,
     pattern,
+    place,
 )
 from paperroute_transit.core.geo import ALONG, Point, Shape, make_shape
 from paperroute_transit.core.map_line import MapLine
@@ -26,7 +27,7 @@ from paperroute_transit.core.map_lines import (
     ringable,
 )
 from paperroute_transit.core.map_view import MapInputs
-from paperroute_transit.core.model import Departure, TripFacts
+from paperroute_transit.core.model import Departure, StopPlace, TripFacts
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.tiles import ZOOMS
 from tests.core.test_map_fit import plain, stop_view
@@ -541,3 +542,26 @@ def test_a_line_over_moved_geometry_is_not_equal() -> None:
     assert moved != RIDE_LINE
     same = MapLine(shape_id='east', solid=RIDE_LINE.solid, shape=EAST)
     assert same == RIDE_LINE
+
+
+BACK = make_shape(shape_id='back', points=((5000.0, 30.0), (0.0, 30.0)))
+ACROSS_KERB: Final[StopPlace] = place(
+    'X', name='Opposite', point=(1100.0, 30.0),
+)
+
+
+def across(found: Departure) -> Departure:
+    """The same departure from the kerb across the road."""
+    return replace(found, facts=replace(found.facts, across=True))
+
+
+def test_plain_map_view_joins_the_kerb_across_to_the_from() -> None:
+    """A both-sides pin's From marks carry the kerb across."""
+    inputs = lines_inputs(departures=(RIDE,))
+    base = plain_map_view(
+        inputs=inputs, choice=replace(CHOICE, across=ACROSS_KERB),
+    ).base
+    assert base.trip is not None
+    assert base.trip.across == ACROSS_KERB.point
+    plain_base = plain_map_view(inputs=inputs, choice=CHOICE).base
+    assert plain_base.trip is not None and plain_base.trip.across is None

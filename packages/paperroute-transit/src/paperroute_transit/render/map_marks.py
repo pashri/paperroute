@@ -1,5 +1,6 @@
 """The map's fixed marks: line widths, ridden stop rings and the From."""
 
+import math
 from collections.abc import Sequence
 from typing import Final
 
@@ -33,6 +34,7 @@ STOP_DISC: Final[float] = 16.0
 STOP_RING: Final[float] = 12.0
 STOP_RING_WIDTH: Final[float] = 4.0
 STOP_DOT: Final[float] = 5.0
+DOT_GAP: Final[float] = 2.0  # least paper between a capsule's two dots
 MARK_SCALE: Final[dict[int, float]] = {25: 0.85, 45: 0.75}
 
 
@@ -68,6 +70,79 @@ def draw_stop(canvas: Canvas, *, at: Point, scale: float = 1.0) -> None:
     """
     with canvas.scaled(at=at, factor=scale):
         draw_bullseye(canvas, at=at)
+
+
+def stadium(
+    canvas: Canvas,
+    *,
+    ends: tuple[Point, Point],
+    radius: float,
+    grey: int,
+) -> None:
+    """
+    Fill the round-ended band between two points.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    ends : tuple[Point, Point]
+        The centres of the band's two round ends.
+    radius : float
+        Half the band's width.
+    grey : int
+        The grey to fill with.
+    """
+    (ax, ay), (bx, by) = ends
+    for x, y in ends:
+        canvas.ellipse(
+            box=(x - radius, y - radius, x + radius, y + radius), grey=grey,
+        )
+    apart = math.dist(*ends)
+    if not apart:
+        return
+    nx, ny = (ay - by) / apart * radius, (bx - ax) / apart * radius
+    canvas.polygon(
+        points=(
+            (ax + nx, ay + ny),
+            (bx + nx, by + ny),
+            (bx - nx, by - ny),
+            (ax - nx, ay - ny),
+        ),
+        grey=grey,
+    )
+
+
+def draw_capsule(
+    canvas: Canvas, *, ends: tuple[Point, Point], scale: float = 1.0,
+) -> None:
+    """
+    Draw the From mark stretched over both kerbs of a road.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    ends : tuple[Point, Point]
+        Each kerb's centre on the canvas.
+    scale : float
+        Size of the mark, 1 for full size.
+    """
+    for radius, grey in (
+        (STOP_DISC, PAPER),
+        (STOP_RING + STOP_RING_WIDTH / 2, INK),
+        (STOP_RING - STOP_RING_WIDTH / 2, PAPER),
+    ):
+        stadium(canvas, ends=ends, radius=radius * scale, grey=grey)
+    dot = STOP_DOT * scale
+    (ax, ay), (bx, by) = ends
+    centres = (
+        ends
+        if math.dist(*ends) >= 2 * dot + DOT_GAP
+        else (((ax + bx) / 2, (ay + by) / 2),)
+    )
+    for x, y in centres:
+        canvas.ellipse(box=(x - dot, y - dot, x + dot, y + dot), grey=INK)
 
 
 def draw_bullseye(canvas: Canvas, *, at: Point) -> None:

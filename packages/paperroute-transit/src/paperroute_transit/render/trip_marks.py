@@ -11,6 +11,7 @@ from paperroute_transit.core.tiles import to_pixels
 from paperroute_transit.render.map_marks import (
     SOLID_WIDTH,
     Window,
+    draw_capsule,
     draw_stop,
     mark_scale,
 )
@@ -279,7 +280,18 @@ def draw_trip_points(canvas: Canvas, *, base: MapBase) -> None:
         width=base.width,
     )
     scale = mark_scale(mpp=base.mpp)
-    if trip.lettered:
+    if trip.across is not None:
+        ax, ay = screen_point(
+            centre=base.centre,
+            mpp=base.mpp,
+            point=trip.across,
+            projection=base.projection,
+            width=base.width,
+        )
+        draw_capsule(
+            canvas, ends=((x, y + HEADER), (ax, ay + HEADER)), scale=scale,
+        )
+    elif trip.lettered:
         with canvas.scaled(at=(x, y + HEADER), factor=scale):
             draw_lettered(canvas, at=(x, y + HEADER), letter='A')
     else:

@@ -9,6 +9,7 @@ from paperroute_transit.core.chooser_lists import (
     turned,
 )
 from paperroute_transit.core.chooser_view import (
+    RESERVED_COLUMN,
     build_chooser_view,
     route_title,
 )
@@ -19,6 +20,7 @@ from tests.core.chooser_walks import (
     KINDS,
     Catalogue,
     answered,
+    at_routes,
     at_to,
     at_towards,
     fed,
@@ -99,3 +101,33 @@ def test_route_title_names_the_route_then_the_towards_row() -> None:
     """The route number alone, then 'to' the towards row once pressed."""
     assert route_title(chooser=at_towards()) == '606'
     assert route_title(chooser=at_to()) == '606 to Parramatta'
+
+
+def test_view_reserves_the_preview_while_it_loads() -> None:
+    """A focus with a preview shows its slot before the rows arrive."""
+    view = build_chooser_view(chooser=at_routes(loaded=False))
+    assert [c.level for c in view.columns] == [
+        Level.GROUP, Level.ROUTE, None,
+    ]
+    assert view.columns[-1] == RESERVED_COLUMN
+
+
+def test_view_without_a_preview_ends_at_the_focus() -> None:
+    """A focus with no preview is the last column."""
+    view = build_chooser_view(chooser=at_towards())
+    assert [c.level for c in view.columns] == [
+        Level.GROUP, Level.ROUTE, Level.TOWARDS,
+    ]
+    assert [c.focused for c in view.columns] == [False, False, True]
+
+
+def test_view_puts_a_failed_preview_in_its_place() -> None:
+    """A failed read shows its note in the slot."""
+    chooser = previews_failed(
+        chooser=at_routes(loaded=False), path=BUS_606[:2],
+    )
+    view = build_chooser_view(chooser=chooser)
+    assert [c.level for c in view.columns] == [
+        Level.GROUP, Level.ROUTE, None,
+    ]
+    assert view.columns[-1].note == "Can't load"

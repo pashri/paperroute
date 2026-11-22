@@ -19,6 +19,8 @@ from numpy.typing import NDArray
 
 from paperroute_device.render.canvas import encode_png
 from paperroute_hardware.render.panel_bits import grey_planes, oriented
+from paperroute_transit.core.chooser import Level
+from paperroute_transit.core.chooser_view import ChooserView
 from paperroute_transit.core.connection_strip import (
     ConnectionStripMapView,
     ConnectionStripView,
@@ -313,3 +315,14 @@ def test_both_sides_live_scenes_build_their_views() -> None:
     rows = PANE_ROWS - (pane.map.banner is not None)
     kinds = [row.kind for row in pane.pane.rows]
     assert kinds.index(RowKind.ORIGIN) == (rows - 1) // 2
+
+
+def test_chooser_routes_scene_keeps_the_preview_in_place() -> None:
+    """The preview sits right of the focused ROUTE column."""
+    view = view_of(state=SCENES['chooser_routes']())
+    assert isinstance(view, ChooserView)
+    assert [c.level for c in view.columns] == [
+        Level.GROUP, Level.ROUTE, Level.TOWARDS,
+    ]
+    assert [c.focused for c in view.columns] == [False, True, False]
+    assert view.columns[-1].total == 14

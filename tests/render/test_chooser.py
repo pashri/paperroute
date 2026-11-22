@@ -14,15 +14,32 @@ from paperroute_testkit.render.factories import (
     route_choice,
     view_of,
 )
-from paperroute_transit.core.chooser import Choice, Level
+from paperroute_transit.core.chooser import Choice, ChooserState, Level
+from paperroute_transit.core.chooser_lists import (
+    preview_steps,
+    turned,
+    with_previews,
+)
+from paperroute_transit.core.chooser_previews import read_previews
 from paperroute_transit.core.chooser_view import (
     CHOOSER_TOP,
     FAILED_COLUMN,
     ROW_HEIGHTS,
     ColumnView,
+    build_chooser_view,
 )
 from paperroute_transit.core.strip_model import HINTS
-from paperroute_transit.render.chooser import COLUMN_WIDTHS, draw_chooser_view
+from paperroute_transit.render.chooser import (
+    COLUMN_WIDTHS,
+    column_edges,
+    draw_chooser_view,
+)
+from tests.core.chooser_walks import (
+    BUS_606,
+    ROUTE_STAGE,
+    THREE_ROUTES,
+    at_routes,
+)
 
 LONG_NAME = 'Parramatta to Blacktown via a very long and winding road home'
 
@@ -392,3 +409,44 @@ def test_kind_column_draws_coach_letter() -> None:
     middle = CHOOSER_TOP + ROW_HEIGHTS[Level.KIND] + 28
     assert frame[middle, 12] == INK
     assert frame[middle, 4] == PAPER
+
+
+def frame_of(*, chooser: ChooserState) -> NDArray[np.uint8]:
+    """
+    Draw a chooser's view.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser.
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        The frame.
+    """
+    return draw_chooser_view(view=build_chooser_view(chooser=chooser))
+
+
+def test_a_click_draws_the_frame_its_preview_loads_into() -> None:
+    """The frame before a preview arrives matches the one after, left of it."""
+    path = BUS_606[:2]
+    previews = read_previews(
+        network=ROUTE_STAGE, path=path,
+        steps=preview_steps(column=THREE_ROUTES),
+    )
+    waiting, ready = at_routes(loaded=False), at_routes()
+    for steps in (1, 1, -2):
+        waiting, _ = turned(chooser=waiting, steps=steps, reach=None)
+        ready, asked = turned(chooser=ready, steps=steps, reach=None)
+        assert asked is None
+        clicked = frame_of(chooser=waiting)
+        arrived = frame_of(chooser=with_previews(
+            chooser=waiting, path=path, previews=previews,
+        ))
+        assert np.array_equal(frame_of(chooser=ready), arrived)
+        edges = column_edges(columns=build_chooser_view(chooser=ready).columns)
+        left = edges[-1][0]
+        assert np.array_equal(clicked[:, :left], arrived[:, :left])
+        assert np.array_equal(clicked[:CHOOSER_TOP], arrived[:CHOOSER_TOP])
+        assert (clicked[CHOOSER_TOP:, left:] == PAPER).all()

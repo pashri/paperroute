@@ -67,6 +67,7 @@ from paperroute_testkit.core.strip_factories import (
 )
 from paperroute_transit.app_render import MapRenderer
 from paperroute_transit.core.chains import Legs, leg_key
+from paperroute_transit.core.chooser_lists import turned
 from paperroute_transit.core.connection_model import way_legs
 from paperroute_transit.core.device import on_settings
 from paperroute_transit.core.geo import Point, Shape, make_shape
@@ -122,7 +123,7 @@ from paperroute_transit.core.tiles import (
     TileVariant,
 )
 from paperroute_transit.transit_app import TransitApp
-from tests.core.chooser_walks import at_towards
+from tests.core.chooser_walks import at_routes, at_towards
 from tests.core.test_alerts_view import on_alerts
 from tests.core.test_chains import TRAINS
 from tests.core.test_connection_screens import started, with_legs
@@ -1201,6 +1202,21 @@ def chooser() -> State:
     return replace(stop(), chooser=at_towards())
 
 
+def chooser_routes() -> State:
+    """
+    Show the chooser on 609 in a ROUTE column, its preview overflowing.
+
+    Returns
+    -------
+    State
+        State at `START`.
+    """
+    return replace(
+        stop(),
+        chooser=turned(chooser=at_routes(), steps=1, reach=None)[0],
+    )
+
+
 def building() -> State:
     """
     Show the Building screen, with no timetable.
@@ -1309,6 +1325,7 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
         view=LiveView.STRIP_MAP,
     ),
     'chooser': chooser,
+    'chooser_routes': chooser_routes,
     'building': building,
     'notice': notice,
     'menu': lambda: panel(menu=Menu()),

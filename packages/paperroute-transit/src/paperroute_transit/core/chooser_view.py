@@ -14,7 +14,7 @@ from paperroute_transit.core.chooser import (
     Stage,
     chosen,
 )
-from paperroute_transit.core.chooser_lists import preview_of
+from paperroute_transit.core.chooser_lists import preview_of, reserves_preview
 from paperroute_transit.core.chooser_station import focus_level
 from paperroute_transit.core.strip_model import HINTS, PICK_TO
 
@@ -83,6 +83,7 @@ FAILED_COLUMN: Final[ColumnView] = ColumnView(
     note=CANT_LOAD,
 )
 ABSENT_COLUMN: Final[ColumnView] = replace(FAILED_COLUMN, note=NEEDS_UPDATE)
+RESERVED_COLUMN: Final[ColumnView] = replace(FAILED_COLUMN, note=None)
 
 
 @dataclass(frozen=True)
@@ -97,7 +98,8 @@ class ChooserView:
     trail : str
         The choices made so far.
     columns : tuple[ColumnView, ...]
-        Up to three columns, ending with the focus's preview.
+        Up to three columns; the focus's preview, or its reserved place,
+        is last when the focus's level has one.
     empty : str | None
         Text shown in place of the columns, or None.
     hint : str | None
@@ -199,9 +201,36 @@ def column_view(
     )
 
 
+def preview_view(*, chooser: ChooserState) -> ColumnView:
+    """
+    Make the focus's preview column.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser whose focus has a preview.
+
+    Returns
+    -------
+    ColumnView
+        The drawn preview; else the timetable-update or can't-load column
+        when the read failed; else the reserved, empty column.
+    """
+    preview = preview_of(chooser=chooser)
+    if preview is not None:
+        return column_view(
+            column=chooser.columns[preview],
+            cursor=chooser.cursors[preview],
+            focused=False,
+        )
+    if chooser.failed is Failure.ABSENT:
+        return ABSENT_COLUMN
+    return FAILED_COLUMN if chooser.failed else RESERVED_COLUMN
+
+
 def column_views(*, chooser: ChooserState) -> tuple[ColumnView, ...]:
     """
-    The last three drawn columns up to the focus's preview.
+    Choose the columns drawn, fixed by the focus.
 
     Parameters
     ----------
@@ -211,27 +240,24 @@ def column_views(*, chooser: ChooserState) -> tuple[ColumnView, ...]:
     Returns
     -------
     tuple[ColumnView, ...]
-        Columns left to right. A preview that failed to load shows as a
-        column with a note: the timetable-update text when the timetable
-        has no such column.
+        Columns left to right. A focus with a preview shows the last two
+        drawn columns up to the focus, then the preview or its reserved
+        place; any other focus shows the last three, then a note column
+        when a read failed.
     """
-    preview = preview_of(chooser=chooser)
-    last = chooser.focus if preview is None else preview
     views = [
         column_view(
             column=column,
             cursor=chooser.cursors[index],
             focused=index == chooser.focus,
         )
-        for index, column in enumerate(chooser.columns[:last + 1])
+        for index, column in enumerate(chooser.columns[:chooser.focus + 1])
         if not column.collapsed
     ]
+    if reserves_preview(chooser=chooser):
+        return (*views[-(SHOWN_COLUMNS - 1):], preview_view(chooser=chooser))
     if chooser.failed and chooser.columns:
-        views.append(
-            ABSENT_COLUMN
-            if chooser.failed is Failure.ABSENT
-            else FAILED_COLUMN,
-        )
+        views.append(preview_view(chooser=chooser))
     return tuple(views[-SHOWN_COLUMNS:])
 
 

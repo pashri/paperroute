@@ -22,6 +22,7 @@ from paperroute_transit.core.chooser import (
 from paperroute_transit.core.chooser_lists import (
     pressed,
     preview_steps,
+    previewed,
     turned,
     with_column,
     with_previews,
@@ -70,6 +71,20 @@ TOWARDS: Final[Column] = Column(
     items=(
         Choice(key='11', label='Parramatta', detail='40'),
         Choice(key='12', label='Hawkesbury', detail='38'),
+    ),
+)
+THREE_ROUTES: Final[Column] = Column(
+    level=Level.ROUTE,
+    items=(
+        *ROUTES.items,
+        Choice(key='r610', label='Parramatta to Rouse Hill', badge='610'),
+    ),
+)
+LONG_TOWARDS: Final[Column] = Column(
+    level=Level.TOWARDS,
+    items=tuple(
+        Choice(key=str(30 + n), label=f'Stop {n}', detail='4')
+        for n in range(14)
     ),
 )
 REPLACEMENT_GROUPS: Final[Column] = Column(
@@ -449,6 +464,41 @@ def at_towards(*, catalogue: ColumnReader = WALK) -> ChooserState:
     chooser, request = answered(chooser, request, catalogue)
     chooser, request = pressed(chooser=chooser, reach=None)
     assert request is None
+    return chooser
+
+
+ROUTE_STAGE: Final[Catalogue] = Catalogue(
+    columns={
+        (*BUS_606[:2], (Level.ROUTE, 'r609')): LONG_TOWARDS,
+        (*BUS_606[:2], (Level.ROUTE, 'r610')): None,
+    },
+)
+
+
+def at_routes(*, loaded: bool = True) -> ChooserState:
+    """
+    Focus the three-row ROUTE column on its first row.
+
+    Parameters
+    ----------
+    loaded : bool
+        Whether the column's previews have arrived.
+
+    Returns
+    -------
+    ChooserState
+        Chooser on KIND, GROUP and ROUTE with the cursor on 606.
+    """
+    chooser, request = previewed(
+        chooser=ChooserState(
+            columns=(KINDS, GROUPS, THREE_ROUTES),
+            cursors=(0, 1, 0),
+            focus=2,
+        ),
+    )
+    if loaded:
+        chooser, asked = answered(chooser, request, ROUTE_STAGE)
+        assert asked is None
     return chooser
 
 

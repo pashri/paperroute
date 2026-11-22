@@ -627,6 +627,7 @@ def test_from_stage_opens_the_box_on_a_paired_stop() -> None:
         'Parramatta', 'Northmead', 'Baulkham Hills',
     ]
     assert [row.paired for row in view.rows] == [False, True, False]
+    assert [row.cursor for row in view.rows] == [False, True, False]
     assert view.menu is not None and view.menu.cursor == 0
     assert draw_strip_view(view=view).shape == (HEIGHT, WIDTH)
 

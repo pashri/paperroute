@@ -263,8 +263,7 @@ class ChooserState:
     load : DepartureLoad
         How those departures stand.
     kerbs : Kerbs
-        The line's paired kerbs and the cursor's row among its
-        station's choices.
+        The FROM line's paired kerbs and the open box's cursor.
     """
 
     columns: tuple[Column, ...] = ()

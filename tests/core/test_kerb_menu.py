@@ -2,11 +2,12 @@
 
 from dataclasses import replace
 
+from paperroute_testkit.core.factories import place
 from paperroute_transit.core.chooser_steps import chooser_view, from_inputs
 from paperroute_transit.core.kerb_menu import MENU_HINT, kerb_menu, with_kerbs
 from paperroute_transit.core.strip_model import HINTS, KerbMenu, StripView
 from paperroute_transit.core.strip_view import build_strip_view
-from tests.core.chooser_walks import BUSY_PAIR, at_kerbs
+from tests.core.chooser_walks import BUSY_PAIR, QUIET_PAIR, at_kerbs
 from tests.core.test_chooser_steps import pinned
 
 
@@ -41,6 +42,21 @@ def test_with_kerbs_marks_paired_rows_and_opens_the_box() -> None:
     ]
     assert view.menu == kerb_menu(chooser=chooser)
     assert view.panel.hint == MENU_HINT
+
+
+def test_with_kerbs_marks_a_paired_row_off_the_cursor() -> None:
+    """Every paired row is marked, not only the cursor's."""
+    second = replace(
+        QUIET_PAIR, station='s3', other=place('x3', name='Mitcham'),
+    )
+    chooser = at_kerbs(pairs=(QUIET_PAIR, second))
+    view = chooser_view(
+        state=replace(pinned(), chooser=chooser), chooser=chooser,
+    )
+    assert isinstance(view, StripView)
+    assert [row.paired for row in view.rows] == [
+        False, False, True, True, False,
+    ]
 
 
 def test_with_kerbs_leaves_a_line_without_pairs_as_built() -> None:

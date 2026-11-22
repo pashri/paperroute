@@ -876,8 +876,9 @@ def test_patterns_requested_once() -> None:
     """The pin's trip patterns are asked for once, then kept."""
     state = loaded(state=fresh(centre=CENTRE))
     trips = frozenset(dep.trip_id for dep in state.board.departures)
+    assert state.map.pending_patterns == {'trip-0803'}
     state, effects = step(state, PRESS)
-    load = LoadPatterns(trip_ids=trips, day=START.date())
+    load = LoadPatterns(trip_ids=trips - {'trip-0803'}, day=START.date())
     assert effects_of(effects=effects, kind=LoadPatterns) == [load]
     state, effects = step(state, Tick(now=START + timedelta(seconds=5)))
     assert not effects_of(effects=effects, kind=LoadPatterns)
@@ -931,10 +932,11 @@ def test_unknown_trips_do_not_stay_pending() -> None:
     """Trips the timetable doesn't know are stored as None, not re-asked."""
     state, effects = step(loaded(state=fresh(centre=CENTRE)), PRESS)
     [load] = effects_of(effects=effects, kind=LoadPatterns)
-    event = PatternsLoaded(trip_ids=load.trip_ids, patterns={}, shapes={})
+    trips = load.trip_ids | {'trip-0803'}
+    event = PatternsLoaded(trip_ids=trips, patterns={}, shapes={})
     state, _ = step(state, event)
     assert not state.map.pending_patterns
-    assert state.map.patterns == dict.fromkeys(load.trip_ids)
+    assert state.map.patterns == dict.fromkeys(trips)
     _, effects = step(state, Tick(now=START + timedelta(minutes=5)))
     assert not effects_of(effects=effects, kind=LoadPatterns)
 

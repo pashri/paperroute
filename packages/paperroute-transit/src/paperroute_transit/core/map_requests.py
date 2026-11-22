@@ -799,11 +799,10 @@ def stop_patterns(*, stop_view: StopView) -> frozenset[str]:
     Returns
     -------
     frozenset[str]
-        The hero's trip ID when the view has a block under its number;
-        otherwise none.
+        The hero's trip ID when the view has a hero; otherwise none.
     """
     hero = hero_departure(view=stop_view)
-    if stop_view.under is None or hero is None:
+    if stop_view.hero is None or hero is None:
         return frozenset()
     return frozenset({hero.trip_id})
 
@@ -819,7 +818,7 @@ def stop_effects(
     state : State
         State, on the Stop view with the chooser closed.
     stop_view : StopView
-        The state's Stop view, with a block under its number.
+        The state's Stop view, with a hero.
 
     Returns
     -------
@@ -905,7 +904,7 @@ def map_effects(
         State with the requests recorded, the effects, and the patterns
         wanted; only the sleep map's from `sleep_effects` while asleep,
         the hero's pattern from `stop_effects` on a Stop view with a
-        block under its number, and nothing on other Stop views, or while
+        hero, and nothing on other Stop views, or while
         the chooser lists routes or picks a From. The patterns wanted are
         None in those cases.
     """
@@ -915,7 +914,7 @@ def map_effects(
     if (
         state.view is LiveView.STOP
         and state.chooser is None
-        and stop_view.under is not None
+        and stop_view.hero is not None
     ):
         return stop_effects(state=state, stop_view=stop_view)
     if not shows_vehicles(state=state):

@@ -695,23 +695,30 @@ def test_pruning_only_a_shape_request_trims_the_request() -> None:
     assert result.map.shapes == state.map.shapes
 
 
-def test_a_destination_stop_view_keeps_its_patterns() -> None:
-    """A Stop view with a Destination prunes and asks for nothing."""
-    state, _ = on_view(view=LiveView.STOP)
-    state = replace(
-        state,
-        map=replace(
-            state.map,
-            patterns={'gone': pattern(trip_id='gone', shape_id='s')},
-            shapes={
-                's': make_shape(shape_id='s', points=[(0.0, 0.0), (1.0, 0.0)]),
-            },
-        ),
+TO_TOWN: Final[Pin] = replace(OPEN, destination=place('200060'))
+
+
+def test_a_destination_stop_view_asks_for_its_heros_pattern() -> None:
+    """A Stop view with a Destination asks for its hero's pattern."""
+    _, effects = on_view(
+        view=LiveView.STOP, pin=TO_TOWN, departures=buses(),
     )
-    state, effects = step(state, Tick(now=state.now + timedelta(seconds=1)))
-    assert set(state.map.patterns) == {'gone'}
-    assert set(state.map.shapes) == {'s'}
-    assert not [e for e in effects if isinstance(e, LoadPatterns)]
+    assert LoadPatterns(
+        trip_ids=frozenset({'trip-0803'}), day=START.date(),
+    ) in effects
+
+
+def test_a_destination_stop_view_drops_patterns_it_no_longer_needs(
+) -> None:
+    """Patterns other than the hero's are pruned."""
+    state, _ = on_view(view=LiveView.STOP, pin=TO_TOWN, departures=buses())
+    held = {
+        trip_id: pattern(trip_id=trip_id)
+        for trip_id in ('gone', 'trip-0803')
+    }
+    state = replace(state, map=replace(state.map, patterns=held))
+    state, _ = step(state, Tick(now=state.now + timedelta(seconds=1)))
+    assert set(state.map.patterns) == {'trip-0803'}
 
 
 BUSES: Final[str] = 'v1/gtfs/realtime/buses'

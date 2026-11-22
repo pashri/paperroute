@@ -66,6 +66,10 @@ def asleep() -> State:
         The state after the row was pressed.
     """
     state, _ = step(loaded(state=fresh()), Tick(now=START))
+    answer = PatternsLoaded(
+        trip_ids=state.map.pending_patterns, patterns={}, shapes={},
+    )
+    state, _ = step(state, answer)
     index = tuple(MenuRow).index(MenuRow.SLEEP)
     state, _ = run(state=state, events=(BOTH, turn(steps=index)))
     return step(state, DOWN)[0]
@@ -91,6 +95,10 @@ def renders(*, effects: tuple[Effect, ...]) -> list[object]:
 def test_sleep_row_sleeps() -> None:
     """Sleep now draws the map with no markers under the sleep band."""
     state, _ = step(loaded(state=fresh()), Tick(now=START))
+    answer = PatternsLoaded(
+        trip_ids=state.map.pending_patterns, patterns={}, shapes={},
+    )
+    state, _ = step(state, answer)
     index = tuple(MenuRow).index(MenuRow.SLEEP)
     state, _ = run(state=state, events=(BOTH, turn(steps=index)))
     state, effects = step(state, DOWN)

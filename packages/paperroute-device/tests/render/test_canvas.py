@@ -4,9 +4,11 @@ from pathlib import Path
 from typing import Final
 
 import numpy as np
+import pytest
 import skia
 from numpy.typing import NDArray
 
+from paperroute_device.core.text import PLANE
 from paperroute_device.render.canvas import (
     ELLIPSIS,
     HEIGHT,
@@ -16,13 +18,16 @@ from paperroute_device.render.canvas import (
     WIDTH,
     Canvas,
     Face,
+    ellipsized,
     encode_png,
     font,
     text_width,
 )
+from paperroute_device.render.pictogram import PLANE_MARGIN, plane_size
 from paperroute_device_testkit.paths import ROOT
 
 LIGHT: Final[int] = 170
+PLANE_FACE: Final[Face] = Face(weight=400, px=15)
 
 
 def test_panel_fonts_ship_in_kit() -> None:
@@ -336,3 +341,63 @@ def test_fit_draws_nothing_when_not_even_the_ellipsis_fits() -> None:
     face = Face(weight=400, px=14)
     assert canvas.fit(text='Redfern', face=face, width=0) == ''
     assert canvas.fit(text='Redfern', face=face, width=-30) == ''
+
+
+def test_text_width_counts_the_plane_and_its_margins() -> None:
+    """A plane adds its size and a margin each side."""
+    expected = (
+        text_width(text='Gate ', face=PLANE_FACE)
+        + plane_size(px=15) + 2 * PLANE_MARGIN
+        + text_width(text=' 5', face=PLANE_FACE)
+    )
+    assert text_width(text=f'Gate {PLANE} 5', face=PLANE_FACE) == (
+        pytest.approx(expected)
+    )
+
+
+def test_text_draws_the_plane_nose_right() -> None:
+    """The unrotated plane is as tall as wide, nose on the right."""
+    canvas = Canvas()
+    canvas.text(at=(100, 100), text=PLANE, face=PLANE_FACE, grey=INK)
+    rows, cols = np.nonzero(canvas.grey() < 128)
+    assert 11 <= cols.max() - cols.min() + 1 <= 13
+    assert 11 <= rows.max() - rows.min() + 1 <= 13
+    nose = rows[cols == cols.max()]
+    tail = rows[cols == cols.min()]
+    assert nose.max() - nose.min() <= 2
+    assert tail.max() - tail.min() >= 4
+
+
+def test_text_turns_the_plane_with_its_angle() -> None:
+    """A quarter turn points the nose down."""
+    canvas = Canvas()
+    canvas.text(
+        at=(100, 100), text=PLANE, face=PLANE_FACE, grey=INK, angle=90.0,
+    )
+    rows, cols = np.nonzero(canvas.grey() < 128)
+    nose = cols[rows == rows.max()]
+    tail = cols[rows == rows.min()]
+    assert nose.max() - nose.min() <= 2
+    assert tail.max() - tail.min() >= 4
+
+
+def test_text_keeps_a_plane_inside_its_right_anchor() -> None:
+    """Right-anchored text ending in a plane stays inside the anchor."""
+    canvas = Canvas()
+    width = canvas.text(
+        at=(200, 100), text=f'Gate {PLANE}', face=PLANE_FACE, grey=INK,
+        anchor='rs',
+    )
+    ink = np.flatnonzero((canvas.grey() < 128).any(axis=0))
+    assert width == pytest.approx(
+        text_width(text=f'Gate {PLANE}', face=PLANE_FACE),
+    )
+    assert 200 - PLANE_MARGIN - 2 <= ink.max() <= 200
+
+
+def test_ellipsized_drops_the_plane_first() -> None:
+    """Trimming removes the pictogram before any letter."""
+    width = text_width(text=f'Western Heights{ELLIPSIS}', face=PLANE_FACE)
+    assert ellipsized(
+        text=f'Western Heights {PLANE}', face=PLANE_FACE, width=width + 0.5,
+    ) == f'Western Heights{ELLIPSIS}'

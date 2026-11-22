@@ -12,6 +12,13 @@ import numpy as np
 import skia
 from numpy.typing import NDArray
 
+from paperroute_device.core.text import PLANE
+from paperroute_device.render.pictogram import (
+    PLANE_MARGIN,
+    placed_plane,
+    plane_size,
+)
+
 Point = tuple[float, float]
 Box = tuple[float, float, float, float]
 INK: Final[int] = 0
@@ -126,7 +133,108 @@ def text_width(*, text: str, face: Face) -> float:
     float
         Advance width in pixels.
     """
-    return float(font(face).measureText(text))
+    if PLANE not in text:
+        return float(font(face).measureText(text))
+    pieces = text.split(PLANE)
+    inked = sum(float(font(face).measureText(piece)) for piece in pieces)
+    return inked + (len(pieces) - 1) * plane_advance(face=face)
+
+
+def plane_advance(*, face: Face) -> float:
+    """
+    Width a pictogram takes in a line, margins included.
+
+    Parameters
+    ----------
+    face : Face
+        Font whose size the pictogram follows.
+
+    Returns
+    -------
+    float
+        Advance width in pixels.
+    """
+    return float(plane_size(px=face.px) + 2 * PLANE_MARGIN)
+
+
+def draw_pieces(
+    target: skia.Canvas,
+    *,
+    text: str,
+    origin: Point,
+    face: Face,
+    font_: skia.Font,
+    fill: skia.Paint,
+    snap: bool,
+    halo: skia.Paint | None,
+) -> None:
+    """
+    Draw text, with each pictogram character drawn as its outline.
+
+    Parameters
+    ----------
+    target : skia.Canvas
+        Surface to draw on.
+    text : str
+        Text, possibly holding pictogram characters.
+    origin : Point
+        Baseline origin.
+    face : Face
+        Font.
+    font_ : skia.Font
+        Loaded font to draw the text pieces with.
+    fill : skia.Paint
+        Paint for the glyphs and outlines.
+    snap : bool
+        Round the pictogram centre to the pixel grid.
+    halo : skia.Paint | None
+        Paper stroke drawn under everything, or None.
+    """
+    x, y = origin
+    cap = font(face).getMetrics().fCapHeight
+    for index, piece in enumerate(text.split(PLANE)):
+        if index:
+            shape = placed_plane(
+                left=x, baseline=y, cap=cap, px=face.px, snap=snap,
+            )
+            if halo:
+                target.drawPath(shape, halo)
+            target.drawPath(shape, fill)
+            x += plane_advance(face=face)
+        if piece:
+            if halo:
+                target.drawString(piece, x, y, font_, halo)
+            target.drawString(piece, x, y, font_, fill)
+            x += text_width(text=piece, face=face)
+
+
+def ellipsized(*, text: str, face: Face, width: float) -> str:
+    """
+    Shorten text with a trailing ellipsis until it fits a width.
+
+    Parameters
+    ----------
+    text : str
+        Text.
+    face : Face
+        Font.
+    width : float
+        Available width in pixels.
+
+    Returns
+    -------
+    str
+        The text, or a shortened copy ending in '\u2026', or '' when
+        not even that fits.
+    """
+    if text_width(text=text, face=face) <= width:
+        return text
+    if text_width(text=ELLIPSIS, face=face) > width:
+        return ''
+    cut = text
+    while cut and text_width(text=cut + ELLIPSIS, face=face) > width:
+        cut = cut[:-1]
+    return cut.rstrip() + ELLIPSIS
 
 
 def anchor_offset(*, face: Face, width: float, anchor: str) -> Point:
@@ -374,8 +482,26 @@ class Canvas:
         dx, dy = anchor_offset(face=face, width=width, anchor=anchor)
         with self.rotated(at=at, angle=angle):
             x, y = (dx, dy) if angle else (at[0] + dx, at[1] + dy)
-            self.stroke_halo(text=text, at=(x, y), font_=loaded, halo=halo)
-            self.canvas.drawString(text, x, y, loaded, self.paint(grey=grey))
+            if PLANE in text:
+                draw_pieces(
+                    self.canvas,
+                    text=text,
+                    origin=(x, y),
+                    face=face,
+                    font_=loaded,
+                    fill=self.paint(grey=grey),
+                    snap=not angle,
+                    halo=(
+                        self.paint(grey=PAPER, stroke=2 * halo)
+                        if halo
+                        else None
+                    ),
+                )
+            else:
+                self.stroke_halo(text=text, at=(x, y), font_=loaded, halo=halo)
+                self.canvas.drawString(
+                    text, x, y, loaded, self.paint(grey=grey),
+                )
         return width
 
     def stroke_halo(self, *, text: str, at: Point, font_: skia.Font,
@@ -601,14 +727,7 @@ class Canvas:
             The text, or a shortened copy ending in '\u2026', or '' when
             not even that fits.
         """
-        if self.length(text=text, face=face) <= width:
-            return text
-        if self.length(text=ELLIPSIS, face=face) > width:
-            return ''
-        cut = text
-        while cut and self.length(text=cut + ELLIPSIS, face=face) > width:
-            cut = cut[:-1]
-        return cut.rstrip() + ELLIPSIS
+        return ellipsized(text=text, face=face, width=width)
 
     def grey(self) -> NDArray[np.uint8]:
         """

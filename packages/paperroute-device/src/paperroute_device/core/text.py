@@ -4,6 +4,7 @@ from datetime import datetime, tzinfo
 from typing import Final
 
 DOT: Final[str] = ' · '
+PLANE: Final[str] = '\ue000'  # drawn as the aeroplane pictogram
 HINT_DOT: Final[str] = ' • '  # between the parts of a knob hint
 
 

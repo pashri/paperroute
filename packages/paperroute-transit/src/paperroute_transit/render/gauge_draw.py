@@ -384,7 +384,7 @@ def names_ink(
         True where a name has ink.
     """
     canvas = Canvas(smooth=True)
-    for mark, mark_text in zip(plan.line.marks, lines):
+    for mark, mark_text in zip(plan.line.marks, lines, strict=True):
         face = face_of(mark=mark)
         x = slot_x(plan=plan, slot=mark.slot)
         for index, text in enumerate(mark_text):
@@ -490,8 +490,11 @@ def count_choice(
         near_ink = grown(mask=near_ink)
     for text, face in options:
         for shift in COUNT_SLIDE:
-            crop = Canvas(width=right - left, height=line_y + 1 - top,
-                          smooth=True)
+            crop = Canvas(
+                width=right - left,
+                height=line_y + 1 - top,
+                smooth=True,
+            )
             draw_count(
                 crop,
                 text=text,
@@ -569,8 +572,8 @@ def draw_gauge(
     keep = keep_out(ink=canvas.grey() < 128)
     plan = gauge_plan(gauge=gauge, route=route, keep=keep, naming=naming)
     draw_track(canvas, plan=plan)
-    draw_marks(canvas, plan=plan)
     draw_bus(canvas, plan=plan, route=route)
+    draw_marks(canvas, plan=plan)
     draw_brackets(canvas, plan=plan, naming=naming)
     names = names_ink(
         plan=plan, lines=mark_lines(plan=plan, keep=keep, naming=naming),

@@ -31,7 +31,9 @@ from paperroute_transit.render.gauge_plan import (
     STEM,
     TEXT_CLEAR,
     GaugePlan,
+    gauge_plan,
     grown,
+    keep_out,
     name_start,
     slot_x,
 )
@@ -211,3 +213,19 @@ def test_draw_gauge_keeps_names_clear_of_hero_text() -> None:
         near = grown(mask=near)
     assert names.any()
     assert not (near & hero).any()
+
+
+def test_draw_gauge_keeps_the_stem_out_of_the_ring_it_waits_at() -> None:
+    """The ring a bus waits at stays empty inside, with the stem below."""
+    canvas = Canvas()
+    gauge = StopGauge(
+        origin='F', behind=('B',), bus=0.0, calls=numbered(2),
+    )
+    naming = Naming(rules=NameRules())
+    keep = keep_out(ink=canvas.grey() < 128)
+    plan = gauge_plan(gauge=gauge, route='6', keep=keep, naming=naming)
+    draw_gauge(canvas, gauge=gauge, route='6', naming=naming)
+    ink = canvas.grey() < 128
+    x = round(slot_x(plan=plan, slot=0))
+    assert not ink[plan.line_y + 1:plan.line_y + 4, x].any()
+    assert ink[plan.line_y + 10, x]

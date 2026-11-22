@@ -130,6 +130,23 @@ def previewed(
     return replace(trimmed, waiting=path), ColumnRequest(path=path)
 
 
+def preview_steps(*, column: Column) -> tuple[tuple[Level, str], ...]:
+    """
+    List each row's own step, in row order.
+
+    Parameters
+    ----------
+    column : Column
+        Column.
+
+    Returns
+    -------
+    tuple[tuple[Level, str], ...]
+        The row's own level, else the column's, with its key.
+    """
+    return tuple((row.level or column.level, row.key) for row in column.items)
+
+
 def first_cursor(*, column: Column, prefer: str | None) -> int:
     """
     Choose where a new column's cursor starts.
@@ -439,3 +456,151 @@ def backed(*, chooser: ChooserState) -> ChooserState | None:
                 chooser, stage=Stage.FROM, origin=None, key=None,
                 to_cursor=0, departures=(), load=DepartureLoad(),
             )
+
+
+def opened_preview(*, chooser: ChooserState) -> ChooserState:
+    """
+    Show the focus cursor's preview from the focus's loaded previews.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser whose focus has its previews loaded.
+
+    Returns
+    -------
+    ChooserState
+        The columns after the focus replaced by the cursor's chain, each
+        with its first cursor; failed is ABSENT when the chain is empty
+        or ends collapsed, else None. Unchanged without previews.
+    """
+    focus = chooser.focus
+    previews = chooser.columns[focus].previews
+    cursor = chooser.cursors[focus]
+    if previews is None or cursor >= len(previews):
+        return chooser
+    chain = previews[cursor]
+    end = focus + 1
+    absent = not chain or chain[-1].collapsed
+    return replace(
+        chooser,
+        columns=(*chooser.columns[:end], *chain),
+        cursors=(
+            *chooser.cursors[:end],
+            *(
+                first_cursor(column=column, prefer=chooser.prefer)
+                for column in chain
+            ),
+        ),
+        failed=Failure.ABSENT if absent else None,
+    )
+
+
+def awaiting_previews(
+    *, chooser: ChooserState, path: ChooserPath, count: int | None,
+) -> bool:
+    """
+    Say whether a column on the path is reading previews for its rows.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser.
+    path : ChooserPath
+        Steps leading to the column.
+    count : int | None
+        The number of rows the reply covers; None for a failure.
+
+    Returns
+    -------
+    bool
+        True when the column exists, follows the path and has its
+        previews being read, over that many rows.
+    """
+    index = len(path)
+    if index >= len(chooser.columns):
+        return False
+    column = chooser.columns[index]
+    if column.previews != () or count not in (None, len(column.items)):
+        return False
+    return path_to(chooser=chooser, index=index - 1) == path
+
+
+def with_previews(
+    *,
+    chooser: ChooserState,
+    path: ChooserPath,
+    previews: tuple[tuple[Column, ...], ...],
+) -> ChooserState:
+    """
+    Keep a column's previews and show the focus cursor's.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser.
+    path : ChooserPath
+        Steps leading to the column.
+    previews : tuple[tuple[Column, ...], ...]
+        One chain per row.
+
+    Returns
+    -------
+    ChooserState
+        The chooser with the previews on the column, and, when it is the
+        LISTS stage's focus, the cursor's preview shown. Unchanged for a
+        reply that no longer fits.
+    """
+    if not awaiting_previews(
+        chooser=chooser, path=path, count=len(previews),
+    ):
+        return chooser
+    index = len(path)
+    column = replace(chooser.columns[index], previews=previews)
+    kept = replace(
+        chooser,
+        columns=(
+            *chooser.columns[:index], column, *chooser.columns[index + 1:],
+        ),
+    )
+    if index == chooser.focus and chooser.stage is Stage.LISTS:
+        return opened_preview(chooser=kept)
+    return kept
+
+
+def previews_failed(
+    *, chooser: ChooserState, path: ChooserPath,
+) -> ChooserState:
+    """
+    Take a failed previews read into the chooser.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser.
+    path : ChooserPath
+        Steps leading to the column.
+
+    Returns
+    -------
+    ChooserState
+        The column's previews None and, when it is the LISTS stage's
+        focus, the columns after it dropped and failed set to LOAD.
+        Unchanged for a reply that no longer fits.
+    """
+    if not awaiting_previews(chooser=chooser, path=path, count=None):
+        return chooser
+    index = len(path)
+    column = replace(chooser.columns[index], previews=None)
+    end = index + 1
+    failed = index == chooser.focus and chooser.stage is Stage.LISTS
+    return replace(
+        chooser,
+        columns=(
+            *chooser.columns[:index],
+            column,
+            *(() if failed else chooser.columns[end:]),
+        ),
+        cursors=chooser.cursors[:end] if failed else chooser.cursors,
+        failed=Failure.LOAD if failed else chooser.failed,
+    )

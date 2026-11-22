@@ -25,6 +25,8 @@ from paperroute_transit.core.messages import (
     MatchPlaces,
     ModesLoaded,
     PlacesFailed,
+    PreviewsFailed,
+    PreviewsLoaded,
     ServiceSpanLoaded,
     StripFailed,
     StripLoaded,
@@ -413,6 +415,8 @@ def is_stale(*, state: State, event: Event) -> bool:
             | StripFailed(timetable=timetable)
             | ColumnLoaded(timetable=timetable)
             | ColumnFailed(timetable=timetable)
+            | PreviewsLoaded(timetable=timetable)
+            | PreviewsFailed(timetable=timetable)
             | LineLoaded(timetable=timetable)
             | LineFailed(timetable=timetable)
             | ChooserDeparturesLoaded(timetable=timetable)

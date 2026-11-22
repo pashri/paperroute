@@ -1,5 +1,7 @@
 """Chooser columns, a strip and walks through the chooser for tests."""
 
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Final
 
@@ -474,3 +476,84 @@ def chooser_departures() -> tuple[Departure, ...]:
         )
         for index, minutes in enumerate((-1, 5))
     )
+
+
+def walk_column(*, path: ChooserPath) -> Column | None:
+    """
+    Answer the column after a path the walks take.
+
+    Parameters
+    ----------
+    path : ChooserPath
+        Steps chosen so far.
+
+    Returns
+    -------
+    Column | None
+        The walks' column, or None where they have none.
+    """
+    levels = tuple(level for level, _ in path)
+    metro = ((Level.KIND, 'metro'),)
+    replacement_lines = (*REPLACEMENTS_PATH, (Level.LINE, 'T1'))
+    fixed: dict[ChooserPath, Column | None] = {
+        (): KINDS,
+        BUS: GROUPS,
+        (*BUS, (Level.GROUP, '1-99')): None,
+        BUS_606[:2]: ROUTES,
+        REPLACEMENTS_PATH: REPLACEMENT_LINES,
+        replacement_lines: REPLACEMENT_ROUTES,
+        TRAIN: TRAIN_LINES,
+        metro: METRO_LINES,
+    }
+    if path in fixed:
+        return fixed[path]
+    if path[-1:] == ((Level.ROUTE, 'rep:1T1'),) and (
+        path[:-1] == replacement_lines
+    ):
+        return TOWARDS
+    if path[:2] == BUS_606[:2] and levels[2:] == (Level.ROUTE,):
+        return TOWARDS
+    if path[:1] == TRAIN and levels[1:] == (Level.LINE,):
+        return T1_STATIONS
+    if path[:1] == TRAIN and levels[1:] == (Level.LINE, Level.STATION):
+        return T1_TO_END if path[-1][1] == 'E1' else T1_TO
+    if path == (*metro, (Level.LINE, 'm1')):
+        return TOWARDS
+    return None
+
+
+@dataclass(frozen=True)
+class Catalogue:
+    """
+    A network that answers the walks' paths.
+
+    Attributes
+    ----------
+    columns : Mapping[ChooserPath, Column | None]
+        Answers that replace the walks' own, by path.
+    """
+
+    columns: Mapping[ChooserPath, Column | None] = field(
+        default_factory=dict,
+    )
+
+    def choices(self, *, path: ChooserPath) -> Column | None:
+        """
+        Give the column after a path.
+
+        Parameters
+        ----------
+        path : ChooserPath
+            Steps chosen so far.
+
+        Returns
+        -------
+        Column | None
+            The listed answer, else the walks' column.
+        """
+        if path in self.columns:
+            return self.columns[path]
+        return walk_column(path=path)
+
+
+WALK: Final[Catalogue] = Catalogue()

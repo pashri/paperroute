@@ -102,11 +102,17 @@ class Column:
         Its rows, in order.
     collapsed : bool
         Whether it was chosen automatically and is not drawn.
+    previews : tuple[tuple[Column, ...], ...] | None
+        What each row opens, in row order: the collapsed columns it
+        passes, then the column drawn as its preview, nothing after a
+        row when the timetable has no column there. () while they are
+        read; None before they are asked for or after the read failed.
     """
 
     level: Level
     items: tuple[Choice, ...]
     collapsed: bool = False
+    previews: tuple[tuple[Column, ...], ...] | None = None
 
 
 UNPICKED: Final[frozenset[RowKind]] = frozenset(
@@ -171,7 +177,24 @@ class StripRequest:
     key: StripKey
 
 
-ChooserRequest = ColumnRequest | LineRequest | StripRequest
+@dataclass(frozen=True)
+class PreviewsRequest:
+    """
+    A request for what every row of a column opens.
+
+    Attributes
+    ----------
+    path : ChooserPath
+        Steps leading to the column; () for the KIND column.
+    steps : tuple[tuple[Level, str], ...]
+        Each row's own step, in row order.
+    """
+
+    path: ChooserPath
+    steps: tuple[tuple[Level, str], ...]
+
+
+ChooserRequest = ColumnRequest | LineRequest | StripRequest | PreviewsRequest
 
 COLLAPSIBLE: Final[frozenset[Level]] = frozenset(
     {Level.GROUP, Level.ROUTE, Level.LINE},

@@ -85,12 +85,15 @@ from paperroute_transit.core.messages import (
     LoadHolidays,
     LoadLine,
     LoadModes,
+    LoadPreviews,
     LoadServiceSpan,
     LoadStrip,
     MatchPlaces,
     ModesLoaded,
     PlacesFailed,
     PlacesMatched,
+    PreviewsFailed,
+    PreviewsLoaded,
     ServiceSpanLoaded,
     StripFailed,
     StripLoaded,
@@ -1362,3 +1365,29 @@ def test_estimates_of_answers_only_the_asked_trips() -> None:
     assert set(found.trips) == {'t2'}
     assert found.trips['t2'].updates[0].departure_delay == 240
     assert timetable.asked == [frozenset({'t1', 't2'})]
+
+
+async def test_load_previews_posts_each_rows_column() -> None:
+    """A previews load posts one chain per row."""
+    column = Column(level=Level.TOWARDS, items=())
+    posted = await posted_by(
+        ports=ports_of(network=FakeNetwork(column=column)),
+        effects=[LoadPreviews(
+            path=(), steps=((Level.KIND, 'bus'),), timetable='v1',
+        )],
+    )
+    assert posted == [
+        PreviewsLoaded(path=(), previews=((column,),), timetable='v1'),
+    ]
+
+
+async def test_load_previews_failure_posts_previews_failed() -> None:
+    """A failed previews read posts PreviewsFailed."""
+    network = FakeNetwork(error=sqlite3.OperationalError('locked'))
+    posted = await posted_by(
+        ports=ports_of(network=network),
+        effects=[LoadPreviews(
+            path=(), steps=((Level.KIND, 'bus'),), timetable='v1',
+        )],
+    )
+    assert posted == [PreviewsFailed(path=(), timetable='v1')]

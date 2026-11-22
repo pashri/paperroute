@@ -23,7 +23,7 @@ from paperroute_testkit.core.factories import (
     place,
 )
 from paperroute_testkit.core.kit_steps import step
-from paperroute_transit.core.chooser import ChooserState, Level, Stage
+from paperroute_transit.core.chooser import ChooserState, Failure, Level, Stage
 from paperroute_transit.core.chooser_steps import (
     DEPARTURES_FAILED,
     LINE_FAILED,
@@ -48,6 +48,8 @@ from paperroute_transit.core.messages import (
     LoadPatterns,
     LoadStrip,
     PatternsLoaded,
+    PreviewsFailed,
+    PreviewsLoaded,
     StripLoaded,
     TimetableSeen,
 )
@@ -61,6 +63,7 @@ from paperroute_transit.core.stop_view import HORIZON, StopView
 from paperroute_transit.core.strip_model import HINTS, StripView
 from paperroute_transit.render.strip_view import draw_strip_view
 from tests.core.chooser_walks import (
+    BUS,
     BUS_606,
     CHOSEN,
     CHOSEN_KEY,
@@ -70,10 +73,12 @@ from tests.core.chooser_walks import (
     NEXT,
     OPEN,
     REACH,
+    ROUTES,
     TO_STAGE,
     UNTIL,
     chooser_departures,
 )
+from tests.core.test_chooser_lists import ASKING
 
 PINS: Final[tuple[Pin, ...]] = (
     pin_at('first', x=100.0),
@@ -606,3 +611,21 @@ def test_from_stage_opens_a_paired_stop_under_the_cursor() -> None:
         False, False, True, False, False,
     ]
     assert draw_strip_view(view=view).shape == (HEIGHT, WIDTH)
+
+
+def test_replied_takes_previews_and_drops_old_ones() -> None:
+    """Previews for the open timetable attach; old ones are dropped."""
+    state = replace(pinned(), chooser=ASKING)
+    previews = ((), (ROUTES,))
+    old = PreviewsLoaded(path=BUS, previews=previews, timetable='old')
+    assert step(state, old) == (state, ())
+    after, _ = step(state, PreviewsLoaded(
+        path=BUS, previews=previews, timetable=state.saving.timetable,
+    ))
+    assert after.chooser is not None
+    assert after.chooser.columns[-1] == ROUTES
+    failed, _ = step(state, PreviewsFailed(
+        path=BUS, timetable=state.saving.timetable,
+    ))
+    assert failed.chooser is not None
+    assert failed.chooser.failed is Failure.LOAD

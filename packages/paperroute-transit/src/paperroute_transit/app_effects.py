@@ -20,13 +20,15 @@ from paperroute_transit.core.alert_model import (
     Informed,
     LoadBetween,
 )
+from paperroute_transit.core.chooser_previews import (
+    chooser_failure,
+    chooser_read,
+)
 from paperroute_transit.core.estimates import estimated_snapshot
 from paperroute_transit.core.feed_plan import FeedKind, FeedParsers, FeedPlan
 from paperroute_transit.core.messages import (
     ChooserDeparturesFailed,
     ChooserDeparturesLoaded,
-    ColumnFailed,
-    ColumnLoaded,
     Estimating,
     Event,
     FeedFetched,
@@ -41,6 +43,7 @@ from paperroute_transit.core.messages import (
     LoadLine,
     LoadModes,
     LoadPatterns,
+    LoadPreviews,
     LoadServiceSpan,
     LoadShapes,
     LoadStrip,
@@ -76,6 +79,7 @@ WorkerEffect = (
     MatchPlaces
     | LoadStrip
     | LoadColumn
+    | LoadPreviews
     | LoadLine
     | LoadChooserDepartures
     | LoadHolidays
@@ -240,31 +244,6 @@ def chooser_departures(
         pin=effect.pin,
         departures=tuple(found),
         until=effect.end,
-        timetable=effect.timetable,
-    )
-
-
-def column_loaded(
-    *, network: NetworkRepository, effect: LoadColumn
-) -> ColumnLoaded:
-    """
-    Read the chooser column after a path.
-
-    Parameters
-    ----------
-    network : NetworkRepository
-        Chooser catalogue.
-    effect : LoadColumn
-        Request.
-
-    Returns
-    -------
-    ColumnLoaded
-        The column.
-    """
-    return ColumnLoaded(
-        path=effect.path,
-        column=network.choices(path=effect.path),
         timetable=effect.timetable,
     )
 
@@ -484,9 +463,9 @@ def read_for(
             return functools.partial(
                 strip_built, network=network, effect=effect
             )
-        case LoadColumn():
+        case LoadColumn() | LoadPreviews():
             return functools.partial(
-                column_loaded, network=network, effect=effect
+                chooser_read, network=network, effect=effect
             )
         case LoadLine():
             return functools.partial(
@@ -518,8 +497,8 @@ def failure_of(*, effect: WorkerEffect) -> Event:
             return PlacesFailed(timetable=version)
         case LoadStrip(key=key, timetable=version):
             return StripFailed(key=key, timetable=version)
-        case LoadColumn(path=path, timetable=version):
-            return ColumnFailed(path=path, timetable=version)
+        case LoadColumn() | LoadPreviews():
+            return chooser_failure(effect=effect)
         case LoadLine(towards=towards, timetable=version):
             return LineFailed(towards=towards, timetable=version)
         case LoadHolidays() | LoadServiceSpan() | LoadBetween():

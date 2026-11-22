@@ -36,7 +36,7 @@ from paperroute_transit.core.alert_model import (
 )
 from paperroute_transit.core.alerts_view import AlertsView
 from paperroute_transit.core.chains import Legs
-from paperroute_transit.core.chooser import ChooserPath, Column
+from paperroute_transit.core.chooser import ChooserPath, Column, Level
 from paperroute_transit.core.chooser_view import ChooserView
 from paperroute_transit.core.connection_strip import (
     ConnectionStripMapView,
@@ -175,6 +175,15 @@ class LoadColumn:
 
 
 @dataclass(frozen=True)
+class LoadPreviews:
+    """Ask for what every row of a column opens, tagged with the timetable."""
+
+    path: ChooserPath
+    steps: tuple[tuple[Level, str], ...]
+    timetable: str | None = None
+
+
+@dataclass(frozen=True)
 class LoadLine:
     """Ask for a towards row's stations, tagged with the timetable."""
 
@@ -247,7 +256,7 @@ class MatchPlaces:
 
 
 MapRequest = LoadShapes | LoadPatterns | LoadModes | LoadDayLines
-ChooserLoad = LoadColumn | LoadLine | LoadChooserDepartures
+ChooserLoad = LoadColumn | LoadPreviews | LoadLine | LoadChooserDepartures
 Effect = (
     LoadDepartures
     | FetchFeed
@@ -652,6 +661,34 @@ class ColumnFailed:
 
 
 @dataclass(frozen=True)
+class PreviewsLoaded:
+    """
+    What every row of a chooser column opens arrived.
+
+    Attributes
+    ----------
+    path : ChooserPath
+        The path to the column.
+    previews : tuple[tuple[Column, ...], ...]
+        One chain of columns per row, in row order.
+    timetable : str | None
+        The timetable version it was read from.
+    """
+
+    path: ChooserPath
+    previews: tuple[tuple[Column, ...], ...]
+    timetable: str | None = None
+
+
+@dataclass(frozen=True)
+class PreviewsFailed:
+    """What every row of a chooser column opens couldn't be read."""
+
+    path: ChooserPath
+    timetable: str | None = None
+
+
+@dataclass(frozen=True)
 class LineLoaded:
     """
     A towards row's stations arrived.
@@ -703,6 +740,8 @@ class ChooserDeparturesFailed:
 ChooserEvent = (
     ColumnLoaded
     | ColumnFailed
+    | PreviewsLoaded
+    | PreviewsFailed
     | LineLoaded
     | LineFailed
     | ChooserDeparturesLoaded

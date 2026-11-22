@@ -15,6 +15,7 @@ from paperroute_transit.core.chooser import (
     ColumnRequest,
     DepartureLoad,
     LineRequest,
+    PreviewsRequest,
     Stage,
     StripRequest,
     chosen_pin,
@@ -22,6 +23,7 @@ from paperroute_transit.core.chooser import (
     to_row,
 )
 from paperroute_transit.core.chooser_lists import turned, with_column
+from paperroute_transit.core.chooser_previews import previews_replied
 from paperroute_transit.core.chooser_sides import (
     side_reach,
     turned_from,
@@ -52,6 +54,9 @@ from paperroute_transit.core.messages import (
     LoadChooserDepartures,
     LoadColumn,
     LoadLine,
+    LoadPreviews,
+    PreviewsFailed,
+    PreviewsLoaded,
 )
 from paperroute_transit.core.model import Departure, Pin
 from paperroute_transit.core.modes import line_modes
@@ -202,6 +207,10 @@ def asked(
     match request:
         case ColumnRequest(path=path):
             return state, (LoadColumn(path=path, timetable=timetable),)
+        case PreviewsRequest(path=path, steps=steps):
+            return state, (
+                LoadPreviews(path=path, steps=steps, timetable=timetable),
+            )
         case LineRequest(towards=towards):
             return state, (LoadLine(towards=towards, timetable=timetable),)
         case StripRequest() if state.chooser is not None:
@@ -494,6 +503,8 @@ def replied(
             )
         case ColumnFailed(path=path):
             return with_column(chooser=chooser, path=path, column=None)
+        case PreviewsLoaded() | PreviewsFailed():
+            return previews_replied(chooser=chooser, event=event), None
         case LineLoaded(towards=towards, line=line, pairs=pairs):
             return with_line(
                 chooser=chooser, towards=towards, line=line, pairs=pairs,

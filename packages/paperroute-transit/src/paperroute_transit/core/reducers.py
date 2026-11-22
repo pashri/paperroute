@@ -62,6 +62,8 @@ from paperroute_transit.core.messages import (
     PlacesFailed,
     PlacesMatched,
     PositionsFetched,
+    PreviewsFailed,
+    PreviewsLoaded,
     ServiceSpanLoaded,
     SettingsChanged,
     ShapesLoaded,
@@ -636,6 +638,8 @@ def data_result(
         case (
             ColumnLoaded()
             | ColumnFailed()
+            | PreviewsLoaded()
+            | PreviewsFailed()
             | LineLoaded()
             | LineFailed()
             | ChooserDeparturesLoaded()

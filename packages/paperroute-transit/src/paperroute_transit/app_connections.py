@@ -56,6 +56,11 @@ def departures_read(
         pin=pin,
         departures=(),
         station=timetable.station_for(stop_id=pin.origin.stop_id),
+        destination_station=(
+            None
+            if pin.destination is None
+            else timetable.station_for(stop_id=pin.destination.stop_id)
+        ),
         until=effect.end,
         timetable=effect.timetable,
         skip_school=effect.skip_school,

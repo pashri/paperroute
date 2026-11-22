@@ -250,7 +250,9 @@ def banner_stop_view(*, state: State, banner: Banner | None) -> StopView:
         view=view,
         station=state.board.station or pin.origin.stop_id,
         destination=(
-            None if pin.destination is None else pin.destination.stop_id
+            None
+            if pin.destination is None
+            else state.board.destination_station or pin.destination.stop_id
         ),
         patterns=state.map.patterns,
         positions=state.map.positions,

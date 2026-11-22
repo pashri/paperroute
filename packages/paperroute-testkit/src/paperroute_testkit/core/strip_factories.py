@@ -359,6 +359,7 @@ def on_view(
     pin: Pin = PIN,
     departures: tuple[Departure, ...] | None = None,
     station: str = '',
+    destination_station: str | None = None,
 ) -> tuple[State, tuple[Effect, ...]]:
     """
     Start on a view and load departures there, answering the feeds.
@@ -373,6 +374,8 @@ def on_view(
         Departures loaded; three trains by default.
     station : str
         The From's station, as the load read it.
+    destination_station : str | None
+        The Destination's station, as the load read it.
 
     Returns
     -------
@@ -393,6 +396,7 @@ def on_view(
             departures=trains() if departures is None else departures,
             until=START + HORIZON,
             station=station,
+            destination_station=destination_station,
         ),
     )
 

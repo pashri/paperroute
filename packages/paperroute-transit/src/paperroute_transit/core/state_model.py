@@ -143,6 +143,8 @@ class Board:
     station : str
         The From's station: its parent station, or the From itself; empty
         before a load.
+    destination_station : str | None
+        The Destination's station, or None with no Destination.
     """
 
     departures: tuple[Departure, ...] = ()
@@ -150,6 +152,7 @@ class Board:
     loading: bool = False
     legs: Legs | None = None
     station: str = ''
+    destination_station: str | None = None
 
 
 @dataclass(frozen=True)

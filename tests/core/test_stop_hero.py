@@ -300,3 +300,45 @@ def test_a_from_under_a_station_finds_its_call(
     gauge = live_stop_view(state=state).gauge
     assert gauge is not None
     assert gauge.calls == ON_TIME
+
+
+def test_a_destination_under_a_station_ends_the_gauge_at_its_call() -> None:
+    """A child-stop Destination ends at its parent's call, not a tied one."""
+    run = replace(
+        RUN,
+        stops=(
+            *RUN.stops[:6],
+            replace(RUN.stops[6], arrives=EIGHT + 720),
+            RUN.stops[7],
+        ),
+    )
+    hero = replace(HERO, arrives=START + timedelta(minutes=12))
+
+    def end_with(*, station: str | None) -> int | None:
+        """The gauge's end for a Destination pinned at a child stop."""
+        state, _ = on_view(
+            view=LiveView.STOP,
+            pin=Pin(
+                origin=place(STAND),
+                destination=place('G-child'),
+                kind=SydneyMode.BUS,
+            ),
+            departures=(hero,),
+            station=FROM,
+            destination_station=station,
+        )
+        state, _ = step(
+            state,
+            PatternsLoaded(
+                trip_ids=frozenset({'trip-0803'}),
+                patterns={'trip-0803': run},
+                shapes={},
+            ),
+        )
+        gauge = live_stop_view(state=state).gauge
+        assert gauge is not None
+        return gauge.end
+
+    late = end_with(station='G')
+    assert late is not None
+    assert end_with(station=None) != late

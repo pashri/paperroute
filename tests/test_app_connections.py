@@ -380,3 +380,14 @@ def test_a_read_carries_the_froms_station() -> None:
     assert departures_read(timetable=timetable, effect=plain).station == 'Ga'
     way = LoadDepartures(pin=pin_of('a', 'b'), start=START, end=END)
     assert departures_read(timetable=timetable, effect=way).station == 'Ga'
+
+
+def test_a_read_carries_the_destinations_station() -> None:
+    """A pin's Destination is resolved to its station; none gives None."""
+    timetable = RecordingTimetable()
+    way = LoadDepartures(pin=pin_of('b', 'a'), start=START, end=END)
+    read = departures_read(timetable=timetable, effect=way)
+    assert read.destination_station == 'Ga'
+    plain = LoadDepartures(pin=pin_of('a', None), start=START, end=END)
+    read = departures_read(timetable=timetable, effect=plain)
+    assert read.destination_station is None

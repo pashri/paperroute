@@ -261,6 +261,7 @@ def on_loaded(
         loaded_until=event.until,
         legs=event.legs,
         station=event.station,
+        destination_station=event.destination_station,
     )
     feeds = feeds_of(
         departures=all_departures(

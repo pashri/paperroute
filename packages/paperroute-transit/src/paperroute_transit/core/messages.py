@@ -271,7 +271,7 @@ class DeparturesLoaded:
 
     `skip_school` and `skip_school_pins` echo the load's. `station` is
     the From's station: its parent station, or the From itself; empty
-    before a load.
+    before a load. `destination_station` is the Destination's, or None.
     """
 
     pin: Pin
@@ -282,6 +282,7 @@ class DeparturesLoaded:
     skip_school: bool = True
     skip_school_pins: bool = False
     station: str = ''
+    destination_station: str | None = None
 
 
 @dataclass(frozen=True)

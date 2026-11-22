@@ -283,6 +283,21 @@ def test_arrival_call_prefers_the_destination_station_over_a_tied_time(
     ) == 3
 
 
+def test_arrival_call_ignores_a_passing_stop_with_the_same_time() -> None:
+    """A stop the bus passes never ends the ride."""
+    trip = calls_at(offsets=(60, 120, 120), stations='ABC')
+    trip = replace(trip, stops=(
+        *trip.stops[:2], replace(trip.stops[2], passes=True), trip.stops[3],
+    ))
+    assert arrival_call(
+        pattern=trip,
+        departure=arrives_at(seconds=120),
+        start=0,
+        station='Z',
+        zone=SYDNEY_ZONE,
+    ) == 3
+
+
 def test_arrival_call_picks_the_loop_call_whose_arrival_matches() -> None:
     """Two calls at the Destination's station: the arrival chooses."""
     trip = calls_at(offsets=(60, 120, 240), stations='CAC')

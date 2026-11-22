@@ -142,7 +142,11 @@ def arrival_call(
     seconds = service_seconds(
         day=departure.service_day, moment=departure.arrives, zone=zone,
     )
-    later = range(start + 1, len(pattern.stops))
+    later = [
+        i
+        for i in range(start + 1, len(pattern.stops))
+        if not pattern.stops[i].passes
+    ]
     timed = [i for i in later if pattern.stops[i].arrives == seconds]
     there = [i for i in later if pattern.stops[i].station == station]
     exact = [i for i in timed if i in there]

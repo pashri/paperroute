@@ -47,11 +47,28 @@ def map_line_key(*, departure: Departure) -> str:
     return departure.facts.route_id or departure.route
 
 
+def kerb_line_key(*, departure: Departure) -> tuple[str, bool]:
+    """
+    Give the line a departure draws on the Map, and its kerb.
+
+    Parameters
+    ----------
+    departure : Departure
+        The departure.
+
+    Returns
+    -------
+    tuple[str, bool]
+        The `map_line_key` and whether it leaves from the kerb across.
+    """
+    return map_line_key(departure=departure), departure.facts.across
+
+
 def first_per_line(
     *, departures: Sequence[Departure],
 ) -> tuple[Departure, ...]:
     """
-    Keep the first departure of each line.
+    Keep the first departure of each line from each kerb.
 
     Parameters
     ----------
@@ -61,11 +78,11 @@ def first_per_line(
     Returns
     -------
     tuple[Departure, ...]
-        The first of each `map_line_key`, in order.
+        The first of each `kerb_line_key`, in order.
     """
-    seen: dict[str, Departure] = {}
+    seen: dict[tuple[str, bool], Departure] = {}
     for found in departures:
-        seen.setdefault(map_line_key(departure=found), found)
+        seen.setdefault(kerb_line_key(departure=found), found)
     return tuple(seen.values())
 
 
@@ -310,9 +327,9 @@ def drawn_lines(
     Returns
     -------
     tuple[tuple[Departure, ...], tuple[Departure, ...]]
-        With no Destination, the first departure of each line, then the
-        extras of other lines; with one, the first departure of each
-        shape and no extras. Hidden kinds are left out.
+        With no Destination, the first departure of each line from each
+        kerb, then the extras of other lines; with one, the first
+        departure of each shape and no extras. Hidden kinds are left out.
     """
     shown = unhidden(departures=inputs.departures, hidden=choice.hidden)
     if inputs.stop_view.destination is not None:
@@ -326,11 +343,33 @@ def drawn_lines(
             if first[drawn_key(inputs=inputs, departure=found)] is found
         ), ()
     solid = first_per_line(departures=shown)
-    keys = {map_line_key(departure=found) for found in solid}
+    keys = {kerb_line_key(departure=found) for found in solid}
     others = unhidden(departures=choice.extras, hidden=choice.hidden)
     return solid, tuple(
-        found for found in others if map_line_key(departure=found) not in keys
+        found for found in others if kerb_line_key(departure=found) not in keys
     )
+
+
+def kerb_station(*, choice: LineChoice, departure: Departure) -> str:
+    """
+    Give the station a departure boards at.
+
+    Parameters
+    ----------
+    choice : LineChoice
+        The From's station and the kerb across, if any.
+    departure : Departure
+        The departure.
+
+    Returns
+    -------
+    str
+        The kerb across's stop ID for a departure from across, else the
+        From's station.
+    """
+    if departure.facts.across and choice.across is not None:
+        return choice.across.stop_id
+    return choice.station
 
 
 def plain_lines(
@@ -350,8 +389,8 @@ def plain_lines(
     -------
     tuple[MapLine, ...]
         One line per drawn departure with a loaded shape, solid over its
-        ride, then one dashed whole per extra. A line with no ride span
-        is dashed whole.
+        ride from its own kerb, then one dashed whole per extra. A line with
+        no ride span is dashed whole.
     """
     solid, dashed = drawn_lines(inputs=inputs, choice=choice)
     lines: list[MapLine] = []
@@ -367,7 +406,9 @@ def plain_lines(
             departure=found,
             pattern=inputs.patterns.get(found.trip_id),
             shape=shape,
-            station=choice.station,
+            station=kerb_station(
+                choice=choice, departure=found,
+            ),
             ends=inputs.ends,
             zone=inputs.zone,
         ) if ridden else None

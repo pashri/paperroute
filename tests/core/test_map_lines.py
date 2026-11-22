@@ -565,3 +565,56 @@ def test_plain_map_view_joins_the_kerb_across_to_the_from() -> None:
     assert base.trip.across == ACROSS_KERB.point
     plain_base = plain_map_view(inputs=inputs, choice=CHOICE).base
     assert plain_base.trip is not None and plain_base.trip.across is None
+
+
+def back_pattern(*, trip_id: str) -> TripPattern:
+    """Z, X and W along BACK, 5 minutes apart, leaving X at eight."""
+    return replace(
+        pattern(
+            trip_id=trip_id, shape_id='back',
+            stops=calls(
+                stations='ZXW', start=EIGHT - 300, step=300,
+                points={
+                    'Z': (4000.0, 30.0), 'X': (1100.0, 30.0),
+                    'W': (0.0, 30.0),
+                },
+            ),
+        ),
+        along=(1000.0, 3900.0, 5000.0),
+    )
+
+
+def test_first_per_line_keeps_each_kerb() -> None:
+    """One route draws once from each kerb, the first from each."""
+    a = across(departure(departs=START, route='370', trip_id='a'))
+    b = departure(departs=START, route='370', trip_id='b')
+    c = across(departure(departs=START, route='370', trip_id='c'))
+    assert first_per_line(departures=(a, b, c)) == (a, b)
+
+
+def test_first_per_line_keeps_a_line_that_runs_one_way() -> None:
+    """A route leaving from one kerb only draws its one line."""
+    a = across(departure(departs=START, route='370', trip_id='a'))
+    assert first_per_line(departures=(a,)) == (a,)
+
+
+def test_plain_lines_rides_from_each_kerb() -> None:
+    """Both directions are solid, each from its own kerb's call."""
+    here = bus(route='370', shape='east')
+    there = across(replace(bus(route='370', shape='back'), trip_id='back'))
+    inputs = replace(
+        lines_inputs(
+            departures=(here, there),
+            patterns={
+                here.trip_id: east_pattern(trip_id=here.trip_id),
+                there.trip_id: back_pattern(trip_id=there.trip_id),
+            },
+        ),
+        shapes={**SHAPES, 'back': BACK},
+    )
+    lines = plain_lines(
+        inputs=inputs, choice=replace(CHOICE, across=ACROSS_KERB),
+    )
+    assert [(line.shape_id, line.solid) for line in lines] == [
+        ('east', (1000.0, 5000.0)), ('back', (3900.0, 5000.0)),
+    ]

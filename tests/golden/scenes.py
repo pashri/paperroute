@@ -116,6 +116,7 @@ from tests.core.test_connection_screens import started, with_legs
 from tests.core.test_connection_strip import PATTERNS as LEG_PATTERNS
 from tests.core.test_state import BUS_POSITIONS, CENTRE, PRESS, fresh, loaded
 from tests.core.test_stop_hero import FROM, RUN, STAND
+from tests.core.test_stop_hero import stop as call_at
 
 GOLDEN: Final[Path] = Path(__file__).parent
 UPDATING: Final[bool] = os.getenv('GOLDEN_UPDATE') == '1'
@@ -511,6 +512,80 @@ def stop_no_destination() -> State:
         snapshot=snapshot(fetched_at=START, vehicles=(report,)),
     ))
     return state
+
+
+GAUGE_AHEAD: Final[tuple[tuple[str, str], ...]] = (
+    ('c1', 'Parramatta Rd Bef Catherine St'),
+    ('c2', 'Parramatta Rd Bef Johnston St'),
+    ('c3', 'Parramatta Rd Aft Johnston St'),
+    ('c4', 'Parramatta Rd Bef Lyons Rd'),
+    ('c5', 'Parramatta Rd Opp Univ Of Sydney'),
+    ('c6', 'Broadway Central Park'),
+    ('c7', 'Harris St Ultimo'),
+    ('c8', 'Quay St Haymarket'),
+    ('c9', 'Elizabeth St Museum'),
+    ('c10', 'Oxford St Taylor Square'),
+    ('c11', 'Flinders St Moore Park'),
+    ('c12', 'Cleveland St Redfern'),
+    ('c13', 'Regent St Chippendale'),
+    ('c14', 'George St Railway Square'),
+    ('c15', 'Castlereagh St Market'),
+    ('c16', 'Bathurst St Town Hall'),
+    ('c17', 'Liverpool St Hyde Park'),
+    ('c18', 'College St Hyde Park'),
+    ('pitt', 'Pitt St At Barlow St'),
+    ('c20', 'Hay St/Belmore Park'),
+)
+
+
+def stop_gauge() -> State:
+    """
+    Show the Stop view of a Destination pin with a long ride ahead.
+
+    Returns
+    -------
+    State
+        State at `START`.
+    """
+    state, _ = on_view(
+        view=LiveView.STOP,
+        pin=Pin(
+            origin=place(STAND, name='Leichhardt PS, Norton St', point=CENTRE),
+            destination=place('pitt', name='Pitt St At Barlow St'),
+            kind=SydneyMode.BUS,
+        ),
+        departures=tuple(
+            departure(
+                departs=START + timedelta(minutes=minutes),
+                mode=SydneyFeed.BUS,
+                kind=SydneyMode.BUS,
+                ride=38,
+            )
+            for minutes in (3, 6, 9)
+        ),
+        station=FROM,
+    )
+    calls_ahead = tuple(
+        call_at(
+            at=180 + 120 * number,
+            x=150.0 * number,
+            station=station,
+            name=name,
+        )
+        for number, (station, name) in enumerate(GAUGE_AHEAD, start=1)
+    )
+    run = pattern(
+        trip_id='trip-0803',
+        stops=(
+            call_at(at=-60, x=-300.0, station='A', name='Johnston St'),
+            call_at(at=60, x=-150.0, station='B', name='Norton Plaza'),
+            call_at(
+                at=180, x=0.0, station=FROM, name='Leichhardt PS, Norton St',
+            ),
+            *calls_ahead,
+        ),
+    )
+    return patterns_loaded(state=state, patterns={'trip-0803': run})
 
 
 def map_scene() -> State:
@@ -976,6 +1051,7 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     'stop_trainlink': stop_trainlink,
     'stop_cambridge_trains': stop_cambridge_trains,
     'stop_no_destination': stop_no_destination,
+    'stop_gauge': stop_gauge,
     'stop_estimates': lambda: estimated(
         state=stop(), lates={0: (-2, False), 1: (2, False)},
     ),

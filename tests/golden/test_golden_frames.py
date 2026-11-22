@@ -250,7 +250,7 @@ def test_cambridge_trains_show_timetable_platforms() -> None:
 
 def test_a_pin_with_no_destination_shows_what_is_known_under_the_number(
 ) -> None:
-    """The open Stop view says status, platform, place and next calls."""
+    """The open Stop view says status, platform, place and the gauge."""
     view = view_of(state=SCENES['stop_no_destination']())
     assert isinstance(view, StopView)
     assert view.under == UnderNumber(
@@ -263,3 +263,13 @@ def test_a_pin_with_no_destination_shows_what_is_known_under_the_number(
     assert view.gauge is not None
     assert view.gauge.behind == ('Mays Hill',)
     assert [row.leaves_at for row in view.rows] == ['8:06', '8:09']
+
+
+def test_a_destination_pin_draws_its_gauge() -> None:
+    """A long ride to the Destination fills the gauge, bus unseen."""
+    view = view_of(state=SCENES['stop_gauge']())
+    assert isinstance(view, StopView)
+    gauge = view.gauge
+    assert gauge is not None and gauge.end is not None
+    assert gauge.calls[gauge.end].name == 'Pitt St At Barlow St'
+    assert (gauge.behind, gauge.bus, gauge.words) == ((), None, '')

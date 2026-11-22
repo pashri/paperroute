@@ -1082,8 +1082,18 @@ def test_a_late_hero_says_how_late() -> None:
         destination=None,
     )
     assert result.under == UnderNumber(
-        status='2 min late', then=('8:06', '8:09'), delay=120,
+        status='2 min late', then=('8:06', '8:09'),
     )
+    assert result.delay == 120
+
+
+def test_build_stop_view_gives_the_heros_delay() -> None:
+    """A view with a Destination still carries the hero's delay."""
+    result = view(
+        departures=(live(minutes=3, late=2),), destination='Parramatta',
+    )
+    assert result.delay == 120
+    assert result.under is None
 
 
 def test_a_cancelled_first_departure_stays_in_the_list_under_the_hero(
@@ -1117,7 +1127,7 @@ def test_an_on_time_hero_says_on_time() -> None:
     result = view(departures=(live(minutes=3),), destination=None)
     assert result.under is not None
     assert result.under.status == 'on time'
-    assert result.under.delay == 0
+    assert result.delay == 0
 
 
 def test_a_timetable_hero_says_timetable_time() -> None:
@@ -1127,7 +1137,7 @@ def test_a_timetable_hero_says_timetable_time() -> None:
     )
     assert result.under is not None
     assert result.under.status == 'timetable time'
-    assert result.under.delay == 0
+    assert result.delay == 0
 
 
 def test_then_lists_the_same_route_and_headsign() -> None:

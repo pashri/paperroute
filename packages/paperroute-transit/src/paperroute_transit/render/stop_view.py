@@ -17,8 +17,7 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER, finish
-from paperroute_transit.core.names import NameRules
-from paperroute_transit.core.stop_under import NextCall, UnderNumber
+from paperroute_transit.core.stop_under import UnderNumber
 from paperroute_transit.core.stop_view import (
     HORIZON_TEXT,
     UNCERTAIN,
@@ -46,7 +45,7 @@ from paperroute_transit.render.chrome import (
     view_header,
 )
 from paperroute_transit.render.late_marks import mark_room, marked_countdown
-from paperroute_transit.render.names import Naming, fit_headsign, fit_name
+from paperroute_transit.render.names import Naming, fit_headsign
 
 SPLIT: Final[int] = 438
 ROW_H: Final[int] = 50
@@ -72,16 +71,7 @@ NOTE_DROP: Final[int] = 44  # 'uncertain' baseline below a row's top
 NOTE_PX: Final[int] = 11
 STATUS_FACE: Final[Face] = Face(weight=700, px=24)
 SMALL_FACE: Final[Face] = Face(weight=400, px=15)
-CALLS_HEAD: Final[str] = 'CALLS NEXT AT'
-CALLS_HEAD_FACE: Final[Face] = Face(weight=700, px=11)
-CALL_TIME_FACE: Final[Face] = Face(weight=700, px=15)
 UNDER_DROPS: Final[tuple[int, int]] = (216, 240)  # status, small line
-CALLS_HEAD_DROP: Final[int] = 270  # baseline below the content top
-CALLS_DROP: Final[int] = 290  # first call's baseline below the top
-CALL_STEP: Final[int] = 24  # between calls' baselines
-CALL_TIME_X: Final[int] = 46
-CALL_NAME_X: Final[int] = 96
-CALL_NAME_WIDTH: Final[int] = 320
 HERO_FACE: Final[Face] = Face(weight=700, px=18)
 HERO_DROP: Final[int] = 57  # baseline below the top
 HERO_DROPS: Final[tuple[int, int]] = (50, 71)  # two-line baselines
@@ -330,57 +320,12 @@ def small_text(*, parts: Sequence[str], face: Face, width: float) -> str:
     return shown
 
 
-def call_row(
-    canvas: Canvas,
-    *,
-    calls: Sequence[NextCall],
-    index: int,
-    top: int,
-    naming: Naming,
-) -> None:
-    """
-    Draw one call: its dot, the link to the next call, time and name.
-
-    Parameters
-    ----------
-    canvas : Canvas
-        Target.
-    calls : Sequence[NextCall]
-        All the calls.
-    index : int
-        Which call to draw.
-    top : int
-        Top of the content.
-    naming : Naming
-        How names are shortened.
-    """
-    y = top + CALLS_DROP + index * CALL_STEP
-    canvas.ellipse(box=(25, y - 10, 35, y), grey=INK)
-    if index < len(calls) - 1:
-        canvas.rect(box=(29, y, 31, y + 18), grey=INK)
-    call = calls[index]
-    canvas.text(
-        at=(CALL_TIME_X, y), text=call.at, face=CALL_TIME_FACE, grey=INK)
-    canvas.text(
-        at=(CALL_NAME_X, y),
-        text=fit_name(
-            text=call.name,
-            face=SMALL_FACE,
-            width=CALL_NAME_WIDTH,
-            naming=naming,
-        )[0],
-        face=SMALL_FACE,
-        grey=INK,
-    )
-
-
 def hero_under(
     canvas: Canvas,
     *,
     under: UnderNumber,
     row: Row,
     top: int,
-    rules: NameRules,
 ) -> None:
     """
     Draw the block under the hero's number.
@@ -395,8 +340,6 @@ def hero_under(
         The hero departure.
     top : int
         Top of the content.
-    rules : NameRules
-        Word lists and options for shortening call names.
     """
     status, small = UNDER_DROPS
     canvas.rect(box=(18, top + 184, 418, top + 186), grey=INK)
@@ -414,18 +357,6 @@ def hero_under(
         face=SMALL_FACE,
         grey=INK,
     )
-    if not under.calls:
-        return
-    canvas.text(
-        at=(18, top + CALLS_HEAD_DROP), text=CALLS_HEAD,
-        face=CALLS_HEAD_FACE, grey=INK)
-    naming = Naming(
-        rules=rules, siblings=tuple(call.name for call in under.calls),
-    )
-    for index in range(len(under.calls)):
-        call_row(
-            canvas, calls=under.calls, index=index, top=top, naming=naming,
-        )
 
 
 def hero(
@@ -456,9 +387,7 @@ def hero(
     hero_headline(canvas, row=row, top=top, naming=naming)
     hero_countdown(canvas, row=row, top=top)
     if under is not None:
-        hero_under(
-            canvas, under=under, row=row, top=top, rules=naming.rules,
-        )
+        hero_under(canvas, under=under, row=row, top=top)
         return
     hero_footer(canvas, row=row, top=top)
     hero_due(canvas, row=row, top=top)

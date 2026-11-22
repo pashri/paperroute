@@ -14,7 +14,7 @@ from paperroute_transit.core.headsigns import tidy_headsign
 from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.model import CarryOn, Departure
 from paperroute_transit.core.names import NameRules
-from paperroute_transit.core.stop_under import UnderNumber
+from paperroute_transit.core.stop_under import StopGauge, UnderNumber
 
 VISIBLE_ROWS: Final[int] = 8
 ROWS_UNDER_BANNER: Final[int] = 7
@@ -296,6 +296,11 @@ class StopView:
     under : UnderNumber | None
         The block under the hero's number, for a view with no
         Destination.
+    delay : int
+        Seconds the hero runs late, negative when early; 0 without a
+        hero.
+    gauge : StopGauge | None
+        The stops ahead of the hero's From, or None when not known.
     name_rules : NameRules
         The word lists that shorten this city's stop names.
     """
@@ -317,6 +322,8 @@ class StopView:
     more: int = 0
     planned: bool = False
     under: UnderNumber | None = None
+    delay: int = 0
+    gauge: StopGauge | None = None
     name_rules: NameRules = NameRules()
 
 
@@ -814,7 +821,7 @@ def under_number(
     Returns
     -------
     UnderNumber
-        The status, the platform, the delay in seconds and the clock
+        The status, the platform and the clock
         times of the next `THEN_COUNT` departures with the hero's route
         and headsign.
     """
@@ -837,9 +844,6 @@ def under_number(
         status=status,
         platform=row.where,
         then=tuple(same[:THEN_COUNT]),
-        delay=int(
-            item.departs.timestamp() - item.departure.departs.timestamp()
-        ),
     )
 
 
@@ -920,6 +924,12 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
     under = None
     if lead is not None and inputs.destination is None:
         under = under_number(items=upcoming, rows=rows, lead=lead)
+    delay = 0
+    if lead is not None:
+        item = upcoming[lead]
+        delay = int(
+            item.departs.timestamp() - item.departure.departs.timestamp()
+        )
     banner = inputs.notice or next(iter(banner_text(inputs=inputs)), None)
     shown = row_count(large=inputs.large, under_banner=banner is not None)
     offset = max(0, min(inputs.scroll, len(rest) - shown))
@@ -945,5 +955,6 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
         more=0 if banner is None else banner.more,
         planned=banner is not None and banner.planned,
         under=under,
+        delay=delay,
         name_rules=inputs.city.name_rules,
     )

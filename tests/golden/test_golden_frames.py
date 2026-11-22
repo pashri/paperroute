@@ -29,7 +29,6 @@ from paperroute_transit.core.reach import RowKind
 from paperroute_transit.core.stop_under import UnderNumber
 from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.core.strip_model import StripMapView, StripView
-from tests.core.test_stop_hero import CALLS
 from tests.golden.scenes import (
     GOLDEN,
     SCENES,
@@ -258,8 +257,9 @@ def test_a_pin_with_no_destination_shows_what_is_known_under_the_number(
         status='2 min late',
         platform='stand B',
         then=('8:06', '8:09'),
-        delay=120,
-        place='1 stop away, last seen at Mays Hill',
-        calls=CALLS,
+        place='1 stop away',
     )
+    assert view.delay == 120
+    assert view.gauge is not None
+    assert view.gauge.behind == ('Mays Hill',)
     assert [row.leaves_at for row in view.rows] == ['8:06', '8:09']

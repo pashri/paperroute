@@ -1,4 +1,4 @@
-"""Tests for where the Stop view's next vehicle is, and its next calls."""
+"""Tests for the gauge the Stop view gains from its hero's trip."""
 
 from dataclasses import replace
 from datetime import datetime, timedelta
@@ -25,12 +25,8 @@ from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.saved import LiveView
 from paperroute_transit.core.state_views import live_stop_view
-from paperroute_transit.core.stop_hero import (
-    hero_place,
-    next_calls,
-    with_detail,
-)
-from paperroute_transit.core.stop_under import NextCall, UnderNumber
+from paperroute_transit.core.stop_hero import with_detail
+from paperroute_transit.core.stop_under import GaugeCall, UnderNumber
 from paperroute_transit.core.stop_view import StopView
 
 STAND: Final[str] = '2145615'
@@ -90,15 +86,15 @@ RUN: Final[TripPattern] = pattern(
         stop(at=720, x=450.0, station='G', name='Parramatta Station'),
     ),
 )
-CALLS: Final[tuple[NextCall, ...]] = (
-    NextCall(at='8:08', name='Harris Park'),
-    NextCall(at='8:11', name='Rosehill'),
-    NextCall(at='8:14', name='Parramatta'),
+CALLS: Final[tuple[GaugeCall, ...]] = (
+    GaugeCall(name='Harris Park', minutes=':08'),
+    GaugeCall(name='Rosehill', minutes=':11'),
+    GaugeCall(name='Parramatta', minutes=':14'),
 )
-ON_TIME: Final[tuple[NextCall, ...]] = (
-    NextCall(at='8:06', name='Harris Park'),
-    NextCall(at='8:09', name='Rosehill'),
-    NextCall(at='8:12', name='Parramatta'),
+ON_TIME: Final[tuple[GaugeCall, ...]] = (
+    GaugeCall(name='Harris Park', minutes=':06'),
+    GaugeCall(name='Rosehill', minutes=':09'),
+    GaugeCall(name='Parramatta', minutes=':12'),
 )
 
 
@@ -126,7 +122,8 @@ def open_view(*, hero: Departure = HERO) -> StopView:
         empty=None,
         scroll=0,
         head_departures=(hero,),
-        under=UnderNumber(status='2 min late', delay=120),
+        under=UnderNumber(status='2 min late'),
+        delay=120,
     )
 
 
@@ -189,51 +186,24 @@ def detail(**changes: object) -> StopView:
     return with_detail(**inputs)  # type: ignore[arg-type]
 
 
-def test_next_calls_are_the_three_after_the_from_moved_by_the_delay(
-) -> None:
-    """Calls skip passes and repeats, and run 2 min late."""
-    assert next_calls(
-        pattern=RUN, start=3, day=START.date(), delay=120, zone=SYDNEY_ZONE,
-    ) == CALLS
-
-
-def test_next_calls_near_the_end_are_fewer() -> None:
-    """Fewer than three stops left give fewer calls."""
-    assert next_calls(
-        pattern=RUN, start=6, day=START.date(), delay=0, zone=SYDNEY_ZONE,
-    ) == (NextCall(at='8:12', name='Parramatta'),)
-
-
-@pytest.mark.parametrize(('x', 'place_text'), [
-    (-375.0, '2 stops away, last seen at Westmead'),
-    (-75.0, '1 stop away, last seen at Mays Hill'),
-    (0.0, 'at the stop now'),
-    (75.0, ''),
-])
-def test_hero_place_counts_the_calls_still_to_make(
-    x: float, place_text: str,
-) -> None:
-    """Stops away counts calls, not passes; past the From there is none."""
-    seen = vehicle(
-        timestamp=int(START.timestamp()), trip_id='trip-0803', point=(x, 0.0),
-    )
-    assert hero_place(pattern=RUN, start=3, vehicle=seen) == place_text
-
-
-def test_detail_fills_place_and_calls() -> None:
-    """A fresh position on the hero's trip gives the place and the calls."""
-    under = detail().under
-    assert under is not None
-    assert under.place == '1 stop away, last seen at Mays Hill'
-    assert under.calls == CALLS
+def test_detail_fills_the_gauge_and_the_words() -> None:
+    """A fresh position on the hero's trip gives the gauge and its words."""
+    view = detail()
+    assert view.under is not None
+    assert view.under.place == '1 stop away'
+    assert view.gauge is not None
+    assert view.gauge.behind == ('Mays Hill',)
+    assert view.gauge.calls == CALLS
 
 
 def test_a_vehicle_on_the_trip_before_gives_no_place() -> None:
     """Another trip's vehicle gives no place; the calls are still filled."""
-    under = detail(positions=seen_at(x=-75.0, trip_id='trip-0748')).under
-    assert under is not None
-    assert under.place == ''
-    assert under.calls == CALLS
+    view = detail(positions=seen_at(x=-75.0, trip_id='trip-0748'))
+    assert view.under is not None
+    assert view.under.place == ''
+    assert view.gauge is not None
+    assert view.gauge.bus is None
+    assert view.gauge.calls == CALLS
 
 
 def test_a_vehicle_heard_under_an_alias_is_the_heros() -> None:
@@ -244,18 +214,18 @@ def test_a_vehicle_heard_under_an_alias_is_the_heros() -> None:
         positions=seen_at(x=-75.0, trip_id='alias-1'),
     ).under
     assert under is not None
-    assert under.place == '1 stop away, last seen at Mays Hill'
+    assert under.place == '1 stop away'
 
 
 def test_a_stale_position_gives_no_place() -> None:
     """A report older than the limit gives no place."""
     then = START - timedelta(minutes=3)
-    under = detail(
-        positions=seen_at(x=-75.0, heard=then, fetched=then),
-    ).under
-    assert under is not None
-    assert under.place == ''
-    assert under.calls == CALLS
+    view = detail(positions=seen_at(x=-75.0, heard=then, fetched=then))
+    assert view.under is not None
+    assert view.under.place == ''
+    assert view.gauge is not None
+    assert view.gauge.bus is None
+    assert view.gauge.calls == CALLS
 
 
 @pytest.mark.parametrize('patterns', [{}, {'trip-0803': None}])
@@ -267,10 +237,17 @@ def test_without_a_pattern_the_view_is_unchanged(
     assert detail(view=view, patterns=patterns) is view
 
 
-def test_a_view_with_a_destination_is_unchanged() -> None:
-    """A view with no block under its number is returned as it is."""
-    view = replace(open_view(), under=None)
-    assert detail(view=view) is view
+def test_a_view_with_a_destination_gains_a_gauge_with_its_end() -> None:
+    """A view with a Destination gets a gauge ending there."""
+    hero = replace(HERO, arrives=START + timedelta(minutes=9))
+    view = replace(
+        open_view(hero=hero), destination='Rosehill', under=None,
+    )
+    gauge = detail(view=view).gauge
+    assert gauge is not None
+    assert (gauge.end, gauge.behind, gauge.words) == (
+        1, ('Mays Hill',), '1 stop away',
+    )
 
 
 def test_the_stand_alone_finds_no_call() -> None:
@@ -320,15 +297,6 @@ def test_a_from_under_a_station_finds_its_call(
             shapes={},
         ),
     )
-    under = live_stop_view(state=state).under
-    assert under is not None
-    assert under.calls == ON_TIME
-
-
-def test_next_calls_name_the_station_not_its_platform() -> None:
-    """A call to a platform stop shows the bare station name."""
-    last = replace(RUN.stops[-1], name='Parramatta Station Platform 3')
-    run = replace(RUN, stops=(*RUN.stops[:-1], last))
-    assert next_calls(
-        pattern=run, start=6, day=START.date(), delay=0, zone=SYDNEY_ZONE,
-    ) == (NextCall(at='8:12', name='Parramatta'),)
+    gauge = live_stop_view(state=state).gauge
+    assert gauge is not None
+    assert gauge.calls == ON_TIME

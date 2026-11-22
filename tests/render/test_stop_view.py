@@ -19,8 +19,8 @@ from paperroute_device.render.frame import HEADER, finish
 from paperroute_testkit.render.factories import STOP_VIEW as BASE
 from paperroute_testkit.render.factories import stop_row as row
 from paperroute_transit.core.model import CarryOn
-from paperroute_transit.core.names import JOINING_WORDS, NameRules
-from paperroute_transit.core.stop_under import NextCall, UnderNumber
+from paperroute_transit.core.names import NameRules
+from paperroute_transit.core.stop_under import UnderNumber
 from paperroute_transit.core.stop_view import (
     HORIZON_TEXT,
     UNCERTAIN,
@@ -618,13 +618,7 @@ UNDER: Final[UnderNumber] = UnderNumber(
     status='2 min late',
     platform='stand B',
     then=('8:06', '8:09'),
-    delay=120,
-    place='1 stop away, last seen at Mays Hill',
-    calls=(
-        NextCall(at='8:08', name='Harris Park'),
-        NextCall(at='8:11', name='Rosehill'),
-        NextCall(at='8:14', name='Parramatta'),
-    ),
+    place='1 stop away',
 )
 OPEN: Final[StopView] = replace(BASE, destination=None, under=UNDER)
 OPEN_TOP: Final[int] = HEADER + LIST_TOP
@@ -639,7 +633,7 @@ def test_small_parts_list_what_the_hero_has() -> None:
     """Place, platform, then the next two; a fallback when none exist."""
     hero = row()
     assert small_parts(under=UNDER, row=hero) == (
-        '1 stop away, last seen at Mays Hill', 'stand B', 'then 8:06, 8:09',
+        '1 stop away', 'stand B', 'then 8:06, 8:09',
     )
     bare = replace(UNDER, place='', platform='', then=())
     assert small_parts(under=bare, row=hero) == (
@@ -660,12 +654,12 @@ def test_small_text_keeps_whole_parts() -> None:
 
 
 def test_under_the_number_fills_its_lines() -> None:
-    """Status, small line, heading and calls each hold ink."""
+    """The status and the small line hold ink, and nothing is below."""
     frame = draw_stop_view(view=OPEN)
-    for low, high in ((190, 222), (228, 244), (258, 272), (276, 342)):
+    for low, high in ((190, 222), (228, 244)):
         band = frame[HEADER + low:HEADER + high, 18:418]
         assert (band == INK).any(), (low, high)
-    assert (frame[HEADER + 348:, 0:SPLIT] == PAPER).all()
+    assert (frame[HEADER + 250:, 0:SPLIT] == PAPER).all()
 
 
 def test_under_the_number_replaces_the_footer_and_due_line() -> None:
@@ -680,18 +674,10 @@ def test_under_the_number_replaces_the_footer_and_due_line() -> None:
     ).all()
 
 
-def test_without_calls_there_is_no_calls_heading() -> None:
-    """With no calls, nothing is drawn below the small line."""
-    frame = draw_stop_view(view=replace(OPEN, under=replace(UNDER, calls=())))
-    assert (frame[HEADER + 256:, 0:SPLIT] == PAPER).all()
-
-
 def test_hero_under_draws_only_below_the_top() -> None:
     """Drawing the block touches nothing above the rule."""
     canvas = Canvas()
-    hero_under(
-        canvas, under=UNDER, row=row(), top=100, rules=NameRules(),
-    )
+    hero_under(canvas, under=UNDER, row=row(), top=100)
     frame = finish(canvas)
     assert (frame[:100 + 183] == PAPER).all()
     assert (frame[100 + 184:100 + 186, 18:418] == INK).all()
@@ -821,18 +807,6 @@ def test_list_row_keeps_via_when_another_row_would_read_alike() -> None:
         text.startswith('Mount Druitt via') and text.endswith(ELLIPSIS)
         for text in canvas.drawn
     )
-
-
-def test_hero_under_shortens_call_names_by_the_rules() -> None:
-    """Call names are shortened by the joining-word rules."""
-    name = 'Great Western Highway Opp Rooty Hill Road North'
-    under = replace(UNDER, calls=(NextCall(at='8:12', name=name),))
-    canvas = Recording()
-    hero_under(
-        canvas, under=under, row=row(), top=100,
-        rules=NameRules(joining=JOINING_WORDS),
-    )
-    assert 'Great Western Hwy Opp Rooty Hill Road North' in canvas.drawn
 
 
 LATE_UNSURE: Final[Estimate] = Estimate(due='7:58', late=12, uncertain=True)

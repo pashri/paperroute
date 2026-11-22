@@ -1,114 +1,76 @@
-"""Where the Stop view's next vehicle was last seen, and its next calls."""
+"""Add the gauge of the stops ahead to the Stop view."""
 
 from collections.abc import Mapping
 from dataclasses import replace
-from datetime import date, datetime, timedelta, tzinfo
-from typing import Final
+from datetime import datetime, timedelta, tzinfo
 
-from paperroute_device.core.text import clock_text
 from paperroute_transit.core.connection_strip import leg_vehicle
-from paperroute_transit.core.model import service_time
-from paperroute_transit.core.names import base_name
-from paperroute_transit.core.patterns import TripPattern, hop_near
+from paperroute_transit.core.gauge import arrival_call, bus_seen, stop_gauge
+from paperroute_transit.core.model import Departure, service_time
+from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.positions import (
     PositionsSnapshot,
     VehiclePosition,
 )
-from paperroute_transit.core.stop_under import NextCall
-from paperroute_transit.core.stop_view import (
-    StopView,
-    hero_departure,
-    stops_text,
-)
+from paperroute_transit.core.stop_under import StopGauge
+from paperroute_transit.core.stop_view import StopView, hero_departure
 from paperroute_transit.core.strip_times import from_call
 
-CALL_COUNT: Final[int] = 3  # calls shown after the From
-HERE: Final[str] = 'at the stop now'
 
-
-def hero_place(
-    *, pattern: TripPattern, start: int, vehicle: VehiclePosition,
-) -> str:
-    """
-    Say where the hero's vehicle was last seen and how far it has to go.
-
-    Parameters
-    ----------
-    pattern : TripPattern
-        The hero's trip.
-    start : int
-        The index of the call at the From.
-    vehicle : VehiclePosition
-        The vehicle's reported position.
-
-    Returns
-    -------
-    str
-        '{stops_text} away, last seen at {name}' counting the calls
-        still to make up to and including the From, or 'at the stop now'
-        when none is left to count; '' when the vehicle has no hop or its
-        hop is at or past the From.
-    """
-    hop = hop_near(pattern=pattern, point=vehicle.point)
-    if hop is None or hop[0] >= start:
-        return ''
-    seen = hop[0] + int(hop[1] >= 1.0)
-    name = base_name(name=pattern.stops[seen].name)
-    count = sum(
-        not stop.passes for stop in pattern.stops[seen + 1 : start + 1]
-    )
-    if count == 0:
-        return HERE
-    if not name:
-        return ''
-    return f'{stops_text(stops=count)} away, last seen at {name}'
-
-
-def next_calls(
+def hero_gauge(
     *,
+    view: StopView,
+    departure: Departure,
     pattern: TripPattern,
     start: int,
-    day: date,
-    delay: int,
+    vehicle: VehiclePosition | None,
+    now: datetime,
     zone: tzinfo,
-) -> tuple[NextCall, ...]:
+) -> StopGauge:
     """
-    List the stops after the From with their times moved by the delay.
+    Work out the gauge for the hero's trip.
 
     Parameters
     ----------
+    view : StopView
+        The view, whose delay and Destination are used.
+    departure : Departure
+        The hero's departure.
     pattern : TripPattern
         The hero's trip.
     start : int
-        The index of the call at the From.
-    day : date
-        The departure's service day.
-    delay : int
-        Seconds late, negative when early.
+        Pattern index of the From.
+    vehicle : VehiclePosition | None
+        The hero's vehicle, or None when not reported.
+    now : datetime
+        The frame time.
     zone : tzinfo
-        Local time zone the times show in.
+        Local time zone.
 
     Returns
     -------
-    tuple[NextCall, ...]
-        Up to `CALL_COUNT` calls, skipping stops the trip passes, stops
-        with no name and a stop named as the call before it.
+    StopGauge
+        The gauge, ending at the Destination when the view has one.
     """
-    calls: list[NextCall] = []
-    before = base_name(name=pattern.stops[start].name)
-    for stop in pattern.stops[start + 1 :]:
-        name = base_name(name=stop.name)
-        if len(calls) == CALL_COUNT:
-            break
-        if stop.passes or not name or name == before:
-            continue
-        moment = service_time(
-            day=day, seconds=stop.arrives + delay, zone=zone,
-        )
-        at = clock_text(moment=moment, zone=zone)
-        calls.append(NextCall(at=at, name=name))
-        before = name
-    return tuple(calls)
+    day = departure.service_day
+    departed = now >= service_time(
+        day=day, seconds=pattern.stops[0].departs + view.delay, zone=zone,
+    )
+    bus = None if vehicle is None else bus_seen(
+        pattern=pattern, start=start, vehicle=vehicle, departed=departed,
+    )
+    end = None if view.destination is None else arrival_call(
+        pattern=pattern, departure=departure, start=start, zone=zone,
+    )
+    return stop_gauge(
+        pattern=pattern,
+        start=start,
+        end=end,
+        bus=bus,
+        day=day,
+        delay=view.delay,
+        zone=zone,
+    )
 
 
 def with_detail(
@@ -122,7 +84,7 @@ def with_detail(
     zone: tzinfo,
 ) -> StopView:
     """
-    Add where the hero was last seen and its next calls to a Stop view.
+    Add the gauge of the stops ahead to a Stop view.
 
     Parameters
     ----------
@@ -144,14 +106,13 @@ def with_detail(
     Returns
     -------
     StopView
-        The same view when it has no block under the number, no hero, no
-        loaded pattern or no call at the From. Otherwise the block gains
-        the calls, and a place only when the hero's own trip has a fresh
-        reported position.
+        The same view when it has no hero, no loaded pattern or no call
+        at the From. Otherwise the view gains its gauge, and its block
+        under the number, if any, gains the words for the vehicle.
     """
     departure = hero_departure(view=view)
     pattern = None if departure is None else patterns.get(departure.trip_id)
-    if view.under is None or departure is None or pattern is None:
+    if departure is None or pattern is None:
         return view
     start = from_call(
         departure=departure,
@@ -162,20 +123,19 @@ def with_detail(
     )
     if start is None:
         return view
-    seen = leg_vehicle(
+    vehicle = leg_vehicle(
         departure=departure, positions=positions, now=now, limit=limit,
     )
-    under = replace(
-        view.under,
-        place='' if seen is None else hero_place(
-            pattern=pattern, start=start, vehicle=seen,
-        ),
-        calls=next_calls(
-            pattern=pattern,
-            start=start,
-            day=departure.service_day,
-            delay=view.under.delay,
-            zone=zone,
-        ),
+    gauge = hero_gauge(
+        view=view,
+        departure=departure,
+        pattern=pattern,
+        start=start,
+        vehicle=vehicle,
+        now=now,
+        zone=zone,
     )
-    return replace(view, under=under)
+    under = view.under
+    if under is not None:
+        under = replace(under, place=gauge.words)
+    return replace(view, under=under, gauge=gauge)

@@ -20,6 +20,8 @@ DAY: Final[str] = '2026-11-24'  # a Tuesday
 LAT: Final[float] = -33.9
 NORTH: Final[float] = 0.00036  # degrees, about 40 m
 FAR: Final[float] = 0.0015  # degrees, about 167 m
+EAST: Final[float] = 0.0012  # degrees, about 111 m, in the next grid cell
+LON: Final[float] = 151.2
 
 
 def kerb_db(*, path: Path) -> sqlite3.Connection:
@@ -67,7 +69,7 @@ def _conn(tmp_path: Path) -> Iterator[sqlite3.Connection]:
 
 def add_stop(
     *, conn: sqlite3.Connection, stop_id: str, lat: float,
-    parent: str | None = None,
+    parent: str | None = None, lon: float = LON,
 ) -> None:
     """
     Insert a stop.
@@ -82,16 +84,19 @@ def add_stop(
         Latitude.
     parent : str | None
         Parent station.
+    lon : float
+        Longitude.
     """
     conn.execute(
         'INSERT INTO stops VALUES (?, ?, ?, ?, ?, ?)',
-        (stop_id, stop_id, parent, lat, 151.2, ''),
+        (stop_id, stop_id, parent, lat, lon, ''),
     )
 
 
 def add_trip(
-    *, conn: sqlite3.Connection, trip_id: str, route: str, way: int,
+    *, conn: sqlite3.Connection, trip_id: str, route: str, way: int | None,
     stops: tuple[str, ...], dep: int = 8 * 3600, kind: int = 3,
+    service: int = 1,
 ) -> None:
     """
     Insert a trip calling at the stops a minute apart.
@@ -104,14 +109,16 @@ def add_trip(
         Trip ID.
     route : str
         Route ID and short name.
-    way : int
-        Direction.
+    way : int | None
+        Direction; None for a trip with no direction.
     stops : tuple[str, ...]
         Stops in order.
     dep : int
         First departure, seconds after midnight.
     kind : int
         GTFS route type.
+    service : int
+        1 when the trip runs in the window, else 0.
     """
     conn.execute(
         'INSERT OR IGNORE INTO routes VALUES (?, ?, ?, ?, NULL, NULL, '
@@ -120,8 +127,8 @@ def add_trip(
     )
     conn.execute(
         "INSERT INTO trips VALUES (?, ?, 'wk', 'x', ?, NULL, NULL, "
-        "'test', NULL, 1)",
-        (trip_id, route, way),
+        "'test', NULL, ?)",
+        (trip_id, route, way, service),
     )
     conn.executemany(
         'INSERT INTO stop_times VALUES (?, ?, ?, ?, ?, 0, 0, NULL)',
@@ -275,3 +282,42 @@ def test_reference_day_skips_weekends_and_holidays(
     )
     conn.execute("INSERT INTO holidays VALUES ('2026-11-23')")
     assert reference_day(conn=conn) == DAY
+
+
+def test_load_pairs_needs_a_shared_route(conn: sqlite3.Connection) -> None:
+    """Opposite ways of different routes do not pair."""
+    add_stop(conn=conn, stop_id='b', lat=LAT + NORTH)
+    add_trip(conn=conn, trip_id='t0', route='6', way=0, stops=('a', 'end1'))
+    add_trip(conn=conn, trip_id='t1', route='7', way=1, stops=('b', 'end2'))
+    assert pairs_of(conn=conn) == []
+
+
+def test_load_pairs_ignores_trips_out_of_service(
+    conn: sqlite3.Connection,
+) -> None:
+    """A trip with service 0 does not make a kerb."""
+    add_stop(conn=conn, stop_id='b', lat=LAT + NORTH)
+    add_trip(conn=conn, trip_id='t0', route='6', way=0, stops=('a', 'end1'))
+    add_trip(
+        conn=conn, trip_id='t1', route='6', way=1, stops=('b', 'end2'),
+        service=0,
+    )
+    assert pairs_of(conn=conn) == []
+
+
+def test_load_pairs_ignores_trips_with_no_direction(
+    conn: sqlite3.Connection,
+) -> None:
+    """A trip with no direction does not make a kerb."""
+    add_stop(conn=conn, stop_id='b', lat=LAT + NORTH)
+    add_trip(conn=conn, trip_id='t0', route='6', way=0, stops=('a', 'end1'))
+    add_trip(conn=conn, trip_id='t1', route='6', way=None, stops=('b', 'end2'))
+    assert pairs_of(conn=conn) == []
+
+
+def test_load_pairs_pairs_across_grid_cells(conn: sqlite3.Connection) -> None:
+    """Stops in neighbouring grid cells within the radius still pair."""
+    add_stop(conn=conn, stop_id='b', lat=LAT, lon=LON + EAST)
+    add_trip(conn=conn, trip_id='t0', route='6', way=0, stops=('a', 'end1'))
+    add_trip(conn=conn, trip_id='t1', route='6', way=1, stops=('b', 'end2'))
+    assert pairs_of(conn=conn) == [('a', 'b', 0), ('b', 'a', 0)]

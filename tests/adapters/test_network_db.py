@@ -1,6 +1,7 @@
 """Tests for the network repository: chooser columns, lines and runs."""
 
 import json
+import logging
 import os
 import shutil
 import sqlite3
@@ -27,6 +28,7 @@ from paperroute_transit.adapters.network_db import (
     route_choices,
 )
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
+from paperroute_transit.app_kerbs import parents_read
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.passed import PASSED_SCHEMA
 from paperroute_transit.build.timetable import Window, build_timetable
@@ -1678,6 +1680,21 @@ def test_parent_kerbs_reads_nothing_from_an_old_file(copy: Path) -> None:
         conn.commit()
     with closing(SqliteNetworkRepository(path=copy, city=LINE_CITY)) as repo:
         assert repo.parent_kerbs(stations=['C']) == {}
+
+
+def test_parents_read_answers_empty_for_a_corrupt_row(
+    copy: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A kerb row that cannot be decoded gives no parents and a warning."""
+    with_parent(path=copy)
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute("UPDATE parent_kerbs SET onward = 'not json'")
+        conn.commit()
+    with closing(SqliteNetworkRepository(path=copy, city=LINE_CITY)) as repo:
+        with caplog.at_level(logging.WARNING):
+            found = parents_read(network=repo, stations=['C'])
+    assert found == {}
+    assert 'reading the parent kerbs failed' in caplog.text
 
 
 def test_fake_network_parent_kerbs_answers_the_real_shape(

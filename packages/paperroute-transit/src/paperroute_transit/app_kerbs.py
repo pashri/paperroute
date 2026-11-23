@@ -38,7 +38,7 @@ def parents_read(
     """
     try:
         return network.parent_kerbs(stations=stations)
-    except sqlite3.Error:
+    except (sqlite3.Error, ValueError, TypeError):
         logger.warning('reading the parent kerbs failed', exc_info=True)
         return {}
 

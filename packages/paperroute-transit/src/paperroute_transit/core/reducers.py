@@ -23,7 +23,7 @@ from paperroute_transit.core.alert_state import (
     rematched,
 )
 from paperroute_transit.core.auto_pins import auto_step, with_override
-from paperroute_transit.core.chains import all_departures
+from paperroute_transit.core.chains import Offers, all_departures
 from paperroute_transit.core.chooser_steps import (
     chooser_knob,
     chooser_retimed,
@@ -258,13 +258,16 @@ def on_loaded(
     """
     if event.until.timestamp() <= state.now.timestamp():
         return replace(state, board=replace(state.board, loading=False)), ()
+    offers = state.board.offers
+    if state.board.loaded_until is None:
+        offers = Offers()
     board = Board(
         departures=event.departures,
         loaded_until=event.until,
         legs=event.legs,
         station=event.station,
         destination_station=event.destination_station,
-        offers=state.board.offers,
+        offers=offers,
     )
     feeds = feeds_of(
         departures=all_departures(

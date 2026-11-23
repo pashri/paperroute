@@ -41,6 +41,7 @@ from paperroute_transit.core.messages import (
     DeparturesLoaded,
     FeedFailed,
     FeedFetched,
+    TimetableSeen,
 )
 from paperroute_transit.core.model import Change, Departure, Pin, Way
 from paperroute_transit.core.places import with_place
@@ -410,6 +411,23 @@ def test_offers_survive_a_reload() -> None:
         pin=WORK, departures=(), until=at(10, 30), legs=work_legs(),
     ))
     assert first_trips(state) == ['a0733', 'b0746']
+
+
+def test_offers_are_forgotten_when_the_timetable_is_rebuilt() -> None:
+    """Renamed onward trips are no change missed, only a new timetable."""
+    state = late_legs(state=answered(), lates={})
+    state, _ = step(state, TimetableSeen(version='new'))
+    renamed = tuple(
+        replace(item, trip_id=f'{item.trip_id}v2') for item in LEG2
+    )
+    state, _ = step(state, DeparturesLoaded(
+        pin=WORK, departures=(), until=at(10, 30), timetable='new',
+        legs=work_legs(second=renamed),
+    ))
+    state = late_legs(state=state, lates={})
+    assert all(
+        chain.missed is None for chain in live_chains(state=state)
+    )
 
 
 def test_offers_forget_a_bus_that_has_left() -> None:

@@ -4,6 +4,7 @@ import json
 import sqlite3
 from typing import Final
 
+from paperroute_transit.build.line_stations import Spot, metres_apart
 from paperroute_transit.build.pairs import (
     busy_places,
     reference_day,
@@ -16,6 +17,7 @@ CREATE TABLE parent_kerbs (stop_id TEXT PRIMARY KEY,
   trips INTEGER NOT NULL, busy INTEGER NOT NULL) WITHOUT ROWID;
 CREATE INDEX parent_kerbs_station ON parent_kerbs (station_id);
 """
+KERBS_APART: Final[float] = 1000.0  # metres
 TWO_KERBS: Final[str] = """
 CREATE TEMP TABLE two_kerbs AS
 WITH called AS (
@@ -61,6 +63,43 @@ def facing_ways(*, here: frozenset[str], there: frozenset[str]) -> bool:
         True when both sets hold a station and they share none.
     """
     return bool(here) and bool(there) and not here & there
+
+
+def close_pairs(
+    *,
+    conn: sqlite3.Connection,
+    pairs: list[tuple[str, str, str]],
+) -> list[tuple[str, str, str]]:
+    """
+    Keep the pairs whose two kerbs are within `KERBS_APART` metres.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable.
+    pairs : list[tuple[str, str, str]]
+        Station and its two kerbs.
+
+    Returns
+    -------
+    list[tuple[str, str, str]]
+        The pairs whose kerbs are close; a kerb with no coordinates
+        keeps its pair.
+    """
+    spots = {
+        stop_id: Spot(name=stop_id, lat=lat, lon=lon)
+        for stop_id, lat, lon in conn.execute(
+            'SELECT stop_id, lat, lon FROM stops'
+            ' WHERE lat IS NOT NULL AND lon IS NOT NULL',
+        )
+    }
+    return [
+        (station, one, two)
+        for station, one, two in pairs
+        if one not in spots
+        or two not in spots
+        or metres_apart(first=spots[one], second=spots[two]) <= KERBS_APART
+    ]
 
 
 def make_two_kerbs(*, conn: sqlite3.Connection) -> None:
@@ -117,6 +156,8 @@ def load_parent_kerbs(*, conn: sqlite3.Connection) -> int:
     """
     Fill `parent_kerbs` with the parents whose two kerbs face apart.
 
+    A parent whose kerbs are over a kilometre apart is left out.
+
     Each kerb is one row naming the other kerb, its next stations as a
     sorted JSON array, its trips and whether both kerbs are busy.
 
@@ -137,14 +178,17 @@ def load_parent_kerbs(*, conn: sqlite3.Connection) -> int:
         'SELECT stop_id, station FROM two_kerbs ORDER BY stop_id',
     ):
         kerbs.setdefault(station, []).append(stop_id)
-    pairs = [
-        (station, one, two)
-        for station, (one, two) in kerbs.items()
-        if facing_ways(
-            here=onward.get(one, frozenset()),
-            there=onward.get(two, frozenset()),
-        )
-    ]
+    pairs = close_pairs(
+        conn=conn,
+        pairs=[
+            (station, one, two)
+            for station, (one, two) in kerbs.items()
+            if facing_ways(
+                here=onward.get(one, frozenset()),
+                there=onward.get(two, frozenset()),
+            )
+        ],
+    )
     busy = busy_places(
         conn=conn,
         places={kerb for _, one, two in pairs for kerb in (one, two)},

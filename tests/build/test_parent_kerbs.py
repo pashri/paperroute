@@ -77,6 +77,41 @@ def test_load_parent_kerbs_keeps_kerbs_leaving_different_ways(
     ]
 
 
+def far_pair(*, conn: sqlite3.Connection, metres: float) -> None:
+    """
+    Move kerb pb the given distance north of pa and give each a way.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable.
+    metres : float
+        Distance between the kerbs.
+    """
+    conn.execute(
+        'UPDATE stops SET lat = ? WHERE stop_id = ?',
+        (LAT + metres / 111_195, 'pb'),
+    )
+    add_trip(conn=conn, trip_id='t0', route='6', way=0, stops=('pa', 'end1'))
+    add_trip(conn=conn, trip_id='t1', route='6', way=1, stops=('pb', 'end2'))
+
+
+def test_load_parent_kerbs_skips_kerbs_over_a_kilometre_apart(
+    conn: sqlite3.Connection,
+) -> None:
+    """Load parent kerbs skips kerbs over a kilometre apart."""
+    far_pair(conn=conn, metres=1200.0)
+    assert kerb_rows(conn=conn) == []
+
+
+def test_load_parent_kerbs_keeps_kerbs_a_few_hundred_metres_apart(
+    conn: sqlite3.Connection,
+) -> None:
+    """Load parent kerbs keeps kerbs a few hundred metres apart."""
+    far_pair(conn=conn, metres=300.0)
+    assert len(kerb_rows(conn=conn)) == 2
+
+
 def test_load_parent_kerbs_skips_kerbs_sharing_a_next_stop(
     conn: sqlite3.Connection,
 ) -> None:

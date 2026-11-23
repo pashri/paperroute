@@ -5,20 +5,24 @@ from datetime import time, timedelta
 
 from paperroute_device.core.kit_effects import SaveState
 from paperroute_device.core.kit_events import Tick
+from paperroute_hardware.core.knob_events import Knob, KnobHeld
 from paperroute_testkit.core.factories import START, departure
 from paperroute_testkit.core.kit_steps import kit_of, kit_step, step
 from paperroute_testkit.core.steps import written
 from paperroute_transit.core.messages import (
     Effect,
     LoadDepartures,
+    MatchPlaces,
     PinDeleted,
     PinMoved,
     PinSaved,
     PinsOrdered,
+    PlacesMatched,
 )
 from paperroute_transit.core.model import AutoWindow, Pin, pin_ref
 from paperroute_transit.core.pin_edits import on_pin_edit
 from paperroute_transit.core.places import toggled
+from paperroute_transit.core.sides import ParentKerb, ParentKerbs
 from paperroute_transit.core.state_model import Places, State
 from tests.core.test_places import FIRST as A
 from tests.core.test_places import SECOND as B
@@ -64,6 +68,91 @@ def test_add_goes_last_unselected() -> None:
     state, _ = step(three(), PinSaved(ref=None, pin=D))
     assert state.places.pins == (A, B, C, D)
     assert state.places.current == 1
+
+
+def parent_of(pin: Pin) -> ParentKerbs:
+    """
+    Make the two kerbs of the parent station a pin's From stands for.
+
+    Parameters
+    ----------
+    pin : Pin
+        Pin whose From is the parent.
+
+    Returns
+    -------
+    ParentKerbs
+        The parent with a kerb each way.
+    """
+    point = pin.origin.point
+    north = replace(pin.origin, stop_id='kerb-n')
+    south = replace(
+        pin.origin, stop_id='kerb-s', point=(point[0], point[1] + 30.0)
+    )
+    return ParentKerbs(
+        station=pin.origin.stop_id,
+        kerbs=(
+            ParentKerb(place=north, onward=frozenset({'n'}), trips=5),
+            ParentKerb(place=south, onward=frozenset({'s'}), trips=3),
+        ),
+        busy=False,
+    )
+
+
+def test_saving_a_plain_pin_asks_to_match_the_places() -> None:
+    """A new pin with no Destination, ways or opposite is matched at once."""
+    state, effects = step(three(), PinSaved(ref=None, pin=D))
+    [ask] = effects_of(effects=effects, kind=MatchPlaces)
+    assert D.origin in ask.places
+
+
+def test_saved_plain_pin_on_a_parent_turns_both_sides() -> None:
+    """The look-up that follows the save makes the parent's pin two kerbs."""
+    state, _ = step(three(), PinSaved(ref=None, pin=D))
+    kerbs = parent_of(D)
+    state, _ = step(
+        state,
+        PlacesMatched(found={'fourth': D.origin}, parents={'fourth': kerbs}),
+    )
+    pin = state.places.pins[-1]
+    assert (pin.origin, pin.opposite) == (
+        kerbs.kerbs[0].place, kerbs.kerbs[1].place,
+    )
+
+
+def test_saved_plain_pin_with_no_parents_is_unchanged() -> None:
+    """With no parents offered the saved pin is as it was saved."""
+    state, _ = step(three(), PinSaved(ref=None, pin=D))
+    state, _ = step(
+        state, PlacesMatched(found={'fourth': D.origin}, parents={})
+    )
+    assert state.places.pins[-1] == D
+
+
+def test_saving_a_pin_with_an_opposite_asks_for_no_match() -> None:
+    """A pin that already shows both kerbs needs no look-up."""
+    pin = replace(D, opposite=A.origin)
+    _, effects = step(three(), PinSaved(ref=None, pin=pin))
+    assert not effects_of(effects=effects, kind=MatchPlaces)
+
+
+def test_saving_a_pin_with_a_destination_asks_for_no_match() -> None:
+    """A pin with a Destination needs no look-up."""
+    pin = replace(D, destination=A.origin)
+    _, effects = step(three(), PinSaved(ref=None, pin=pin))
+    assert not effects_of(effects=effects, kind=MatchPlaces)
+
+
+def test_pinning_a_plain_unpinned_place_asks_to_match_the_places() -> None:
+    """Holding the bottom knob on a plain place matches the places."""
+    state = three()
+    state = replace(
+        state,
+        places=replace(state.places, pins=(A, B), current=1, unpinned=C),
+    )
+    state, effects = step(state, KnobHeld(knob=Knob.BOTTOM))
+    assert state.places.pins == (A, B, C)
+    assert effects_of(effects=effects, kind=MatchPlaces)
 
 
 def test_add_existing_place_is_ignored() -> None:

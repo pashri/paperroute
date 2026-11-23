@@ -641,6 +641,30 @@ def rematch(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     return replace(state, saving=saving), (ask,)
 
 
+def has_plain_pin(*, before: State, after: State) -> bool:
+    """
+    Say whether an edit added a pin a parent station could turn two-sided.
+
+    Parameters
+    ----------
+    before : State
+        State before the edit.
+    after : State
+        State after it.
+
+    Returns
+    -------
+    bool
+        True when `after` has a pin with no Destination, no ways and no
+        opposite that `before` did not.
+    """
+    return any(
+        pin.destination is None and not pin.ways and pin.opposite is None
+        for pin in after.places.pins
+        if pin not in before.places.pins
+    )
+
+
 def rematch_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     """
     Match the places again `RETRY_AFTER` after a failed look-up.

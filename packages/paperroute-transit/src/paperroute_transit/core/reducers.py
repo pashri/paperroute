@@ -76,6 +76,7 @@ from paperroute_transit.core.model import same_place
 from paperroute_transit.core.pin_edits import on_pin_edit
 from paperroute_transit.core.places import (
     feeds_of,
+    has_plain_pin,
     is_stale,
     match_failed,
     matched,
@@ -342,10 +343,13 @@ def knob_step(
         after = knob_moved(state=state, event=event)
     if after is state:
         return state, ()
-    return reloaded(
+    return with_match(
         before=state,
-        after=with_override(before=state, after=after, event=event),
-        effects=effects,
+        result=reloaded(
+            before=state,
+            after=with_override(before=state, after=after, event=event),
+            effects=effects,
+        ),
     )
 
 
@@ -544,6 +548,32 @@ def on_timetable_file(
     return with_rebuild(result=settled(state=after, effects=effects))
 
 
+def with_match(
+    *, before: State, result: tuple[State, tuple[Effect, ...]]
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Add a look-up of the places when an edit added a plain pin.
+
+    Parameters
+    ----------
+    before : State
+        State before the edit.
+    result : tuple[State, tuple[Effect, ...]]
+        New state and effects of the edit.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        `result`, with a MatchPlaces after its effects when the edit
+        added a pin with no Destination, ways or opposite.
+    """
+    after, effects = result
+    if not has_plain_pin(before=before, after=after):
+        return result
+    after, ask = rematch(state=after)
+    return after, (*effects, *ask)
+
+
 def on_places(
     *, state: State, event: PinEdit | PlacesMatched | PlacesFailed
 ) -> tuple[State, tuple[Effect, ...]]:
@@ -567,7 +597,9 @@ def on_places(
     after = on_pin_edit(state=state, event=event)
     if after is state:
         return state, ()
-    return reloaded(before=state, after=after)
+    return with_match(
+        before=state, result=reloaded(before=state, after=after),
+    )
 
 
 def live_result(

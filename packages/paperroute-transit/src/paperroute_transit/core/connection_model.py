@@ -1,7 +1,7 @@
 """Connection pins: their legs and the walk between them."""
 
 import math
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Final
 
 from paperroute_transit.core.live import LiveDeparture
@@ -11,6 +11,7 @@ LEG_EXTRA: Final[timedelta] = timedelta(hours=2)
 WALK_STEP: Final[int] = 10  # metres the walk is rounded up to
 WALK_PACE: Final[int] = 80  # metres walked a minute
 SPARE_MINUTES: Final[int] = 2
+TIGHT_SPARE: Final[int] = 120  # seconds spare under which a change is tight
 
 type TripKey = tuple[str, date]
 
@@ -133,3 +134,46 @@ def change_walk(*, change: Change) -> int | None:
     if change.alight.stop_id == change.board.stop_id:
         return None
     return walk_metres(alight=change.alight, board=change.board) or None
+
+
+def walk_minutes(*, change: Change) -> int:
+    """
+    Count the whole minutes a change walks.
+
+    Parameters
+    ----------
+    change : Change
+        The change.
+
+    Returns
+    -------
+    int
+        The walk at 80 m a minute, rounded up; 0 when the change makes
+        no walk.
+    """
+    return math.ceil((change_walk(change=change) or 0) / WALK_PACE)
+
+
+def spare_seconds(
+    *, arrives: datetime, departs: datetime, change: Change,
+) -> float:
+    """
+    Measure the time left over at a change after the walk.
+
+    Parameters
+    ----------
+    arrives : datetime
+        When the trip changed from arrives.
+    departs : datetime
+        When the trip changed to leaves.
+    change : Change
+        The change.
+
+    Returns
+    -------
+    float
+        Seconds between the two less the walk's whole minutes; negative
+        when the walk does not fit.
+    """
+    walk = 60 * walk_minutes(change=change)
+    return departs.timestamp() - arrives.timestamp() - walk

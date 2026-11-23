@@ -11,16 +11,20 @@ from paperroute_testkit.core.connection_factories import (
     TWO_WAY,
     WESTMEAD,
     WORK,
+    WORK_CHANGE,
+    at,
 )
 from paperroute_testkit.core.factories import place
 from paperroute_transit.core.connection_model import (
     LEG_EXTRA,
     default_allow,
     direct_leg,
+    spare_seconds,
     walk_metres,
+    walk_minutes,
     way_legs,
 )
-from paperroute_transit.core.model import Pin
+from paperroute_transit.core.model import Change, Pin
 
 
 def test_walk_and_allow() -> None:
@@ -65,3 +69,20 @@ def test_direct_leg() -> None:
 def test_leg_two_extra_is_two_hours() -> None:
     """Leg 2 is searched two hours past the window."""
     assert LEG_EXTRA == timedelta(hours=2)
+
+
+def test_walk_minutes_round_up_at_the_usual_pace() -> None:
+    """150 m is two minutes; a change at one stop walks none."""
+    assert walk_minutes(change=WORK_CHANGE) == 2
+    same = Change(alight=WESTMEAD, board=WESTMEAD, allow=4)
+    assert walk_minutes(change=same) == 0
+
+
+def test_spare_seconds_take_the_walk_off() -> None:
+    """Spare is the gap less the walk; it goes negative when missed."""
+    assert spare_seconds(
+        arrives=at(7, 43), departs=at(7, 46), change=WORK_CHANGE,
+    ) == 60.0
+    assert spare_seconds(
+        arrives=at(7, 45), departs=at(7, 46), change=WORK_CHANGE,
+    ) == -60.0

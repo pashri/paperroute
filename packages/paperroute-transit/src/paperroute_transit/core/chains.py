@@ -8,11 +8,18 @@ from types import MappingProxyType
 
 from paperroute_transit.core.connection_model import (
     TripKey,
+    spare_seconds,
     trip_key,
     way_legs,
 )
 from paperroute_transit.core.live import LiveDeparture
-from paperroute_transit.core.model import Departure, Pin, Way, ticked_ways
+from paperroute_transit.core.model import (
+    Change,
+    Departure,
+    Pin,
+    Way,
+    ticked_ways,
+)
 
 type LegKey = tuple[str, str]
 
@@ -85,6 +92,29 @@ def open_legs(*, pin: Pin) -> dict[LegKey, tuple[Pin, int]]:
 
 
 @dataclass(frozen=True)
+class Missed:
+    """
+    A remembered change that can no longer be made.
+
+    Attributes
+    ----------
+    leg : int
+        Index in the chain's legs of the first leg after the missed
+        change.
+    arrives : datetime | None
+        When the chain first offered arrives, live; None when its last
+        trip is no longer listed.
+    later : bool
+        True when the chain goes on by a later trip; False when the legs
+        from `leg` on are the missed ones.
+    """
+
+    leg: int
+    arrives: datetime | None
+    later: bool
+
+
+@dataclass(frozen=True)
 class Chain:
     """
     One way through a pin: the trip taken on each leg.
@@ -96,10 +126,13 @@ class Chain:
         on at that change.
     way : int | None
         Index of the way in the pin's ways, or None for a direct trip.
+    missed : Missed | None
+        The remembered change this chain could not make, or None.
     """
 
     legs: tuple[LiveDeparture, ...]
     way: int | None
+    missed: Missed | None = None
 
     @property
     def departs(self) -> datetime:
@@ -139,6 +172,99 @@ class Chain:
             trip_key(item=first) != trip_key(item=second)
             for first, second in zip(self.legs, self.legs[1:])
         )
+
+
+@dataclass(frozen=True)
+class Offer:
+    """
+    The trips a chain was first offered on.
+
+    Attributes
+    ----------
+    way : int
+        Index of the way in the pin's ways.
+    trips : tuple[TripKey, ...]
+        The trip taken on each leg.
+    """
+
+    way: int
+    trips: tuple[TripKey, ...]
+
+
+@dataclass(frozen=True)
+class Offers:
+    """
+    The chains a pin has offered, remembered by their first trip.
+
+    Attributes
+    ----------
+    pin : Pin | None
+        The pin the offers were made for, or None before any.
+    kept : Mapping[TripKey, Offer]
+        Each offer by its first leg's trip.
+    """
+
+    pin: Pin | None = None
+    kept: Mapping[TripKey, Offer] = field(
+        default_factory=lambda: MappingProxyType({}),
+    )
+
+
+def kept_for(*, offers: Offers, pin: Pin) -> Mapping[TripKey, Offer]:
+    """
+    Give the offers remembered for a pin.
+
+    Parameters
+    ----------
+    offers : Offers
+        Offers remembered.
+    pin : Pin
+        The pin now shown.
+
+    Returns
+    -------
+    Mapping[TripKey, Offer]
+        The offers when they were made for this pin, else none.
+    """
+    if offers.pin == pin:
+        return offers.kept
+    return MappingProxyType({})
+
+
+def offers_after(
+    *, offers: Offers, pin: Pin, chains: Sequence[Chain],
+) -> Offers:
+    """
+    Remember the chains now listed that change vehicle.
+
+    Parameters
+    ----------
+    offers : Offers
+        Offers remembered so far.
+    pin : Pin
+        The pin the chains are for.
+    chains : Sequence[Chain]
+        The chains listed.
+
+    Returns
+    -------
+    Offers
+        For each chain on a way with a change of vehicle, the offer
+        already held for its first trip, else its own trips. Other first
+        trips are forgotten.
+    """
+    held = kept_for(offers=offers, pin=pin)
+    kept: dict[TripKey, Offer] = {}
+    for chain in chains:
+        if chain.way is None or not chain.changes:
+            continue
+        key = trip_key(item=chain.legs[0])
+        offer = held.get(key)
+        kept[key] = offer if offer is not None else Offer(
+            way=chain.way,
+            trips=tuple(trip_key(item=item) for item in chain.legs),
+        )
+    return Offers(pin=pin, kept=MappingProxyType(kept))
 
 
 @dataclass(frozen=True)
@@ -293,6 +419,39 @@ def stayable(*, stay: LiveDeparture, current: LiveDeparture) -> bool:
     return not stay.cancelled and stay.departs >= current.arrives
 
 
+def holds(
+    *, before: LiveDeparture, onward: LiveDeparture, change: Change,
+) -> bool:
+    """
+    Tell whether a remembered change can still be made.
+
+    Parameters
+    ----------
+    before : LiveDeparture
+        The trip the change is from.
+    onward : LiveDeparture
+        The trip remembered for the next leg.
+    change : Change
+        The change.
+
+    Returns
+    -------
+    bool
+        For the same trip, whether it can be stayed on. Otherwise
+        whether the onward trip runs and either leaves time spare after
+        the walk or still meets the change's allowance.
+    """
+    if trip_key(item=onward) == trip_key(item=before):
+        return stayable(stay=onward, current=before)
+    if onward.cancelled:
+        return False
+    spare = spare_seconds(
+        arrives=before.arrives, departs=onward.departs, change=change,
+    )
+    ready = before.arrives + timedelta(minutes=change.allow)
+    return spare > 0 or onward.departs >= ready
+
+
 def walked(
     *,
     taken: tuple[LiveDeparture, ...],
@@ -341,6 +500,41 @@ def walked(
     return best_of([option for option in options if option is not None])
 
 
+def way_lists(
+    *,
+    pin: Pin,
+    way: Way,
+    lists: Mapping[LegKey, Sequence[LiveDeparture]],
+    cache: dict[LegKey, LegList],
+) -> list[LegList]:
+    """
+    Prepare each leg of a way for searching.
+
+    Parameters
+    ----------
+    pin : Pin
+        Pin.
+    way : Way
+        One of its ways.
+    lists : Mapping[LegKey, Sequence[LiveDeparture]]
+        Departures by leg, sorted by when they leave.
+    cache : dict[LegKey, LegList]
+        Leg lists already built for this pin; filled in as legs are built.
+
+    Returns
+    -------
+    list[LegList]
+        Each leg's departures, in the way's order.
+    """
+    legs = []
+    for leg in way_legs(pin=pin, way=way):
+        key = leg_key(leg=leg)
+        if key not in cache:
+            cache[key] = leg_list(items=lists.get(key, ()), never=pin.never)
+        legs.append(cache[key])
+    return legs
+
+
 def way_chains(
     *,
     pin: Pin,
@@ -371,12 +565,7 @@ def way_chains(
         One chain per first-leg trip still to leave that can finish.
     """
     way = pin.ways[position]
-    legs = []
-    for leg in way_legs(pin=pin, way=way):
-        key = leg_key(leg=leg)
-        if key not in cache:
-            cache[key] = leg_list(items=lists.get(key, ()), never=pin.never)
-        legs.append(cache[key])
+    legs = way_lists(pin=pin, way=way, lists=lists, cache=cache)
     found = (
         walked(taken=(item,), index=0, way=way, legs=legs)
         for item in legs[0].items
@@ -385,6 +574,162 @@ def way_chains(
     return [
         Chain(legs=taken, way=position) for taken in found if taken
     ]
+
+
+def held_chain(
+    *, offer: Offer, first: LiveDeparture, way: Way, legs: Sequence[LegList],
+) -> Chain | None:
+    """
+    Follow a remembered chain while each change can still be made.
+
+    Parameters
+    ----------
+    offer : Offer
+        The chain first offered.
+    first : LiveDeparture
+        Its first trip as now listed.
+    way : Way
+        The offer's way.
+    legs : Sequence[LegList]
+        Each leg's departures.
+
+    Returns
+    -------
+    Chain | None
+        The offered trips when every change holds; else the chain
+        `missed_chain` gives from the first change that does not.
+    """
+    taken: tuple[LiveDeparture, ...] = (first,)
+    for index, key in enumerate(offer.trips[1:], start=1):
+        onward = legs[index].trips.get(key)
+        if onward is not None and holds(
+            before=taken[-1], onward=onward, change=way.changes[index - 1],
+        ):
+            taken = (*taken, onward)
+            continue
+        return missed_chain(offer=offer, taken=taken, way=way, legs=legs)
+    return Chain(legs=taken, way=offer.way)
+
+
+def missed_chain(
+    *,
+    offer: Offer,
+    taken: tuple[LiveDeparture, ...],
+    way: Way,
+    legs: Sequence[LegList],
+) -> Chain | None:
+    """
+    Finish a remembered chain past the change it missed.
+
+    Parameters
+    ----------
+    offer : Offer
+        The chain first offered.
+    taken : tuple[LiveDeparture, ...]
+        Its trips up to the missed change.
+    way : Way
+        The offer's way.
+    legs : Sequence[LegList]
+        Each leg's departures.
+
+    Returns
+    -------
+    Chain | None
+        The best chain on from the last trip taken, the miss noted; else
+        the offered trips, noted as missed; None when those are no
+        longer all listed.
+    """
+    index = len(taken)
+    old = [
+        leg.trips.get(key)
+        for leg, key in zip(legs[index:], offer.trips[index:], strict=True)
+    ]
+    arrives = None if old[-1] is None else old[-1].arrives
+    rest = walked(taken=taken, index=index - 1, way=way, legs=legs)
+    if rest is not None:
+        return Chain(
+            legs=rest,
+            way=offer.way,
+            missed=Missed(leg=index, arrives=arrives, later=True),
+        )
+    found = tuple(item for item in old if item is not None)
+    if len(found) < len(old):
+        return None
+    return Chain(
+        legs=(*taken, *found),
+        way=offer.way,
+        missed=Missed(leg=index, arrives=arrives, later=False),
+    )
+
+
+def offered_way(*, pin: Pin, offer: Offer) -> Way | None:
+    """
+    Find the way an offer was made on, if it can still be held.
+
+    Parameters
+    ----------
+    pin : Pin
+        Pin.
+    offer : Offer
+        A remembered offer.
+
+    Returns
+    -------
+    Way | None
+        The way when the pin has it, it is ticked and it has one leg per
+        offered trip; else None.
+    """
+    if offer.way >= len(pin.ways):
+        return None
+    way = pin.ways[offer.way]
+    if not way.ticked or len(offer.trips) != len(way.changes) + 1:
+        return None
+    return way
+
+
+def held_chains(
+    *,
+    pin: Pin,
+    kept: Mapping[TripKey, Offer],
+    lists: Mapping[LegKey, Sequence[LiveDeparture]],
+    now: datetime,
+    cache: dict[LegKey, LegList],
+) -> list[Chain]:
+    """
+    Follow each remembered chain whose first trip is still to leave.
+
+    Parameters
+    ----------
+    pin : Pin
+        Pin.
+    kept : Mapping[TripKey, Offer]
+        Offers remembered for the pin, by first trip.
+    lists : Mapping[LegKey, Sequence[LiveDeparture]]
+        Departures by leg, sorted by when they leave.
+    now : datetime
+        Current time.
+    cache : dict[LegKey, LegList]
+        Leg lists already built for this pin; filled in as legs are built.
+
+    Returns
+    -------
+    list[Chain]
+        One chain per offer on a way still held whose first trip is
+        listed, runs and has not left, and which `held_chain` can give.
+    """
+    found = []
+    for offer in kept.values():
+        way = offered_way(pin=pin, offer=offer)
+        if way is None:
+            continue
+        legs = way_lists(pin=pin, way=way, lists=lists, cache=cache)
+        first = legs[0].trips.get(offer.trips[0])
+        if first is None or first.cancelled or first.departs < now:
+            continue
+        chain = held_chain(offer=offer, first=first, way=way, legs=legs)
+        if chain is not None:
+            found.append(chain)
+    return found
 
 
 def best_per_first(*, chains: Sequence[Chain]) -> list[Chain]:
@@ -413,7 +758,9 @@ def best_per_first(*, chains: Sequence[Chain]) -> list[Chain]:
     return list(best.values())
 
 
-def latest_per_final(*, chains: Sequence[Chain]) -> tuple[Chain, ...]:
+def latest_per_final(
+    *, chains: Sequence[Chain], held: frozenset[TripKey] = frozenset(),
+) -> tuple[Chain, ...]:
     """
     Drop chains that leave earlier for the same last trip as another.
 
@@ -421,11 +768,14 @@ def latest_per_final(*, chains: Sequence[Chain]) -> tuple[Chain, ...]:
     ----------
     chains : Sequence[Chain]
         Chains in first-leg departure order.
+    held : frozenset[TripKey]
+        First trips whose chains are never dropped.
 
     Returns
     -------
     tuple[Chain, ...]
-        For each last-leg trip, the chain whose first leg leaves last.
+        For each last-leg trip, the chain whose first leg leaves last,
+        and every chain whose first trip is held.
     """
     last = {
         trip_key(item=chain.legs[-1]): index
@@ -434,7 +784,8 @@ def latest_per_final(*, chains: Sequence[Chain]) -> tuple[Chain, ...]:
     return tuple(
         chain
         for index, chain in enumerate(chains)
-        if last[trip_key(item=chain.legs[-1])] == index
+        if trip_key(item=chain.legs[0]) in held
+        or last[trip_key(item=chain.legs[-1])] == index
     )
 
 
@@ -444,6 +795,7 @@ def chains_of(
     lists: Mapping[LegKey, Sequence[LiveDeparture]],
     direct: Sequence[LiveDeparture],
     now: datetime,
+    kept: Mapping[TripKey, Offer] = MappingProxyType({}),
 ) -> tuple[Chain, ...]:
     """
     Find the workable chains across a pin's ticked ways and direct trips.
@@ -458,6 +810,8 @@ def chains_of(
         Departures from the From to the Destination, sorted likewise.
     now : datetime
         Current time.
+    kept : Mapping[TripKey, Offer]
+        Offers remembered for the pin, by first trip.
 
     Returns
     -------
@@ -465,7 +819,8 @@ def chains_of(
         Chains in first-leg departure order. Routes in the pin's never
         list are not used, first legs that have left or are cancelled
         are dropped, and of chains ending on one trip only the last to
-        leave is kept.
+        leave is kept. A held first trip takes the chain its offer
+        gives, and that chain is never dropped.
     """
     found = [
         Chain(legs=(item,), way=None)
@@ -479,7 +834,15 @@ def chains_of(
                 pin=pin, position=position, lists=lists, now=now,
                 cache=cache,
             ))
-    kept = best_per_first(chains=found)
+    held = held_chains(pin=pin, kept=kept, lists=lists, now=now, cache=cache)
+    swap = {trip_key(item=chain.legs[0]): chain for chain in held}
+    best = [
+        swap.pop(trip_key(item=chain.legs[0]), chain)
+        for chain in best_per_first(chains=found)
+    ]
     return latest_per_final(
-        chains=sorted(kept, key=lambda chain: chain.departs),
+        chains=sorted(
+            [*best, *swap.values()], key=lambda chain: chain.departs,
+        ),
+        held=frozenset(trip_key(item=chain.legs[0]) for chain in held),
     )

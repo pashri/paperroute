@@ -14,6 +14,7 @@ from paperroute_device.adapters.sqlite_ro import (
 )
 from paperroute_transit.adapters.departure_rows import STOP_STATION
 from paperroute_transit.adapters.network_lines import LineTables, Row
+from paperroute_transit.adapters.station_runs import StationRuns
 from paperroute_transit.adapters.timetable_db import DEFAULT_PATH, to_point
 from paperroute_transit.adapters.train_network_db import (
     HOP_TABLES,
@@ -27,21 +28,14 @@ from paperroute_transit.core.chooser import (
     kind_specs,
 )
 from paperroute_transit.core.city import City, LineGroup
-from paperroute_transit.core.model import StopPlace, until_revisit
+from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.modes import (
     ModeSpec,
     end_point_modes,
     line_modes,
     line_value,
 )
-from paperroute_transit.core.reach import (
-    ReachInput,
-    RunTail,
-    StripKey,
-    cut_to_line,
-    every_route,
-    merge_tails,
-)
+from paperroute_transit.core.reach import ReachInput, StripKey, cut_to_line
 from paperroute_transit.core.sides import KerbPair
 from paperroute_transit.core.train_network import TrainNetwork
 
@@ -84,25 +78,12 @@ TOWARDS: Final[str] = """
 SELECT towards_id, headsign, trips FROM chooser_towards
 WHERE route_key = ? ORDER BY trips DESC, towards_id
 """
-KERB_PAIRS: Final[str] = """
-SELECT p.station_id, p.other_id, p.busy, s.name, s.lon, s.lat
-FROM stop_pairs p JOIN stops s ON s.stop_id = p.other_id
-WHERE p.station_id IN (SELECT value FROM json_each(:ids))
-"""
 TOWARDS_LINE: Final[str] = """
 SELECT j.value, s.name, s.lon, s.lat
 FROM chooser_towards t, json_each(t.stations) j
 JOIN stops s ON s.stop_id = j.value
 WHERE t.towards_id = ?
 ORDER BY j.key
-"""
-RUNS_THROUGH: Final[str] = """
-SELECT r.stations, r.trips, s.pos
-FROM run_stops s JOIN runs r ON r.run_id = s.run_id
-WHERE s.station_id = :station
-  AND (:kind IS NULL OR r.kind = :kind)
-  AND (:any_route OR r.route IN (SELECT value FROM json_each(:routes)))
-ORDER BY s.run_id, s.pos
 """
 PLACES: Final[str] = """
 SELECT stop_id, name, lon, lat FROM stops
@@ -277,39 +258,6 @@ def ruled_off(
     )
 
 
-def merged_tails(*, rows: Iterable[Row]) -> tuple[RunTail, ...]:
-    """
-    Make one tail per pass of the From and merge identical tails.
-
-    Each tail is cut before the first station it would call at again
-    after the From; stations before the From never cut it. Tails are
-    then merged as `merge_tails` does.
-
-    Parameters
-    ----------
-    rows : Iterable[Row]
-        Each run's stations as JSON, its trip-days and the From's
-        position in it, one row per pass.
-
-    Returns
-    -------
-    tuple[RunTail, ...]
-        Tails, the most trips first, then by their stations.
-    """
-    passes = (
-        (tuple(json.loads(str(stations))), cast(int, trips), cast(int, pos))
-        for stations, trips, pos in rows
-    )
-    return merge_tails(tails=(
-        RunTail(
-            before=calls[:at],
-            after=until_revisit(stations=calls[at:])[1:],
-            trips=weight,
-        )
-        for calls, weight, at in passes
-    ))
-
-
 class SqliteNetworkRepository:
     """
     Read-only chooser and run queries against the timetable file.
@@ -349,6 +297,12 @@ class SqliteNetworkRepository:
             tuple[str, ...], tuple[Identity | None, bool]
         ] = {}
         self.lines = LineTables(
+            fetch=self.fetch,
+            has_tables=self._has_tables,
+            projection=city.projection,
+            line_kinds=self.line_kinds,
+        )
+        self.runs = StationRuns(
             fetch=self.fetch,
             has_tables=self._has_tables,
             projection=city.projection,
@@ -776,27 +730,7 @@ class SqliteNetworkRepository:
         dict[str, KerbPair]
             Pair by station ID; empty for an old file.
         """
-        if not self._has_tables(tables=('stop_pairs',)):
-            return {}
-        rows = self.fetch(
-            sql=KERB_PAIRS, params={'ids': json.dumps(list(stations))},
-        )
-        return {
-            str(station): KerbPair(
-                station=str(station),
-                other=StopPlace(
-                    stop_id=str(other),
-                    name=str(name),
-                    point=to_point(
-                        lon=lon,
-                        lat=lat,
-                        projection=self.projection,
-                    ),
-                ),
-                busy=bool(busy),
-            )
-            for station, other, busy, name, lon, lat in rows
-        }
+        return self.runs.kerb_pairs(stations=stations)
 
     def station_for(self, *, stop_id: str) -> str:
         """
@@ -864,34 +798,6 @@ class SqliteNetworkRepository:
         )
         return {str(stop_id): str(station) for stop_id, station in rows}
 
-    def tails(self, *, station: str, key: StripKey) -> tuple[RunTail, ...]:
-        """
-        Read the tails of the runs through a station that feed a strip.
-
-        Train, Metro and Light rail take every run of their kind; other
-        kinds only their routes' runs, or every run of the kind when no
-        routes are chosen; no kind takes every run.
-
-        Parameters
-        ----------
-        station : str
-            Station ID.
-        key : StripKey
-            Strip kind and routes.
-
-        Returns
-        -------
-        tuple[RunTail, ...]
-            Merged tails.
-        """
-        rows = self.fetch(sql=RUNS_THROUGH, params={
-            'station': station,
-            'kind': None if key.kind is None else str(key.kind),
-            'any_route': every_route(key=key, line_kinds=self.line_kinds),
-            'routes': json.dumps(list(key.routes)),
-        })
-        return merged_tails(rows=rows)
-
     def reach_input(
         self, *, key: StripKey, origin: StopPlace,
     ) -> ReachInput | None:
@@ -917,7 +823,7 @@ class SqliteNetworkRepository:
         if not self.has_network():
             return None
         station = self.station_for(stop_id=key.station)
-        tails = self.tails(station=station, key=key)
+        tails = self.runs.tails(station=station, key=key)
         line = self.lines.line_of(key=key)
         exits = self.lines.exits_of(
             key=key, tails=tails, line=line, origin=station,
@@ -930,7 +836,7 @@ class SqliteNetworkRepository:
             else self.station_for(stop_id=key.across)
         )
         across_tails = (
-            () if across is None else self.tails(station=across, key=key)
+            () if across is None else self.runs.tails(station=across, key=key)
         )
         named = {station, *(each.off for each in exits)}.union(
             *(tail.before + tail.after for tail in (*tails, *across_tails)),

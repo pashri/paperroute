@@ -33,6 +33,7 @@ RUN_TABLES: Final[set[str]] = {
     'runs', 'run_stops', 'run_calls', 'trip_runs', 'trip_next',
     'trip_joins', 'route_patterns', 'chooser_routes', 'chooser_towards',
     'rail_hops', 'track_places', 'weekday_runs', 'stop_pairs',
+    'parent_kerbs',
 }
 IMPORTS_ONLY: Final[str] = (
     'import paperroute_transit.build.extras, sys; '
@@ -203,6 +204,8 @@ def test_run_extras_prints_each_phase(
     assert lines[8].startswith('progress catalogue done ')
     assert lines[9] == 'progress pairs'
     assert lines[10].startswith('progress pairs done ')
+    assert lines[11] == 'progress parent kerbs'
+    assert lines[12].startswith('progress parent kerbs done ')
     assert lines[-1].startswith('progress extras peak ')
     assert lines[-1].endswith('MB')
     assert RUN_TABLES <= tables_of(db=db)
@@ -228,6 +231,46 @@ def test_run_extras_survives_a_pairing_failure(
             0,
         )
     assert 'stop pairing failed' in caplog.text
+
+
+def test_run_extras_survives_a_parent_kerbs_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A parent kerb error is logged and leaves the table empty."""
+
+    def broken(**_: object) -> int:
+        """Fail as a missing table would."""
+        raise sqlite3.OperationalError('no such table: routes')
+
+    monkeypatch.setattr(timetable, 'build_extras', skip_extras)
+    monkeypatch.setattr(extras, 'load_parent_kerbs', broken)
+    db = network_build(folder=tmp_path)
+    extras.run_extras(path=db, city=SYDNEY, tiles=None)
+    with closing(sqlite3.connect(db)) as conn:
+        assert conn.execute(
+            'SELECT COUNT(*) FROM parent_kerbs',
+        ).fetchone() == (0,)
+    assert 'parent kerbs failed' in caplog.text
+
+
+def test_run_parent_kerbs_skips_a_city_without_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A city without parent kerbs never runs the build."""
+
+    def called(**_: object) -> int:
+        """Fail the test if the build runs."""
+        raise AssertionError('parent kerbs built')
+
+    monkeypatch.setattr(extras, 'load_parent_kerbs', called)
+    city = dataclasses.replace(
+        SYDNEY,
+        timetable=dataclasses.replace(SYDNEY.timetable, parent_kerbs=False),
+    )
+    with closing(sqlite3.connect(tmp_path / 't.db')) as conn:
+        extras.run_parent_kerbs(conn=conn, city=city)
+    assert SYDNEY.timetable.parent_kerbs
 
 
 def free_pages_after_extras(*, db: Path, compact: bool) -> int:

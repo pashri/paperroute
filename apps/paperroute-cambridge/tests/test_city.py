@@ -200,3 +200,8 @@ def test_cambridge_name_rules_cut_at_the_dash_with_no_joining_words() -> None:
     assert CAMBRIDGE_NAMES.dash
     assert CAMBRIDGE_NAMES.joining == ()
     assert 'London' in CAMBRIDGE_NAMES.centres
+
+
+def test_cambridge_builds_no_parent_kerbs() -> None:
+    """Cambridge leaves the parent kerb build off."""
+    assert not CAMBRIDGE.timetable.parent_kerbs

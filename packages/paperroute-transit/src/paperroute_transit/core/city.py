@@ -150,11 +150,15 @@ class TimetableRules:
     compact : bool
         Whether the finished timetable file is vacuumed, so it holds no
         free pages.
+    parent_kerbs : bool
+        Whether the build records the two kerbs of each parent station
+        whose buses leave different ways.
     """
 
     merge: MergeHook
     holiday_source: str
     compact: bool = False
+    parent_kerbs: bool = False
 
 
 @dataclass(frozen=True)

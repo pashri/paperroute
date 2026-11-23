@@ -14,6 +14,10 @@ from paperroute_device.rss import peak_rss_mb
 from paperroute_transit.build.catalogue import CATALOGUE_SCHEMA, load_catalogue
 from paperroute_transit.build.handoff import HANDOFF_NAME
 from paperroute_transit.build.pairs import PAIR_SCHEMA, load_pairs
+from paperroute_transit.build.parent_kerbs import (
+    PARENT_KERB_SCHEMA,
+    load_parent_kerbs,
+)
 from paperroute_transit.build.passed import write_passed
 from paperroute_transit.build.runs import RUN_SCHEMA, load_runs
 from paperroute_transit.build.swap import land
@@ -90,6 +94,28 @@ def run_pairs(*, conn: sqlite3.Connection, city: City) -> None:
         logger.exception('stop pairing failed; stop_pairs left empty')
 
 
+def run_parent_kerbs(*, conn: sqlite3.Connection, city: City) -> None:
+    """
+    Fill `parent_kerbs` for a city that records them.
+
+    The table is left empty when the city does not record them or the
+    build fails.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable with the run tables.
+    city : City
+        The city the timetable is for.
+    """
+    if not city.timetable.parent_kerbs:
+        return
+    try:
+        load_parent_kerbs(conn=conn)
+    except sqlite3.Error:
+        logger.exception('parent kerbs failed; parent_kerbs left empty')
+
+
 def run_passed(
     *, conn: sqlite3.Connection, city: City, tiles: Path | None,
 ) -> None:
@@ -138,6 +164,7 @@ def run_extras(*, path: Path, city: City, tiles: Path | None) -> None:
         conn.executescript(RUN_SCHEMA)
         conn.executescript(CATALOGUE_SCHEMA)
         conn.executescript(PAIR_SCHEMA)
+        conn.executescript(PARENT_KERB_SCHEMA)
         timed(
             phase='runs',
             step=lambda: load_runs(
@@ -169,6 +196,10 @@ def run_extras(*, path: Path, city: City, tiles: Path | None) -> None:
         timed(
             phase='pairs',
             step=lambda: run_pairs(conn=conn, city=city),
+        )
+        timed(
+            phase='parent kerbs',
+            step=lambda: run_parent_kerbs(conn=conn, city=city),
         )
         conn.commit()
         if city.timetable.compact:

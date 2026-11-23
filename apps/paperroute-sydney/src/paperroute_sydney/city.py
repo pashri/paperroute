@@ -427,7 +427,9 @@ SYDNEY: Final[City] = City(
     modes=SYDNEY_MODES,
     classify=classify_sydney,
     catalogue=SYDNEY_CATALOGUE,
-    timetable=TimetableRules(merge=merge_sydney, holiday_source='bundle'),
+    timetable=TimetableRules(
+        merge=merge_sydney, holiday_source='bundle', parent_kerbs=True,
+    ),
     alerts=SYDNEY_ALERTS,
     default_pin=DEFAULT_PIN,
     peak_windows=PEAK_WINDOWS,

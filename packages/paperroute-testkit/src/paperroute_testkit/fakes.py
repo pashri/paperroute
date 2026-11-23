@@ -27,7 +27,7 @@ from paperroute_transit.core.model import (
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.reach import ReachInput, StripKey
 from paperroute_transit.core.saved import Saved, default_saved
-from paperroute_transit.core.sides import KerbPair
+from paperroute_transit.core.sides import KerbPair, ParentKerbs
 from paperroute_transit.core.tiles import LabelKind, StreetLabel, TileVariant
 from paperroute_transit.ports import TileRepository
 
@@ -50,17 +50,20 @@ class FakeNetwork:
         The stations of every towards row.
     pairs : dict[str, KerbPair]
         The pair of each station that has one.
+    parents : dict[str, ParentKerbs]
+        The kerbs of each parent station that has them.
     data : ReachInput | None
         The runs through every strip's From.
     error : sqlite3.Error | None
         Raised by every read when set.
     pairs_error : sqlite3.Error | None
-        Raised by the kerb pairs read alone when set.
+        Raised by the kerb reads alone when set.
     """
 
     column: Column | None = None
     line: tuple[StopPlace, ...] | None = None
     pairs: dict[str, KerbPair] = field(default_factory=dict)
+    parents: dict[str, ParentKerbs] = field(default_factory=dict)
     data: ReachInput | None = None
     error: sqlite3.Error | None = None
     pairs_error: sqlite3.Error | None = None
@@ -121,6 +124,36 @@ class FakeNetwork:
         return {
             station: pair
             for station, pair in self.pairs.items()
+            if station in stations
+        }
+
+    def parent_kerbs(
+        self, *, stations: Collection[str]
+    ) -> dict[str, ParentKerbs]:
+        """
+        Give the kerbs of the asked parent stations.
+
+        Parameters
+        ----------
+        stations : Collection[str]
+            Station IDs.
+
+        Returns
+        -------
+        dict[str, ParentKerbs]
+            The fixed kerbs of those stations.
+
+        Raises
+        ------
+        sqlite3.Error
+            The pairs error, when set.
+        """
+        self.check()
+        if self.pairs_error is not None:
+            raise self.pairs_error
+        return {
+            station: kerbs
+            for station, kerbs in self.parents.items()
             if station in stations
         }
 

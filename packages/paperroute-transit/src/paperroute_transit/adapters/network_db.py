@@ -36,7 +36,7 @@ from paperroute_transit.core.modes import (
     line_value,
 )
 from paperroute_transit.core.reach import ReachInput, StripKey, cut_to_line
-from paperroute_transit.core.sides import KerbPair
+from paperroute_transit.core.sides import KerbPair, ParentKerbs
 from paperroute_transit.core.train_network import TrainNetwork
 
 NETWORK_TABLES: Final[tuple[str, ...]] = (
@@ -731,6 +731,24 @@ class SqliteNetworkRepository:
             Pair by station ID; empty for an old file.
         """
         return self.runs.kerb_pairs(stations=stations)
+
+    def parent_kerbs(
+        self, *, stations: Collection[str]
+    ) -> dict[str, ParentKerbs]:
+        """
+        Read the two kerbs of each parent station that has them.
+
+        Parameters
+        ----------
+        stations : Collection[str]
+            Station IDs.
+
+        Returns
+        -------
+        dict[str, ParentKerbs]
+            Kerbs by station ID; empty for an old file.
+        """
+        return self.runs.parent_kerbs(stations=stations)
 
     def station_for(self, *, stop_id: str) -> str:
         """

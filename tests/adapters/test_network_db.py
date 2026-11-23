@@ -21,6 +21,7 @@ from paperroute_sydney.city import (
 )
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_testkit.core.factories import inputs_of
+from paperroute_testkit.fakes import FakeNetwork
 from paperroute_transit.adapters.network_db import (
     SqliteNetworkRepository,
     route_choices,
@@ -1618,3 +1619,77 @@ def test_reach_input_reads_a_kerb_across_under_a_station(
     assert found.across_tails == across
     assert 'W1' in found.places
     assert found.station_of['W2'] == 'R3'
+
+
+def with_parent(*, path: Path) -> None:
+    """
+    Put a second stop C_2 under station C and record C's two kerbs.
+
+    Parameters
+    ----------
+    path : Path
+        Timetable file.
+    """
+    with closing(sqlite3.connect(path)) as conn:
+        conn.execute(
+            "INSERT INTO stops SELECT 'C_2', 'C_2 Stop', parent_station,"
+            " lat, lon, platform FROM stops WHERE stop_id = 'C_1'"
+        )
+        conn.execute('DELETE FROM parent_kerbs')
+        conn.executemany(
+            'INSERT INTO parent_kerbs VALUES (?, ?, ?, ?, ?, ?)', [
+                ('C_1', 'C', 'C_2', '["J", "L1"]', 9, 1),
+                ('C_2', 'C', 'C_1', '["E1"]', 7, 1),
+            ],
+        )
+        conn.commit()
+
+
+def test_parent_kerbs_reads_both_kerbs(copy: Path) -> None:
+    """Both kerbs of a parent come back with their sets and trips."""
+    with_parent(path=copy)
+    with closing(SqliteNetworkRepository(path=copy, city=LINE_CITY)) as repo:
+        found = repo.parent_kerbs(stations=['C', 'nowhere'])
+    assert list(found) == ['C']
+    one, two = found['C'].kerbs
+    assert (one.place.stop_id, one.onward, one.trips) == (
+        'C_1', frozenset({'J', 'L1'}), 9,
+    )
+    assert (two.place.stop_id, two.place.name, two.onward, two.trips) == (
+        'C_2', 'C_2 Stop', frozenset({'E1'}), 7,
+    )
+    assert two.place.point is not None and found['C'].busy
+
+
+def test_parent_kerbs_skips_a_station_with_one_kerb_row(copy: Path) -> None:
+    """A station without exactly two rows is left out."""
+    with_parent(path=copy)
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute("DELETE FROM parent_kerbs WHERE stop_id = 'C_2'")
+        conn.commit()
+    with closing(SqliteNetworkRepository(path=copy, city=LINE_CITY)) as repo:
+        assert repo.parent_kerbs(stations=['C']) == {}
+
+
+def test_parent_kerbs_reads_nothing_from_an_old_file(copy: Path) -> None:
+    """A file without the table answers empty."""
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute('DROP TABLE parent_kerbs')
+        conn.commit()
+    with closing(SqliteNetworkRepository(path=copy, city=LINE_CITY)) as repo:
+        assert repo.parent_kerbs(stations=['C']) == {}
+
+
+def test_fake_network_parent_kerbs_answers_the_real_shape(
+    copy: Path,
+) -> None:
+    """The fake answers the same shape as the real repository."""
+    with_parent(path=copy)
+    with closing(SqliteNetworkRepository(path=copy, city=LINE_CITY)) as repo:
+        real = repo.parent_kerbs(stations=['C', 'nowhere'])
+    fake = FakeNetwork(parents=real)
+    assert fake.parent_kerbs(stations=['C', 'nowhere']) == real
+    assert fake.parent_kerbs(stations=['nowhere']) == {}
+    failing = FakeNetwork(pairs_error=sqlite3.OperationalError('gone'))
+    with pytest.raises(sqlite3.OperationalError):
+        failing.parent_kerbs(stations=['C'])

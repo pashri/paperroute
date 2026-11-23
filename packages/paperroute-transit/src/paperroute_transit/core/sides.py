@@ -39,6 +39,46 @@ class KerbPair:
 
 
 @dataclass(frozen=True)
+class ParentKerb:
+    """
+    One bus kerb of a parent station.
+
+    Attributes
+    ----------
+    place : StopPlace
+        The kerb, with its name and point.
+    onward : frozenset[str]
+        IDs of the stations its buses call at next.
+    trips : int
+        Trips leaving it.
+    """
+
+    place: StopPlace
+    onward: frozenset[str]
+    trips: int
+
+
+@dataclass(frozen=True)
+class ParentKerbs:
+    """
+    A parent station's two bus kerbs, whose buses leave different ways.
+
+    Attributes
+    ----------
+    station : str
+        ID of the parent station.
+    kerbs : tuple[ParentKerb, ParentKerb]
+        The two kerbs, by stop ID.
+    busy : bool
+        Whether both kerbs are busy enough to list apart.
+    """
+
+    station: str
+    kerbs: tuple[ParentKerb, ParentKerb]
+    busy: bool
+
+
+@dataclass(frozen=True)
 class Kerbs:
     """
     The paired kerbs of the line being picked from.

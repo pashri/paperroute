@@ -1,7 +1,7 @@
 """Read the runs through a station and the kerbs at it."""
 
 import json
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Sequence
 from typing import Final, cast
 
 from paperroute_transit.adapters.network_lines import Fetch, HasTables, Row
@@ -14,12 +14,19 @@ from paperroute_transit.core.reach import (
     every_route,
     merge_tails,
 )
-from paperroute_transit.core.sides import KerbPair
+from paperroute_transit.core.sides import KerbPair, ParentKerb, ParentKerbs
 
 KERB_PAIRS: Final[str] = """
 SELECT p.station_id, p.other_id, p.busy, s.name, s.lon, s.lat
 FROM stop_pairs p JOIN stops s ON s.stop_id = p.other_id
 WHERE p.station_id IN (SELECT value FROM json_each(:ids))
+"""
+PARENT_KERBS: Final[str] = """
+SELECT k.station_id, k.stop_id, s.name, s.lon, s.lat, k.onward, k.trips,
+  k.busy
+FROM parent_kerbs k JOIN stops s ON s.stop_id = k.stop_id
+WHERE k.station_id IN (SELECT value FROM json_each(:ids))
+ORDER BY k.station_id, k.stop_id
 """
 RUNS_THROUGH: Final[str] = """
 SELECT r.stations, r.trips, s.pos
@@ -29,6 +36,35 @@ WHERE s.station_id = :station
   AND (:any_route OR r.route IN (SELECT value FROM json_each(:routes)))
 ORDER BY s.run_id, s.pos
 """
+def parent_kerb(
+    *, row: Sequence[object], projection: Projection
+) -> ParentKerb:
+    """
+    Make one kerb from the middle six columns of a `PARENT_KERBS` row.
+
+    Parameters
+    ----------
+    row : Sequence[object]
+        Station, stop ID, name, lon, lat, onward JSON, trips, busy.
+    projection : Projection
+        The projection the point is placed in.
+
+    Returns
+    -------
+    ParentKerb
+        The kerb.
+    """
+    _, stop_id, name, lon, lat, onward, trips, _ = row
+    return ParentKerb(
+        place=StopPlace(
+            stop_id=str(stop_id),
+            name=str(name),
+            point=to_point(lon=lon, lat=lat, projection=projection),
+        ),
+        onward=frozenset(json.loads(str(onward))),
+        trips=cast(int, trips),
+    )
+
 
 def merged_tails(*, rows: Iterable[Row]) -> tuple[RunTail, ...]:
     """
@@ -129,6 +165,44 @@ class StationRuns:
                 busy=bool(busy),
             )
             for station, other, busy, name, lon, lat in rows
+        }
+
+    def parent_kerbs(
+        self, *, stations: Collection[str]
+    ) -> dict[str, ParentKerbs]:
+        """
+        Read the two kerbs of each parent station that has them.
+
+        Parameters
+        ----------
+        stations : Collection[str]
+            Station IDs.
+
+        Returns
+        -------
+        dict[str, ParentKerbs]
+            Kerbs by station ID; empty for an old file. A station with
+            other than two kerb rows is left out.
+        """
+        if not self.has_tables(tables=('parent_kerbs',)):
+            return {}
+        rows = self.fetch(
+            sql=PARENT_KERBS, params={'ids': json.dumps(list(stations))},
+        )
+        grouped: dict[str, list[Row]] = {}
+        for row in rows:
+            grouped.setdefault(str(row[0]), []).append(row)
+        return {
+            station: ParentKerbs(
+                station=station,
+                kerbs=(
+                    parent_kerb(row=group[0], projection=self.projection),
+                    parent_kerb(row=group[1], projection=self.projection),
+                ),
+                busy=bool(group[0][7]),
+            )
+            for station, group in grouped.items()
+            if len(group) == 2
         }
 
     def tails(

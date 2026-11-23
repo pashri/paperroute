@@ -23,7 +23,7 @@ from paperroute_transit.core.pin_choices import ChangeStop, StopMatch
 from paperroute_transit.core.reach import ReachInput, StripKey
 from paperroute_transit.core.route_colours import RouteColour
 from paperroute_transit.core.saved import Settings
-from paperroute_transit.core.sides import KerbPair
+from paperroute_transit.core.sides import KerbPair, ParentKerbs
 from paperroute_transit.core.tiles import LabelKind, StreetLabel, TileVariant
 
 
@@ -416,6 +416,23 @@ class NetworkRepository(Protocol):
         -------
         dict[str, KerbPair]
             Pair by station ID; empty for an old file.
+        """
+
+    def parent_kerbs(
+        self, *, stations: Collection[str]
+    ) -> dict[str, ParentKerbs]:
+        """
+        Read the two kerbs of each parent station that has them.
+
+        Parameters
+        ----------
+        stations : Collection[str]
+            Station IDs.
+
+        Returns
+        -------
+        dict[str, ParentKerbs]
+            Kerbs by station ID; empty for an old file.
         """
 
     def towards_line(self, *, towards: int) -> tuple[StopPlace, ...] | None:

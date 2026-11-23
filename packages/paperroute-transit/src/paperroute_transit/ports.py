@@ -22,6 +22,7 @@ from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.pin_choices import ChangeStop, StopMatch
 from paperroute_transit.core.reach import ReachInput, StripKey
 from paperroute_transit.core.route_colours import RouteColour
+from paperroute_transit.core.route_trips import RouteTrip
 from paperroute_transit.core.saved import Settings
 from paperroute_transit.core.sides import KerbPair, ParentKerbs
 from paperroute_transit.core.tiles import LabelKind, StreetLabel, TileVariant
@@ -375,6 +376,32 @@ class TimetableRepository(DayTimetable, Protocol):
         list[Departure]
             In departure order. Without a Destination, every departure
             from the From, each running to its last stop.
+        """
+
+
+class GaugeTimetable(Protocol):
+    """Read access to a route's trips for the bus gauge."""
+
+    def route_trips(
+        self, *, route: str, source: str, day: date
+    ) -> tuple[RouteTrip, ...]:
+        """
+        List a route's passenger trips on a service day and the day before.
+
+        Parameters
+        ----------
+        route : str
+            Route short name.
+        source : str
+            Feed source the route belongs to.
+        day : date
+            Later of the two service days.
+
+        Returns
+        -------
+        tuple[RouteTrip, ...]
+            The trips, earlier service day first and then by first
+            departure.
         """
 
 

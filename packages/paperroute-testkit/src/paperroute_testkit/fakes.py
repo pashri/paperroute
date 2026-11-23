@@ -26,6 +26,7 @@ from paperroute_transit.core.model import (
 )
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.reach import ReachInput, StripKey
+from paperroute_transit.core.route_trips import RouteTrip
 from paperroute_transit.core.saved import Saved, default_saved
 from paperroute_transit.core.sides import KerbPair, ParentKerbs
 from paperroute_transit.core.tiles import LabelKind, StreetLabel, TileVariant
@@ -454,6 +455,29 @@ class BrokenTimetable:
             Nothing.
         """
         return {}
+
+    def route_trips(
+        self, *, route: str, source: str, day: date
+    ) -> tuple[RouteTrip, ...]:
+        """
+        Know no trips.
+
+        Parameters
+        ----------
+        route : str
+            Ignored.
+        source : str
+            Ignored.
+        day : date
+            Ignored.
+
+        Returns
+        -------
+        tuple[RouteTrip, ...]
+            Nothing.
+        """
+        del route, source, day
+        return ()
 
     def joined_trips(self, *, trip_ids: Collection[str]) -> dict[str, str]:
         """

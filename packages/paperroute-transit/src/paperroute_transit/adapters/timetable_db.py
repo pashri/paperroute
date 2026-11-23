@@ -45,6 +45,7 @@ from paperroute_transit.adapters.pattern_rows import (
     RUNNING_DAYS,
     pattern_of,
 )
+from paperroute_transit.adapters.route_trip_rows import ROUTE_TRIPS
 from paperroute_transit.core.alert_model import AlertPlaces
 from paperroute_transit.core.city import City
 from paperroute_transit.core.geo import (
@@ -71,6 +72,7 @@ from paperroute_transit.core.model import (
 from paperroute_transit.core.modes import end_point_modes, line_modes
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.reach import StripKey
+from paperroute_transit.core.route_trips import RouteTrip
 from paperroute_transit.core.sides import both_sides
 from paperroute_transit.core.strip_list import loop_passes
 from paperroute_transit.core.strip_times import (
@@ -853,6 +855,43 @@ class SqliteTimetableRepository:
             str(trip): str(joined)
             for trip, joined in self.fetch_in(sql=sql, ids=trip_ids)
         }
+
+    def route_trips(
+        self, *, route: str, source: str, day: date
+    ) -> tuple[RouteTrip, ...]:
+        """
+        List a route's passenger trips on a service day and the day before.
+
+        Parameters
+        ----------
+        route : str
+            Route short name.
+        source : str
+            Feed source the route belongs to.
+        day : date
+            Later of the two service days.
+
+        Returns
+        -------
+        tuple[RouteTrip, ...]
+            The trips, earlier service day first and then by first
+            departure.
+        """
+        before = day - timedelta(days=1)
+        rows = self.fetch(
+            sql=ROUTE_TRIPS.format(service=self.service_filter()),
+            params=(route, source, before.isoformat(), day.isoformat()),
+        )
+        return tuple(
+            RouteTrip(
+                trip_id=str(trip),
+                day=date.fromisoformat(str(when)),
+                starts=int(str(first)),
+                ends=int(str(last)),
+                direction=None if way is None else int(str(way)),
+            )
+            for trip, when, first, last, way in rows
+        )
 
     def running_days(
         self, *, trip_ids: Collection[str], around: date

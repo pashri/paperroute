@@ -112,6 +112,7 @@ from paperroute_transit.core.reach import (
     build_reach,
 )
 from paperroute_transit.core.realtime import RealtimeSnapshot
+from paperroute_transit.core.route_trips import RouteTrip
 from paperroute_transit.core.saved import seeded
 from paperroute_transit.core.sides import KerbPair
 from paperroute_transit.measures import StopMeasures
@@ -1363,6 +1364,29 @@ class PatternTimetable(EmptyPlacedTimetable):
         del around
         self.asked.append(frozenset(trip_ids))
         return {k: v for k, v in self.found.items() if k in trip_ids}
+
+    def route_trips(
+        self, *, route: str, source: str, day: date
+    ) -> tuple[RouteTrip, ...]:
+        """
+        Know no trips.
+
+        Parameters
+        ----------
+        route : str
+            Ignored.
+        source : str
+            Ignored.
+        day : date
+            Ignored.
+
+        Returns
+        -------
+        tuple[RouteTrip, ...]
+            Nothing.
+        """
+        del route, source, day
+        return ()
 
     def joined_trips(self, *, trip_ids: Collection[str]) -> dict[str, str]:
         """

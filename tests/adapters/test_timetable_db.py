@@ -2670,3 +2670,26 @@ def test_departures_reads_one_kerb_beside_a_destination(
         'here', 'loop',
     ]
     assert not any(across for _, _, across in found)
+
+
+def test_route_trips_lists_the_route_on_the_day_and_the_day_before(
+    repo: SqliteTimetableRepository,
+) -> None:
+    """Both days' trips of the route come with their first and last times."""
+    day = date(2026, 10, 16)
+    found = repo.route_trips(route='606', source='bundle', day=day)
+    assert {t.day for t in found} == {day - timedelta(days=1), day}
+    first = next(t for t in found if t.trip_id == 'bus-0803')
+    assert first.starts < first.ends
+    assert first.direction == 0
+
+
+def test_route_trips_leaves_out_other_routes(
+    repo: SqliteTimetableRepository,
+) -> None:
+    """Another route name or another source finds nothing."""
+    day = date(2026, 10, 16)
+    other = repo.route_trips(route='T1', source='bundle', day=day)
+    assert other
+    assert 'bus-0803' not in {t.trip_id for t in other}
+    assert not repo.route_trips(route='606', source='nope', day=day)

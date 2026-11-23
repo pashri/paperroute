@@ -26,6 +26,7 @@ from paperroute_transit.core.connection_strip import (
     ConnectionStripMapView,
     ConnectionStripView,
 )
+from paperroute_transit.core.connection_view import ConnectionView
 from paperroute_transit.core.kerb_menu import MENU_HINT
 from paperroute_transit.core.map_view import MapView, Marker
 from paperroute_transit.core.messages import ScreenView
@@ -371,3 +372,34 @@ def test_chooser_kerbs_scenes_mark_the_pair_and_open_the_box() -> None:
         'Towards Emmanuel Street', 'Towards Oakington', 'Both directions',
     )
     assert boxed.panel.hint == MENU_HINT
+
+
+def test_late_connection_scenes_build_their_views() -> None:
+    """Marks on each bus; tight and missed changes say so."""
+    easy = view_of(state=SCENES['connection_easy']())
+    assert isinstance(easy, ConnectionView) and easy.hero is not None
+    assert easy.hero.mark == '+4'
+    assert [line.mark for line in easy.hero.lines] == ['', '', '', '+2']
+    assert easy.hero.lines[1].text == (
+        'change at Constitution Hill, North West Twy 7:48'
+    )
+    assert [row.mark for row in easy.rows] == ['', '', '−2', '']
+    tight = view_of(state=SCENES['connection_tight']())
+    assert isinstance(tight, ConnectionView) and tight.hero is not None
+    assert tight.hero.lines[1].bold
+    assert tight.hero.lines[1].text.startswith('tight change at ')
+    assert [row.tight for row in tight.rows] == [True, False, False, False]
+    missed = view_of(state=SCENES['connection_missed']())
+    assert isinstance(missed, ConnectionView) and missed.hero is not None
+    assert missed.hero.lines[1].text == 'change missed · next 664 at 8:01'
+    assert missed.hero.arrives_at == '8:12'
+    assert [(row.was, row.arrives_at) for row in missed.rows] == [
+        ('8:12', '8:27'), ('', '8:27'), ('', '8:45'), ('9:04', ''),
+    ]
+    strip = view_of(state=SCENES['connection_strip_tight']())
+    assert isinstance(strip, ConnectionStripView)
+    assert [stop.late for stop in strip.sections[0].stops] == [
+        '+4', '', '+4',
+    ]
+    assert [stop.late for stop in strip.sections[1].stops] == ['', '', '']
+    assert [pair.tight for pair in strip.pairs[:2]] == [True, True]

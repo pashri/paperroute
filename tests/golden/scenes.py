@@ -126,6 +126,7 @@ from paperroute_transit.transit_app import TransitApp
 from tests.core.chooser_walks import BUSY_PAIR, at_kerbs, at_routes, at_towards
 from tests.core.test_alerts_view import on_alerts
 from tests.core.test_chains import TRAINS
+from tests.core.test_connection import late_legs
 from tests.core.test_connection_screens import started, with_legs
 from tests.core.test_connection_strip import PATTERNS as LEG_PATTERNS
 from tests.core.test_state import BUS_POSITIONS, CENTRE, PRESS, fresh, loaded
@@ -1194,6 +1195,43 @@ def connection(*, view: LiveView) -> State:
     return with_legs(state=started(view=view))
 
 
+EASY_LATES: Final[Mapping[str, int]] = MappingProxyType({
+    'a0733': 4, 'b0746': 2, 'a0822': -2,
+})
+TIGHT_LATES: Final[Mapping[str, int]] = MappingProxyType({
+    'a0733': 4, 'a0748': 4, 'a0822': -2,
+})
+MISSED_LATES: Final[Mapping[str, int]] = MappingProxyType({
+    'a0733': 6, 'a0748': 6, 'a0842': 8,
+})
+
+
+def late_connection(*, view: LiveView, lates: Mapping[str, int]) -> State:
+    """
+    Show the Work connection pin once its feed has answered, then late.
+
+    Parameters
+    ----------
+    view : LiveView
+        The Stop or Strip view.
+    lates : Mapping[str, int]
+        Minutes late by trip ID in the second answer.
+
+    Returns
+    -------
+    State
+        State at 7:30 with the first offers remembered and the trips
+        late.
+    """
+    state = (
+        connection(view=view)
+        if view is LiveView.STOP
+        else connection_strip(view=view)
+    )
+    state = late_legs(state=state, lates={})
+    return late_legs(state=state, lates=lates)
+
+
 def chooser() -> State:
     """
     Show the chooser at 606's Towards column.
@@ -1327,6 +1365,18 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     'connection_strip': lambda: connection_strip(view=LiveView.STRIP),
     'connection_strip_map': lambda: connection_strip(
         view=LiveView.STRIP_MAP,
+    ),
+    'connection_easy': lambda: late_connection(
+        view=LiveView.STOP, lates=EASY_LATES,
+    ),
+    'connection_tight': lambda: late_connection(
+        view=LiveView.STOP, lates=TIGHT_LATES,
+    ),
+    'connection_missed': lambda: late_connection(
+        view=LiveView.STOP, lates=MISSED_LATES,
+    ),
+    'connection_strip_tight': lambda: late_connection(
+        view=LiveView.STRIP, lates=TIGHT_LATES,
     ),
     'chooser': chooser,
     'chooser_routes': chooser_routes,

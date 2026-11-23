@@ -33,6 +33,9 @@ WARNING_SIDE: Final[int] = 18  # warning triangle side, in pixels
 FASTER: Final[str] = 'FASTER'
 TAG_GAP: Final[int] = 8
 NAME_GAP: Final[int] = 8  # pixels between a name and what ends it
+CLOCK_RIGHT: Final[float] = 788.0  # px, the time's right edge
+CLOCK_SAMPLE: Final[str] = '20:00'
+CLOCK_FACE: Final[Face] = Face(weight=800, px=22)
 TABS: Final[tuple[str, ...]] = ('Stop', 'Map', 'Strip', 'Strip + map')
 ALERT_TABS: Final[tuple[str, ...]] = (*TABS, 'Alerts')
 ONE_TITLE_PICKS: Final[frozenset[str]] = frozenset({PICK_FROM})
@@ -120,10 +123,10 @@ def header_tabs(
     float
         Left edge of the tabs.
     """
-    big = Face(weight=800, px=22)
-    right = WIDTH - 12 - canvas.text(
-        at=(WIDTH - 12, 20), text=clock, face=big, grey=PAPER,
+    canvas.text(
+        at=(CLOCK_RIGHT, 20), text=clock, face=CLOCK_FACE, grey=PAPER,
         anchor='rm')
+    right = CLOCK_RIGHT - canvas.length(text=CLOCK_SAMPLE, face=CLOCK_FACE)
     for tab in reversed(tabs):
         width = canvas.length(text=tab, face=Face(weight=700, px=12)) + 10
         right -= width + 4

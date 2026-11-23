@@ -86,7 +86,7 @@ class Recording(Canvas):
 def _tab_x(*, tab: str) -> int:
     """Return an x inside the box of a tab in the header."""
     right = WIDTH - 12 - text_width(
-        text='8:41', face=Face(weight=800, px=22))
+        text='20:00', face=Face(weight=800, px=22))
     for name in reversed(TABS):
         width = text_width(text=name, face=Face(weight=700, px=12)) + 10
         right -= width + 4
@@ -232,6 +232,31 @@ def test_picking_from_title() -> None:
     assert not canvas.shapes
 
 
+def blank() -> Canvas:
+    canvas = Canvas()
+    canvas.rect(box=(0, 0, WIDTH, HEADER), grey=INK)
+    return canvas
+
+
+def paper_columns(*, canvas: Canvas, top: int, bottom: int) -> list[int]:
+    band = canvas.grey()[top:bottom]
+    return [int(x) for x in np.flatnonzero((band == PAPER).any(axis=0))]
+
+
+@pytest.mark.parametrize('clock', ['1:05', '9:59', '20:00', '23:11'])
+def test_header_tabs_left_edge_ignores_the_time(clock: str) -> None:
+    moved = header_tabs(blank(), clock=clock, active='Stop')
+    fixed = header_tabs(blank(), clock='20:00', active='Stop')
+    assert moved == fixed
+
+
+def test_header_tabs_time_ends_at_788() -> None:
+    canvas = blank()
+    header_tabs(canvas, clock='1:05', active='Stop')
+    ink = paper_columns(canvas=canvas, top=8, bottom=32)
+    assert 782 <= max(ink) <= 788
+
+
 def test_titles_stop_before_the_tag() -> None:
     """A long origin and destination leave the tag's box untouched."""
     canvas = Canvas()
@@ -247,7 +272,7 @@ def test_titles_stop_before_the_tag() -> None:
     )
     left = (
         WIDTH - 12
-        - text_width(text='8:41', face=Face(weight=800, px=22))
+        - text_width(text='20:00', face=Face(weight=800, px=22))
     )
     for tab in TABS:
         left -= text_width(text=tab, face=Face(weight=700, px=12)) + 14

@@ -350,7 +350,12 @@ def drawn_lines(
     )
 
 
-def kerb_station(*, choice: LineChoice, departure: Departure) -> str:
+def kerb_station(
+    *,
+    choice: LineChoice,
+    departure: Departure,
+    pattern: TripPattern | None,
+) -> str:
     """
     Give the station a departure boards at.
 
@@ -360,15 +365,21 @@ def kerb_station(*, choice: LineChoice, departure: Departure) -> str:
         The From's station and the kerb across, if any.
     departure : Departure
         The departure.
+    pattern : TripPattern | None
+        The departure's trip pattern, if known.
 
     Returns
     -------
     str
-        The kerb across's stop ID for a departure from across, else the
-        From's station.
+        The kerb across's stop ID for a departure from across whose
+        pattern calls there, else the From's station.
     """
     if departure.facts.across and choice.across is not None:
-        return choice.across.stop_id
+        if pattern is None or any(
+            stop.station == choice.across.stop_id
+            for stop in pattern.stops
+        ):
+            return choice.across.stop_id
     return choice.station
 
 
@@ -407,7 +418,9 @@ def plain_lines(
             pattern=inputs.patterns.get(found.trip_id),
             shape=shape,
             station=kerb_station(
-                choice=choice, departure=found,
+                choice=choice,
+                departure=found,
+                pattern=inputs.patterns.get(found.trip_id),
             ),
             ends=inputs.ends,
             zone=inputs.zone,

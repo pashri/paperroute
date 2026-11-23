@@ -144,3 +144,12 @@ def test_hero_station_follows_the_hero_across() -> None:
     assert hero_station(view=view, pin=BOTH, station='s9') == 's9'
     plain = replace(BOTH, opposite=None)
     assert hero_station(view=view, pin=plain, station='s2') == 's2'
+
+
+def test_hero_station_reads_a_parent_for_either_kerb() -> None:
+    """A parent pin's gauge reads the From's station for either kerb."""
+    view = build_stop_view(inputs=inputs_of(items=(
+        item(minutes=2, across=True), item(minutes=5, across=False),
+    )))
+    parent = replace(BOTH, origin=place('s2a'), opposite=place('s2b'))
+    assert hero_station(view=view, pin=parent, station='s2') == 's2'

@@ -372,11 +372,15 @@ def was_text(*, chain: Chain, zone: tzinfo) -> str:
     Returns
     -------
     str
-        The first-offered arrival; empty without a miss or its arrival.
+        The first-offered arrival; empty without a miss or its arrival, or
+        when the new arrival is the same time.
     """
     if chain.missed is None or chain.missed.arrives is None:
         return ''
-    return clock_text(moment=chain.missed.arrives, zone=zone)
+    was = clock_text(moment=chain.missed.arrives, zone=zone)
+    if was == arrival_text(chain=chain, zone=zone):
+        return ''
+    return was
 
 
 def chain_hero(

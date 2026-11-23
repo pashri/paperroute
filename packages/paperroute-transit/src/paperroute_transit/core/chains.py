@@ -832,8 +832,8 @@ def held_or_fresh(
         The held chain when it misses nothing, or goes on by a later trip
         arriving no later than the fresh one. Otherwise the fresh chain,
         carrying the held chain's miss with `leg` at the fresh chain's
-        first new leg (see `first_new_leg`); `later` is False only when
-        its legs from the missed change on are the offered trips.
+        first new leg (see `first_new_leg`); a fresh chain always reaches
+        the destination, so `later` is True.
     """
     if held is None:
         return fresh
@@ -841,13 +841,12 @@ def held_or_fresh(
     if missed is None or (missed.later and held.arrives <= fresh.arrives):
         return held
     offer = kept[trip_key(item=held.legs[0])]
-    rest = tuple(trip_key(item=item) for item in fresh.legs[missed.leg:])
     return replace(
         fresh,
         missed=replace(
             missed,
             leg=first_new_leg(chain=fresh, trips=offer.trips),
-            later=rest != offer.trips[missed.leg:],
+            later=True,
         ),
     )
 

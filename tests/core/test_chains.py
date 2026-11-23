@@ -1090,3 +1090,43 @@ def test_missed_change_points_at_a_shorter_fresh_plan() -> None:
     chain = three_then_two()
     assert (chain.way, ids([chain])[0]) == (1, ('a0733', 'p0750'))
     assert chain.missed == Missed(leg=1, arrives=at(8, 8), later=True)
+
+
+EXPRESS: Final[Departure] = run(
+    departs=(7, 48), arrives=(7, 59), route='665', trip_id='b0748x',
+)
+
+
+def express_plan() -> Chain:
+    """
+    Offer the 7:33 then the 7:46 665, then run the 665 six late.
+
+    Returns
+    -------
+    Chain
+        The chain shown once an express 665 at 7:48 still makes the 8:03
+        train, which the 7:46 no longer does.
+    """
+    second = tuple(sorted(lived((*LEG2, EXPRESS)), key=lambda x: x.departs))
+    lists = {FIRST: lived(LEG1[:1]), SECOND: second, THIRD: lived(TRAINS)}
+    on_time = chains_of(pin=TWO_PIN, lists=lists, direct=(), now=at(7, 30))
+    kept = offers_after(offers=Offers(), pin=TWO_PIN, chains=on_time).kept
+    late = tuple(sorted(
+        (live(item=LEG2[0], late=6), *lived((*LEG2[1:], EXPRESS))),
+        key=lambda x: x.departs,
+    ))
+    (chain, *_) = chains_of(
+        pin=TWO_PIN,
+        lists={**lists, SECOND: late},
+        direct=(),
+        now=at(7, 30),
+        kept=kept,
+    )
+    return chain
+
+
+def test_missed_change_with_a_fresh_plan_always_has_a_way_on() -> None:
+    """A fresh plan reaches the destination, so it is never stranded."""
+    chain = express_plan()
+    assert ids([chain])[0] == ('a0733', 'b0748x', 't0803')
+    assert chain.missed is not None and chain.missed.later

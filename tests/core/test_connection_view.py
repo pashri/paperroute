@@ -55,6 +55,7 @@ from tests.core.test_chains import (
     TRAINS,
     TWO_PIN,
     camp_offers,
+    express_plan,
     late_first,
     lived,
     three_then_two,
@@ -661,3 +662,17 @@ def test_missed_second_change_folded_into_a_stay_on_says_so() -> None:
         chain=chain, pin=TWO_PIN, now=at(7, 30), zone=SYDNEY_ZONE,
     )
     assert row.was == '8:08'
+
+
+def test_fresh_plan_after_a_missed_change_shows_its_arrival_unstruck() -> None:
+    """The hero names the next bus; the row strikes nothing."""
+    chain = express_plan()
+    hero = chain_hero(
+        chain=chain, pin=TWO_PIN, now=at(7, 30), zone=SYDNEY_ZONE, city=SYDNEY,
+    )
+    assert hero.lines[1].text == 'change missed · next 665 at 7:48'
+    assert hero.arrives_at == '8:08'
+    row = chain_row(
+        chain=chain, pin=TWO_PIN, now=at(7, 30), zone=SYDNEY_ZONE,
+    )
+    assert (row.arrives_at, row.was) == ('8:08', '')

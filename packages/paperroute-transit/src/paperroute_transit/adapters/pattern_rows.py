@@ -88,4 +88,6 @@ def pattern_of(
         days=tuple(running),
         next_trip=calls[1].get(str(row[1])),
         road=is_road(route_type=int(str(row[3]))),
+        direction=None if row[6] is None else int(str(row[6])),
+        route_id=None if row[7] is None else str(row[7]),
     )

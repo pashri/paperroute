@@ -43,6 +43,7 @@ from paperroute_transit.core.model import (
     StopPlace,
     TripFacts,
 )
+from paperroute_transit.core.patterns import TripPattern
 from tests.build.feeds import (
     DAILY,
     STATIONS,
@@ -176,6 +177,61 @@ def test_patterns_carry_road(repo: SqliteTimetableRepository) -> None:
     found = repo.patterns(trip_ids={'bus-0803', 'S-0835'}, around=MONDAY)
     assert found['bus-0803'].road is True
     assert found['S-0835'].road is False
+
+
+def bus_pattern(*, tmp_path: Path, direction: int | None) -> TripPattern:
+    """
+    Read the pattern of the bus trip once its direction is set.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Working directory.
+    direction : int | None
+        Value to store in the trip's ``direction_id`` column.
+
+    Returns
+    -------
+    TripPattern
+        The pattern of trip ``bus-0803``.
+    """
+    db = build_db(
+        tmp_path=tmp_path,
+        start=date(2026, 10, 15),
+        days=3,
+        sources=[
+            Source(name='bundle', archive=bus_feed(path=tmp_path / 'b.zip')),
+        ],
+    )
+    with closing(sqlite3.connect(db)) as conn, conn:
+        conn.execute(
+            'UPDATE trips SET direction_id = ? WHERE trip_id = ?',
+            (direction, 'bus-0803'),
+        )
+        route_id = conn.execute(
+            'SELECT route_id FROM trips WHERE trip_id = ?', ('bus-0803',)
+        ).fetchone()[0]
+    with closing(SqliteTimetableRepository(path=db, city=SYDNEY)) as repo:
+        found = repo.patterns(trip_ids={'bus-0803'}, around=MONDAY)
+    assert found['bus-0803'].route_id == route_id
+    return found['bus-0803']
+
+
+def test_patterns_read_the_direction(tmp_path: Path) -> None:
+    """A trip's direction_id is read into its pattern."""
+    assert bus_pattern(tmp_path=tmp_path, direction=1).direction == 1
+
+
+def test_patterns_without_a_direction_read_none(tmp_path: Path) -> None:
+    """A NULL direction_id reads as None."""
+    assert bus_pattern(tmp_path=tmp_path, direction=None).direction is None
+
+
+def test_patterns_read_the_route_id(tmp_path: Path) -> None:
+    """The route ID is the trip's, not the feed key."""
+    found = bus_pattern(tmp_path=tmp_path, direction=0)
+    assert found.route_id is not None
+    assert found.route_id != found.source
 
 
 def test_departures_uses_station_children_and_skips_no_pickup(

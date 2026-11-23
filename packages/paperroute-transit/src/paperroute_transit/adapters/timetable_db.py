@@ -132,7 +132,7 @@ WHERE name = :name AND lon BETWEEN :west AND :east
 """
 TRIP_COLUMNS: Final[str] = """
 t.trip_id, r.short_name, r.type, COALESCE(t.agency_id, r.agency_id),
-  {shape}
+  {shape}, t.direction_id, t.route_id
 """
 BY_TRIP: Final[str] = (
     'SELECT t.trip_id, ' + TRIP_COLUMNS + """
@@ -781,8 +781,9 @@ class SqliteTimetableRepository:
         -------
         dict[str, list[tuple[object, ...]]]
             Requested ID to its candidate rows (requested ID, trip ID,
-            route, route type, agency, shape ID). The trip with that ID
-            comes first, then aliased trips in trip ID order.
+            route, route type, agency, shape ID, direction ID, route
+            ID). The trip with that ID comes first, then aliased trips in
+            trip ID order.
         """
         shape = self.shape_column()
         found: dict[str, list[tuple[object, ...]]] = {}

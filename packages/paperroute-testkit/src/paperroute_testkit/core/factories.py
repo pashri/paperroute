@@ -270,6 +270,8 @@ def pattern(
     stops: tuple[PatternStop, ...] | None = None,
     days: tuple[date, ...] | None = None,
     along: tuple[float, ...] | None = None,
+    direction: int | None = None,
+    route_id: str | None = None,
 ) -> TripPattern:
     """
     A bus pattern that runs 1 km east from the origin, 8:00 to 8:10.
@@ -288,6 +290,10 @@ def pattern(
         Running dates; defaults to the day of `START`.
     along : tuple[float, ...] | None
         Metres along the shape at each stop.
+    direction : int | None
+        GTFS direction_id.
+    route_id : str | None
+        Route ID.
 
     Returns
     -------
@@ -313,6 +319,8 @@ def pattern(
         ),
         days=days if days is not None else (START.date(),),
         along=along,
+        direction=direction,
+        route_id=route_id,
     )
 
 

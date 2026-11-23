@@ -73,6 +73,10 @@ class TripPattern:
         None when it doesn't or it isn't known.
     road : bool
         False for rail, metro, light rail and ferry.
+    direction : int | None
+        GTFS direction_id, or None when the feed gives none.
+    route_id : str | None
+        The trip's route ID in the timetable, or None when not known.
     """
 
     trip_id: str
@@ -84,6 +88,8 @@ class TripPattern:
     along: tuple[float, ...] | None = None
     next_trip: str | None = None
     road: bool = True
+    direction: int | None = None
+    route_id: str | None = None
 
 
 def stated_along(*, pattern: TripPattern) -> tuple[float, ...] | None:

@@ -79,6 +79,7 @@ from paperroute_transit.core.places import (
     is_stale,
     match_failed,
     matched,
+    paired,
     places_of,
     rematch,
     rematch_effects,
@@ -442,7 +443,10 @@ def on_matched(
     """
     if isinstance(event, PlacesFailed):
         return match_failed(state=state), ()
-    after = matched(state=state, found=event.found)
+    after = paired(
+        state=matched(state=state, found=event.found),
+        parents=event.parents,
+    )
     if after.places == state.places:
         return state, ()
     if not same_place(first=shown(state=after), second=shown(state=state)):

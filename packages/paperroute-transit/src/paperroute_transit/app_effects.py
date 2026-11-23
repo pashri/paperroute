@@ -407,7 +407,7 @@ def read_for(
     match effect:
         case MatchPlaces(places=places):
             return functools.partial(
-                matches, timetable=timetable, places=places
+                matches, timetable=timetable, network=network, places=places
             )
         case LoadStrip():
             return functools.partial(

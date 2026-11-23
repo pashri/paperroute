@@ -537,6 +537,39 @@ async def test_match_places_posts_found() -> None:
     ]
 
 
+async def test_match_places_posts_the_parents_of_the_matches(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The matches carry the kerbs of the found parents; a failed read
+    carries none and is logged."""
+    kerbs = replace(PARENT_KERBS, station='A')
+    found = {
+        'A': StopPlace(stop_id='A', name='A', point=STOP_POINT), 'B': None,
+    }
+    match = MatchPlaces(places=(place('A'), place('B')))
+    posted = await posted_by(
+        ports=ports_of(
+            timetable=MatchingTimetable(),
+            network=FakeNetwork(parents={'A': kerbs, 'Z': kerbs}),
+        ),
+        effects=[match],
+    )
+    assert posted == [PlacesMatched(found=found, parents={'A': kerbs})]
+    with caplog.at_level(logging.WARNING):
+        posted = await posted_by(
+            ports=ports_of(
+                timetable=MatchingTimetable(),
+                network=FakeNetwork(
+                    parents={'A': kerbs},
+                    pairs_error=sqlite3.OperationalError('locked'),
+                ),
+            ),
+            effects=[match],
+        )
+    assert posted == [PlacesMatched(found=found)]
+    assert 'reading the parent kerbs failed' in caplog.text
+
+
 async def test_renders_each_view_type() -> None:
     """Every kind of view is drawn by its own renderer and shown."""
     display = FrameRecorder()

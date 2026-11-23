@@ -177,6 +177,7 @@ from paperroute_transit.core.saved import (
     default_settings,
     seeded,
 )
+from paperroute_transit.core.sides import ParentKerb, ParentKerbs
 from paperroute_transit.core.state_model import (
     CLOCK_WAIT,
     FEED_IDLE,
@@ -3147,6 +3148,36 @@ def test_matched_id_change_updates_pin_and_reloads() -> None:
     assert load.pin == Pin(origin=moved)
     assert state.board.departures == ()
     assert state.map.centre == moved.point
+
+
+def test_matched_parent_pin_turns_both_sides_and_reloads() -> None:
+    """A re-match onto a parent's kerbs makes the pin both-sides."""
+    state = loaded(state=pinned())
+    kerbs = ParentKerbs(
+        station='first',
+        kerbs=(
+            ParentKerb(
+                place=place('first-a', point=(100.0, 0.0)),
+                onward=frozenset({'n'}), trips=5,
+            ),
+            ParentKerb(
+                place=place('first-b', point=(100.0, 30.0)),
+                onward=frozenset({'s'}), trips=3,
+            ),
+        ),
+        busy=False,
+    )
+    first = shown(state=state).origin
+    state, effects = step(
+        state,
+        PlacesMatched(found={'first': first}, parents={'first': kerbs}),
+    )
+    pin = shown(state=state)
+    assert (pin.origin.stop_id, pin.opposite) == (
+        'first-a', kerbs.kerbs[1].place,
+    )
+    [load] = effects_of(effects=effects, kind=LoadDepartures)
+    assert load.pin == pin
 
 
 def test_matched_name_only_refresh_keeps_the_board() -> None:

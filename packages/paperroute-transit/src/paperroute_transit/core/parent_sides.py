@@ -1,10 +1,11 @@
 """Splitting a parent station's runs between its two kerbs."""
 
 from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import replace
 
-from paperroute_transit.core.model import StopPlace
+from paperroute_transit.core.model import Pin, StopPlace, pin_key
 from paperroute_transit.core.reach import RunTail, StripKey
-from paperroute_transit.core.sides import KerbPair, ParentKerbs
+from paperroute_transit.core.sides import KerbPair, ParentKerb, ParentKerbs
 
 
 def leaving(
@@ -150,3 +151,85 @@ def line_pairs(
             found = None if found.other.stop_id == key else found
         chosen[key] = found
     return tuple(pair for pair in chosen.values() if pair is not None)
+
+
+def busier(*, parents: ParentKerbs) -> tuple[ParentKerb, ParentKerb]:
+    """
+    Order a parent's kerbs by how many trips leave them.
+
+    Parameters
+    ----------
+    parents : ParentKerbs
+        The parent station's kerbs.
+
+    Returns
+    -------
+    tuple[ParentKerb, ParentKerb]
+        The kerb with more trips first; on a tie the lower stop ID.
+    """
+    first, second = sorted(
+        parents.kerbs,
+        key=lambda kerb: (-kerb.trips, kerb.place.stop_id),
+    )
+    return first, second
+
+
+def parent_pin(*, pin: Pin, parents: Mapping[str, ParentKerbs]) -> Pin:
+    """
+    Turn a plain pin on a parent station into a both-sides pin.
+
+    Parameters
+    ----------
+    pin : Pin
+        Pin.
+    parents : Mapping[str, ParentKerbs]
+        Parent stations' kerbs by station ID.
+
+    Returns
+    -------
+    Pin
+        The pin with the busier kerb as its From and the other as its
+        opposite; the pin itself when it has a Destination, ways, an
+        opposite kerb or the missing mark, or its From is not a parent.
+    """
+    plain = (
+        pin.destination is None
+        and not pin.ways
+        and pin.opposite is None
+        and not pin.missing
+    )
+    if not plain or pin.origin.stop_id not in parents:
+        return pin
+    here, other = busier(parents=parents[pin.origin.stop_id])
+    return replace(
+        pin, origin=here.place, opposite=other.place, towards=('', ''),
+    )
+
+
+def parent_pins(
+    *, pins: tuple[Pin, ...], parents: Mapping[str, ParentKerbs]
+) -> tuple[Pin, ...]:
+    """
+    Turn each pin on a parent station into a both-sides pin.
+
+    Parameters
+    ----------
+    pins : tuple[Pin, ...]
+        Pins.
+    parents : Mapping[str, ParentKerbs]
+        Parent stations' kerbs by station ID.
+
+    Returns
+    -------
+    tuple[Pin, ...]
+        The pins in order. A pin whose converted form would have another
+        pin's key is kept as it was.
+    """
+    keys = [pin_key(pin=pin) for pin in pins]
+    result: list[Pin] = []
+    for index, pin in enumerate(pins):
+        changed = parent_pin(pin=pin, parents=parents)
+        others = keys[:index] + keys[index + 1:]
+        taken = changed is not pin and pin_key(pin=changed) in others
+        result.append(pin if taken else changed)
+    return tuple(result)

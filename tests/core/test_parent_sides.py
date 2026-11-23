@@ -4,9 +4,21 @@ from dataclasses import replace
 from typing import Final
 
 from paperroute_testkit.core.factories import place
-from paperroute_transit.core.parent_sides import kerb_sides, line_pairs
+from paperroute_transit.core.model import Pin, Way
+from paperroute_transit.core.parent_sides import (
+    busier,
+    kerb_sides,
+    line_pairs,
+    parent_pin,
+    parent_pins,
+)
 from paperroute_transit.core.reach import RunTail, StripKey
-from paperroute_transit.core.sides import KerbPair, ParentKerb, ParentKerbs
+from paperroute_transit.core.sides import (
+    KerbPair,
+    ParentKerb,
+    ParentKerbs,
+    both_sides,
+)
 from tests.core.chooser_walks import (
     KERB_LINE,
     PARENT_KERBS,
@@ -117,3 +129,84 @@ def test_line_pairs_reads_a_station_once_at_its_first_call() -> None:
     assert line_pairs(
         line=loop, pairs={}, parents={'s2': PARENT_KERBS},
     ) == (PARENT_PAIR,)
+
+
+ON_PARENT: Final[Pin] = Pin(
+    origin=place('s2', name='Orchard Close'), kind='bus',
+)
+
+
+def test_parent_pin_takes_the_busier_kerb() -> None:
+    """The busier kerb becomes the From and the other the opposite."""
+    pin = parent_pin(pin=ON_PARENT, parents={'s2': PARENT_KERBS})
+    assert (pin.origin, pin.opposite, pin.towards) == (S2A, S2B, ('', ''))
+    assert both_sides(pin=pin) and pin.kind == 'bus'
+
+
+def test_parent_pin_breaks_a_tie_by_stop_id() -> None:
+    """Kerbs with as many trips are ordered by stop ID."""
+    even = replace(PARENT_KERBS, kerbs=(
+        replace(PARENT_KERBS.kerbs[0], trips=30), PARENT_KERBS.kerbs[1],
+    ))
+    assert busier(parents=even)[0].place == S2A
+    flipped = replace(even, kerbs=(even.kerbs[1], even.kerbs[0]))
+    assert busier(parents=flipped)[0].place == S2A
+
+
+def test_parent_pin_leaves_other_pins_alone() -> None:
+    """A pin that is not a plain From on the parent is not changed."""
+    for pin in (
+        replace(ON_PARENT, destination=place('s4')),
+        replace(ON_PARENT, ways=(Way(changes=(), ticked=True),)),
+        replace(ON_PARENT, opposite=place('x2')),
+        replace(ON_PARENT, missing=True),
+        Pin(origin=S2A),
+    ):
+        assert parent_pin(pin=pin, parents={'s2': PARENT_KERBS}) == pin
+
+
+def test_parent_pin_leaves_a_parent_that_does_not_qualify() -> None:
+    """A pin on a station with no kerbs read, or no table, is unchanged."""
+    other = replace(ON_PARENT, origin=place('s9'))
+    assert parent_pin(pin=other, parents={'s2': PARENT_KERBS}) == other
+    assert parent_pin(pin=ON_PARENT, parents={}) == ON_PARENT
+    assert parent_pins(pins=(other, ON_PARENT), parents={}) == (
+        other, ON_PARENT,
+    )
+
+
+def test_parent_pins_keeps_a_pin_whose_kerbs_are_taken() -> None:
+    """A pin that would equal an existing pin stays as it was."""
+    taken = Pin(origin=S2A, opposite=S2B, kind='bus')
+    kept = parent_pins(
+        pins=(ON_PARENT, taken), parents={'s2': PARENT_KERBS},
+    )
+    assert kept == (ON_PARENT, taken)
+    assert not any(pin.missing for pin in kept)
+
+
+def test_parent_pins_twice_changes_nothing_more() -> None:
+    """Converting converted pins gives the same pins."""
+    parents = {'s2': PARENT_KERBS}
+    once = parent_pins(pins=(ON_PARENT,), parents=parents)
+    assert once != (ON_PARENT,)
+    assert parent_pins(pins=once, parents=parents) == once
+
+
+def test_parent_pins_keeps_nickname_and_place_in_the_list() -> None:
+    """A converted pin keeps its nickname, filters and its position."""
+    named = replace(
+        ON_PARENT,
+        nickname='Home',
+        routes=('333',),
+        only=('333',),
+        never=('x',),
+    )
+    before, after = Pin(origin=place('a')), Pin(origin=place('b'))
+    pins = parent_pins(
+        pins=(before, named, after), parents={'s2': PARENT_KERBS},
+    )
+    assert pins[0] is before and pins[2] is after
+    assert pins[1] == replace(
+        named, origin=S2A, opposite=S2B, towards=('', ''),
+    )

@@ -1,7 +1,7 @@
 """The events the reducer takes and the effects it asks for."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from enum import StrEnum
 
@@ -64,7 +64,7 @@ from paperroute_transit.core.saved import (
     Rate,
     StopSides,
 )
-from paperroute_transit.core.sides import KerbPair
+from paperroute_transit.core.sides import KerbPair, ParentKerbs
 from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.core.strip_model import StripMapView, StripView
 
@@ -467,9 +467,13 @@ class PlacesMatched:
     found : Mapping[str, StopPlace | None]
         The place now found for each old stop ID, or None when it is
         gone.
+    parents : Mapping[str, ParentKerbs]
+        The two kerbs of each matched place that is a parent station
+        with them, by the place's new stop ID.
     """
 
     found: Mapping[str, StopPlace | None]
+    parents: Mapping[str, ParentKerbs] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

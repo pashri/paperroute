@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import timedelta
+from typing import Final
 
 from paperroute_sydney.city import SYDNEY, SydneyFeed
 from paperroute_testkit.core.factories import (
@@ -19,6 +20,7 @@ from paperroute_transit.core.places import (
     flipped,
     is_stale,
     matched,
+    paired,
     rematched,
     shown,
     shown_index,
@@ -33,6 +35,7 @@ from paperroute_transit.core.saved import (
     default_saved,
     default_settings,
 )
+from paperroute_transit.core.sides import ParentKerb, ParentKerbs
 from paperroute_transit.core.state_model import Board, State
 from paperroute_transit.core.tiles import ZOOMS
 from tests.core.test_map_requests import fitted_on
@@ -296,3 +299,40 @@ def test_rematched_drops_a_vanished_opposite_kerb() -> None:
     )
     moved = rematched(pin=both, found={'across': place('across2')})
     assert moved.opposite == place('across2')
+
+
+FIRST_KERBS: Final[ParentKerbs] = ParentKerbs(
+    station='first',
+    kerbs=(
+        ParentKerb(place=place('first-a'), onward=frozenset({'n'}), trips=3),
+        ParentKerb(place=place('first-b'), onward=frozenset({'s'}), trips=5),
+    ),
+    busy=False,
+)
+
+
+def test_paired_turns_a_parent_pin_into_both_sides() -> None:
+    """A pin on a parent takes its two kerbs; the others stay."""
+    state = paired(state=state_with(), parents={'first': FIRST_KERBS})
+    first = state.places.pins[0]
+    assert (first.origin.stop_id, first.opposite) == (
+        'first-b', FIRST_KERBS.kerbs[0].place,
+    )
+    assert state.places.pins[1:] == (SECOND, THIRD)
+    unchanged = state_with()
+    assert paired(state=unchanged, parents={}) is unchanged
+    assert paired(state=state, parents={'first': FIRST_KERBS}) == state
+
+
+def test_paired_turns_the_unpinned_place_too() -> None:
+    """The unpinned place on a parent takes its two kerbs too."""
+    state = paired(
+        state=state_with(pins=(SECOND, THIRD), unpinned=FIRST),
+        parents={'first': FIRST_KERBS},
+    )
+    unpinned = state.places.unpinned
+    assert unpinned is not None
+    assert (unpinned.origin.stop_id, unpinned.opposite) == (
+        'first-b', FIRST_KERBS.kerbs[0].place,
+    )
+    assert state.places.pins == (SECOND, THIRD)

@@ -700,6 +700,15 @@ def test_offers_after_starts_again_for_another_pin() -> None:
         offers=Offers(pin=WORK, kept=KEPT), pin=SHORT, chains=(),
     )
     assert offers == Offers(pin=SHORT)
+    later = work_chains(first=late_first(6), second=lived(LEG2))
+    offers = offers_after(
+        offers=Offers(pin=WORK, kept=KEPT), pin=SHORT, chains=later,
+    )
+    assert offers.kept == {
+        ('a0733', DAY): Offer(
+            way=0, trips=(('a0733', DAY), ('b0801a', DAY)),
+        ),
+    }
 
 
 def test_held_change_with_time_spare_is_kept() -> None:
@@ -766,6 +775,11 @@ def test_change_inside_a_short_allowance_is_never_missed() -> None:
     )
     assert ids(chains) == [('a0733', 'b0746')]
     assert chains[0].missed is None
+    chains = work_chains(
+        first=late_first(7), second=lived(LEG2), pin=SHORT, kept=kept,
+    )
+    assert ids(chains) == [('a0733', 'b0751')]
+    assert chains[0].missed == Missed(leg=1, arrives=at(7, 57), later=True)
 
 
 def test_held_chain_missed_at_its_second_change() -> None:
@@ -785,6 +799,31 @@ def test_held_chain_missed_at_its_second_change() -> None:
     )
     assert ids(chains) == [('a0733', 'b0746', 't0815')]
     assert chains[0].missed == Missed(leg=2, arrives=at(8, 8), later=True)
+    held = sorted(
+        (live(item=LEG2[0], late=4), *lived(LEG2[1:])),
+        key=lambda item: item.departs,
+    )
+    chains = chains_of(
+        pin=TWO_PIN, lists={**lists, SECOND: tuple(held)}, direct=(),
+        now=at(7, 30), kept=kept,
+    )
+    assert ids(chains) == [('a0733', 'b0746', 't0803')]
+    assert chains[0].missed is None
+
+
+def test_held_chain_missed_at_its_first_change() -> None:
+    """The late 7:33 misses its 665; the miss names the offered train."""
+    lists = {
+        FIRST: lived(LEG1[:1]), SECOND: lived(LEG2), THIRD: lived(TRAINS),
+    }
+    on_time = chains_of(pin=TWO_PIN, lists=lists, direct=(), now=at(7, 30))
+    kept = offers_after(offers=Offers(), pin=TWO_PIN, chains=on_time).kept
+    chains = chains_of(
+        pin=TWO_PIN, lists={**lists, FIRST: late_first(6)}, direct=(),
+        now=at(7, 30), kept=kept,
+    )
+    assert ids(chains) == [('a0733', 'b0746', 't0803')]
+    assert chains[0].missed == Missed(leg=1, arrives=at(8, 8), later=False)
 
 
 @settings(max_examples=60, deadline=None)
@@ -847,12 +886,134 @@ def test_missed_change_may_fold_into_a_stay_on() -> None:
     assert chains[0].missed == Missed(leg=1, arrives=at(7, 57), later=True)
 
 
+def test_missed_change_folded_into_a_stay_on_is_remembered() -> None:
+    """The folded chain keeps its offer, so the miss shows again."""
+    through = run(
+        departs=(7, 45), arrives=(7, 58), route='606', trip_id='a0733',
+    )
+    second = (live(item=through), *lived(LEG2[:1]))
+    on_time = work_chains(first=lived(LEG1[:1]), second=second)
+    kept = offers_after(offers=Offers(), pin=WORK, chains=on_time).kept
+    late = (live(item=through, late=6), *lived(LEG2[:1]))
+    chains = work_chains(first=late_first(6), second=late, kept=kept)
+    offers = offers_after(
+        offers=Offers(pin=WORK, kept=kept), pin=WORK, chains=chains,
+    )
+    assert offers.kept == kept
+    again = work_chains(first=late_first(6), second=late, kept=offers.kept)
+    assert again == chains
+    assert again[0].missed == Missed(leg=1, arrives=at(7, 57), later=True)
+
+
+CAMP_PIN: Final[Pin] = replace(WORK, ways=(*WORK.ways, CAMPBELLTOWN_WAY))
+NO_665: Final[tuple[LiveDeparture, ...]] = tuple(
+    live(item=item, cancelled=item.trip_id in {'b0746', 'b0751'})
+    for item in LEG2
+)
+C0750: Final[Departure] = run(
+    departs=(7, 50), arrives=(8, 5), route='880', trip_id='c0750',
+)
+
+
+def camp_chains(
+    *,
+    first: Sequence[LiveDeparture],
+    camp: Sequence[Departure],
+    kept: Mapping[TripKey, Offer] = MappingProxyType({}),
+) -> list[tuple[int | None, tuple[str, ...], Missed | None]]:
+    """
+    Chain CAMP_PIN's two ways with the 7:46 and 7:51 cancelled.
+
+    Parameters
+    ----------
+    first : Sequence[LiveDeparture]
+        Leg-1 departures.
+    camp : Sequence[Departure]
+        Campbelltown departures, on time.
+    kept : Mapping[TripKey, Offer]
+        Offers held, by first trip.
+
+    Returns
+    -------
+    list[tuple[int | None, tuple[str, ...], Missed | None]]
+        Each chain's way, trip IDs and miss.
+    """
+    chains = chains_of(
+        pin=CAMP_PIN,
+        lists={FIRST: first, SECOND: NO_665, FROM_CAMPBELLTOWN: lived(camp)},
+        direct=(),
+        now=at(7, 30),
+        kept=kept,
+    )
+    return [
+        (chain.way, ids([chain])[0], chain.missed) for chain in chains
+    ]
+
+
+def camp_offers(camp: Sequence[Departure]) -> Mapping[TripKey, Offer]:
+    """
+    Offer CAMP_PIN's chains with every bus on time.
+
+    Parameters
+    ----------
+    camp : Sequence[Departure]
+        Campbelltown departures.
+
+    Returns
+    -------
+    Mapping[TripKey, Offer]
+        The offers, the 7:33 by way 1 and the 7:48 by way 0.
+    """
+    chains = chains_of(
+        pin=CAMP_PIN,
+        lists={
+            FIRST: lived(LEG1[:2]),
+            SECOND: NO_665,
+            FROM_CAMPBELLTOWN: lived(camp),
+        },
+        direct=(),
+        now=at(7, 30),
+    )
+    assert [(chain.way, ids([chain])[0][0]) for chain in chains] == [
+        (1, 'a0733'), (0, 'a0748'),
+    ]
+    return offers_after(offers=Offers(), pin=CAMP_PIN, chains=chains).kept
+
+
+def test_missed_change_stranded_on_its_way_goes_on_by_another() -> None:
+    """Nothing later from Campbelltown: the late 7:33 goes on by way 0."""
+    kept = camp_offers((C0750,))
+    first = (*late_first(6), *lived(LEG1[1:2]))
+    assert camp_chains(first=first, camp=(C0750,), kept=kept) == [
+        (0, ('a0733', 'b0801a'), Missed(leg=1, arrives=at(8, 5), later=True)),
+        (0, ('a0748', 'b0801a'), None),
+    ]
+
+
+@pytest.mark.parametrize('arrives', [(8, 10), (8, 12)])
+def test_missed_change_keeps_its_way_when_it_arrives_no_later(
+    arrives: tuple[int, int],
+) -> None:
+    """A later Campbelltown train no later than way 0 keeps way 1."""
+    camp = (
+        C0750,
+        run(departs=(7, 55), arrives=arrives, route='880', trip_id='c0755'),
+    )
+    kept = camp_offers(camp)
+    first = (*late_first(6), *lived(LEG1[1:2]))
+    assert camp_chains(first=first, camp=camp, kept=kept) == [
+        (1, ('a0733', 'c0755'), Missed(leg=1, arrives=at(8, 5), later=True)),
+        (0, ('a0748', 'b0801a'), None),
+    ]
+
+
 def test_offers_off_the_pin_ways_are_not_held() -> None:
     """An offer on a missing or unticked way, or the wrong length, is free."""
     offer = KEPT[('a0733', DAY)]
     plain = work_chains(first=late_first(6), second=lived(LEG2))
     for wrong in (
         replace(offer, way=1), replace(offer, trips=offer.trips[:1]),
+        replace(offer, way=-1),
     ):
         kept = {('a0733', DAY): wrong}
         assert work_chains(
@@ -875,3 +1036,7 @@ def test_held_first_trip_that_left_or_is_cancelled_is_dropped() -> None:
     assert work_chains(
         first=lived(LEG1), second=lived(LEG2), now=at(7, 34), kept=KEPT,
     ) == work_chains(first=lived(LEG1), second=lived(LEG2), now=at(7, 34))
+    chains = work_chains(
+        first=late_first(6), second=lived(LEG2), now=at(7, 39), kept=KEPT,
+    )
+    assert chains[0].missed == Missed(leg=1, arrives=at(7, 57), later=True)

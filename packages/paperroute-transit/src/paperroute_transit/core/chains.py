@@ -2,7 +2,7 @@
 
 import bisect
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from types import MappingProxyType
 
@@ -231,11 +231,42 @@ def kept_for(*, offers: Offers, pin: Pin) -> Mapping[TripKey, Offer]:
     return MappingProxyType({})
 
 
+def offer_of(
+    *, chain: Chain, held: Mapping[TripKey, Offer],
+) -> Offer | None:
+    """
+    Give the offer to remember for one listed chain.
+
+    Parameters
+    ----------
+    chain : Chain
+        A chain listed.
+    held : Mapping[TripKey, Offer]
+        Offers held for the pin, by first trip.
+
+    Returns
+    -------
+    Offer | None
+        The offer held for its first trip when the chain changes vehicle
+        or carries a miss; else its own trips when it is on a way and
+        changes vehicle; else None.
+    """
+    offer = held.get(trip_key(item=chain.legs[0]))
+    if offer is not None and (chain.changes or chain.missed is not None):
+        return offer
+    if chain.way is None or not chain.changes:
+        return None
+    return Offer(
+        way=chain.way,
+        trips=tuple(trip_key(item=item) for item in chain.legs),
+    )
+
+
 def offers_after(
     *, offers: Offers, pin: Pin, chains: Sequence[Chain],
 ) -> Offers:
     """
-    Remember the chains now listed that change vehicle.
+    Remember the chains now listed that change vehicle or carry a miss.
 
     Parameters
     ----------
@@ -249,21 +280,15 @@ def offers_after(
     Returns
     -------
     Offers
-        For each chain on a way with a change of vehicle, the offer
-        already held for its first trip, else its own trips. Other first
-        trips are forgotten.
+        For each chain, the offer `offer_of` gives, by its first trip.
+        Other first trips are forgotten.
     """
     held = kept_for(offers=offers, pin=pin)
     kept: dict[TripKey, Offer] = {}
     for chain in chains:
-        if chain.way is None or not chain.changes:
-            continue
-        key = trip_key(item=chain.legs[0])
-        offer = held.get(key)
-        kept[key] = offer if offer is not None else Offer(
-            way=chain.way,
-            trips=tuple(trip_key(item=item) for item in chain.legs),
-        )
+        offer = offer_of(chain=chain, held=held)
+        if offer is not None:
+            kept[trip_key(item=chain.legs[0])] = offer
     return Offers(pin=pin, kept=MappingProxyType(kept))
 
 
@@ -679,7 +704,7 @@ def offered_way(*, pin: Pin, offer: Offer) -> Way | None:
         The way when the pin has it, it is ticked and it has one leg per
         offered trip; else None.
     """
-    if offer.way >= len(pin.ways):
+    if not 0 <= offer.way < len(pin.ways):
         return None
     way = pin.ways[offer.way]
     if not way.ticked or len(offer.trips) != len(way.changes) + 1:
@@ -758,6 +783,42 @@ def best_per_first(*, chains: Sequence[Chain]) -> list[Chain]:
     return list(best.values())
 
 
+def held_or_fresh(
+    *, held: Chain | None, fresh: Chain, kept: Mapping[TripKey, Offer],
+) -> Chain:
+    """
+    Choose between a held chain and the best fresh one for its first trip.
+
+    Parameters
+    ----------
+    held : Chain | None
+        The chain the first trip's offer gives, or None.
+    fresh : Chain
+        The best chain the search found for the same first trip.
+    kept : Mapping[TripKey, Offer]
+        Offers remembered for the pin, by first trip.
+
+    Returns
+    -------
+    Chain
+        The held chain when it misses nothing, or goes on by a later trip
+        arriving no later than the fresh one. Otherwise the fresh chain,
+        carrying the held chain's miss; `later` is False only when its
+        legs from the missed change on are the offered trips.
+    """
+    if held is None:
+        return fresh
+    missed = held.missed
+    if missed is None or (missed.later and held.arrives <= fresh.arrives):
+        return held
+    offer = kept[trip_key(item=held.legs[0])]
+    rest = tuple(trip_key(item=item) for item in fresh.legs[missed.leg:])
+    return replace(
+        fresh,
+        missed=replace(missed, later=rest != offer.trips[missed.leg:]),
+    )
+
+
 def latest_per_final(
     *, chains: Sequence[Chain], held: frozenset[TripKey] = frozenset(),
 ) -> tuple[Chain, ...]:
@@ -820,7 +881,10 @@ def chains_of(
         list are not used, first legs that have left or are cancelled
         are dropped, and of chains ending on one trip only the last to
         leave is kept. A held first trip takes the chain its offer
-        gives, and that chain is never dropped.
+        gives, and that chain is never dropped. After a missed change,
+        that chain gives way to the fresh best chain for its first trip,
+        the miss carried over, when it has no onward plan or arrives
+        later.
     """
     found = [
         Chain(legs=(item,), way=None)
@@ -837,7 +901,11 @@ def chains_of(
     held = held_chains(pin=pin, kept=kept, lists=lists, now=now, cache=cache)
     swap = {trip_key(item=chain.legs[0]): chain for chain in held}
     best = [
-        swap.pop(trip_key(item=chain.legs[0]), chain)
+        held_or_fresh(
+            held=swap.pop(trip_key(item=chain.legs[0]), None),
+            fresh=chain,
+            kept=kept,
+        )
         for chain in best_per_first(chains=found)
     ]
     return latest_per_final(

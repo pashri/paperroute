@@ -144,9 +144,14 @@ def both_sides(*, pin: Pin) -> bool:
     Returns
     -------
     bool
-        True when the pin has an opposite kerb and no Destination.
+        True when the pin has an opposite kerb other than its From and
+        no Destination.
     """
-    return pin.opposite is not None and pin.destination is None
+    return (
+        pin.opposite is not None
+        and pin.opposite.stop_id != pin.origin.stop_id
+        and pin.destination is None
+    )
 
 
 def pin_places(*, pin: Pin) -> tuple[StopPlace, ...]:

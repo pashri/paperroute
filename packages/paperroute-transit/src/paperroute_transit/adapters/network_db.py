@@ -35,6 +35,7 @@ from paperroute_transit.core.modes import (
     line_modes,
     line_value,
 )
+from paperroute_transit.core.parent_sides import kerb_sides
 from paperroute_transit.core.reach import ReachInput, StripKey, cut_to_line
 from paperroute_transit.core.sides import KerbPair, ParentKerbs
 from paperroute_transit.core.train_network import TrainNetwork
@@ -837,11 +838,31 @@ class SqliteNetworkRepository:
             before its first station off the line, and the ways off it as
             exits (see `LineTables`). A key with a kerb across also reads
             that kerb's tails and places, mapping its stops to the From.
+            A key on one kerb of a parent station keeps the tails that
+            leave from that kerb, and a kerb across under the same station
+            those that leave from it; the From's station is never read twice.
         """
         if not self.has_network():
             return None
         station = self.station_for(stop_id=key.station)
-        tails = self.runs.tails(station=station, key=key)
+        across = (
+            None if key.across is None
+            else self.station_for(stop_id=key.across)
+        )
+        tails, across_tails = kerb_sides(
+            key=key,
+            tails=self.runs.tails(station=station, key=key),
+            across_tails=(
+                ()
+                if across is None or across == station
+                else self.runs.tails(station=across, key=key)
+            ),
+            parents=(
+                None
+                if key.station == station
+                else self.runs.parent_kerbs(stations=(station,)).get(station)
+            ),
+        )
         line = self.lines.line_of(key=key)
         exits = self.lines.exits_of(
             key=key, tails=tails, line=line, origin=station,
@@ -849,13 +870,6 @@ class SqliteNetworkRepository:
         if line:
             tails = cut_to_line(tails=tails, line=line)
         network = self.train_network(key=key, station=station)
-        across = (
-            None if key.across is None
-            else self.station_for(stop_id=key.across)
-        )
-        across_tails = (
-            () if across is None else self.runs.tails(station=across, key=key)
-        )
         named = {station, *(each.off for each in exits)}.union(
             *(tail.before + tail.after for tail in (*tails, *across_tails)),
             *(

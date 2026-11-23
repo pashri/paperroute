@@ -3,25 +3,29 @@
 from dataclasses import replace
 
 from paperroute_transit.core.chooser import Stage, StripRequest, pressed_from
-from paperroute_transit.core.chooser_lists import backed
+from paperroute_transit.core.chooser_lists import backed, pressed
 from paperroute_transit.core.chooser_sides import (
     SideChoice,
     choice_label,
     pressed_side,
     side_choices,
     turned_from,
+    with_line,
 )
 from paperroute_transit.core.chooser_station import knob_backed
 from paperroute_transit.core.model import Pin
+from paperroute_transit.core.parent_sides import line_pairs
 from paperroute_transit.core.sides import Kerbs
 from tests.core.chooser_walks import (
     BUSY_PAIR,
     KERB_LINE,
+    PARENT_KERBS,
     PARENT_PAIR,
     QUIET_PAIR,
     S2A,
     S2B,
     at_kerbs,
+    at_towards,
 )
 
 
@@ -159,3 +163,20 @@ def test_pressed_side_at_a_parent_takes_one_kerb_on() -> None:
     assert isinstance(request, StripRequest) and request.key.station == 's2a'
     across, _ = pressed_side(chooser=at_kerbs(pairs=(PARENT_PAIR,), menu=2))
     assert across.origin == S2B
+
+
+def test_pressed_side_on_a_loop_offers_the_parent_once_at_its_first_call() -> (
+    None
+):
+    """A parent a loop calls at twice has one row, pinning its first pair."""
+    loop = (*KERB_LINE[:4], KERB_LINE[2])
+    pairs = line_pairs(line=loop, pairs={}, parents={'s2': PARENT_KERBS})
+    chooser, _ = pressed(chooser=at_towards(), reach=None)
+    chooser = with_line(chooser=chooser, towards=11, line=loop, pairs=pairs)
+    assert chooser.line == KERB_LINE[:4]
+    chooser = replace(
+        chooser, line_cursor=2, kerbs=Kerbs(pairs=pairs, menu=0),
+    )
+    _, pin = pressed_side(chooser=chooser)
+    assert isinstance(pin, Pin)
+    assert (pin.origin, pin.opposite) == (S2A, S2B)

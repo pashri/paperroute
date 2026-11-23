@@ -131,6 +131,40 @@ def test_line_pairs_reads_a_station_once_at_its_first_call() -> None:
     ) == (PARENT_PAIR,)
 
 
+def _unorientable(*, both: bool) -> ParentKerbs:
+    """Make `s2` whose kerbs hold neither or both of its neighbours."""
+    one, two = PARENT_KERBS.kerbs
+    onward = frozenset({'s1', 's3'}) if both else frozenset({'elsewhere'})
+    return replace(PARENT_KERBS, kerbs=(
+        replace(one, onward=onward), replace(two, onward=onward),
+    ))
+
+
+def test_line_pairs_falls_back_to_the_facing_pair_when_unoriented() -> None:
+    """A parent no kerb of which holds the neighbour offers its facing pair."""
+    lost = {'s2': _unorientable(both=False)}
+    assert line_pairs(
+        line=KERB_LINE, pairs={'s2': QUIET_PAIR}, parents=lost,
+    ) == (QUIET_PAIR,)
+    assert line_pairs(line=KERB_LINE, pairs={}, parents=lost) == ()
+
+
+def test_line_pairs_falls_back_when_both_kerbs_hold_the_neighbour() -> None:
+    """A parent with the neighbour on both kerbs is unoriented too."""
+    both = {'s2': _unorientable(both=True)}
+    assert line_pairs(
+        line=KERB_LINE, pairs={'s2': QUIET_PAIR}, parents=both,
+    ) == (QUIET_PAIR,)
+    assert line_pairs(line=KERB_LINE, pairs={}, parents=both) == ()
+
+
+def test_line_pairs_orients_the_first_station_by_the_next() -> None:
+    """The line's first station takes the kerb heading to the next one."""
+    assert line_pairs(
+        line=KERB_LINE[2:], pairs={}, parents={'s2': PARENT_KERBS},
+    ) == (PARENT_PAIR,)
+
+
 ON_PARENT: Final[Pin] = Pin(
     origin=place('s2', name='Orchard Close'), kind='bus',
 )

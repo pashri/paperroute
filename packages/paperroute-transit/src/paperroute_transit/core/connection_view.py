@@ -13,6 +13,7 @@ from paperroute_transit.core.connection_late import (
     TIGHT,
     ChangeFate,
     leg_mark,
+    missed_ride,
     ride_fates,
     stranded,
 )
@@ -301,12 +302,14 @@ def hero_lines(
     Returns
     -------
     tuple[HeroLine, ...]
-        Each ride's change lines and badge line; a lone ride adds
-        'change missed · stay on' in bold when the chain carries a miss,
-        else 'direct to {To}' or 'stay on to {To}'.
+        Each ride's change lines and badge line; 'change missed ·
+        stay on' in bold follows the ride a miss is stayed on in; a
+        chain with no miss and a lone ride adds 'direct to {To}' or
+        'stay on to {To}'.
     """
     rides = rides_of(chain=chain, pin=pin)
     fates = ride_fates(chain=chain, rides=rides)
+    folded = missed_ride(chain=chain, rides=rides)
     lines = tuple(
         line
         for index, (ride, fate) in enumerate(zip(rides, fates, strict=True))
@@ -318,18 +321,17 @@ def hero_lines(
                 city=city,
                 mark=leg_mark(item=ride.item) if index else '',
             ),
-        )
-    )
-    if len(rides) > 1:
-        return lines
-    if chain.missed is not None:
-        return (
-            *lines,
-            HeroLine(
-                route=None, noun=None, text=f'{MISSED}{DOT}stay on',
-                bold=True,
+            *(
+                (HeroLine(
+                    route=None, noun=None, text=f'{MISSED}{DOT}stay on',
+                    bold=True,
+                ),)
+                if index == folded else ()
             ),
         )
+    )
+    if len(rides) > 1 or chain.missed is not None:
+        return lines
     to = '' if pin.destination is None else pin.destination.name
     lead = 'direct' if chain.way is None else 'stay on'
     return (*lines, HeroLine(route=None, noun=None, text=f'{lead} to {to}'))

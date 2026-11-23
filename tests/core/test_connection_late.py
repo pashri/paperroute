@@ -5,17 +5,24 @@ from datetime import timedelta
 
 import pytest
 
-from paperroute_testkit.core.connection_factories import WORK, WORK_CHANGE, at
+from paperroute_testkit.core.connection_factories import (
+    WORK,
+    WORK_CHANGE,
+    at,
+    run,
+)
 from paperroute_testkit.core.factories import live
 from paperroute_transit.core.chains import Chain, Missed
 from paperroute_transit.core.connection_late import (
     ChangeFate,
     arrival_mark,
     leg_mark,
+    missed_ride,
     ride_fates,
 )
 from paperroute_transit.core.connection_model import TIGHT_SPARE, spare_seconds
 from paperroute_transit.core.rides import rides_of
+from tests.core.test_chains import TWO_PIN
 from tests.core.test_connection_view import A0733, B0746, B0801A
 
 
@@ -109,3 +116,31 @@ def test_ride_fates_take_a_missed_leg_past_the_chain_as_its_last() -> None:
     assert ride_fates(chain=chain, rides=rides) == (
         ChangeFate.EASY, ChangeFate.MISSED,
     )
+
+
+def test_ride_fates_leave_a_missed_leg_folded_into_a_ride_unmissed() -> None:
+    """A stay-on leg is no boarding: no ride's fate is missed."""
+    chain = Chain(
+        legs=(
+            live(item=A0733, late=6),
+            live(item=B0746, late=7),
+            live(
+                item=run(
+                    departs=(7, 57), arrives=(8, 10), route='665',
+                    trip_id='b0746',
+                ),
+                late=7,
+            ),
+        ),
+        way=0, missed=Missed(leg=2, arrives=at(8, 8), later=True),
+    )
+    rides = rides_of(chain=chain, pin=TWO_PIN)
+    assert len(rides) == 2
+    assert ChangeFate.MISSED not in ride_fates(chain=chain, rides=rides)
+    assert missed_ride(chain=chain, rides=rides) == 1
+    boarded = Chain(
+        legs=chain.legs[:2], way=0,
+        missed=Missed(leg=1, arrives=at(8, 8), later=True),
+    )
+    rides = rides_of(chain=boarded, pin=WORK)
+    assert missed_ride(chain=boarded, rides=rides) is None

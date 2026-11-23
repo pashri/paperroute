@@ -5,7 +5,11 @@ from enum import StrEnum
 from typing import Final
 
 from paperroute_transit.core.chains import Chain
-from paperroute_transit.core.connection_model import TIGHT_SPARE, spare_seconds
+from paperroute_transit.core.connection_model import (
+    TIGHT_SPARE,
+    spare_seconds,
+    trip_key,
+)
 from paperroute_transit.core.late_marks import signed
 from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.rides import Ride
@@ -111,10 +115,12 @@ def ride_fate(
     Returns
     -------
     ChangeFate
-        `EASY` for the first ride or a stay on; `MISSED` or `STRANDED`
-        for the ride boarded on the chain's missed leg, its last leg when
-        the missed leg is not one of its legs; `TIGHT` when the spare at
-        the change is under `TIGHT_SPARE`; else `EASY`.
+        `EASY` for the first ride; `MISSED` or `STRANDED` for the ride
+        boarded on the chain's missed leg, or on its last leg when the
+        missed index is past the chain; a missed leg the fresh plan stays
+        on through is no boarding and leaves its ride's fate to the spare
+        (see `missed_ride`); `TIGHT` when the spare at the change is under
+        `TIGHT_SPARE`; else `EASY`.
     """
     missed = chain.missed
     if before is None or ride.change is None:
@@ -166,3 +172,41 @@ def stranded(*, chain: Chain) -> bool:
         True when the chain carries a miss with no later trip.
     """
     return chain.missed is not None and not chain.missed.later
+
+
+def missed_ride(*, chain: Chain, rides: Sequence[Ride]) -> int | None:
+    """
+    Find the ride a missed change is folded into.
+
+    Parameters
+    ----------
+    chain : Chain
+        The chain.
+    rides : Sequence[Ride]
+        The chain's rides.
+
+    Returns
+    -------
+    int | None
+        The index of the ride holding the miss's leg when that leg is
+        stayed on rather than boarded; None without a miss, or when a
+        ride boards the leg (see `ride_fate`).
+    """
+    missed = chain.missed
+    if missed is None:
+        return None
+    last = len(chain.legs) - 1
+    target = missed.leg if missed.leg in range(last + 1) else last
+    start = 0
+    for index, ride in enumerate(rides):
+        size = 1
+        key = trip_key(item=ride.item)
+        while (
+            start + size <= last
+            and trip_key(item=chain.legs[start + size]) == key
+        ):
+            size += 1
+        if start <= target < start + size:
+            return None if index and target == start else index
+        start += size
+    return None

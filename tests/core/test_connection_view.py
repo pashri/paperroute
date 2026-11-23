@@ -50,7 +50,10 @@ from tests.core.test_chains import (
     FROM_CAMPBELLTOWN,
     NO_665,
     SECOND,
+    THIRD,
     THREE_OR_TWO,
+    TRAINS,
+    TWO_PIN,
     camp_offers,
     late_first,
     lived,
@@ -619,3 +622,42 @@ def test_direct_trip_without_a_miss_is_unchanged() -> None:
         tight=False,
         was='',
     )
+
+
+def stay_on_second_change_chain() -> Chain:
+    """The 665 seven late: the fresh plan stays on it past Westmead."""
+    through = run(
+        departs=(7, 57), arrives=(8, 10), route='665', trip_id='b0746',
+    )
+    lists = {
+        FIRST: lived(LEG1[:1]),
+        SECOND: lived(LEG2[:1]),
+        THIRD: (live(item=through), *lived(TRAINS)),
+    }
+    on_time = chains_of(pin=TWO_PIN, lists=lists, direct=(), now=at(7, 30))
+    kept = offers_after(offers=Offers(), pin=TWO_PIN, chains=on_time).kept
+    late = {
+        **lists,
+        SECOND: (live(item=LEG2[0], late=7),),
+        THIRD: (live(item=through, late=7), *lived(TRAINS)),
+    }
+    return chains_of(
+        pin=TWO_PIN, lists=late, direct=(), now=at(7, 30), kept=kept,
+    )[0]
+
+
+def test_missed_second_change_folded_into_a_stay_on_says_so() -> None:
+    chain = stay_on_second_change_chain()
+    assert chain.missed == Missed(leg=2, arrives=at(8, 8), later=True)
+    hero = chain_hero(
+        chain=chain, pin=TWO_PIN, now=at(7, 30), zone=SYDNEY_ZONE, city=SYDNEY,
+    )
+    texts = [line.text for line in hero.lines]
+    assert texts.count('change missed · stay on') == 1
+    line = hero.lines[texts.index('change missed · stay on')]
+    assert line.bold
+    assert hero.lines[texts.index('change missed · stay on') - 1].mark == '+7'
+    row = chain_row(
+        chain=chain, pin=TWO_PIN, now=at(7, 30), zone=SYDNEY_ZONE,
+    )
+    assert row.was == '8:08'

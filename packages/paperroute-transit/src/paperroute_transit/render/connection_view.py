@@ -22,6 +22,11 @@ from paperroute_transit.render.chrome import (
     view_banner,
     view_header,
 )
+from paperroute_transit.render.late_marks import (
+    SMALL_MARK,
+    mark_width,
+    raised_mark,
+)
 from paperroute_transit.render.pair_list import draw_pair_list
 from paperroute_transit.render.stop_view import SPLIT
 
@@ -46,11 +51,13 @@ SMALL_BOLD: Final[Face] = Face(weight=700, px=12)
 LINE_FACE: Final[Face] = Face(weight=400, px=18)
 STEP_FACE: Final[Face] = Face(weight=400, px=17)
 BADGE_PX: Final[int] = 18
+HERO_MARK_PX: Final[int] = 24
+STEP_BOLD: Final[Face] = Face(weight=700, px=17)
 
 
 def hero_countdown(canvas: Canvas, *, hero: ChainHero, top: int) -> None:
     """
-    Draw the countdown to leg 1 as the Stop view's hero does.
+    Draw the countdown to leg 1 as the Stop view's hero does, then its mark.
 
     Parameters
     ----------
@@ -75,6 +82,10 @@ def hero_countdown(canvas: Canvas, *, hero: ChainHero, top: int) -> None:
         used += 8 + canvas.text(
             at=(HERO_LEFT + 8 + used, y), text='min', face=unit, grey=INK,
         )
+    used += raised_mark(
+        canvas, mark=hero.mark, at=(HERO_LEFT + used, y), face=big,
+        mark_face=Face(weight=700, px=HERO_MARK_PX // (1 + tight)),
+    )
     if hero.uncertain:
         canvas.text(
             at=(HERO_LEFT + used + NOTE_GAP, y), text=UNCERTAIN,
@@ -84,10 +95,10 @@ def hero_countdown(canvas: Canvas, *, hero: ChainHero, top: int) -> None:
 
 def badge_line(
     canvas: Canvas, *, route: str, text: str, y: int, at: str = '',
-    px: int = BADGE_PX,
+    px: int = BADGE_PX, mark: str = '',
 ) -> None:
     """
-    Draw a route badge, then text, then a time at the right.
+    Draw a route badge, then text, then a time and its mark at the right.
 
     Parameters
     ----------
@@ -103,10 +114,14 @@ def badge_line(
         Time drawn at the right edge; empty for none.
     px : int
         Badge text size.
+    mark : str
+        Lateness mark after the time, the pair ending at the right edge;
+        empty for none.
     """
     width = badge(canvas, x=HERO_LEFT, y=y, route=route, px=px)
     left = HERO_LEFT + width + 10
-    room = HERO_RIGHT - left - (canvas.length(text=at, face=LINE_FACE) + 10)
+    right = HERO_RIGHT - mark_width(mark=mark, face=SMALL_MARK)
+    room = right - left - (canvas.length(text=at, face=LINE_FACE) + 10)
     canvas.text(
         at=(left, y + 7),
         text=canvas.fit(text=text, face=LINE_FACE, width=room),
@@ -115,8 +130,12 @@ def badge_line(
     )
     if at:
         canvas.text(
-            at=(HERO_RIGHT, y + 7), text=at, face=LINE_FACE, grey=INK,
+            at=(right, y + 7), text=at, face=LINE_FACE, grey=INK,
             anchor='rs',
+        )
+        raised_mark(
+            canvas, mark=mark, at=(right, y + 7), face=LINE_FACE,
+            mark_face=SMALL_MARK,
         )
 
 
@@ -141,6 +160,32 @@ def line_centres(*, count: int) -> tuple[int, ...]:
     return tuple(first + index * pitch for index in range(count))
 
 
+def step_text(canvas: Canvas, *, line: HeroLine, face: Face) -> str:
+    """
+    Fit a plain step to the hero's width, keeping its time whole.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target, which measures the text.
+    line : HeroLine
+        The step.
+    face : Face
+        Its font.
+
+    Returns
+    -------
+    str
+        The text cut to fit, then its time when it has one.
+    """
+    width = HERO_RIGHT - HERO_LEFT
+    if not line.at:
+        return canvas.fit(text=line.text, face=face, width=width)
+    tail = f' {line.at}'
+    room = width - canvas.length(text=tail, face=face)
+    return canvas.fit(text=line.text, face=face, width=room) + tail
+
+
 def hero_line(canvas: Canvas, *, line: HeroLine, y: int, px: int) -> None:
     """
     Draw one hero line: a badge line, or a plain step.
@@ -159,15 +204,14 @@ def hero_line(canvas: Canvas, *, line: HeroLine, y: int, px: int) -> None:
     if line.route is not None:
         badge_line(
             canvas, route=line.route, text=line.text, y=y, at=line.at,
-            px=px,
+            px=px, mark=line.mark,
         )
         return
+    face = STEP_BOLD if line.bold else STEP_FACE
     canvas.text(
         at=(HERO_LEFT, y + 6),
-        text=canvas.fit(
-            text=line.text, face=STEP_FACE, width=HERO_RIGHT - HERO_LEFT,
-        ),
-        face=STEP_FACE,
+        text=step_text(canvas, line=line, face=face),
+        face=face,
         grey=INK,
     )
 
@@ -193,7 +237,7 @@ def hero_steps(canvas: Canvas, *, hero: ChainHero, top: int) -> None:
 
 def hero_footer(canvas: Canvas, *, hero: ChainHero, top: int) -> None:
     """
-    Draw the rule and the arrival time.
+    Draw the rule and the arrival time; the rule alone with no arrival.
 
     Parameters
     ----------
@@ -206,6 +250,8 @@ def hero_footer(canvas: Canvas, *, hero: ChainHero, top: int) -> None:
     """
     rule = top + FOOTER_RULE
     canvas.rect(box=(HERO_LEFT, rule, HERO_RIGHT, rule + 2), grey=INK)
+    if not hero.arrives_at:
+        return
     used = arrow(canvas, x=HERO_LEFT, y=top + ARRIVE_Y - 9, grey=INK)
     canvas.text(
         at=(HERO_LEFT + used + 6, top + ARRIVE_Y),

@@ -12,6 +12,7 @@ from paperroute_testkit.core.connection_factories import WORK, at, work_chains
 from paperroute_transit.core.connection_view import (
     NO_PAIRS,
     ConnectionView,
+    HeroLine,
     PairRow,
     build_connection_view,
 )
@@ -20,12 +21,25 @@ from paperroute_transit.render.connection_view import (
     FIRST_Y,
     FOOTER_RULE,
     HERO_LEFT,
+    HERO_RIGHT,
     LABEL_Y,
+    STEP_BOLD,
+    STEP_FACE,
+    badge_line,
     draw_connection_view,
+    hero_footer,
+    hero_steps,
+    step_text,
 )
 from paperroute_transit.render.pair_list import draw_pair_list
 from paperroute_transit.render.stop_view import SPLIT
-from tests.core.test_connection_view import TWO, TWO_CHANGES
+from tests.core.test_connection_view import (
+    TWO,
+    TWO_CHANGES,
+    folded_chain,
+    hero_of,
+)
+from tests.render.test_chrome import Recording
 
 ROW: Final[PairRow] = PairRow(
     leaves_at='7:48',
@@ -153,3 +167,83 @@ def test_uncertain_hero_says_so_after_its_count() -> None:
     assert found[:, 1].min() > HERO_LEFT + 60
     assert found[:, 0].min() > HEADER + LABEL_Y
     assert found[:, 0].max() < HEADER + FIRST_Y - 12
+
+
+def test_hero_mark_follows_the_count_and_pushes_uncertain_right() -> None:
+    """The mark sits after the count; uncertain starts after the mark."""
+    assert VIEW.hero is not None
+    hero = replace(VIEW.hero, live=True, mark='+4')
+    plain = draw_connection_view(
+        view=replace(VIEW, hero=replace(hero, mark='')),
+    )
+    marked = draw_connection_view(view=replace(VIEW, hero=hero))
+    both = draw_connection_view(
+        view=replace(VIEW, hero=replace(hero, uncertain=True)),
+    )
+    mark = np.argwhere(plain != marked)
+    word = np.argwhere(marked != both)
+    assert mark.size and word.size
+    assert mark[:, 1].min() > HERO_LEFT + 60
+    assert mark[:, 0].max() < HEADER + FIRST_Y - 12
+    assert word[:, 1].min() > mark[:, 1].max()
+
+
+def test_second_bus_mark_ends_at_the_hero_edge() -> None:
+    """A later bus's time moves left so its mark ends at the hero edge."""
+    canvas = Recording()
+    badge_line(
+        canvas, route='665', text='Parramatta Station', y=200, at='7:48',
+        mark='+2',
+    )
+    assert {'7:48', '+2'} <= set(canvas.drawn)
+    ink = np.flatnonzero((canvas.grey()[180:220] < 128).any(axis=0))
+    assert HERO_RIGHT - 3 <= ink.max() <= HERO_RIGHT
+
+
+def test_tight_change_line_cuts_the_stop_and_keeps_the_time() -> None:
+    """A long tight line loses stop name, never its time."""
+    canvas = Canvas()
+    line = HeroLine(
+        route=None, noun=None,
+        text='tight change at Constitution Hill, North West Twy',
+        at='7:46', bold=True,
+    )
+    shown = step_text(canvas, line=line, face=STEP_BOLD)
+    assert shown.startswith('tight change at Constitution Hill')
+    assert shown.endswith('… 7:46')
+    assert canvas.length(text=shown, face=STEP_BOLD) <= HERO_RIGHT - HERO_LEFT
+    easy = HeroLine(
+        route=None, noun=None,
+        text='change at Constitution Hill, North West Twy 7:46',
+    )
+    assert step_text(canvas, line=easy, face=STEP_FACE) == easy.text
+
+
+def test_stranded_hero_draws_no_arrival() -> None:
+    """With no arrival the footer is the rule alone."""
+    assert VIEW.hero is not None
+    canvas = Recording()
+    hero_footer(canvas, hero=replace(VIEW.hero, arrives_at=''), top=HEADER)
+    assert canvas.drawn == [] and canvas.shapes == []
+    assert canvas.grey()[HEADER + FOOTER_RULE, HERO_LEFT + 5] < 128
+
+
+def test_missed_stay_on_line_is_drawn_whole_and_bold() -> None:
+    """'change missed · stay on' ends the hero, in the bold step face."""
+    hero = hero_of(folded_chain())
+    last = hero.lines[-1]
+    assert last.bold and last.route is None
+    plain = replace(
+        hero, lines=(*hero.lines[:-1], replace(last, bold=False)),
+    )
+    canvas, regular = Recording(), Canvas()
+    hero_steps(canvas, hero=hero, top=HEADER)
+    hero_steps(regular, hero=plain, top=HEADER)
+    assert canvas.drawn[-1] == 'change missed · stay on'
+    changed = np.argwhere(canvas.grey() != regular.grey())
+    assert changed.size
+    bold = canvas.grey() < 128
+    assert bold.sum() > (regular.grey() < 128).sum()
+    assert changed[:, 1].max() < HERO_LEFT + canvas.length(
+        text=last.text, face=STEP_BOLD,
+    ) + 2

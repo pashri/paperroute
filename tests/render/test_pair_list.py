@@ -18,16 +18,22 @@ from paperroute_device.render.frame import finish
 from paperroute_transit.core.connection_view import PairRow
 from paperroute_transit.render.chrome import LINK_WIDTH, badge_width
 from paperroute_transit.render.pair_list import (
+    ARRIVE_FACE,
     ARRIVE_ROOM,
     CHIP_PX,
     DETAIL_FACE,
     INSET,
     LEAVE_FACE,
     MIN_UNIT,
+    ROUTES_CLEAR,
     ROUTES_LEFT,
+    STRUCK_FACE,
+    STRUCK_GAP,
     draw_pair_row,
     route_chips,
+    routes_left,
 )
+from tests.render.test_chrome import Recording
 
 LEFT: Final[int] = 450
 RIGHT: Final[int] = 790
@@ -43,6 +49,7 @@ LIVE: Final[PairRow] = PairRow(
     countdown='12',
     live=True,
 )
+TIMED: Final[PairRow] = replace(LIVE, live=False)
 
 
 def unit_band(*, row: PairRow) -> NDArray[np.uint8]:
@@ -136,3 +143,63 @@ def test_uncertain_pair_row_starts_its_detail_line_with_it() -> None:
     assert found.size
     assert found[:, 0].min() >= TOP + 38 and found[:, 0].max() <= TOP + 54
     assert found[:, 1].min() >= LEFT + ROUTES_LEFT
+
+
+def test_routes_move_only_for_a_marked_leave_time() -> None:
+    """Unmarked rows keep the column; a mark pushes it clear."""
+    assert routes_left(rows=(LIVE, TIMED)) == ROUTES_LEFT
+    late_night = replace(TIMED, leaves_at='23:58')
+    assert routes_left(rows=(LIVE, late_night)) == ROUTES_LEFT
+    marked = replace(TIMED, mark='+12')
+    left = routes_left(rows=(LIVE, marked))
+    assert left > ROUTES_LEFT
+    canvas = Canvas()
+    draw_pair_row(
+        canvas, row=marked, y=TOP, edges=(LEFT, RIGHT),
+        detail=marked.detail, routes=left,
+    )
+    clear = canvas.grey()[
+        TOP + 2:TOP + 36, int(LEFT + left - ROUTES_CLEAR + 1):int(LEFT + left)
+    ]
+    assert (clear >= 128).all()
+
+
+def test_tight_and_uncertain_row_reads_tight_first() -> None:
+    """The bold 'tight' comes before 'uncertain · at ...'."""
+    canvas = Recording()
+    row = replace(LIVE, tight=True, uncertain=True)
+    draw_pair_row(
+        canvas, row=row, y=TOP, edges=(LEFT, RIGHT), detail=row.detail,
+    )
+    detail = next(
+        index for index, text in enumerate(canvas.drawn)
+        if text.startswith('uncertain · at Constitution')
+    )
+    assert canvas.drawn.index('tight') < detail
+
+
+def test_missed_row_strikes_the_old_arrival() -> None:
+    """The old arrival sits struck through, just left of the new one."""
+    canvas = Recording()
+    row = replace(LIVE, was='8:12', arrives_at='8:27')
+    draw_pair_row(
+        canvas, row=row, y=TOP, edges=(LEFT, RIGHT), detail=row.detail,
+    )
+    assert {'8:12', '8:27'} <= set(canvas.drawn)
+    end = (
+        RIGHT - INSET - text_width(text='8:27', face=ARRIVE_FACE) - STRUCK_GAP
+    )
+    start = end - text_width(text='8:12', face=STRUCK_FACE)
+    assert (canvas.grey()[TOP + 27, int(start) + 1:int(end) - 1] < 128).all()
+
+
+def test_stranded_row_strikes_its_arrival_and_shows_none() -> None:
+    """With no new arrival the struck one ends at the right edge."""
+    canvas = Recording()
+    row = replace(LIVE, was='9:04', arrives_at='')
+    draw_pair_row(
+        canvas, row=row, y=TOP, edges=(LEFT, RIGHT), detail=row.detail,
+    )
+    assert '9:04' in canvas.drawn
+    ink = np.flatnonzero((canvas.grey()[TOP + 18:TOP + 34] < 128).any(axis=0))
+    assert RIGHT - INSET - 2 <= ink.max() <= RIGHT - INSET

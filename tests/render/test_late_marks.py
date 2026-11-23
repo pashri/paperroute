@@ -10,7 +10,9 @@ from paperroute_transit.core.stop_view import Estimate, Row
 from paperroute_transit.render.late_marks import (
     MARK_GAP,
     mark_room,
+    mark_width,
     marked_countdown,
+    raised_mark,
 )
 from tests.render.test_chrome import Recording
 
@@ -77,3 +79,29 @@ def test_marked_countdown_raises_the_mark_to_the_cap_line() -> None:
     count = np.flatnonzero(grey[:, :split - MARK_GAP].any(axis=1))
     assert abs(int(mark.min()) - int(count.min())) <= 1
     assert mark.max() < count.max()
+
+
+def test_mark_width_counts_the_mark_and_its_gap() -> None:
+    """No mark takes no room; a mark takes its width and its gap."""
+    assert mark_width(mark='', face=MARK) == 0.0
+    assert mark_width(mark='+4', face=MARK) == pytest.approx(
+        text_width(text='+4', face=MARK) + MARK_GAP,
+    )
+
+
+def test_raised_mark_follows_the_text_at_its_cap_line() -> None:
+    """The mark starts after the text, its top level with the text's."""
+    canvas = Canvas()
+    end = 100 + canvas.text(at=(100, 100), text='9', face=FACE, grey=INK)
+    room = raised_mark(
+        canvas, mark='+4', at=(end, 100), face=FACE, mark_face=MARK,
+    )
+    assert room == pytest.approx(mark_width(mark='+4', face=MARK))
+    grey = canvas.grey() < 128
+    mark = np.flatnonzero(grey[:, int(end + MARK_GAP):].any(axis=1))
+    count = np.flatnonzero(grey[:, :int(end)].any(axis=1))
+    assert abs(int(mark.min()) - int(count.min())) <= 1
+    assert mark.max() < count.max()
+    assert raised_mark(
+        Canvas(), mark='', at=(end, 100), face=FACE, mark_face=MARK,
+    ) == 0.0

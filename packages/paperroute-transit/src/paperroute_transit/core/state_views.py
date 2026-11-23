@@ -13,6 +13,7 @@ from paperroute_transit.core.alerts_view import build_alerts_view
 from paperroute_transit.core.auto_pins import rule_holds
 from paperroute_transit.core.banners import OFFLINE_PHRASE, timetable_banner
 from paperroute_transit.core.chooser_steps import chooser_view
+from paperroute_transit.core.connection import with_offers
 from paperroute_transit.core.connection_screens import connection_screen
 from paperroute_transit.core.cycle import cycle_effects, cycle_held
 from paperroute_transit.core.day_lines import line_choice
@@ -612,7 +613,7 @@ def settled(
     tuple[State, tuple[Effect, ...]]
         New state, marked held when `draw` is False, and effects.
     """
-    state = alerts_left(state=state)
+    state = with_offers(state=alerts_left(state=state))
     stop_view = live_stop_view(state=state)
     banner = stop_view.banner is not None
     state = kept_selection(

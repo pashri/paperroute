@@ -1,6 +1,7 @@
 """A connection pin's loaded legs: their chains and what alerts name."""
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 
 from paperroute_transit.core.alert_match import (
     BETWEEN_TRIPS,
@@ -8,7 +9,14 @@ from paperroute_transit.core.alert_match import (
     is_name_pin,
     pin_facts,
 )
-from paperroute_transit.core.chains import Chain, Legs, chains_of, open_legs
+from paperroute_transit.core.chains import (
+    Chain,
+    Legs,
+    chains_of,
+    kept_for,
+    offers_after,
+    open_legs,
+)
 from paperroute_transit.core.city import City
 from paperroute_transit.core.connection_model import direct_leg
 from paperroute_transit.core.live import LiveDeparture, resolved
@@ -44,6 +52,7 @@ def live_chains(*, state: State) -> tuple[Chain, ...]:
         },
         direct=live_list(items=state.board.departures, state=state),
         now=frame_time(state=state),
+        kept=kept_for(offers=state.board.offers, pin=pin),
     )
 
 
@@ -293,3 +302,33 @@ def selected_trips(*, state: State) -> frozenset[str]:
         return frozenset()
     chain = chains[min(state.scroll, len(chains) - 1)]
     return frozenset(item.trip_id for item in chain_legs(chain=chain))
+
+
+def with_offers(*, state: State) -> State:
+    """
+    Remember the chains first offered for the shown connection pin.
+
+    The offers are refreshed from the listed chains once every feed the
+    board needs has a snapshot. Before that, or when the offers do not
+    change, the same state comes back. They are forgotten with the board.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    State
+        State with the board's offers refreshed.
+    """
+    if not all(feed in state.snapshots for feed in state.feeds):
+        return state
+    offers = offers_after(
+        offers=state.board.offers,
+        pin=shown(state=state),
+        chains=live_chains(state=state),
+    )
+    if offers == state.board.offers:
+        return state
+    return replace(state, board=replace(state.board, offers=offers))

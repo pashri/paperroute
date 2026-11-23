@@ -9,7 +9,7 @@ from paperroute_device.core.device_model import Panel, PowerAction
 from paperroute_device.core.device_state import DeviceState
 from paperroute_transit.core.alert_model import AlertsState
 from paperroute_transit.core.auto_model import AutoState
-from paperroute_transit.core.chains import Legs
+from paperroute_transit.core.chains import Legs, Offers
 from paperroute_transit.core.chooser import ChooserState
 from paperroute_transit.core.city import City
 from paperroute_transit.core.map_state import MapState
@@ -145,6 +145,9 @@ class Board:
         before a load.
     destination_station : str | None
         The Destination's station, or None with no Destination.
+    offers : Offers
+        The chains first offered for the shown connection pin, by first
+        trip.
     """
 
     departures: tuple[Departure, ...] = ()
@@ -153,6 +156,7 @@ class Board:
     legs: Legs | None = None
     station: str = ''
     destination_station: str | None = None
+    offers: Offers = field(default_factory=Offers)
 
 
 @dataclass(frozen=True)

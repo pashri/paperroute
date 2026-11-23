@@ -264,6 +264,7 @@ def on_loaded(
         legs=event.legs,
         station=event.station,
         destination_station=event.destination_station,
+        offers=state.board.offers,
     )
     feeds = feeds_of(
         departures=all_departures(

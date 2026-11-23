@@ -1,5 +1,6 @@
 """Tests for a connection pin's loaded legs, pairs and alert facts."""
 
+from collections.abc import Mapping
 from dataclasses import replace
 from typing import Final
 
@@ -29,13 +30,26 @@ from paperroute_transit.core.alert_model import (
     BetweenLoaded,
     Informed,
 )
+from paperroute_transit.core.chains import Missed, Offers
 from paperroute_transit.core.connection import (
     chain_legs,
     connection_facts,
     live_chains,
+    with_offers,
 )
-from paperroute_transit.core.messages import DeparturesLoaded
+from paperroute_transit.core.messages import (
+    DeparturesLoaded,
+    FeedFailed,
+    FeedFetched,
+)
 from paperroute_transit.core.model import Change, Departure, Pin, Way
+from paperroute_transit.core.places import with_place
+from paperroute_transit.core.realtime import (
+    EVERY_STOP,
+    RealtimeSnapshot,
+    StopUpdate,
+    TripRealtime,
+)
 from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import seeded
 from paperroute_transit.core.state_model import Board, State
@@ -311,3 +325,151 @@ def test_leg_lines_from_the_timetable_tie_alerts() -> None:
     )
     assert state.alerts.matched is not None
     assert [item.tie for item in state.alerts.matched[1]] == [AlertTie.ROUTE]
+
+
+def late_legs(*, state: State, lates: Mapping[str, int]) -> State:
+    """
+    Answer every feed with some trips running late.
+
+    Parameters
+    ----------
+    state : State
+        A state with legs loaded.
+    lates : Mapping[str, int]
+        Minutes late, by trip ID.
+
+    Returns
+    -------
+    State
+        The state after each feed delivers a snapshot fetched now.
+    """
+    trips = {
+        trip_id: TripRealtime(
+            trip_id=trip_id,
+            cancelled=False,
+            updates=(StopUpdate(
+                sequence=EVERY_STOP,
+                stop_id=None,
+                arrival_delay=None,
+                departure_delay=60 * late,
+                arrival_time=None,
+                departure_time=None,
+            ),),
+            start_date=None,
+        )
+        for trip_id, late in lates.items()
+    }
+    snapshot = RealtimeSnapshot(fetched_at=state.now, trips=trips)
+    for feed in state.feeds:
+        state, _ = step(state, FeedFetched(feed=feed, snapshot=snapshot))
+    return state
+
+
+def answered() -> State:
+    """Work at 7:30 with its legs loaded and its feed answered on time."""
+    return late_legs(state=loaded(), lates={})
+
+
+def first_trips(state: State) -> list[str]:
+    """The trip IDs of the first chain listed."""
+    return [
+        item.trip_id for item in chain_legs(chain=live_chains(state=state)[0])
+    ]
+
+
+def test_offers_wait_for_the_feeds_to_answer() -> None:
+    assert loaded().board.offers.kept == {}
+    offers = answered().board.offers
+    assert offers.pin == WORK and len(offers.kept) == 5
+
+
+def test_a_remembered_change_is_held_below_its_allowance() -> None:
+    state = late_legs(state=answered(), lates={'a0733': 4})
+    assert first_trips(state) == ['a0733', 'b0746']
+    assert live_chains(state=state)[0].missed is None
+
+
+def test_a_remembered_change_is_missed_when_the_bus_runs_later() -> None:
+    state = late_legs(state=answered(), lates={'a0733': 6})
+    assert first_trips(state) == ['a0733', 'b0801a']
+    assert live_chains(state=state)[0].missed == Missed(
+        leg=1, arrives=at(7, 57), later=True,
+    )
+
+
+def test_a_board_that_first_hears_late_offers_what_works() -> None:
+    """Live data before any offer: the late 7:33 takes the 664, no miss."""
+    state = late_legs(state=loaded(first=LEG1[:1]), lates={'a0733': 6})
+    assert first_trips(state) == ['a0733', 'b0801a']
+    assert live_chains(state=state)[0].missed is None
+
+
+def test_offers_survive_a_reload() -> None:
+    state = late_legs(state=answered(), lates={'a0733': 4})
+    state, _ = step(state, DeparturesLoaded(
+        pin=WORK, departures=(), until=at(10, 30), legs=work_legs(),
+    ))
+    assert first_trips(state) == ['a0733', 'b0746']
+
+
+def test_offers_forget_a_bus_that_has_left() -> None:
+    state = with_offers(state=replace(answered(), now=at(7, 34)))
+    assert ('a0733', LEG1[0].service_day) not in state.board.offers.kept
+    assert len(state.board.offers.kept) == 4
+
+
+def test_offers_start_again_for_a_new_place() -> None:
+    assert with_place(state=answered(), pin=None).board.offers == Offers()
+
+
+def test_an_edited_pin_is_searched_afresh() -> None:
+    """Allow 6 now: the late 7:33 takes the 662, nothing held."""
+    state = late_legs(state=answered(), lates={'a0733': 4})
+    edited = replace(
+        WORK, ways=(Way(changes=(replace(WORK_CHANGE, allow=6),)),),
+    )
+    pins = list(state.places.pins)
+    pins[state.places.current] = edited
+    state = replace(state, places=replace(state.places, pins=tuple(pins)))
+    assert first_trips(state) == ['a0733', 'b0751']
+
+
+def test_a_remembered_change_outlives_a_dropped_feed() -> None:
+    """The feed forgets the 7:33: timetable times, the same change, kept."""
+    state = late_legs(state=answered(), lates={'a0733': 6})
+    state = late_legs(state=state, lates={})
+    chain = live_chains(state=state)[0]
+    assert first_trips(state) == ['a0733', 'b0746']
+    assert chain.missed is None and not chain.legs[0].live
+    assert ('a0733', LEG1[0].service_day) in state.board.offers.kept
+
+
+def test_offers_wait_while_a_feed_never_answers() -> None:
+    """Trains down: nothing is remembered and a late 606 re-plans."""
+    trains = tuple(replace(item, source=SydneyFeed.TRAIN) for item in LEG2)
+    state = loaded(first=LEG1[:1], second=trains)
+    buses, rail = sorted(state.feeds)
+    late = TripRealtime(
+        trip_id='a0733',
+        cancelled=False,
+        updates=(StopUpdate(
+            sequence=EVERY_STOP,
+            stop_id=None,
+            arrival_delay=None,
+            departure_delay=6 * 60,
+            arrival_time=None,
+            departure_time=None,
+        ),),
+        start_date=None,
+    )
+    for snapshot in (
+        RealtimeSnapshot(fetched_at=state.now, trips={}),
+        RealtimeSnapshot(fetched_at=state.now, trips={'a0733': late}),
+    ):
+        state, _ = step(state, FeedFetched(feed=buses, snapshot=snapshot))
+        state, _ = step(
+            state, FeedFailed(feed=rail, at=state.now, reason='HTTP 500'),
+        )
+    assert state.board.offers.kept == {}
+    assert first_trips(state) == ['a0733', 'b0801a']
+    assert live_chains(state=state)[0].missed is None

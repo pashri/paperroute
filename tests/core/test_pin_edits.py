@@ -96,16 +96,29 @@ def parent_of(pin: Pin) -> ParentKerbs:
     )
 
 
+def timed() -> State:
+    """
+    Three pins on a board that has seen a timetable.
+
+    Returns
+    -------
+    State
+        `three()` with a timetable version.
+    """
+    state = three()
+    return replace(state, saving=replace(state.saving, timetable='v'))
+
+
 def test_saving_a_plain_pin_asks_to_match_the_places() -> None:
     """A new pin with no Destination, ways or opposite is matched at once."""
-    state, effects = step(three(), PinSaved(ref=None, pin=D))
+    state, effects = step(timed(), PinSaved(ref=None, pin=D))
     [ask] = effects_of(effects=effects, kind=MatchPlaces)
     assert D.origin in ask.places
 
 
 def test_saved_plain_pin_on_a_parent_turns_both_sides() -> None:
     """The look-up that follows the save makes the parent's pin two kerbs."""
-    state, _ = step(three(), PinSaved(ref=None, pin=D))
+    state, _ = step(timed(), PinSaved(ref=None, pin=D))
     kerbs = parent_of(D)
     state, _ = step(
         state,
@@ -119,7 +132,7 @@ def test_saved_plain_pin_on_a_parent_turns_both_sides() -> None:
 
 def test_saved_plain_pin_with_no_parents_is_unchanged() -> None:
     """With no parents offered the saved pin is as it was saved."""
-    state, _ = step(three(), PinSaved(ref=None, pin=D))
+    state, _ = step(timed(), PinSaved(ref=None, pin=D))
     state, _ = step(
         state, PlacesMatched(found={'fourth': D.origin}, parents={})
     )
@@ -129,20 +142,20 @@ def test_saved_plain_pin_with_no_parents_is_unchanged() -> None:
 def test_saving_a_pin_with_an_opposite_asks_for_no_match() -> None:
     """A pin that already shows both kerbs needs no look-up."""
     pin = replace(D, opposite=A.origin)
-    _, effects = step(three(), PinSaved(ref=None, pin=pin))
+    _, effects = step(timed(), PinSaved(ref=None, pin=pin))
     assert not effects_of(effects=effects, kind=MatchPlaces)
 
 
 def test_saving_a_pin_with_a_destination_asks_for_no_match() -> None:
     """A pin with a Destination needs no look-up."""
     pin = replace(D, destination=A.origin)
-    _, effects = step(three(), PinSaved(ref=None, pin=pin))
+    _, effects = step(timed(), PinSaved(ref=None, pin=pin))
     assert not effects_of(effects=effects, kind=MatchPlaces)
 
 
 def test_pinning_a_plain_unpinned_place_asks_to_match_the_places() -> None:
     """Holding the bottom knob on a plain place matches the places."""
-    state = three()
+    state = timed()
     state = replace(
         state,
         places=replace(state.places, pins=(A, B), current=1, unpinned=C),
@@ -150,6 +163,12 @@ def test_pinning_a_plain_unpinned_place_asks_to_match_the_places() -> None:
     state, effects = step(state, KnobHeld(knob=Knob.BOTTOM))
     assert state.places.pins == (A, B, C)
     assert effects_of(effects=effects, kind=MatchPlaces)
+
+
+def test_saving_a_plain_pin_with_no_timetable_asks_for_no_match() -> None:
+    """A board with no timetable has nothing to match a new pin against."""
+    _, effects = step(three(), PinSaved(ref=None, pin=D))
+    assert not effects_of(effects=effects, kind=MatchPlaces)
 
 
 def test_add_existing_place_is_ignored() -> None:

@@ -565,9 +565,12 @@ def with_match(
     -------
     tuple[State, tuple[Effect, ...]]
         `result`, with a MatchPlaces after its effects when the edit
-        added a pin with no Destination, ways or opposite.
+        added a pin with no Destination, ways or opposite and a
+        timetable has been seen.
     """
     after, effects = result
+    if after.saving.timetable is None:
+        return result
     if not has_plain_pin(before=before, after=after):
         return result
     after, ask = rematch(state=after)

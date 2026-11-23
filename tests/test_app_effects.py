@@ -128,6 +128,7 @@ from tests.app_factories import (
     posted_by,
     strip_map_view,
 )
+from tests.core.chooser_walks import KERB_LINE, PARENT_KERBS, PARENT_PAIR
 
 
 def kit_ports(
@@ -483,6 +484,20 @@ async def test_load_line_posts_the_pairs_of_its_stations() -> None:
         effects=[LoadLine(towards=7, timetable='v1')],
     )
     assert posted == [LineLoaded(towards=7, line=None, timetable='v1')]
+
+
+async def test_load_line_posts_a_parent_station_pair() -> None:
+    """LoadLine offers a parent station as both of its kerbs."""
+    network = FakeNetwork(line=KERB_LINE, parents={'s2': PARENT_KERBS})
+    posted = await posted_by(
+        ports=ports_of(network=network),
+        effects=[LoadLine(towards=7, timetable='v1')],
+    )
+    assert posted == [
+        LineLoaded(
+            towards=7, line=KERB_LINE, timetable='v1', pairs=(PARENT_PAIR,),
+        ),
+    ]
 
 
 @dataclass

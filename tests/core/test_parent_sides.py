@@ -4,9 +4,17 @@ from dataclasses import replace
 from typing import Final
 
 from paperroute_testkit.core.factories import place
-from paperroute_transit.core.parent_sides import kerb_sides
+from paperroute_transit.core.parent_sides import kerb_sides, line_pairs
 from paperroute_transit.core.reach import RunTail, StripKey
-from paperroute_transit.core.sides import ParentKerb, ParentKerbs
+from paperroute_transit.core.sides import KerbPair, ParentKerb, ParentKerbs
+from tests.core.chooser_walks import (
+    KERB_LINE,
+    PARENT_KERBS,
+    PARENT_PAIR,
+    QUIET_PAIR,
+    S2A,
+    S2B,
+)
 
 C_KERBS: Final[ParentKerbs] = ParentKerbs(
     station='C',
@@ -57,3 +65,55 @@ def test_kerb_sides_leaves_a_station_pin_as_today() -> None:
         key=replace(key, across='Q'), tails=(WEST,),
         across_tails=(ELSEWHERE,), parents=None,
     ) == ((WEST,), (ELSEWHERE,))
+
+
+def test_line_pairs_orients_a_parent_by_the_next_station() -> None:
+    """A parent's pair has the kerb whose buses call at the next station."""
+    parents = {'s2': PARENT_KERBS}
+    assert line_pairs(line=KERB_LINE, pairs={}, parents=parents) == (
+        PARENT_PAIR,
+    )
+    assert line_pairs(line=KERB_LINE[::-1], pairs={}, parents=parents) == (
+        KerbPair(station='s2', other=S2A, busy=False, here=S2B),
+    )
+
+
+def test_line_pairs_orients_the_last_station_by_the_one_before() -> None:
+    """The line's last station takes the kerb not heading back."""
+    assert line_pairs(
+        line=KERB_LINE[:3], pairs={}, parents={'s2': PARENT_KERBS},
+    ) == (PARENT_PAIR,)
+
+
+def test_line_pairs_skips_a_parent_the_line_cannot_orient() -> None:
+    """A parent with no usable neighbour on the line has no pair."""
+    one, two = PARENT_KERBS.kerbs
+    away = frozenset({'elsewhere'})
+    lost = replace(PARENT_KERBS, kerbs=(
+        replace(one, onward=away), replace(two, onward=away),
+    ))
+    assert line_pairs(line=KERB_LINE, pairs={}, parents={'s2': lost}) == ()
+    assert line_pairs(
+        line=KERB_LINE[2:3], pairs={}, parents={'s2': PARENT_KERBS},
+    ) == ()
+
+
+def test_line_pairs_prefers_the_parent_and_drops_a_pair_with_itself() -> None:
+    """The parent's pair wins; a pair whose other kerb is the station goes."""
+    assert line_pairs(
+        line=KERB_LINE, pairs={'s2': QUIET_PAIR},
+        parents={'s2': PARENT_KERBS},
+    ) == (PARENT_PAIR,)
+    assert line_pairs(
+        line=KERB_LINE, pairs={'s2': QUIET_PAIR}, parents={},
+    ) == (QUIET_PAIR,)
+    itself = replace(QUIET_PAIR, other=place('s2', name='Orchard Close'))
+    assert line_pairs(line=KERB_LINE, pairs={'s2': itself}, parents={}) == ()
+
+
+def test_line_pairs_reads_a_station_once_at_its_first_call() -> None:
+    """A station a loop calls at twice is paired once."""
+    loop = (*KERB_LINE[:4], KERB_LINE[2])
+    assert line_pairs(
+        line=loop, pairs={}, parents={'s2': PARENT_KERBS},
+    ) == (PARENT_PAIR,)

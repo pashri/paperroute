@@ -14,7 +14,15 @@ from paperroute_transit.core.chooser_sides import (
 from paperroute_transit.core.chooser_station import knob_backed
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.sides import Kerbs
-from tests.core.chooser_walks import BUSY_PAIR, KERB_LINE, QUIET_PAIR, at_kerbs
+from tests.core.chooser_walks import (
+    BUSY_PAIR,
+    KERB_LINE,
+    PARENT_PAIR,
+    QUIET_PAIR,
+    S2A,
+    S2B,
+    at_kerbs,
+)
 
 
 def test_side_choices_offers_both_first_at_a_quiet_stop() -> None:
@@ -132,3 +140,22 @@ def test_choice_label_at_either_end_names_no_station_itself() -> None:
     assert choice_label(
         choice=SideChoice.HERE, line=KERB_LINE, cursor=4,
     ) == 'Only this side'
+
+
+def test_pressed_side_at_a_parent_pins_its_two_kerbs() -> None:
+    """Both directions at a parent pins its here kerb and the other."""
+    _, pin = pressed_side(chooser=at_kerbs(pairs=(PARENT_PAIR,), menu=0))
+    assert isinstance(pin, Pin)
+    assert (pin.origin, pin.opposite, pin.destination) == (S2A, S2B, None)
+    assert pin.towards == ('Emmanuel Street', 'Oakington')
+
+
+def test_pressed_side_at_a_parent_takes_one_kerb_on() -> None:
+    """The towards rows at a parent take the here kerb or the other."""
+    here, request = pressed_side(
+        chooser=at_kerbs(pairs=(PARENT_PAIR,), menu=1),
+    )
+    assert (here.stage, here.origin) == (Stage.TO, S2A)
+    assert isinstance(request, StripRequest) and request.key.station == 's2a'
+    across, _ = pressed_side(chooser=at_kerbs(pairs=(PARENT_PAIR,), menu=2))
+    assert across.origin == S2B

@@ -41,7 +41,12 @@ from paperroute_transit.core.messages import (
 )
 from paperroute_transit.core.model import Departure, Pin, StopPlace
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
-from paperroute_transit.core.sides import KerbPair, Kerbs
+from paperroute_transit.core.sides import (
+    KerbPair,
+    Kerbs,
+    ParentKerb,
+    ParentKerbs,
+)
 from paperroute_transit.core.state_model import RELOAD_BEFORE
 from paperroute_transit.core.stop_view import HORIZON
 
@@ -707,6 +712,19 @@ QUIET_PAIR: Final[KerbPair] = KerbPair(
     station='s2', other=place('x2', name='Orchard Close'), busy=False,
 )
 BUSY_PAIR: Final[KerbPair] = replace(QUIET_PAIR, busy=True)
+S2A: Final[StopPlace] = place('s2a', name='Orchard Close')
+S2B: Final[StopPlace] = place('s2b', name='Orchard Close Opp')
+PARENT_KERBS: Final[ParentKerbs] = ParentKerbs(
+    station='s2',
+    kerbs=(
+        ParentKerb(place=S2A, onward=frozenset({'s3'}), trips=40),
+        ParentKerb(place=S2B, onward=frozenset({'s1'}), trips=30),
+    ),
+    busy=False,
+)
+PARENT_PAIR: Final[KerbPair] = KerbPair(
+    station='s2', other=S2B, busy=False, here=S2A,
+)
 
 
 def at_kerbs(

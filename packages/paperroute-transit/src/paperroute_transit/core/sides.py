@@ -31,11 +31,15 @@ class KerbPair:
         The kerb across the road, with its point.
     busy : bool
         Whether both kerbs are busy enough to list apart.
+    here : StopPlace | None
+        The kerb on this side when the station holds both kerbs; None
+        when the station is itself the kerb.
     """
 
     station: str
     other: StopPlace
     busy: bool
+    here: StopPlace | None = None
 
 
 @dataclass(frozen=True)

@@ -221,7 +221,8 @@ def both_pin(*, chooser: ChooserState, pair: KerbPair) -> Pin:
     """
     station = chooser.line[chooser.line_cursor]
     pin = chosen_pin(
-        chooser=replace(chooser, origin=station), destination=None,
+        chooser=replace(chooser, origin=pair.here or station),
+        destination=None,
     )
     return replace(
         pin, opposite=pair.other, towards=kerb_ends(chooser=chooser),
@@ -258,7 +259,7 @@ def pressed_side(
         return chooser, both_pin(chooser=chooser, pair=pair)
     closed = menu_closed(chooser=chooser)
     if choice is SideChoice.HERE:
-        return pressed_from(chooser=closed)
+        return pressed_from(chooser=closed, origin=pair.here)
     return pressed_from(chooser=closed, origin=pair.other)
 
 

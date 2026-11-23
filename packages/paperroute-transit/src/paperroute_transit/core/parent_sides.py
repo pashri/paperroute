@@ -1,9 +1,10 @@
 """Splitting a parent station's runs between its two kerbs."""
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 
+from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.reach import RunTail, StripKey
-from paperroute_transit.core.sides import ParentKerbs
+from paperroute_transit.core.sides import KerbPair, ParentKerbs
 
 
 def leaving(
@@ -67,3 +68,85 @@ def kerb_sides(
     if key.across in onward and key.across != key.station:
         return mine, leaving(tails=tails, onward=onward[key.across])
     return mine, across_tails
+
+
+def parent_pair(
+    *, line: Sequence[StopPlace], index: int, parents: ParentKerbs,
+) -> KerbPair | None:
+    """
+    Orient a parent station's kerbs on a line.
+
+    Parameters
+    ----------
+    line : Sequence[StopPlace]
+        Stations in running order.
+    index : int
+        Index of the parent station on the line.
+    parents : ParentKerbs
+        The parent station's kerbs.
+
+    Returns
+    -------
+    KerbPair | None
+        The pair whose here kerb is the one leaving for the next station
+        (for the last station, the one not leaving for the station
+        before), or None when not exactly one kerb matches.
+    """
+    last = index == len(line) - 1
+    neighbour = line[index - 1 if last else index + 1].stop_id
+    matching = [
+        kerb for kerb in parents.kerbs if neighbour in kerb.onward
+    ]
+    if len(matching) != 1:
+        return None
+    toward = matching[0]
+    rest = next(kerb for kerb in parents.kerbs if kerb is not toward)
+    here, other = (rest, toward) if last else (toward, rest)
+    return KerbPair(
+        station=parents.station,
+        other=other.place,
+        busy=parents.busy,
+        here=here.place,
+    )
+
+
+def line_pairs(
+    *,
+    line: Sequence[StopPlace],
+    pairs: Mapping[str, KerbPair],
+    parents: Mapping[str, ParentKerbs],
+) -> tuple[KerbPair, ...]:
+    """
+    Pick the kerb pair to offer at each station of a line.
+
+    Parameters
+    ----------
+    line : Sequence[StopPlace]
+        Stations in running order.
+    pairs : Mapping[str, KerbPair]
+        Facing pairs by station ID.
+    parents : Mapping[str, ParentKerbs]
+        Parent stations' kerbs by station ID.
+
+    Returns
+    -------
+    tuple[KerbPair, ...]
+        In line order, each station once, at its first call: its parent
+        pair if the line orients one, else its facing pair unless the
+        other kerb is the station itself, else nothing.
+    """
+    chosen: dict[str, KerbPair | None] = {}
+    for index, station in enumerate(line):
+        key = station.stop_id
+        if key in chosen:
+            continue
+        found = (
+            parent_pair(line=line, index=index, parents=parents[key])
+            if key in parents
+            else None
+        )
+        if found is None and key in pairs:
+            found = pairs[key]
+            found = None if found.other.stop_id == key else found
+        chosen[key] = found
+    return tuple(pair for pair in chosen.values() if pair is not None)

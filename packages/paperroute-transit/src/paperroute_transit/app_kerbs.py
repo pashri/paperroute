@@ -8,6 +8,7 @@ from paperroute_transit.core.messages import (
     PlacesMatched,
 )
 from paperroute_transit.core.model import StopPlace
+from paperroute_transit.core.parent_sides import line_pairs
 from paperroute_transit.ports import NetworkRepository, TimetableRepository
 
 
@@ -54,13 +55,14 @@ def line_loaded(*, network: NetworkRepository, effect: LoadLine) -> LineLoaded:
         The stations.
     """
     line = network.towards_line(towards=effect.towards)
+    ids = [] if line is None else [place.stop_id for place in line]
     pairs = (
         ()
         if line is None
-        else tuple(
-            network.kerb_pairs(
-                stations=[place.stop_id for place in line],
-            ).values()
+        else line_pairs(
+            line=line,
+            pairs=network.kerb_pairs(stations=ids),
+            parents=network.parent_kerbs(stations=ids),
         )
     )
     return LineLoaded(

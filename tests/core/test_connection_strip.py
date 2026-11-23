@@ -563,3 +563,32 @@ def test_build_connection_strip_carries_the_name_rules() -> None:
         zone=SYDNEY_ZONE,
     )
     assert result.name_rules == RULES
+
+
+def test_first_leg_rows_carry_its_marks() -> None:
+    """Both buses late: only the first ride's rows are marked."""
+    onward = live(item=CHAINS[0].legs[1].departure, late=2)
+    late = Chain(legs=(live(item=LEG1[0], late=4), onward), way=0)
+    view = build_connection_strip(
+        stop_view=STOP, pin=WORK, chains=(late,), selected=0,
+        patterns=PATTERNS, positions={}, now=at(7, 30),
+        stale_after=STALE_LIMIT, zone=SYDNEY_ZONE,
+    )
+    first, second = view.sections
+    assert [stop.late for stop in first.stops] == ['+4', '', '+4']
+    assert [stop.late for stop in second.stops] == ['', '', '']
+
+
+def test_first_leg_last_row_marks_the_live_arrival() -> None:
+    """The last row's mark follows the live arrival."""
+    first = LEG1[0]
+    item = replace(
+        live(item=first, late=3), arrives=first.arrives + timedelta(minutes=1),
+    )
+    view = build_connection_strip(
+        stop_view=STOP, pin=WORK,
+        chains=(Chain(legs=(item, CHAINS[0].legs[1]), way=0),),
+        selected=0, patterns=PATTERNS, positions={}, now=at(7, 30),
+        stale_after=STALE_LIMIT, zone=SYDNEY_ZONE,
+    )
+    assert [stop.late for stop in view.sections[0].stops] == ['+3', '', '']

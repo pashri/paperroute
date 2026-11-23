@@ -7,6 +7,7 @@ from enum import StrEnum
 
 from paperroute_device.core.text import clock_text
 from paperroute_transit.core.chains import Chain
+from paperroute_transit.core.connection_late import arrival_mark, leg_mark
 from paperroute_transit.core.connection_model import change_walk
 from paperroute_transit.core.connection_view import (
     PairRow,
@@ -60,11 +61,14 @@ class LegStop:
         Call time; empty on a fold row.
     mark : StopMark
         Where the row sits in its leg.
+    late : str
+        Lateness mark after the time; empty on a fold row.
     """
 
     name: str
     time: str
     mark: StopMark
+    late: str = ''
 
 
 @dataclass(frozen=True)
@@ -472,6 +476,38 @@ class Leg:
     last: LiveDeparture | None = None
 
 
+def with_marks(
+    *, rows: tuple[LegStop, ...], leg: Leg,
+) -> tuple[LegStop, ...]:
+    """
+    Add a leg's lateness marks to its rows.
+
+    Parameters
+    ----------
+    rows : tuple[LegStop, ...]
+        The leg's rows.
+    leg : Leg
+        The leg.
+
+    Returns
+    -------
+    tuple[LegStop, ...]
+        Rows with a time take the leg's mark, the `LAST` row the
+        arrival's; fold rows are unchanged.
+    """
+    departure = leg_mark(item=leg.item)
+    arrival = arrival_mark(item=leg.last or leg.item)
+    return tuple(
+        replace(
+            row,
+            late=arrival if row.mark is StopMark.LAST else departure,
+        )
+        if row.time
+        else row
+        for row in rows
+    )
+
+
 def walk_note(*, change: Change) -> str:
     """
     Say how far a change walks and how long it allows.
@@ -673,7 +709,7 @@ def chain_sections(
         The sections, the first ride first.
     """
     sections = []
-    for leg in chain_legs_of(chain=chain, pin=pin):
+    for index, leg in enumerate(chain_legs_of(chain=chain, pin=pin)):
         trip_id = leg.item.departure.trip_id
         trip = patterns.get(trip_id)
         note = approach_note(
@@ -688,9 +724,10 @@ def chain_sections(
             pattern=trip,
             zone=zone,
         )
+        rows = leg_rows(leg=leg, patterns=patterns, zone=zone)
         sections.append(leg_section(
             leg=leg,
-            rows=leg_rows(leg=leg, patterns=patterns, zone=zone),
+            rows=with_marks(rows=rows, leg=leg) if index == 0 else rows,
             loaded=trip_id in patterns,
             vehicle=note,
         ))

@@ -21,6 +21,11 @@ from paperroute_transit.render.chrome import (
     view_banner,
     view_header,
 )
+from paperroute_transit.render.late_marks import (
+    SMALL_MARK,
+    mark_width,
+    raised_mark,
+)
 from paperroute_transit.render.pair_list import draw_pair_list
 
 STRIP_RIGHT: Final[int] = 440
@@ -321,9 +326,14 @@ def draw_stop_text(
         grey=INK,
     )
     if stop.time:
+        end = right - 6 - mark_width(mark=stop.late, face=SMALL_MARK)
         canvas.text(
-            at=(right - 6, y), text=stop.time, face=TIME_FACE, grey=INK,
+            at=(end, y), text=stop.time, face=TIME_FACE, grey=INK,
             anchor='rs',
+        )
+        raised_mark(
+            canvas, mark=stop.late, at=(end, y), face=TIME_FACE,
+            mark_face=SMALL_MARK,
         )
 
 

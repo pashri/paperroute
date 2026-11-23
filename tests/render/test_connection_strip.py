@@ -34,12 +34,14 @@ from paperroute_transit.render.connection_strip import (
     SIDE,
     STRIP_RIGHT,
     draw_connection_strip,
+    draw_stop_text,
     draw_strip_sections,
     heading_parts,
     name_room,
     row_step,
 )
 from tests.core.test_connection_strip import CHAINS, PATTERNS, STOP
+from tests.render.test_chrome import Recording
 
 VIEW: Final[ConnectionStripView] = build_connection_strip(
     stop_view=STOP, pin=WORK, chains=CHAINS, selected=0, patterns=PATTERNS,
@@ -191,3 +193,21 @@ def test_three_sections_fit_strip() -> None:
     ).tolist()
     starts = [y for y in heads if not set(range(y - 6, y)) & set(heads)]
     assert len(starts) == 3
+
+
+def test_marked_stop_time_ends_at_the_section_edge() -> None:
+    """A marked time keeps its mark inside the section edge."""
+    ends = []
+    for late in ('', '+4'):
+        canvas = Recording()
+        draw_stop_text(
+            canvas,
+            stop=LegStop(
+                name='Hollis St', time='7:37', mark=StopMark.FIRST, late=late,
+            ),
+            y=100, edges=(0, 400),
+        )
+        ink = np.flatnonzero((canvas.grey()[80:104] < 128).any(axis=0))
+        ends.append(int(ink.max()))
+    assert '+4' in canvas.drawn
+    assert abs(ends[0] - ends[1]) <= 2

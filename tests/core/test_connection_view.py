@@ -17,7 +17,13 @@ from paperroute_testkit.core.connection_factories import (
     work_chains,
 )
 from paperroute_testkit.core.factories import STALE_LIMIT, live, place
-from paperroute_transit.core.chains import Chain, Missed, Offers, offers_after
+from paperroute_transit.core.chains import (
+    Chain,
+    Missed,
+    Offers,
+    chains_of,
+    offers_after,
+)
 from paperroute_transit.core.connection_map import sidebar_rows
 from paperroute_transit.core.connection_strip import build_connection_strip
 from paperroute_transit.core.connection_view import (
@@ -37,7 +43,19 @@ from paperroute_transit.core.model import Change, Pin, Way
 from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.rides import Ride
 from paperroute_transit.core.stop_view import StopView, empty_text
-from tests.core.test_chains import late_first, lived
+from tests.core.test_chains import (
+    C0750,
+    CAMP_PIN,
+    FIRST,
+    FROM_CAMPBELLTOWN,
+    NO_665,
+    SECOND,
+    THREE_OR_TWO,
+    camp_offers,
+    late_first,
+    lived,
+    three_then_two,
+)
 from tests.core.test_chains import work_chains as chains_from
 
 CHAINS: Final[tuple[Chain, ...]] = work_chains()
@@ -502,3 +520,102 @@ def test_row_has_no_struck_arrival_when_the_first_trip_is_unlisted() -> None:
         pin=WORK, now=at(7, 30), zone=SYDNEY_ZONE,
     )
     assert row.was == ''
+
+
+def test_hero_of_a_shorter_fresh_plan_names_its_first_new_bus() -> None:
+    hero = chain_hero(
+        chain=three_then_two(),
+        pin=THREE_OR_TWO,
+        now=at(7, 30),
+        zone=SYDNEY_ZONE,
+        city=SYDNEY,
+    )
+    assert hero.lines[1] == HeroLine(
+        route=None, noun=None, text='change missed · next T-Way at 7:50',
+        bold=True,
+    )
+    assert hero.lines[-1].route == 'T-Way'
+
+
+def test_hero_of_a_fresh_plan_on_another_way_names_its_first_new_bus() -> None:
+    chains = chains_of(
+        pin=CAMP_PIN,
+        lists={
+            FIRST: late_first(6),
+            SECOND: NO_665,
+            FROM_CAMPBELLTOWN: lived((C0750,)),
+        },
+        direct=(),
+        now=at(7, 30),
+        kept=camp_offers((C0750,)),
+    )
+    assert chains[0].way == 0
+    hero = chain_hero(
+        chain=chains[0],
+        pin=CAMP_PIN,
+        now=at(7, 30),
+        zone=SYDNEY_ZONE,
+        city=SYDNEY,
+    )
+    assert hero.lines[1] == HeroLine(
+        route=None, noun=None, text='change missed · next 664 at 8:01',
+        bold=True,
+    )
+    assert (hero.lines[-1].route, hero.lines[-1].at) == ('664', '8:01')
+
+
+MISSED_DIRECT: Final[Chain] = replace(
+    DIRECT, missed=Missed(leg=0, arrives=at(7, 57), later=True),
+)
+
+
+def test_missed_direct_hero_says_so_in_bold() -> None:
+    hero = hero_of(MISSED_DIRECT)
+    assert hero.lines[1:] == (
+        HeroLine(
+            route=None, noun=None, text='change missed · stay on', bold=True,
+        ),
+    )
+
+
+def test_missed_direct_row_keeps_direct_and_strikes_the_old_arrival() -> None:
+    row = chain_row(
+        chain=MISSED_DIRECT, pin=WORK, now=at(7, 30), zone=SYDNEY_ZONE,
+    )
+    assert (row.detail, row.was, row.arrives_at, row.tight) == (
+        'direct', '7:57', '8:05', False,
+    )
+
+
+def test_direct_trip_without_a_miss_is_unchanged() -> None:
+    assert hero_of(DIRECT) == ChainHero(
+        countdown='10',
+        leaves_at='7:40',
+        lines=(
+            HeroLine(
+                route='609', noun='bus', text='Parramatta Station', at='7:40',
+            ),
+            HeroLine(
+                route=None, noun=None, text='direct to Westmead Station',
+            ),
+        ),
+        arrives_at='8:05',
+        live=False,
+        uncertain=False,
+        mark='',
+    )
+    assert chain_row(
+        chain=DIRECT, pin=WORK, now=at(7, 30), zone=SYDNEY_ZONE,
+    ) == PairRow(
+        leaves_at='7:40',
+        chips=('609',),
+        detail='direct',
+        arrives_at='8:05',
+        minutes=25,
+        countdown='10',
+        live=False,
+        uncertain=False,
+        mark='',
+        tight=False,
+        was='',
+    )

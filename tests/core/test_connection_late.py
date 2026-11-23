@@ -5,7 +5,7 @@ from datetime import timedelta
 
 import pytest
 
-from paperroute_testkit.core.connection_factories import WORK, at
+from paperroute_testkit.core.connection_factories import WORK, WORK_CHANGE, at
 from paperroute_testkit.core.factories import live
 from paperroute_transit.core.chains import Chain, Missed
 from paperroute_transit.core.connection_late import (
@@ -14,6 +14,7 @@ from paperroute_transit.core.connection_late import (
     leg_mark,
     ride_fates,
 )
+from paperroute_transit.core.connection_model import TIGHT_SPARE, spare_seconds
 from paperroute_transit.core.rides import rides_of
 from tests.core.test_connection_view import A0733, B0746, B0801A
 
@@ -29,6 +30,11 @@ def test_leg_mark_follows_the_row_rule() -> None:
     guess = replace(late, estimated=True, uncertain=True)
     assert leg_mark(item=guess) == '+4?'
     assert leg_mark(item=replace(late, uncertain=True)) == '+4'
+
+
+def test_leg_mark_is_empty_for_a_bus_not_live() -> None:
+    """A lateness figure on a bus not live shows nothing."""
+    assert leg_mark(item=replace(live(item=A0733, late=4), live=False)) == ''
 
 
 def test_arrival_mark_reads_the_live_arrival() -> None:
@@ -71,3 +77,35 @@ def test_ride_fates_name_a_missed_change() -> None:
     )
     rides = rides_of(chain=alone, pin=WORK)
     assert ride_fates(chain=alone, rides=rides)[1] is ChangeFate.STRANDED
+
+
+@pytest.mark.parametrize(('spare', 'fate'), [
+    (TIGHT_SPARE, ChangeFate.EASY),
+    (TIGHT_SPARE - 60, ChangeFate.TIGHT),
+])
+def test_ride_fates_draw_the_tight_line_in_whole_minutes(
+    spare: int, fate: ChangeFate,
+) -> None:
+    """Exactly `TIGHT_SPARE` spare is easy; a minute less is tight."""
+    base = spare_seconds(
+        arrives=A0733.arrives, departs=B0746.departs, change=WORK_CHANGE,
+    )
+    first = live(item=A0733, late=int(base - spare) // 60)
+    assert spare_seconds(
+        arrives=first.arrives, departs=B0746.departs, change=WORK_CHANGE,
+    ) == spare
+    chain = Chain(legs=(first, live(item=B0746)), way=0)
+    rides = rides_of(chain=chain, pin=WORK)
+    assert ride_fates(chain=chain, rides=rides) == (ChangeFate.EASY, fate)
+
+
+def test_ride_fates_take_a_missed_leg_past_the_chain_as_its_last() -> None:
+    """A missed leg beyond the chain falls on its last ride."""
+    chain = Chain(
+        legs=(live(item=A0733, late=6), live(item=B0801A)), way=0,
+        missed=Missed(leg=5, arrives=at(7, 57), later=True),
+    )
+    rides = rides_of(chain=chain, pin=WORK)
+    assert ride_fates(chain=chain, rides=rides) == (
+        ChangeFate.EASY, ChangeFate.MISSED,
+    )

@@ -1040,3 +1040,53 @@ def test_held_first_trip_that_left_or_is_cancelled_is_dropped() -> None:
         first=late_first(6), second=lived(LEG2), now=at(7, 39), kept=KEPT,
     )
     assert chains[0].missed == Missed(leg=1, arrives=at(7, 57), later=True)
+
+
+LEVEL: Final[Departure] = run(
+    departs=(7, 50), arrives=(8, 15), route='T-Way', trip_id='p0750',
+)
+THREE_OR_TWO: Final[Pin] = replace(
+    WORK,
+    destination=PARRAMATTA,
+    ways=(TWO_WAY, Way(changes=(WORK_CHANGE,))),
+)
+
+
+def three_then_two() -> Chain:
+    """
+    Offer the 7:33 by three legs, then miss its second change.
+
+    Returns
+    -------
+    Chain
+        The chain shown once the 665 runs seven late: the two-leg way,
+        which arrives before the three-leg way's later train.
+    """
+    lists = {
+        FIRST: lived(LEG1[:1]),
+        SECOND: lived(LEG2[:1]),
+        THIRD: lived(TRAINS),
+        TO_PARRAMATTA: lived((LEVEL,)),
+    }
+    on_time = chains_of(
+        pin=THREE_OR_TWO, lists=lists, direct=(), now=at(7, 30),
+    )
+    assert ids(on_time) == [('a0733', 'b0746', 't0803')]
+    kept = offers_after(
+        offers=Offers(), pin=THREE_OR_TWO, chains=on_time,
+    ).kept
+    (chain,) = chains_of(
+        pin=THREE_OR_TWO,
+        lists={**lists, SECOND: (live(item=LEG2[0], late=7),)},
+        direct=(),
+        now=at(7, 30),
+        kept=kept,
+    )
+    return chain
+
+
+def test_missed_change_points_at_a_shorter_fresh_plan() -> None:
+    """A three-leg offer shown by a two-leg plan notes its first new bus."""
+    chain = three_then_two()
+    assert (chain.way, ids([chain])[0]) == (1, ('a0733', 'p0750'))
+    assert chain.missed == Missed(leg=1, arrives=at(8, 8), later=True)

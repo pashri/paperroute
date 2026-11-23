@@ -71,6 +71,28 @@ def arrival_mark(*, item: LiveDeparture) -> str:
     return signed(late=late, uncertain=item.estimated and item.uncertain)
 
 
+def missed_item(*, chain: Chain) -> LiveDeparture | None:
+    """
+    Give the leg a chain's missed change boards.
+
+    Parameters
+    ----------
+    chain : Chain
+        The chain.
+
+    Returns
+    -------
+    LiveDeparture | None
+        The leg at the miss's index, or the last leg when the index is
+        not one of the chain's; None without a miss.
+    """
+    if chain.missed is None:
+        return None
+    if chain.missed.leg in range(len(chain.legs)):
+        return chain.legs[chain.missed.leg]
+    return chain.legs[-1]
+
+
 def ride_fate(
     *, chain: Chain, ride: Ride, before: Ride | None,
 ) -> ChangeFate:
@@ -90,13 +112,14 @@ def ride_fate(
     -------
     ChangeFate
         `EASY` for the first ride or a stay on; `MISSED` or `STRANDED`
-        for the ride boarded on the chain's missed leg; `TIGHT` when
-        the spare at the change is under `TIGHT_SPARE`; else `EASY`.
+        for the ride boarded on the chain's missed leg, its last leg when
+        the missed leg is not one of its legs; `TIGHT` when the spare at
+        the change is under `TIGHT_SPARE`; else `EASY`.
     """
     missed = chain.missed
     if before is None or ride.change is None:
         return ChangeFate.EASY
-    if missed is not None and ride.item == chain.legs[missed.leg]:
+    if missed is not None and ride.item == missed_item(chain=chain):
         return ChangeFate.MISSED if missed.later else ChangeFate.STRANDED
     spare = spare_seconds(
         arrives=before.arrives, departs=ride.departs, change=ride.change,

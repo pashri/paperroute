@@ -99,8 +99,8 @@ class Missed:
     Attributes
     ----------
     leg : int
-        Index in the chain's legs of the first leg after the missed
-        change.
+        Index into the legs of the chain carrying the note: the first
+        leg after the missed change.
     arrives : datetime | None
         When the chain first offered arrives, live; None when its last
         trip is no longer listed.
@@ -783,6 +783,34 @@ def best_per_first(*, chains: Sequence[Chain]) -> list[Chain]:
     return list(best.values())
 
 
+def first_new_leg(*, chain: Chain, trips: Sequence[TripKey]) -> int:
+    """
+    Find where a chain first leaves the trips it was offered.
+
+    Parameters
+    ----------
+    chain : Chain
+        A chain.
+    trips : Sequence[TripKey]
+        The trips offered for its first trip.
+
+    Returns
+    -------
+    int
+        The index of its first leg, from index 1 on, whose trip is not
+        the one offered at that position; its last leg's index when
+        there is none.
+    """
+    return next(
+        (
+            index
+            for index, item in enumerate(chain.legs[1:], start=1)
+            if index >= len(trips) or trip_key(item=item) != trips[index]
+        ),
+        len(chain.legs) - 1,
+    )
+
+
 def held_or_fresh(
     *, held: Chain | None, fresh: Chain, kept: Mapping[TripKey, Offer],
 ) -> Chain:
@@ -803,8 +831,9 @@ def held_or_fresh(
     Chain
         The held chain when it misses nothing, or goes on by a later trip
         arriving no later than the fresh one. Otherwise the fresh chain,
-        carrying the held chain's miss; `later` is False only when its
-        legs from the missed change on are the offered trips.
+        carrying the held chain's miss with `leg` at the fresh chain's
+        first new leg (see `first_new_leg`); `later` is False only when
+        its legs from the missed change on are the offered trips.
     """
     if held is None:
         return fresh
@@ -815,7 +844,11 @@ def held_or_fresh(
     rest = tuple(trip_key(item=item) for item in fresh.legs[missed.leg:])
     return replace(
         fresh,
-        missed=replace(missed, later=rest != offer.trips[missed.leg:]),
+        missed=replace(
+            missed,
+            leg=first_new_leg(chain=fresh, trips=offer.trips),
+            later=rest != offer.trips[missed.leg:],
+        ),
     )
 
 

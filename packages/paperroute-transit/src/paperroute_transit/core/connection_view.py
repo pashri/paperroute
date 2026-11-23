@@ -225,7 +225,7 @@ def change_line(*, ride: Ride, zone: tzinfo, fate: ChangeFate) -> HeroLine:
     -------
     HeroLine
         'change at {board} {time}' when easy; 'tight change at {board}'
-        with the time apart; 'change missed - next {route} at {time}';
+        with the time apart; 'change missed · next {route} at {time}';
         or 'change missed' when stranded.
     """
     assert ride.change is not None
@@ -302,7 +302,8 @@ def hero_lines(
     -------
     tuple[HeroLine, ...]
         Each ride's change lines and badge line; a lone ride adds
-        'direct to {To}' or 'stay on to {To}'.
+        'change missed · stay on' in bold when the chain carries a miss,
+        else 'direct to {To}' or 'stay on to {To}'.
     """
     rides = rides_of(chain=chain, pin=pin)
     fates = ride_fates(chain=chain, rides=rides)
@@ -321,7 +322,7 @@ def hero_lines(
     )
     if len(rides) > 1:
         return lines
-    if chain.way is not None and chain.missed is not None:
+    if chain.missed is not None:
         return (
             *lines,
             HeroLine(

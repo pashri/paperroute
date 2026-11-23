@@ -5,9 +5,17 @@ from dataclasses import dataclass
 from datetime import datetime, tzinfo
 from typing import Final
 
-from paperroute_device.core.text import clock_text
+from paperroute_device.core.text import DOT, clock_text
 from paperroute_transit.core.chains import Chain
 from paperroute_transit.core.city import City
+from paperroute_transit.core.connection_late import (
+    MISSED,
+    TIGHT,
+    ChangeFate,
+    leg_mark,
+    ride_fates,
+    stranded,
+)
 from paperroute_transit.core.connection_model import change_walk
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.names import NameRules
@@ -45,12 +53,18 @@ class HeroLine:
         The ride's headsign, or the step.
     at : str
         The ride's departure time; empty for a plain step.
+    mark : str
+        The ride's lateness mark; empty when on time or a plain step.
+    bold : bool
+        True when the line is drawn bold, for a tight or missed change.
     """
 
     route: str | None
     noun: str | None
     text: str
     at: str = ''
+    mark: str = ''
+    bold: bool = False
 
 
 @dataclass(frozen=True)
@@ -73,6 +87,8 @@ class ChainHero:
         True when the first ride has live times.
     uncertain : bool
         True when any ride's estimate is uncertain.
+    mark : str
+        The first ride's lateness mark.
     """
 
     countdown: str
@@ -81,6 +97,7 @@ class ChainHero:
     arrives_at: str
     live: bool
     uncertain: bool = False
+    mark: str = ''
 
 
 @dataclass(frozen=True)
@@ -106,6 +123,13 @@ class PairRow:
         True when the first ride has live times.
     uncertain : bool
         True when any ride's estimate is uncertain.
+    mark : str
+        The first ride's lateness mark.
+    tight : bool
+        True when a change is tight.
+    was : str
+        The first-offered arrival a missed change replaced; empty
+        otherwise.
     """
 
     leaves_at: str
@@ -116,6 +140,9 @@ class PairRow:
     countdown: str = ''
     live: bool = False
     uncertain: bool = False
+    mark: str = ''
+    tight: bool = False
+    was: str = ''
 
 
 @dataclass(frozen=True)
@@ -149,7 +176,9 @@ class ConnectionView:
     name_rules: NameRules = NameRules()
 
 
-def ride_line(*, ride: Ride, zone: tzinfo, city: City) -> HeroLine:
+def ride_line(
+    *, ride: Ride, zone: tzinfo, city: City, mark: str = '',
+) -> HeroLine:
     """
     Make a ride's badge line.
 
@@ -161,6 +190,8 @@ def ride_line(*, ride: Ride, zone: tzinfo, city: City) -> HeroLine:
         Local time zone the times show in.
     city : City
         The city, which holds what each ride is called.
+    mark : str
+        The ride's lateness mark.
 
     Returns
     -------
@@ -173,10 +204,55 @@ def ride_line(*, ride: Ride, zone: tzinfo, city: City) -> HeroLine:
         noun=nouns(city=city, departure=departure).connection,
         text=departure.headsign,
         at=clock_text(moment=ride.departs, zone=zone),
+        mark=mark,
     )
 
 
-def change_lines(*, ride: Ride, zone: tzinfo) -> tuple[HeroLine, ...]:
+def change_line(*, ride: Ride, zone: tzinfo, fate: ChangeFate) -> HeroLine:
+    """
+    Name the change made to board a ride.
+
+    Parameters
+    ----------
+    ride : Ride
+        A ride after the first.
+    zone : tzinfo
+        Local time zone the times show in.
+    fate : ChangeFate
+        How the change stands.
+
+    Returns
+    -------
+    HeroLine
+        'change at {board} {time}' when easy; 'tight change at {board}'
+        with the time apart; 'change missed - next {route} at {time}';
+        or 'change missed' when stranded.
+    """
+    assert ride.change is not None
+    board = ride.change.board.name
+    time = clock_text(moment=ride.departs, zone=zone)
+    route = ride.item.departure.route
+    match fate:
+        case ChangeFate.TIGHT:
+            return HeroLine(
+                route=None, noun=None, text=f'{TIGHT} change at {board}',
+                at=time, bold=True,
+            )
+        case ChangeFate.MISSED:
+            return HeroLine(
+                route=None, noun=None,
+                text=f'{MISSED}{DOT}next {route} at {time}', bold=True,
+            )
+        case ChangeFate.STRANDED:
+            return HeroLine(route=None, noun=None, text=MISSED, bold=True)
+    return HeroLine(
+        route=None, noun=None, text=f'change at {board} {time}',
+    )
+
+
+def change_lines(
+    *, ride: Ride, zone: tzinfo, fate: ChangeFate = ChangeFate.EASY,
+) -> tuple[HeroLine, ...]:
     """
     Spell out the change made to board a ride.
 
@@ -186,22 +262,19 @@ def change_lines(*, ride: Ride, zone: tzinfo) -> tuple[HeroLine, ...]:
         A ride after the first.
     zone : tzinfo
         Local time zone the times show in.
+    fate : ChangeFate
+        How the change stands.
 
     Returns
     -------
     tuple[HeroLine, ...]
-        'change at {board} {time}', then 'walk {metres} m' when the
-        change walks (see `change_walk`); nothing for the first ride.
+        The change line (see `change_line`), then 'walk {metres} m' when
+        the change walks (see `change_walk`); nothing for the first ride.
     """
     change = ride.change
     if change is None:
         return ()
-    at = HeroLine(
-        route=None,
-        noun=None,
-        text=f'change at {change.board.name} '
-        f'{clock_text(moment=ride.departs, zone=zone)}',
-    )
+    at = change_line(ride=ride, zone=zone, fate=fate)
     metres = change_walk(change=change)
     if metres is None:
         return (at,)
@@ -232,19 +305,75 @@ def hero_lines(
         'direct to {To}' or 'stay on to {To}'.
     """
     rides = rides_of(chain=chain, pin=pin)
+    fates = ride_fates(chain=chain, rides=rides)
     lines = tuple(
         line
-        for ride in rides
+        for index, (ride, fate) in enumerate(zip(rides, fates, strict=True))
         for line in (
-            *change_lines(ride=ride, zone=zone),
-            ride_line(ride=ride, zone=zone, city=city),
+            *change_lines(ride=ride, zone=zone, fate=fate),
+            ride_line(
+                ride=ride,
+                zone=zone,
+                city=city,
+                mark=leg_mark(item=ride.item) if index else '',
+            ),
         )
     )
     if len(rides) > 1:
         return lines
+    if chain.way is not None and chain.missed is not None:
+        return (
+            *lines,
+            HeroLine(
+                route=None, noun=None, text=f'{MISSED}{DOT}stay on',
+                bold=True,
+            ),
+        )
     to = '' if pin.destination is None else pin.destination.name
     lead = 'direct' if chain.way is None else 'stay on'
     return (*lines, HeroLine(route=None, noun=None, text=f'{lead} to {to}'))
+
+
+def arrival_text(*, chain: Chain, zone: tzinfo) -> str:
+    """
+    Spell out when a chain arrives.
+
+    Parameters
+    ----------
+    chain : Chain
+        The chain.
+    zone : tzinfo
+        Local time zone the times show in.
+
+    Returns
+    -------
+    str
+        The arrival time; empty when the chain is stranded.
+    """
+    if stranded(chain=chain):
+        return ''
+    return clock_text(moment=chain.arrives, zone=zone)
+
+
+def was_text(*, chain: Chain, zone: tzinfo) -> str:
+    """
+    Spell out the arrival a missed change replaced.
+
+    Parameters
+    ----------
+    chain : Chain
+        The chain.
+    zone : tzinfo
+        Local time zone the times show in.
+
+    Returns
+    -------
+    str
+        The first-offered arrival; empty without a miss or its arrival.
+    """
+    if chain.missed is None or chain.missed.arrives is None:
+        return ''
+    return clock_text(moment=chain.missed.arrives, zone=zone)
 
 
 def chain_hero(
@@ -275,9 +404,10 @@ def chain_hero(
         countdown=countdown(departs=chain.departs, now=now),
         leaves_at=clock_text(moment=chain.departs, zone=zone),
         lines=hero_lines(chain=chain, pin=pin, zone=zone, city=city),
-        arrives_at=clock_text(moment=chain.arrives, zone=zone),
+        arrives_at=arrival_text(chain=chain, zone=zone),
         live=chain.legs[0].live,
         uncertain=any(leg.uncertain for leg in chain.legs),
+        mark=leg_mark(item=chain.legs[0]),
     )
 
 
@@ -358,11 +488,16 @@ def chain_row(
         leaves_at=clock_text(moment=chain.departs, zone=zone),
         chips=route_chips(chain=chain, pin=pin),
         detail=via_text(chain=chain, pin=pin),
-        arrives_at=clock_text(moment=chain.arrives, zone=zone),
+        arrives_at=arrival_text(chain=chain, zone=zone),
         minutes=int(seconds // 60),
         countdown=countdown(departs=chain.departs, now=now),
         live=chain.legs[0].live,
         uncertain=any(leg.uncertain for leg in chain.legs),
+        mark=leg_mark(item=chain.legs[0]),
+        tight=ChangeFate.TIGHT in ride_fates(
+            chain=chain, rides=rides_of(chain=chain, pin=pin),
+        ),
+        was=was_text(chain=chain, zone=zone),
     )
 
 

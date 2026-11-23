@@ -6,6 +6,8 @@ from typing import Final
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_testkit.core.connection_factories import (
     HOLLIS,
+    LEG1,
+    LEG2,
     PARRAMATTA,
     WESTMEAD,
     WORK,
@@ -15,13 +17,15 @@ from paperroute_testkit.core.connection_factories import (
     work_chains,
 )
 from paperroute_testkit.core.factories import STALE_LIMIT, live, place
-from paperroute_transit.core.chains import Chain
+from paperroute_transit.core.chains import Chain, Missed, Offers, offers_after
 from paperroute_transit.core.connection_map import sidebar_rows
 from paperroute_transit.core.connection_strip import build_connection_strip
 from paperroute_transit.core.connection_view import (
     NO_PAIRS,
     PAIR_ROWS,
+    ChainHero,
     HeroLine,
+    PairRow,
     build_connection_view,
     chain_hero,
     chain_row,
@@ -33,6 +37,8 @@ from paperroute_transit.core.model import Change, Pin, Way
 from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.rides import Ride
 from paperroute_transit.core.stop_view import StopView, empty_text
+from tests.core.test_chains import late_first, lived
+from tests.core.test_chains import work_chains as chains_from
 
 CHAINS: Final[tuple[Chain, ...]] = work_chains()
 STOP: Final[StopView] = StopView(
@@ -59,6 +65,8 @@ A0733: Final = run(departs=(7, 33), arrives=(7, 39), route='606',
                    trip_id='a0733')
 B0746: Final = run(departs=(7, 46), arrives=(7, 57), route='665',
                    trip_id='b0746')
+B0801A: Final = run(departs=(8, 1), arrives=(8, 12), route='664',
+                    trip_id='b0801a')
 C0805: Final = run(departs=(8, 5), arrives=(8, 20), route='T1',
                    trip_id='c0805')
 TWO_CHANGES: Final[Chain] = Chain(
@@ -373,3 +381,124 @@ def test_build_connection_view_carries_the_name_rules() -> None:
         city=SYDNEY,
     )
     assert result.name_rules == RULES
+
+
+def hero_of(chain: Chain) -> ChainHero:
+    """Work's hero for a chain at 7:30."""
+    return chain_hero(
+        chain=chain, pin=WORK, now=at(7, 30), zone=SYDNEY_ZONE, city=SYDNEY,
+    )
+
+
+def folded_chain() -> Chain:
+    """The late 7:33 whose missed change folded into a stay on."""
+    through = run(
+        departs=(7, 45), arrives=(7, 58), route='606', trip_id='a0733',
+    )
+    second = (live(item=through), *lived(LEG2[:1]))
+    on_time = chains_from(first=lived(LEG1[:1]), second=second)
+    kept = offers_after(offers=Offers(), pin=WORK, chains=on_time).kept
+    late = (live(item=through, late=6), *lived(LEG2[:1]))
+    chains = chains_from(first=late_first(6), second=late, kept=kept)
+    return chains[0]
+
+
+def test_easy_hero_marks_both_buses() -> None:
+    hero = hero_of(Chain(
+        legs=(live(item=A0733, late=4), live(item=B0746, late=2)), way=0,
+    ))
+    assert hero.mark == '+4'
+    assert [line.mark for line in hero.lines] == ['', '', '', '+2']
+    assert hero.lines[1] == HeroLine(
+        route=None, noun=None,
+        text='change at Constitution Hill, North West Twy 7:48',
+    )
+    assert hero.lines[3].at == '7:48'
+
+
+def test_tight_hero_names_the_change_in_bold() -> None:
+    hero = hero_of(Chain(
+        legs=(live(item=A0733, late=4), live(item=B0746)), way=0,
+    ))
+    assert hero.lines[1] == HeroLine(
+        route=None, noun=None,
+        text='tight change at Constitution Hill, North West Twy',
+        at='7:46', bold=True,
+    )
+    assert hero.lines[2].text == 'walk 150 m'
+
+
+def test_missed_hero_names_the_next_bus() -> None:
+    hero = hero_of(Chain(
+        legs=(live(item=A0733, late=6), live(item=B0801A)), way=0,
+        missed=Missed(leg=1, arrives=at(7, 57), later=True),
+    ))
+    assert hero.lines[1] == HeroLine(
+        route=None, noun=None, text='change missed · next 664 at 8:01',
+        bold=True,
+    )
+    assert (hero.lines[3].route, hero.lines[3].at) == ('664', '8:01')
+    assert hero.arrives_at == '8:12'
+
+
+def test_stranded_hero_says_change_missed_and_no_arrival() -> None:
+    hero = hero_of(Chain(
+        legs=(live(item=A0733, late=6), live(item=B0746)), way=0,
+        missed=Missed(leg=1, arrives=at(7, 57), later=False),
+    ))
+    assert hero.lines[1] == HeroLine(
+        route=None, noun=None, text='change missed', bold=True,
+    )
+    assert hero.lines[3].route == '665'
+    assert hero.arrives_at == ''
+
+
+def test_missed_stay_on_hero_says_so_in_bold() -> None:
+    hero = hero_of(folded_chain())
+    assert [line.text for line in hero.lines][-1] == 'change missed · stay on'
+    assert hero.lines[-1].bold
+    assert not any(line.text.startswith('stay on') for line in hero.lines)
+
+
+def test_rows_carry_the_mark_the_word_and_the_struck_arrival() -> None:
+    def row(chain: Chain) -> PairRow:
+        return chain_row(
+            chain=chain, pin=WORK, now=at(7, 30), zone=SYDNEY_ZONE,
+        )
+
+    tight = row(Chain(
+        legs=(live(item=A0733, late=4), live(item=B0746)), way=0,
+    ))
+    assert (tight.mark, tight.tight, tight.was) == ('+4', True, '')
+    missed = row(Chain(
+        legs=(live(item=A0733, late=6), live(item=B0801A)), way=0,
+        missed=Missed(leg=1, arrives=at(7, 57), later=True),
+    ))
+    assert (missed.tight, missed.was, missed.arrives_at) == (
+        False, '7:57', '8:12',
+    )
+    stranded = row(Chain(
+        legs=(live(item=A0733, late=6), live(item=B0746)), way=0,
+        missed=Missed(leg=1, arrives=at(7, 57), later=False),
+    ))
+    assert (stranded.was, stranded.arrives_at) == ('7:57', '')
+    plain = row(CHAINS[0])
+    assert (plain.mark, plain.tight, plain.was) == ('', False, '')
+
+
+def test_missed_stay_on_row_keeps_stay_on_and_strikes_the_old_arrival() -> None:
+    row = chain_row(
+        chain=folded_chain(), pin=WORK, now=at(7, 30), zone=SYDNEY_ZONE,
+    )
+    assert (row.detail, row.was, row.tight) == ('stay on', '7:57', False)
+
+
+def test_row_has_no_struck_arrival_when_the_first_trip_is_unlisted() -> None:
+    row = chain_row(
+        chain=Chain(
+            legs=(live(item=A0733, late=6), live(item=B0801A)), way=0,
+            missed=Missed(leg=1, arrives=None, later=True),
+        ),
+        pin=WORK, now=at(7, 30), zone=SYDNEY_ZONE,
+    )
+    assert row.was == ''

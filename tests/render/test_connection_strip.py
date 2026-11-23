@@ -24,10 +24,12 @@ from paperroute_transit.core.connection_strip import (
     build_connection_strip,
 )
 from paperroute_transit.render.connection_strip import (
+    END_FACE,
     HEAD_FACE,
     HEAD_GAP,
     HEAD_STEP,
     NAME_FACE,
+    NAME_LEFT,
     PAIR_STEP,
     PAIRS_LEFT,
     PAIRS_RIGHT,
@@ -209,5 +211,53 @@ def test_marked_stop_time_ends_at_the_section_edge() -> None:
         )
         ink = np.flatnonzero((canvas.grey()[80:104] < 128).any(axis=0))
         ends.append(int(ink.max()))
-    assert '+4' in canvas.drawn
+        assert ('+4' in canvas.drawn) == bool(late)
     assert abs(ends[0] - ends[1]) <= 2
+
+
+def stop_ink(*, name: str, time: str, late: str) -> np.ndarray:
+    """
+    Draw one stop row and give the columns its ink touches.
+
+    Parameters
+    ----------
+    name : str
+        Stop name.
+    time : str
+        Stop time.
+    late : str
+        Lateness mark.
+
+    Returns
+    -------
+    np.ndarray
+        Indexes of the columns with ink.
+    """
+    canvas = Recording()
+    draw_stop_text(
+        canvas,
+        stop=LegStop(name=name, time=time, mark=StopMark.FIRST, late=late),
+        y=100, edges=(0, 400),
+    )
+    return np.flatnonzero((canvas.grey()[80:104] < 128).any(axis=0))
+
+
+def test_marked_stop_time_stays_clear_of_a_long_name() -> None:
+    """A long name ends left of a marked time with a gap."""
+    name = 'Hollis St Opp Constitution Hill Library Shops'
+    name_end = stop_ink(name=name, time='', late='+4').max()
+    time_start = stop_ink(name='', time='10:47', late='+4').min()
+    assert name_end + 4 <= time_start
+
+
+def test_unmarked_stop_name_fits_the_room_for_the_time_only() -> None:
+    """Without a mark the name is fitted to the time's room alone."""
+    name = 'Hollis St Opp Constitution Hill Library Shops'
+    canvas = Recording()
+    fitted = canvas.fit(text=name, face=END_FACE, width=name_room(left=0, right=400))
+    expected = Recording()
+    expected.text(at=(NAME_LEFT, 100), text=fitted, face=END_FACE, grey=INK)
+    assert (
+        stop_ink(name=name, time='', late='').tolist()
+        == np.flatnonzero((expected.grey()[80:104] < 128).any(axis=0)).tolist()
+    )

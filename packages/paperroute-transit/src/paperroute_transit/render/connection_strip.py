@@ -317,11 +317,12 @@ def draw_stop_text(
         face = END_FACE
     elif stop.mark is StopMark.FOLD:
         face = FOLD_FACE
+    room = name_room(left=left, right=right) - mark_width(
+        mark=stop.late, face=SMALL_MARK,
+    )
     canvas.text(
         at=(left + NAME_LEFT, y),
-        text=canvas.fit(
-            text=stop.name, face=face, width=name_room(left=left, right=right),
-        ),
+        text=canvas.fit(text=stop.name, face=face, width=room),
         face=face,
         grey=INK,
     )

@@ -84,11 +84,8 @@ def parent_of(pin: Pin) -> ParentKerbs:
     ParentKerbs
         The parent with a kerb each way.
     """
-    point = pin.origin.point
-    north = replace(pin.origin, stop_id='kerb-n')
-    south = replace(
-        pin.origin, stop_id='kerb-s', point=(point[0], point[1] + 30.0)
-    )
+    north = replace(pin.origin, stop_id='kerb-n', point=(100.0, 0.0))
+    south = replace(pin.origin, stop_id='kerb-s', point=(100.0, 30.0))
     return ParentKerbs(
         station=pin.origin.stop_id,
         kerbs=(

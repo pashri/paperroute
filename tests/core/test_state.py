@@ -3180,6 +3180,30 @@ def test_matched_parent_pin_turns_both_sides_and_reloads() -> None:
     assert load.pin == pin
 
 
+def test_matched_parent_a_second_time_changes_nothing() -> None:
+    """The same re-match twice leaves the state and asks for nothing."""
+    state = loaded(state=pinned())
+    kerbs = ParentKerbs(
+        station='first',
+        kerbs=(
+            ParentKerb(
+                place=place('first-a', point=(100.0, 0.0)),
+                onward=frozenset({'n'}), trips=5,
+            ),
+            ParentKerb(
+                place=place('first-b', point=(100.0, 30.0)),
+                onward=frozenset({'s'}), trips=3,
+            ),
+        ),
+        busy=False,
+    )
+    event = PlacesMatched(
+        found={'first': shown(state=state).origin}, parents={'first': kerbs},
+    )
+    state, _ = step(state, event)
+    assert step(state, event) == (state, ())
+
+
 def test_matched_name_only_refresh_keeps_the_board() -> None:
     """A re-match under the same ID keeps the departures loaded."""
     renamed = replace(PINS[0].origin, name='First St')

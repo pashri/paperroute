@@ -540,8 +540,7 @@ async def test_match_places_posts_found() -> None:
 async def test_match_places_posts_the_parents_of_the_matches(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """The matches carry the kerbs of the found parents; a failed read
-    carries none and is logged."""
+    """Matches carry the found parents' kerbs; a failed read gives none."""
     kerbs = replace(PARENT_KERBS, station='A')
     found = {
         'A': StopPlace(stop_id='A', name='A', point=STOP_POINT), 'B': None,

@@ -36,6 +36,8 @@ WHERE s.station_id = :station
   AND (:any_route OR r.route IN (SELECT value FROM json_each(:routes)))
 ORDER BY s.run_id, s.pos
 """
+
+
 def parent_kerb(
     *, row: Sequence[object], projection: Projection
 ) -> ParentKerb:
@@ -97,7 +99,6 @@ def merged_tails(*, rows: Iterable[Row]) -> tuple[RunTail, ...]:
         )
         for calls, weight, at in passes
     ))
-
 
 
 class StationRuns:

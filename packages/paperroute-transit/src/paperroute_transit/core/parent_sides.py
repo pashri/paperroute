@@ -141,15 +141,15 @@ def line_pairs(
         key = station.stop_id
         if key in chosen:
             continue
-        found = (
+        oriented = (
             parent_pair(line=line, index=index, parents=parents[key])
             if key in parents
             else None
         )
-        if found is None and key in pairs:
-            found = pairs[key]
-            found = None if found.other.stop_id == key else found
-        chosen[key] = found
+        if oriented is None and key in pairs:
+            facing = pairs[key]
+            oriented = None if facing.other.stop_id == key else facing
+        chosen[key] = oriented
     return tuple(pair for pair in chosen.values() if pair is not None)
 
 

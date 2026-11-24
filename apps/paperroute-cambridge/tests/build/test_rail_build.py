@@ -569,7 +569,7 @@ def test_the_train_chooser_walks_kind_station_to(
     assert pin.origin.stop_id == 'rail:CBG'
     assert pin.destination is not None
     assert pin.destination.stop_id == 'rail:ELY'
-    assert pin.routes == ()
+    assert not pin.routes
 
 
 def test_each_train_line_has_its_own_stations(norwich_built: Path) -> None:
@@ -1082,6 +1082,7 @@ def run_here(path: str, argv: list[str]) -> NoReturn:
     ids=['first-night', 'new-copy', 'stored-copy', 'every-build'],
 )
 def test_a_handed_over_build_falls_back_when_the_run_tables_fail(
+    *,
     data_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str], good_first: bool, new_copy: bool,
     fault: str, expected: tuple[int, dict[str, int], int, list[list[str]]],
@@ -1177,7 +1178,7 @@ def test_trains_reach_every_later_station(rail_built: Path) -> None:
         'London Liverpool Street', 'London St Pancras International',
         'Royston',
     ]
-    assert buses == ()
+    assert not buses
 
 
 def test_route_trips_sort_rail_and_bods_by_feed_source(

@@ -40,7 +40,7 @@ def test_coach_sightings_skip_an_incomplete_activity(
     activity: tuple[str, str, str, str, str],
 ) -> None:
     """Coach sightings skip an incomplete activity."""
-    assert coach_sightings(data=siri_body(activities=(activity,))) == ()
+    assert not coach_sightings(data=siri_body(activities=(activity,)))
 
 
 def test_coach_sightings_raise_feed_error_on_bad_xml() -> None:

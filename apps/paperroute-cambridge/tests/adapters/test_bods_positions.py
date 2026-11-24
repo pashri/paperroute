@@ -64,7 +64,7 @@ def test_parse_positions_accepts_a_body_with_no_vehicle() -> None:
         fetched_at=NOW,
         projection=CAMBRIDGE_PROJECTION,
     )
-    assert snapshot.vehicles == ()
+    assert not snapshot.vehicles
     assert snapshot.header_time == 1_000
 
 

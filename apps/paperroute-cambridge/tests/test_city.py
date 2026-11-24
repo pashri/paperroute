@@ -91,6 +91,7 @@ def test_city_has_the_spec_values() -> None:
     ],
 )
 def test_classify_cambridge(
+    *,
     route_type: int,
     agency: str,
     short: str,
@@ -198,7 +199,7 @@ def test_cambridge_name_rules_cut_at_the_dash_with_no_joining_words() -> None:
     """Cambridge cuts at the dash and keeps joining words as written."""
     assert CAMBRIDGE.name_rules == CAMBRIDGE_NAMES
     assert CAMBRIDGE_NAMES.dash
-    assert CAMBRIDGE_NAMES.joining == ()
+    assert not CAMBRIDGE_NAMES.joining
     assert 'London' in CAMBRIDGE_NAMES.centres
 
 

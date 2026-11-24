@@ -27,7 +27,7 @@ def test_only_buses_have_a_trips_feed() -> None:
     """Buses have the estimates feed; coaches have none; nothing has alerts."""
     assert PLAN.trip_feed(source='bus') == ESTIMATES_FEED
     assert PLAN.trip_feed(source='coach') is None
-    assert PLAN.alert_feeds(sources=SOURCES) == ()
+    assert not PLAN.alert_feeds(sources=SOURCES)
     assert PLAN.single_line_type(feed=POSITIONS_FEED) is None
 
 
@@ -56,7 +56,7 @@ def test_position_feeds_is_one_feed_for_a_bus_or_coach_source() -> None:
     assert PLAN.position_feeds(sources=('bus', 'coach'), box=None) == (
         POSITIONS_FEED,
     )
-    assert PLAN.position_feeds(sources=('train',), box=None) == ()
+    assert not PLAN.position_feeds(sources=('train',), box=None)
 
 
 def test_sources_of_maps_a_mode_to_its_source() -> None:

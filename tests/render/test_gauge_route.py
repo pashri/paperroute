@@ -25,6 +25,9 @@ from paperroute_transit.render.gauge_plan import (
     slot_x,
 )
 from paperroute_transit.render.gauge_route import (
+    FOLD_GAP,
+    GaugeBadge,
+    badge_span,
     bus_marker,
     draw_badge,
     draw_route_gauge,
@@ -85,11 +88,11 @@ THREE_STOPS: Final[RouteGauge] = gauge_of(3)
 WITH_BREAK: Final[RouteGauge] = gauge_of(40, end=39)
 
 
-def badge(*, x: float, bearing: float = 90.0) -> Marker:
+def badge(*, x: float, bearing: float = 90.0) -> GaugeBadge:
     """Build a live badge for route A."""
-    return Marker(
+    return GaugeBadge(marker=Marker(
         route='A', x=x, y=0.0, bearing=bearing, live=True, pinned=True,
-    )
+    ))
 
 
 def drawn(gauge: RouteGauge) -> tuple[NDArray[np.bool_], NDArray[np.bool_]]:
@@ -168,7 +171,7 @@ def test_draw_route_gauge_shows_a_folded_bus_tick_below_the_badge(
 def alone(marker: Marker, *, y: int) -> NDArray[np.bool_]:
     """Draw one badge on blank paper at the line's height."""
     canvas = Canvas(smooth=True)
-    draw_badge(canvas, marker=replace(marker, y=float(y)))
+    draw_badge(canvas, badge=GaugeBadge(marker=replace(marker, y=float(y))))
     return canvas.grey() < 128
 
 
@@ -212,45 +215,91 @@ def test_draw_route_gauge_keeps_count_boxes_free_of_dot_ink() -> None:
 
 
 def test_folded_merges_overlapping_badges_into_one_count() -> None:
-    """Overlapping badges either way become one count with no wedge."""
+    """Overlapping badges either way become one mixed count."""
     shown, ticks = folded(markers=(
         badge(x=100), badge(x=110, bearing=270.0), badge(x=118),
     ))
-    assert [(marker.route, marker.bearing) for marker in shown] == [
-        ('+3', None),
-    ]
+    assert [
+        (item.marker.route, item.marker.bearing, item.mixed)
+        for item in shown
+    ] == [('+3', None, True)]
     assert ticks == [100, 110, 118]
 
 
 def test_folded_keeps_a_shared_heading_on_a_count() -> None:
     """A count of badges facing one way keeps their heading."""
     shown, _ = folded(markers=(badge(x=100), badge(x=110)))
-    assert [(marker.route, marker.bearing) for marker in shown] == [
-        ('+2', 90.0),
+    assert [
+        (item.marker.route, item.marker.bearing, item.mixed)
+        for item in shown
+    ] == [('+2', 90.0, False)]
+
+
+def test_folded_keeps_a_merge_with_a_mixed_count_mixed() -> None:
+    """A mixed count stays mixed after taking in a one-way badge."""
+    mixed = GaugeBadge(
+        marker=replace(badge(x=100).marker, route='+2', bearing=None),
+        mixed=True,
+    )
+    shown, _ = folded(markers=(mixed, badge(x=112)))
+    assert [(item.marker.route, item.mixed) for item in shown] == [
+        ('+3', True),
     ]
 
 
+def test_folded_checks_overlap_with_the_wedges() -> None:
+    """Badges whose boxes clear but whose wedges meet fold."""
+    width = badge_box(route='A', centre=(0, 0))[2] * 2
+    shown, _ = folded(markers=(
+        badge(x=100), badge(x=100 + width + FOLD_GAP + 4),
+    ))
+    assert [item.marker.route for item in shown] == ['+2']
+
+
 def test_folded_leaves_no_badges_overlapping() -> None:
-    """No two badges drawn overlap."""
+    """No two badges drawn overlap, wedges included."""
     shown, _ = folded(markers=tuple(
         badge(x=60 + 13 * n, bearing=90.0 if n % 3 else 270.0)
         for n in range(20)
     ))
-    boxes = sorted(
-        badge_box(route=marker.route, centre=(marker.x, 0))
-        for marker in shown
-    )
+    spans = sorted(badge_span(badge=item) for item in shown)
     assert all(
-        after[0] >= before[2] + 2
-        for before, after in zip(boxes, boxes[1:])
+        after[0] >= before[1] + FOLD_GAP
+        for before, after in zip(spans, spans[1:])
     )
 
 
 def test_folded_leaves_badges_apart_unfolded() -> None:
     """Badges clear of each other stay as they are."""
     shown, ticks = folded(markers=(badge(x=100), badge(x=200)))
-    assert [marker.route for marker in shown] == ['A', 'A']
+    assert [item.marker.route for item in shown] == ['A', 'A']
     assert not ticks
+
+
+def count_ink(*, mixed: bool) -> tuple[bool, bool]:
+    """Draw a +3 count facing right; tell if ink is left and right of it."""
+    marker = Marker(
+        route='+3', x=200.0, y=100.0, bearing=None if mixed else 90.0,
+        live=False, pinned=True,
+    )
+    canvas = Canvas(smooth=True)
+    draw_badge(canvas, badge=GaugeBadge(marker=marker, mixed=mixed))
+    ink = canvas.grey() < 128
+    left, _, right, _ = badge_box(route='+3', centre=(200.0, 100.0))
+    return (
+        bool(ink[100, math.floor(left) - 8 : math.floor(left) - 2].any()),
+        bool(ink[100, math.ceil(right) + 2 : math.ceil(right) + 8].any()),
+    )
+
+
+def test_draw_badge_draws_a_wedge_each_side_of_a_mixed_count() -> None:
+    """A count mixing directions points both ways."""
+    assert count_ink(mixed=True) == (True, True)
+
+
+def test_draw_badge_draws_one_wedge_on_a_one_way_count() -> None:
+    """A count of buses one way points only that way."""
+    assert count_ink(mixed=False) == (False, True)
 
 
 @pytest.mark.parametrize('spots', [(30.0,), (30.0, 35.0)])
@@ -260,11 +309,17 @@ def test_draw_route_gauge_keeps_buses_past_the_arrow_off_the_last_disc(
     """Buses past the right arrow leave the last mark as it is bare."""
     gauge = gauge_of(40, end=20)
     busy = replace(gauge, buses=tuple(bus(spot) for spot in spots))
-    plan = route_plan(gauge=busy, keep=NONE, naming=NAMING)
-    assert plan.line.arrow
-    x = slot_x(plan=plan, slot=plan.line.marks[-1].slot)
-    rows, cols = np.ogrid[:HEIGHT, :WIDTH]
-    disc = (cols - x) ** 2 + (rows - plan.line_y) ** 2 <= (
-        DISC_RADIUS ** 2
-    )
-    assert (drawn(busy)[0][disc] == drawn(gauge)[0][disc]).all()
+
+    def disc(shown: RouteGauge) -> NDArray[np.bool_]:
+        """The ink within the last mark's disc."""
+        plan = route_plan(gauge=shown, keep=NONE, naming=NAMING)
+        assert plan.line.arrow
+        x = round(slot_x(plan=plan, slot=plan.line.marks[-1].slot))
+        y = plan.line_y
+        size = int(DISC_RADIUS)
+        rows, cols = np.ogrid[-size : size + 1, -size : size + 1]
+        inside = cols ** 2 + rows ** 2 <= size ** 2
+        ink = drawn(shown)[0][y - size : y + size + 1, x - size : x + size + 1]
+        return np.asarray(ink[inside], dtype=bool)
+
+    assert (disc(busy) == disc(gauge)).all()

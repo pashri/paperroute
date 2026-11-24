@@ -2,7 +2,7 @@
 
 import math
 from collections.abc import Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Final
 
 import numpy as np
@@ -51,9 +51,11 @@ from paperroute_transit.render.markers import (
     BADGE_HALF_HEIGHT,
     STRIP_WEDGE,
     badge_box,
+    badge_half,
     draw_dashed,
     draw_hollow,
     draw_live,
+    wedge_points,
 )
 from paperroute_transit.render.names import Naming
 from paperroute_transit.render.strip import DISC_RADIUS, TRACK_WIDTH
@@ -113,6 +115,7 @@ def line_end(*, gauge: RouteGauge) -> float:
     beyond = (
         DISC_RADIUS
         + 2 * badge_box(route=label, centre=(0, 0))[2]
+        + 2 * STRIP_WEDGE.tip
         + 2 * FOLD_GAP
         + ARROW[0]
         if past
@@ -215,6 +218,23 @@ def route_plan(
     return replace(plan, pitch=max(plan.pitch, spread))
 
 
+@dataclass(frozen=True)
+class GaugeBadge:
+    """
+    A badge or count on the gauge line.
+
+    Attributes
+    ----------
+    marker : Marker
+        What to draw and where.
+    mixed : bool
+        True for a count of buses going both ways; it points both ways.
+    """
+
+    marker: Marker
+    mixed: bool = False
+
+
 def buses_in(*, marker: Marker) -> int:
     """
     Count the buses a badge stands for.
@@ -232,42 +252,71 @@ def buses_in(*, marker: Marker) -> int:
     return int(marker.route[1:]) if marker.route.startswith('+') else 1
 
 
-def merged(*, first: Marker, second: Marker) -> Marker:
+def badge_span(*, badge: GaugeBadge) -> tuple[float, float]:
+    """
+    Give the pixel span a badge's drawing takes, wedges included.
+
+    Parameters
+    ----------
+    badge : GaugeBadge
+        The badge.
+
+    Returns
+    -------
+    tuple[float, float]
+        Left and right pixel x.
+    """
+    marker = badge.marker
+    left, _, right, _ = badge_box(route=marker.route, centre=(marker.x, 0))
+    tip = STRIP_WEDGE.tip
+    return (
+        left - (tip if badge.mixed or marker.bearing == 270.0 else 0.0),
+        right + (tip if badge.mixed or marker.bearing == 90.0 else 0.0),
+    )
+
+
+def merged(*, first: GaugeBadge, second: GaugeBadge) -> GaugeBadge:
     """
     Fold two badges into one count midway between them.
 
     Parameters
     ----------
-    first : Marker
+    first : GaugeBadge
         The left badge or count.
-    second : Marker
+    second : GaugeBadge
         The right badge or count.
 
     Returns
     -------
-    Marker
-        A count of both, keeping a heading and liveness they share.
+    GaugeBadge
+        A count of both, mixed when either was or their headings differ,
+        keeping liveness they share.
     """
-    count = buses_in(marker=first) + buses_in(marker=second)
-    return replace(
-        first,
-        route=f'+{count}',
-        x=(first.x + second.x) / 2,
-        bearing=first.bearing if first.bearing == second.bearing else None,
-        live=first.live and second.live,
-        age=None,
+    one, two = first.marker, second.marker
+    mixed = first.mixed or second.mixed or one.bearing != two.bearing
+    count = buses_in(marker=one) + buses_in(marker=two)
+    return GaugeBadge(
+        marker=replace(
+            one,
+            route=f'+{count}',
+            x=(one.x + two.x) / 2,
+            bearing=None if mixed else one.bearing,
+            live=one.live and two.live,
+            age=None,
+        ),
+        mixed=mixed,
     )
 
 
-def overlap(*, first: Marker, second: Marker) -> bool:
+def overlap(*, first: GaugeBadge, second: GaugeBadge) -> bool:
     """
-    Tell whether two badges come closer than ``FOLD_GAP``.
+    Tell whether two badges, wedges included, come within ``FOLD_GAP``.
 
     Parameters
     ----------
-    first : Marker
+    first : GaugeBadge
         The left badge.
-    second : Marker
+    second : GaugeBadge
         The right badge.
 
     Returns
@@ -275,14 +324,12 @@ def overlap(*, first: Marker, second: Marker) -> bool:
     bool
         True when they overlap or nearly touch.
     """
-    right = badge_box(route=first.route, centre=(first.x, 0))[2]
-    left = badge_box(route=second.route, centre=(second.x, 0))[0]
-    return left < right + FOLD_GAP
+    return badge_span(badge=second)[0] < badge_span(badge=first)[1] + FOLD_GAP
 
 
 def folded(
-    *, markers: Sequence[Marker],
-) -> tuple[list[Marker], list[float]]:
+    *, markers: Sequence[GaugeBadge],
+) -> tuple[list[GaugeBadge], list[float]]:
     """
     Fold overlapping badges, whichever way they face, into counts.
 
@@ -290,12 +337,12 @@ def folded(
 
     Parameters
     ----------
-    markers : Sequence[Marker]
+    markers : Sequence[GaugeBadge]
         Badges in x order.
 
     Returns
     -------
-    tuple[list[Marker], list[float]]
+    tuple[list[GaugeBadge], list[float]]
         Badges to draw, and the x of every bus folded into a count.
     """
     shown = list(markers)
@@ -307,8 +354,8 @@ def folded(
             index += 1
             continue
         ticks.update(
-            marker.x for marker in (first, second)
-            if buses_in(marker=marker) == 1
+            item.marker.x for item in (first, second)
+            if buses_in(marker=item.marker) == 1
         )
         shown[index - 1 : index + 1] = [
             merged(first=first, second=second),
@@ -336,7 +383,7 @@ def past_end(*, plan: GaugePlan, bus: BusSlot) -> bool:
     return bus.slot > plan.line.marks[-1].slot
 
 
-def end_x(*, plan: GaugePlan, label: str) -> float:
+def end_x(*, plan: GaugePlan, badge: GaugeBadge) -> float:
     """
     Give the centre x of a badge just past the last mark.
 
@@ -344,21 +391,22 @@ def end_x(*, plan: GaugePlan, label: str) -> float:
     ----------
     plan : GaugePlan
         The measurements.
-    label : str
-        The badge's text.
+    badge : GaugeBadge
+        The badge.
 
     Returns
     -------
     float
-        Pixel x, the badge ``FOLD_GAP`` clear of the last mark.
+        Pixel x, the badge and its wedges ``FOLD_GAP`` clear of the last
+        mark.
     """
     last = plan.line.marks[-1]
-    half = badge_box(route=label, centre=(0, 0))[2]
     return (
         slot_x(plan=plan, slot=last.slot)
         + mark_edge(kind=last.kind)
         + FOLD_GAP
-        + half
+        + badge.marker.x
+        - badge_span(badge=badge)[0]
     )
 
 
@@ -384,14 +432,9 @@ def bus_marker(*, plan: GaugePlan, bus: BusSlot, route: str) -> Marker:
     bearing = None if bus.right is None else (
         90.0 if bus.right else 270.0
     )
-    label = f'+{bus.count}' if bus.count else route
     return Marker(
-        route=label,
-        x=(
-            end_x(plan=plan, label=label)
-            if past_end(plan=plan, bus=bus)
-            else slot_x(plan=plan, slot=bus.slot)
-        ),
+        route=f'+{bus.count}' if bus.count else route,
+        x=slot_x(plan=plan, slot=bus.slot),
         y=float(plan.line_y),
         bearing=bearing,
         live=bool(bus.live) and not bus.count,
@@ -399,7 +442,35 @@ def bus_marker(*, plan: GaugePlan, bus: BusSlot, route: str) -> Marker:
     )
 
 
-def draw_badge(canvas: Canvas, *, marker: Marker) -> None:
+def bus_badge(*, plan: GaugePlan, bus: BusSlot, route: str) -> GaugeBadge:
+    """
+    Make the gauge badge for a bus or a count placed on the line.
+
+    Parameters
+    ----------
+    plan : GaugePlan
+        The measurements.
+    bus : BusSlot
+        The placed bus.
+    route : str
+        Route label.
+
+    Returns
+    -------
+    GaugeBadge
+        The badge; a count whose buses differ in direction is mixed.
+    """
+    mixed = bool(bus.count) and bus.right is None
+    marker = bus_marker(plan=plan, bus=bus, route=route)
+    if past_end(plan=plan, bus=bus):
+        marker = replace(
+            marker,
+            x=end_x(plan=plan, badge=GaugeBadge(marker=marker, mixed=mixed)),
+        )
+    return GaugeBadge(marker=marker, mixed=mixed)
+
+
+def draw_badge(canvas: Canvas, *, badge: GaugeBadge) -> None:
     """
     Draw one badge centred on the line.
 
@@ -407,11 +478,24 @@ def draw_badge(canvas: Canvas, *, marker: Marker) -> None:
     ----------
     canvas : Canvas
         Target.
-    marker : Marker
+    badge : GaugeBadge
         The badge.
     """
+    marker = badge.marker
     centre = (marker.x, marker.y)
-    if marker.bearing is None:
+    if badge.mixed:
+        draw_hollow(canvas, marker=marker, centre=centre)
+        for bearing in (90.0, 270.0):
+            canvas.polygon(
+                points=wedge_points(
+                    centre=centre,
+                    half=badge_half(route=marker.route),
+                    bearing=bearing,
+                    size=STRIP_WEDGE,
+                ),
+                grey=INK,
+            )
+    elif marker.bearing is None:
         draw_hollow(canvas, marker=marker, centre=centre)
     elif buses_in(marker=marker) > 1:
         draw_hollow(
@@ -437,12 +521,12 @@ def draw_buses(canvas: Canvas, *, plan: GaugePlan, route: str) -> None:
         Route label.
     """
     markers, ticks = folded(markers=[
-        bus_marker(plan=plan, bus=bus, route=route)
+        bus_badge(plan=plan, bus=bus, route=route)
         for bus in plan.line.buses
         if not past_end(plan=plan, bus=bus)
     ])
     markers.extend(
-        bus_marker(plan=plan, bus=bus, route=route)
+        bus_badge(plan=plan, bus=bus, route=route)
         for bus in plan.line.buses
         if past_end(plan=plan, bus=bus)
     )
@@ -454,7 +538,7 @@ def draw_buses(canvas: Canvas, *, plan: GaugePlan, route: str) -> None:
             grey=INK,
         )
     for marker in markers:
-        draw_badge(canvas, marker=marker)
+        draw_badge(canvas, badge=marker)
 
 
 def draw_end(canvas: Canvas, *, plan: GaugePlan, route: str) -> None:
@@ -473,9 +557,9 @@ def draw_end(canvas: Canvas, *, plan: GaugePlan, route: str) -> None:
     past = [bus for bus in plan.line.buses if past_end(plan=plan, bus=bus)]
     if not past:
         return
-    marker = bus_marker(plan=plan, bus=past[0], route=route)
-    right = badge_box(route=marker.route, centre=(marker.x, 0))[2]
-    head = right + FOLD_GAP
+    head = badge_span(
+        badge=bus_badge(plan=plan, bus=past[0], route=route),
+    )[1] + FOLD_GAP
     start = slot_x(plan=plan, slot=plan.line.marks[-1].slot)
     band(
         canvas, left=start, right=head, y=plan.line_y, height=TRACK_WIDTH,

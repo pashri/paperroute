@@ -331,10 +331,12 @@ def drawn_gauge(
     draw_badge = gauge_route.draw_badge
     route_plan = gauge_route.route_plan
 
-    def kept_badge(canvas: skia.Canvas, *, marker: Marker) -> None:
+    def kept_badge(
+        canvas: skia.Canvas, *, badge: gauge_route.GaugeBadge,
+    ) -> None:
         """Record a badge and draw it."""
-        badges.append(marker)
-        draw_badge(canvas, marker=marker)
+        badges.append(badge.marker)
+        draw_badge(canvas, badge=badge)
 
     def kept_lines(**inputs: object) -> tuple[tuple[str, ...], ...]:
         """Record the name lines and return them."""

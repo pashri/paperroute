@@ -15,14 +15,13 @@ from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.core.chooser import Column, Level
 from paperroute_transit.core.model import Pin, StopPlace
-from tests.adapters.test_network_db import (
+from tests.adapters.network_db.helpers import (
     LINE_CITY,
     T1,
-    build_network,
     merge_e2_into_r3,
     set_runs,
 )
-from tests.build.network_feed import network_files
+from tests.build.network_feed import build_network_db, network_files
 from tests.helpers import schema_five
 
 DAY: Final[date] = date(2026, 10, 5)
@@ -48,7 +47,7 @@ def _copy(tmp_path: Path) -> Path:
     Path
         Timetable file.
     """
-    return build_network(folder=tmp_path)
+    return build_network_db(folder=tmp_path)
 
 
 def to_column(*, path: Path, origin: str) -> Column:

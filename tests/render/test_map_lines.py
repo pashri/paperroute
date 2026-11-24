@@ -20,7 +20,14 @@ from paperroute_transit.core.map_view import MAP_WIDTH, screen_point
 from paperroute_transit.core.tiles import TILE, TileVariant, to_pixels
 from paperroute_transit.render.map_base import draw_map_base
 from paperroute_transit.render.map_lines import line_parts
-from tests.render.map_base.helpers import CENTRE, LABEL_SHIFT, MPP, base, build, centre_row
+from tests.render.map_base.helpers import (
+    CENTRE,
+    LABEL_SHIFT,
+    MPP,
+    base,
+    build,
+    centre_row,
+)
 from tests.render.map_base.helpers import pattern as pattern_of
 from tests.render.map_base.helpers import stop_tile, street
 

@@ -72,8 +72,8 @@ from paperroute_transit.core.saved import (
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import stop_view_of
 from paperroute_transit.core.stop_view import StopView
-from tests.core.test_rebuild import failed_at, pinned
 from tests.core.state.helpers import at, fresh, loaded
+from tests.core.test_rebuild import failed_at, pinned
 
 
 def test_settings_change_is_saved() -> None:

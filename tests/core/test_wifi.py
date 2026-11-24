@@ -47,9 +47,9 @@ from paperroute_transit.core.messages import FetchFeed, RebuildTimetable
 from paperroute_transit.core.saved import LiveView
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import stop_view_of
+from tests.core.state.helpers import fresh, loaded
 from tests.core.test_menu import BOTH, DOWN, UP, opened_at, renders, run
 from tests.core.test_rebuild import pinned
-from tests.core.state.helpers import fresh, loaded
 
 PASSWORD: Final[str] = '7Q4K9W2M'
 HOME: Final[WifiNetwork] = WifiNetwork(

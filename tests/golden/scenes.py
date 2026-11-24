@@ -123,13 +123,19 @@ from paperroute_transit.core.tiles import (
     TileVariant,
 )
 from paperroute_transit.transit_app import TransitApp
-from tests.core.chooser_walks import BUSY_PAIR, at_kerbs, at_routes, at_towards
-from tests.core.test_alerts_view import on_alerts
 from tests.core.chains.helpers import TRAINS
+from tests.core.chooser_walks import BUSY_PAIR, at_kerbs, at_routes, at_towards
+from tests.core.state.helpers import (
+    BUS_POSITIONS,
+    CENTRE,
+    PRESS,
+    fresh,
+    loaded,
+)
+from tests.core.test_alerts_view import on_alerts
 from tests.core.test_connection import late_legs
 from tests.core.test_connection_screens import started, with_legs
 from tests.core.test_connection_strip import PATTERNS as LEG_PATTERNS
-from tests.core.state.helpers import BUS_POSITIONS, CENTRE, PRESS, fresh, loaded
 from tests.core.test_stop_hero import FROM, RUN, STAND
 from tests.core.test_stop_hero import stop as call_at
 

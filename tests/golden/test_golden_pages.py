@@ -31,10 +31,10 @@ from paperroute_transit.adapters.settings_form import form_values
 from tests.adapters.test_device_data import BUSES
 from tests.adapters.test_device_data import SYDNEY_STATUS as STATUS
 from tests.adapters.test_device_data import TRAINS
-from tests.adapters.web_pins.helpers import HOME, ODD, WORK, Pins
 from tests.adapters.test_web_suggest import NOW as SEARCH_NOW
 from tests.adapters.test_web_suggest import PLATFORMS
 from tests.adapters.transit_web import transit_display
+from tests.adapters.web_pins.helpers import HOME, ODD, WORK, Pins
 from tests.golden.scenes import GOLDEN, baseline_bytes
 from tests.golden.test_golden_state import RICH_SAVED
 from tests.planner_fakes import FakeTripPlanner

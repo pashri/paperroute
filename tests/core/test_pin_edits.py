@@ -24,12 +24,12 @@ from paperroute_transit.core.pin_edits import on_pin_edit
 from paperroute_transit.core.places import toggled
 from paperroute_transit.core.sides import ParentKerb, ParentKerbs
 from paperroute_transit.core.state_model import Places, State
+from tests.core.state.helpers import effects_of
 from tests.core.test_places import FIRST as A
 from tests.core.test_places import SECOND as B
 from tests.core.test_places import THIRD as C
 from tests.core.test_places import state_with
 from tests.core.test_sleep import asleep
-from tests.core.state.helpers import effects_of
 
 D = Pin(origin=replace(A.origin, stop_id='fourth'))
 

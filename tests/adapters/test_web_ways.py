@@ -23,8 +23,8 @@ from paperroute_transit.observers import PinsSeen
 from tests.adapters.test_connection_editor import OPTIONS
 from tests.adapters.test_web_connection import unlabelled
 from tests.adapters.test_web_device import sydney_site
-from tests.adapters.web_pins.helpers import Pins, check_danger_card
 from tests.adapters.transit_web import transit_display
+from tests.adapters.web_pins.helpers import Pins, check_danger_card
 
 Client = TestClient[web.Request, web.Application]
 REF = pin_ref(pin=WORK)

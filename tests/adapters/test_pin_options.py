@@ -18,11 +18,7 @@ from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.pin_choices import kind_names
 from paperroute_transit.core.reach import RowKind, StripKey, build_reach
 from paperroute_transit.core.route_colours import RouteColour
-from tests.adapters.test_network_db import (
-    add_named_lines,
-    build_network,
-    set_runs,
-)
+from tests.adapters.network_db.helpers import add_named_lines, set_runs
 
 SCHOOL_RUN: str = (
     "INSERT INTO runs VALUES (90, 'school', 'S901', '[\"B1\", \"B2\"]', 3)"
@@ -33,6 +29,7 @@ REPLACEMENT_RUN: str = (
 STOP_ROWS: str = (
     "INSERT INTO run_stops VALUES ('B2', 90, 1), ('B2', 91, 0)"
 )
+from tests.build.network_feed import build_network_db
 
 
 @pytest.fixture(name='built', scope='module')
@@ -50,7 +47,7 @@ def _built(tmp_path_factory: pytest.TempPathFactory) -> Path:
     Path
         Timetable file.
     """
-    return build_network(folder=tmp_path_factory.mktemp('options'))
+    return build_network_db(folder=tmp_path_factory.mktemp('options'))
 
 
 @pytest.fixture(name='network')

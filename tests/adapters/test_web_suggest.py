@@ -17,8 +17,8 @@ from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages
 from tests.adapters.test_connection_editor import OPTIONS
 from tests.adapters.test_web_device import sydney_site
-from tests.adapters.web_pins.helpers import Pins
 from tests.adapters.transit_web import transit_display
+from tests.adapters.web_pins.helpers import Pins
 from tests.planner_fakes import FakeTripPlanner
 
 Client = TestClient[web.Request, web.Application]

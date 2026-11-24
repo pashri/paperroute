@@ -51,9 +51,9 @@ from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import live_stop_view
 from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.render.trip_marks import END_DISC, END_EDGE
+from tests.core.state.helpers import BUSES, CENTRE, PIN, fresh, loaded
 from tests.core.test_connection import loaded as connection_loaded
 from tests.core.test_menu import BOTH, DOWN, run, turn
-from tests.core.state.helpers import BUSES, CENTRE, PIN, fresh, loaded
 
 
 def asleep() -> State:

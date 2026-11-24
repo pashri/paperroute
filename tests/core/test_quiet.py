@@ -45,8 +45,8 @@ from paperroute_transit.core.places import shown
 from paperroute_transit.core.saved import Rate
 from paperroute_transit.core.state_model import Places, State
 from paperroute_transit.core.stop_view import StopView
-from tests.core.test_menu import DOWN, run, turn
 from tests.core.state.helpers import BUSES, PINS, fresh
+from tests.core.test_menu import DOWN, run, turn
 
 DAY: Final[date] = START.date()
 HALF_MINUTE: Final[timedelta] = timedelta(seconds=30)

@@ -1,9 +1,13 @@
 """A small rail and bus network with blocks, for run and chooser tests."""
 
+from datetime import date
 from pathlib import Path
 from typing import Final
 
+from paperroute_sydney.city import SYDNEY_REF
 from paperroute_testkit.build.feed_zip import write_feed
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.timetable import Window, build_timetable
 from tests.build.feeds import DAILY, stop_times
 
 LAT: Final[float] = -33.88
@@ -239,3 +243,32 @@ def network_feed(*, path: Path) -> Path:
         The zip.
     """
     return write_feed(path=path, files=network_files())
+
+
+def build_network_db(*, folder: Path) -> Path:
+    """
+    Build the network feed, with its run tables, over a 3-day window.
+
+    Parameters
+    ----------
+    folder : Path
+        Directory to build in.
+
+    Returns
+    -------
+    Path
+        Timetable file.
+    """
+    out = folder / 'timetable.db'
+    build_timetable(
+        sources=[
+            Source(
+                name='sydneytrains',
+                archive=network_feed(path=folder / 'network.zip'),
+            ),
+        ],
+        window=Window(start=date(2026, 10, 5), days=3),
+        out=out,
+        city_ref=SYDNEY_REF,
+    )
+    return out

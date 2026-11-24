@@ -52,9 +52,9 @@ from paperroute_transit.core.saved import BoardSettings, Settings, StopSides
 from paperroute_transit.core.sides import SIDES_ROWS
 from paperroute_transit.observers import Timings
 from paperroute_transit.transit_app import TransitApp
+from tests.app_effects.helpers import VersionFailingTimetable
 from tests.app_factories import REAL
 from tests.core.state.helpers import fresh, loaded
-from tests.app_effects.helpers import VersionFailingTimetable
 
 APP = TransitApp(city=SYDNEY, parts=QUIET_PARTS)
 CORE_IMPORTS: Final[str] = (

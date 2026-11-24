@@ -8,7 +8,7 @@ from paperroute_device_testkit.hardware_fakes import FakePanelBus
 from paperroute_hardware.adapters.epaper import PanelTimeout, Uc8179
 from paperroute_hardware.render.panel_bits import Box
 
-WINDOW = bytes.fromhex('00C80257' '00A0013F' '01')
+WINDOW = bytes.fromhex('00C80257 00A0013F 01')
 BOX = Box(200, 160, 600, 320)
 
 
@@ -233,7 +233,7 @@ def test_draw_full_drives_black_again() -> None:
     quick = commands[start:]
     assert (0xE5, b'\x6e') in quick
     assert (0x50, bytes.fromhex('A907')) in quick
-    assert (0x90, bytes.fromhex('0000031F' '000001DF' '01')) in quick
+    assert (0x90, bytes.fromhex('0000031F 000001DF 01')) in quick
     assert (0x10, b'\xff' * 48000) in quick
     assert (0x13, b'\x77' * 48000) in quick
 

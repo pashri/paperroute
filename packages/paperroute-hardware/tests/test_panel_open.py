@@ -4,7 +4,7 @@
 from paperroute_hardware.adapters.panel_display import PanelDisplay
 from paperroute_hardware.panel_open import panel_times_for
 from paperroute_hardware.ports import PanelTimes
-from tests.adapters.test_panel_display import GatedController
+from tests.adapters.panel_display.helpers import GatedController
 
 
 def test_panel_times_for_not_wanted() -> None:

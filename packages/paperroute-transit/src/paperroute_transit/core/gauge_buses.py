@@ -5,12 +5,19 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, tzinfo
 from itertools import pairwise
+from typing import Final
 
 from paperroute_transit.core.geo import Point, project_onto_segment
+from paperroute_transit.core.memo import SameMemo
 from paperroute_transit.core.model import service_seconds
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.positions import VehiclePosition
 from paperroute_transit.core.route_trips import RouteTrip
+
+MEMO_SIZE: Final[int] = 512
+HERO_STOPS: Final[SameMemo[list[tuple[int, float]]]] = SameMemo(
+    size=MEMO_SIZE,
+)
 
 
 @dataclass(frozen=True)
@@ -283,8 +290,17 @@ def hero_spot(
         neighbouring stops map to; zero when the hero has no stop with a
         position.
     """
-    known = known or index_hero(hero=hero)
-    stops = hero_stops(known=known, pattern=pattern, right=right)
+    inputs = (hero, pattern, right)
+    stops = HERO_STOPS.get(inputs=inputs)
+    if stops is None:
+        stops = HERO_STOPS.put(
+            inputs=inputs,
+            value=hero_stops(
+                known=known or index_hero(hero=hero),
+                pattern=pattern,
+                right=right,
+            ),
+        )
     if not stops:
         return 0.0
     if index <= stops[0][0]:

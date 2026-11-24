@@ -24,19 +24,12 @@ from paperroute_transit.core.patterns import (
     timetable_point,
     without_stated,
 )
+from tests.core.builders import DIAGONAL
 
 ZONE: Final[ZoneInfo] = city_under_test().zone
 CORNER = make_shape(
     shape_id='L',
     points=[(0.0, 0.0), (1000.0, 0.0), (1000.0, 1000.0)],
-)
-DIAGONAL = (
-    PatternStop(arrives=EIGHT, departs=EIGHT, point=(0.0, 0.0)),
-    PatternStop(
-        arrives=EIGHT + TEN_MINUTES,
-        departs=EIGHT + TEN_MINUTES,
-        point=(1000.0, 1000.0),
-    ),
 )
 
 HALFWAY = START + timedelta(minutes=5)

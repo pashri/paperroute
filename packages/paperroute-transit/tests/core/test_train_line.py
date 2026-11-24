@@ -2,10 +2,8 @@
 
 from datetime import timedelta
 
-from paperroute_testkit.city_setting import city_under_test
 from paperroute_testkit.core.factories import (
     EIGHT,
-    STALE_LIMIT,
     START,
     calls,
     departure,
@@ -23,6 +21,7 @@ from paperroute_transit.core.train_line import (
     train_reach,
 )
 from paperroute_transit.core.train_network import Hop, TrainNetwork, WeekdayRun
+from tests.core.builders import trip_inputs
 
 
 def trip_of(*, stations: tuple[str, ...], trip_id: str = 'a') -> TripPattern:
@@ -66,21 +65,14 @@ def trips_of(
     TripInputs
         The inputs, at 8:00.
     """
-    return TripInputs(
+    return trip_inputs(
         departures=tuple(
             live(item=departure(
                 departs=START + timedelta(minutes=10), trip_id=trip_id,
             ))
             for trip_id in ids
         ),
-        key=None,
         patterns=patterns,
-        positions={},
-        now=START,
-        stale_after=STALE_LIMIT,
-        zone=city_under_test().zone,
-        station_of={},
-        line_kinds=frozenset(),
     )
 
 

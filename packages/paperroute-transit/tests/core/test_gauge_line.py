@@ -5,8 +5,8 @@ from typing import Final
 from paperroute_transit.core.gauge_ends import route_line
 from paperroute_transit.core.gauge_line import GaugeLine, GaugeRun, MarkKind
 from paperroute_transit.core.names import JOINING_WORDS, NameRules
-from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.stop_under import GaugeCall
+from tests.core.builders import named_pattern
 
 PLAIN: Final[NameRules] = NameRules()
 JOINED: Final[NameRules] = NameRules(joining=JOINING_WORDS)
@@ -35,24 +35,7 @@ def line(
 ) -> GaugeLine:
     """Lay out a gauge from a first-stop From, `end` among the calls."""
     names = (origin, *(call.name for call in found))
-    pattern = TripPattern(
-        trip_id='t',
-        route='6',
-        source='s',
-        shape_id=None,
-        stops=tuple(
-            PatternStop(
-                arrives=0,
-                departs=0,
-                point=None,
-                station=f'S{index}',
-                name=name,
-                passes=False,
-            )
-            for index, name in enumerate(names)
-        ),
-        days=(),
-    )
+    pattern = named_pattern(route='6', names=names, days=())
     return route_line(
         pattern=pattern,
         start=0,

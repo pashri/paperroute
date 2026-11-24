@@ -14,8 +14,8 @@ from paperroute_transit.core.gauge_line import (
     MarkKind,
 )
 from paperroute_transit.core.names import NameRules
-from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.stop_under import GaugeCall
+from tests.core.builders import named_pattern
 
 
 def bus(spot: float, *, right: bool = True, live: bool = False) -> GaugeBus:
@@ -99,22 +99,9 @@ def test_placed_folds_buses_past_the_right_arrow_past_the_last_mark(
 
 def test_route_line_places_its_buses() -> None:
     """The line carries its buses at their slots."""
-    pattern = TripPattern(
-        trip_id='t',
+    pattern = named_pattern(
         route='1',
-        source='s',
-        shape_id=None,
-        stops=tuple(
-            PatternStop(
-                arrives=0,
-                departs=0,
-                point=None,
-                station=f'S{n}',
-                name=f'Stop {n}',
-                passes=False,
-            )
-            for n in range(12)
-        ),
+        names=[f'Stop {n}' for n in range(12)],
         days=(date(2026, 11, 23),),
     )
     calls = tuple(

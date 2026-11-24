@@ -56,13 +56,13 @@ def reach_from(*, specs: Sequence[RowSpec], above: int = 0) -> Reach:
         )
         for index, (name, depth, parent, trips) in enumerate(specs)
     )
-    names = [name for name, *_ in specs]
+    labels = [name for name, *_ in specs]
     return Reach(
         rows=rows,
         stations=len(rows) - 1,
         station_of={
-            **{name: name for name in names},
-            **{f'{name}_1': name for name in names},
+            **{name: name for name in labels},
+            **{f'{name}_1': name for name in labels},
         },
     )
 

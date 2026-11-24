@@ -274,16 +274,17 @@ def raw_tiles(*, out: Path, blob: bytes | None) -> None:
     blob : bytes | None
         The stored tile, or None for NULL.
     """
-    with closing(sqlite3.connect(out)) as conn, conn:
-        conn.execute('CREATE TABLE meta (key TEXT, value TEXT)')
-        conn.execute("INSERT INTO meta VALUES ('built_at', 'corrupt')")
-        conn.execute(
-            'CREATE TABLE tiles (zoom INTEGER, col INTEGER, row INTEGER,'
-            ' grey BLOB, bits BLOB)'
-        )
-        conn.execute(
-            'INSERT INTO tiles VALUES (14, 3, 4, ?, ?)', (blob, blob)
-        )
+    with closing(sqlite3.connect(out)) as conn:
+        with conn:
+            conn.execute('CREATE TABLE meta (key TEXT, value TEXT)')
+            conn.execute("INSERT INTO meta VALUES ('built_at', 'corrupt')")
+            conn.execute(
+                'CREATE TABLE tiles (zoom INTEGER, col INTEGER, row INTEGER,'
+                ' grey BLOB, bits BLOB)'
+            )
+            conn.execute(
+                'INSERT INTO tiles VALUES (14, 3, 4, ?, ?)', (blob, blob)
+            )
 
 
 @pytest.mark.parametrize(
@@ -395,7 +396,7 @@ def test_bad_zooms_do_not_fit(tmp_path: Path) -> None:
         assert not repo.fits(origin=ORIGIN)
 
 
-def test_unreadable_meta_does_not_fit(tmp_path: Path) -> None:
+def test_unreadable_meta_does_not_fit() -> None:
     """A meta table that can't be read doesn't fit."""
     with closing(sqlite3.connect(':memory:')) as conn:
         conn.execute('CREATE TABLE meta (k TEXT)')

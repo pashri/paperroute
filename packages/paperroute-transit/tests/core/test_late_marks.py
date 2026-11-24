@@ -1,3 +1,5 @@
+"""Tests for the lateness marks on stop rows."""
+
 from dataclasses import replace
 
 from paperroute_testkit.render.factories import stop_row

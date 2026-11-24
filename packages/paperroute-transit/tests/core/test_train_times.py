@@ -3,13 +3,7 @@
 from dataclasses import replace
 from datetime import timedelta
 
-from paperroute_testkit.city_setting import city_under_test
-from paperroute_testkit.core.factories import (
-    STALE_LIMIT,
-    START,
-    departure,
-    live,
-)
+from paperroute_testkit.core.factories import START, departure, live
 from paperroute_transit.core.model import CarryOn, StopPlace
 from paperroute_transit.core.reach import Reach, ReachInput, ReachRow, RowKind
 from paperroute_transit.core.strip_times import TripInputs
@@ -19,6 +13,7 @@ from paperroute_transit.core.train_times import (
     train_note,
     train_times,
 )
+from tests.core.builders import trip_inputs
 
 HERE = StopPlace(stop_id='C', name='C', point=None)
 SOURCE = ReachInput(
@@ -73,18 +68,11 @@ def trips_of(*, then: CarryOn | None) -> TripInputs:
     TripInputs
         The inputs, at 8:00.
     """
-    return TripInputs(
+    return trip_inputs(
         departures=(live(item=departure(
             departs=START, trip_id='a', then=then,
         )),),
-        key=None,
         patterns={},
-        positions={},
-        now=START,
-        stale_after=STALE_LIMIT,
-        zone=city_under_test().zone,
-        station_of={},
-        line_kinds=frozenset(),
     )
 
 

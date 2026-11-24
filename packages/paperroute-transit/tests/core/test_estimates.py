@@ -53,7 +53,7 @@ def bus(*, x: float, seconds: int, trip_id: str = 't1') -> VehiclePosition:
 def made(
     *buses: VehiclePosition,
     fetched: int,
-    patterns: dict[str, TripPattern | None] = BOTH,
+    patterns: dict[str, TripPattern | None] | None = None,
     trip_ids: frozenset[str] = frozenset({'t1', 't2'}),
     limit: timedelta = LIMIT,
     turns: dict[str, str] | None = None,
@@ -63,7 +63,7 @@ def made(
         positions=snapshot(
             fetched_at=START + timedelta(seconds=fetched), vehicles=buses,
         ),
-        patterns=patterns,
+        patterns=BOTH if patterns is None else patterns,
         shapes={},
         trip_ids=trip_ids,
         limit=limit,

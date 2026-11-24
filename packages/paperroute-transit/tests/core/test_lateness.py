@@ -7,13 +7,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from paperroute_testkit.city_setting import city_under_test
-from paperroute_testkit.core.factories import (
-    EIGHT,
-    START,
-    TEN_MINUTES,
-    pattern,
-    vehicle,
-)
+from paperroute_testkit.core.factories import EIGHT, START, pattern, vehicle
 from paperroute_transit.core.geo import Point, make_shape
 from paperroute_transit.core.lateness import (
     Line,
@@ -23,19 +17,12 @@ from paperroute_transit.core.lateness import (
     timetable_at,
 )
 from paperroute_transit.core.patterns import PatternStop, TripPattern, measure
+from tests.core.builders import DIAGONAL
 
 ZONE: Final[ZoneInfo] = city_under_test().zone
 EAST: Final[TripPattern] = pattern()  # (0, 0) at 8:00 to (1000, 0) at 8:10
 CORNER = make_shape(
     shape_id='L', points=[(0.0, 0.0), (1000.0, 0.0), (1000.0, 1000.0)],
-)
-DIAGONAL = (
-    PatternStop(arrives=EIGHT, departs=EIGHT, point=(0.0, 0.0)),
-    PatternStop(
-        arrives=EIGHT + TEN_MINUTES,
-        departs=EIGHT + TEN_MINUTES,
-        point=(1000.0, 1000.0),
-    ),
 )
 U_TURN = make_shape(
     shape_id='U',

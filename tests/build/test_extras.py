@@ -46,7 +46,9 @@ CHILD_RUN: Final[str] = (
     'import runpy, sys\n'
     "sys.argv = ['extras', *sys.argv[1:]]\n"
     'try:\n'
-    "    runpy.run_module('paperroute_transit.build.extras', run_name='__main__')\n"
+    '    runpy.run_module(\n'
+    "        'paperroute_transit.build.extras', run_name='__main__'\n"
+    '    )\n'
     'except SystemExit as stop:\n'
     '    assert stop.code == 0, stop.code\n'
     'else:\n'
@@ -371,7 +373,9 @@ def test_extras_run_in_a_child(
 def test_extras_never_import_numpy(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The extras module and its real child run load neither numpy nor aiohttp."""
+    """
+    The extras module and its real child run load neither numpy nor aiohttp.
+    """
     imported = subprocess.run(
         [sys.executable, '-c', IMPORTS_ONLY],
         check=False, capture_output=True, text=True,

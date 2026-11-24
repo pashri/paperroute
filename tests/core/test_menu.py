@@ -347,7 +347,9 @@ def test_phone_reset_asks_on_panel() -> None:
     view = renders(effects=effects)[0]
     assert isinstance(view, ConfirmView)
     assert 'Asked for from a phone on your Wi-Fi.' in view.lines
-    assert device_status(device=device_of(state=state)).asked is ConfirmAction.RESET_SETTINGS
+    assert device_status(
+        device=device_of(state=state),
+    ).asked is ConfirmAction.RESET_SETTINGS
     _, effects = step(state, DOWN)
     assert ResetDevice(kind=ResetKind.SETTINGS) in effects
 

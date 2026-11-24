@@ -2008,7 +2008,9 @@ async def test_run_survives_a_tiles_read_error(
     assert kit.running
     assert app_of(kit=kit).map.step != 0
     assert len(display.frames) >= 4
-    unusable = [r for r in caplog.records if r.message == 'tiles file unusable']
+    unusable = [
+        r for r in caplog.records if r.message == 'tiles file unusable'
+    ]
     assert len(unusable) == 1
     assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
 
@@ -2099,7 +2101,9 @@ def test_corrupt_tile_draws_map_not_installed_and_warns_once(
         maps.frame(view=replace(map_view(), base=moved))
     missing = MapRenderer(tiles=NullTiles()).frame(view=map_view())
     assert np.array_equal(first, missing)
-    unusable = [r for r in caplog.records if r.message == 'tiles file unusable']
+    unusable = [
+        r for r in caplog.records if r.message == 'tiles file unusable'
+    ]
     assert len(unusable) == 1
 
 

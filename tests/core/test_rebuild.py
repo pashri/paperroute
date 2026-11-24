@@ -302,7 +302,10 @@ def test_chooser_works_while_outdated() -> None:
         DOWN,
         NEXT,
     ]
-    current = step(pinned(), TimetableSeen(version='v', schema=TIMETABLE_SCHEMA))[0]
+    current = step(
+        pinned(),
+        TimetableSeen(version='v', schema=TIMETABLE_SCHEMA),
+    )[0]
     outdated = step(pinned(), OLD)[0]
     assert outdated.rebuild == Rebuild(
         outdated=True,
@@ -478,7 +481,9 @@ def test_rebuild_row_starts_and_shows_device_screen() -> None:
 
 
 def test_feeds_held_until_there_is_a_timetable() -> None:
-    """No feed is fetched or counted without a timetable; one arriving polls."""
+    """
+    No feed is fetched or counted without a timetable; one arriving polls.
+    """
     state, effects = run_events(
         state=step(replace(pinned(), view=LiveView.MAP), MISSING)[0],
         events=[
@@ -512,7 +517,10 @@ def test_device_row_keeps_the_build_after_a_failure() -> None:
     state, _ = run_events(
         state=pinned(),
         events=[
-            TimetableSeen(version='2026-10-16T03:30:00+11:00', schema=TIMETABLE_SCHEMA),
+            TimetableSeen(
+                version='2026-10-16T03:30:00+11:00',
+                schema=TIMETABLE_SCHEMA,
+            ),
             TimetableRebuilt(ok=False),
         ],
     )

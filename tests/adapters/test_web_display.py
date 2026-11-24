@@ -156,7 +156,9 @@ async def test_events_sends_current_frame_version_on_connect(
     response = await client.get('/events')
     assert response.content_type == 'text/event-stream'
     assert response.headers['Cache-Control'] == 'no-store'
-    assert await _read_event(response=response) == ('frame', f'{display.live.boot}-1')
+    assert await _read_event(
+        response=response,
+    ) == ('frame', f'{display.live.boot}-1')
 
 
 async def test_events_pushes_new_versions(
@@ -165,11 +167,17 @@ async def test_events_pushes_new_versions(
     """Each new frame is pushed to an open stream."""
     display.show(frame=FRAME)
     response = await client.get('/events')
-    assert await _read_event(response=response) == ('frame', f'{display.live.boot}-1')
+    assert await _read_event(
+        response=response,
+    ) == ('frame', f'{display.live.boot}-1')
     display.show(frame=FRAME)
-    assert await _read_event(response=response) == ('frame', f'{display.live.boot}-2')
+    assert await _read_event(
+        response=response,
+    ) == ('frame', f'{display.live.boot}-2')
     display.show(frame=FRAME)
-    assert await _read_event(response=response) == ('frame', f'{display.live.boot}-3')
+    assert await _read_event(
+        response=response,
+    ) == ('frame', f'{display.live.boot}-3')
 
 
 async def test_events_pings_when_idle(
@@ -545,7 +553,11 @@ async def test_settings_page_served(
 
 async def test_settings_page_links_sheets_once() -> None:
     """The settings page links the city's sheet once, between the others."""
-    display = transit_display(status=dict, city=SYDNEY, sheets=('palette.css',))
+    display = transit_display(
+        status=dict,
+        city=SYDNEY,
+        sheets=('palette.css',),
+    )
     client = await _client(display=display)
     try:
         text = await (await client.get('/settings')).text()

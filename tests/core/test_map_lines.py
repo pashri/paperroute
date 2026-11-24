@@ -470,7 +470,9 @@ def test_a_call_far_from_the_line_is_not_ringed() -> None:
 
 
 def test_a_call_beyond_a_truncated_shape_is_not_ringed() -> None:
-    """A call farther than the ring distance past the shape's end gets no ring."""
+    """
+    A call farther than the ring distance past the shape's end gets no ring.
+    """
     near, far = (5100.0, 0.0), (5200.0, 0.0)
     assert near in sum(ringed_with(index=4, point=near), ())
     assert far not in sum(ringed_with(index=4, point=far), ())

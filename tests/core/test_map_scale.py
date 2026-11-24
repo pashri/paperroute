@@ -214,7 +214,9 @@ def test_strip_map_after_a_finer_hold_draws_at_the_rule() -> None:
     """Strip + map after the wider call draws at 8 m/px, not 5."""
     state, departures = held_finer()
     state = break_by_strip(state, departures)
-    assert drawn_zoom(state=state) == rule_zoom(state=state, width=STRIP_MAP_WIDTH)
+    assert drawn_zoom(
+        state=state,
+    ) == rule_zoom(state=state, width=STRIP_MAP_WIDTH)
 
 
 def test_sleep_after_a_coarser_hold_fits_the_rule() -> None:

@@ -138,7 +138,10 @@ def test_with_place_resets_what_belonged_to_the_old_place() -> None:
 def test_with_place_keeps_given_departures_and_their_feeds() -> None:
     """Departures handed over show at once and keep their feed's data."""
     bus = departure(departs=START + timedelta(minutes=3))
-    train = departure(departs=START + timedelta(minutes=5), mode=SydneyFeed.TRAIN)
+    train = departure(
+        departs=START + timedelta(minutes=5),
+        mode=SydneyFeed.TRAIN,
+    )
     state = replace(
         state_with(),
         board=Board(departures=(train,)),

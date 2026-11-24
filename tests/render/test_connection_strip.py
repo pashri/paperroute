@@ -107,7 +107,10 @@ def test_selected_pair_kept_on_screen() -> None:
 def test_no_pairs_draws_empty_text() -> None:
     """With no pair, the empty text is drawn left of the rule."""
     view = replace(
-        VIEW, sections=(), pairs=(), empty='No connections in the next 3 hours',
+        VIEW,
+        sections=(),
+        pairs=(),
+        empty='No connections in the next 3 hours',
     )
     frame = draw_connection_strip(view=view)
     assert frame[HEADER + 4:HEIGHT, :STRIP_RIGHT].min() == 0
@@ -254,7 +257,11 @@ def test_unmarked_stop_name_fits_the_room_for_the_time_only() -> None:
     """Without a mark the name is fitted to the time's room alone."""
     name = 'Hollis St Opp Constitution Hill Library Shops'
     canvas = Recording()
-    fitted = canvas.fit(text=name, face=END_FACE, width=name_room(left=0, right=400))
+    fitted = canvas.fit(
+        text=name,
+        face=END_FACE,
+        width=name_room(left=0, right=400),
+    )
     expected = Recording()
     expected.text(at=(NAME_LEFT, 100), text=fitted, face=END_FACE, grey=INK)
     assert (

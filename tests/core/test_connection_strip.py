@@ -192,7 +192,10 @@ def test_leg_calls_skip_passing() -> None:
     )
     trip = pattern(trip_id='a0733', stops=tuple(stops))
     calls = leg_calls(
-        item=live(item=LEG1[0]), last=live(item=LEG1[0]), pattern=trip, start='G2145615',
+        item=live(item=LEG1[0]),
+        last=live(item=LEG1[0]),
+        pattern=trip,
+        start='G2145615',
         end='G215254',
         zone=SYDNEY_ZONE,
     )
@@ -254,7 +257,10 @@ def test_leg_follows_joined_trip_to_its_end() -> None:
 def test_leg_calls_missing_end() -> None:
     """A trip that never reaches the end gives no calls."""
     calls = leg_calls(
-        item=live(item=LEG1[0]), last=live(item=LEG1[0]), pattern=FIRST_LEG, start='G2145615',
+        item=live(item=LEG1[0]),
+        last=live(item=LEG1[0]),
+        pattern=FIRST_LEG,
+        start='G2145615',
         end='nowhere',
         zone=SYDNEY_ZONE,
     )
@@ -482,7 +488,9 @@ def test_stay_pair_one_section() -> None:
     )
     (section,) = view.sections
     assert section.route == '609'
-    assert section.title == 'Hollis St Opp Constitution Hill Library → Westmead Station'
+    assert section.title == (
+        'Hollis St Opp Constitution Hill Library → Westmead Station'
+    )
     assert section.stops[-1].name == 'Westmead Station'
     assert section.stops[-1].time == '8:05'
 
@@ -528,7 +536,9 @@ def test_no_pairs_no_sections() -> None:
     )
     assert not view.sections
     assert view.selected == 0
-    assert view.empty == 'No connections to Westmead Station in the next 3 hours'
+    assert view.empty == (
+        'No connections to Westmead Station in the next 3 hours'
+    )
 
 
 def test_change_without_a_walk_says_change() -> None:

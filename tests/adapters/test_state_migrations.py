@@ -781,7 +781,10 @@ def test_move_auto_rebuild_keeps_my_hours_mode() -> None:
         city=SYDNEY,
     )
     assert data == {
-        'device': {'schema_version': 1, 'settings': {'quiet_mode': 'my_hours'}},
+        'device': {
+            'schema_version': 1,
+            'settings': {'quiet_mode': 'my_hours'},
+        },
         'board': {
             'schema_version': 1,
             'settings': {'auto_rebuild': True, 'peak_rate': '30s'},

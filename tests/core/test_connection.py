@@ -62,7 +62,10 @@ FERRY_CHANGE: Final[Change] = replace(
 FERRY_WORK: Final[Pin] = replace(WORK, ways=(Way(changes=(FERRY_CHANGE,)),))
 FERRY_LEG: Final[tuple[Departure, ...]] = (
     departure(
-        departs=at(7, 50), route='F3', mode=SydneyFeed.FERRY, trip_id='ferry-1',
+        departs=at(7, 50),
+        route='F3',
+        mode=SydneyFeed.FERRY,
+        trip_id='ferry-1',
     ),
 )
 

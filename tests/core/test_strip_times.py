@@ -234,17 +234,26 @@ def approach_times(
 
 def test_approach_times_follow_the_next_departure() -> None:
     """The earlier trip's calls give the times, shifted by its delay."""
-    on_time = approach_times(trips=approach_inputs(), origin='C', stations={'A', 'B'},
+    on_time = approach_times(
+        trips=approach_inputs(),
+        origin='C',
+        stations={'A', 'B'},
     )
     assert on_time == {'A': START + timedelta(minutes=5)}
-    late = approach_times(trips=approach_inputs(late=2), origin='C', stations={'A'},
+    late = approach_times(
+        trips=approach_inputs(late=2),
+        origin='C',
+        stations={'A'},
     )
     assert late == {'A': START + timedelta(minutes=7)}
 
 
 def test_approach_time_blank_where_trip_skips() -> None:
     """A station the next trip runs through gets no time."""
-    assert 'B' not in approach_times(trips=approach_inputs(), origin='C', stations={'A', 'B'},
+    assert 'B' not in approach_times(
+        trips=approach_inputs(),
+        origin='C',
+        stations={'A', 'B'},
     )
 
 

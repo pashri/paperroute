@@ -733,7 +733,9 @@ def test_no_tiles_keeps_scale_and_says_map_not_installed() -> None:
         tiles=NullTiles(),
         variant=TileVariant.GREY,
     )
-    assert np.all(grey[MAP_HEIGHT - 16 : MAP_HEIGHT - 12, 12 : 12 + 125] == INK)
+    assert np.all(
+        grey[MAP_HEIGHT - 16 : MAP_HEIGHT - 12, 12 : 12 + 125] == INK,
+    )
     assert grey[MAP_HEIGHT - 18, 7] == DARK
     assert np.any(grey[MAP_HEIGHT - 30 :, MAP_WIDTH - 120 :] == INK)
 

@@ -79,7 +79,10 @@ def test_confirm_view_lines() -> None:
     phone = Confirm(
         action=ConfirmAction.ERASE, origin=Origin.PHONE, asked_at=START,
     )
-    assert confirm_view(confirm=phone, copy=TRANSIT_CONFIRM_COPY) == ConfirmView(
+    assert confirm_view(
+        confirm=phone,
+        copy=TRANSIT_CONFIRM_COPY,
+    ) == ConfirmView(
         title='Settings',
         question='Erase everything?',
         lines=(
@@ -184,7 +187,12 @@ def test_panel_view_only_with_menu_or_confirm() -> None:
 
     def shown(*, state: State) -> object | None:
         device = device_of(state=state)
-        return panel_view(device=device, app=app, state=state, zone=SYDNEY_ZONE)
+        return panel_view(
+            device=device,
+            app=app,
+            state=state,
+            zone=SYDNEY_ZONE,
+        )
 
     state = pinned()
     assert shown(state=state) is None

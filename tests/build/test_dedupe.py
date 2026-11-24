@@ -653,7 +653,9 @@ def test_retimed_twin_left_alone() -> None:
 
 
 def test_same_date_twin_matched_on_arrival_only() -> None:
-    """Same date, arrivals within a minute, departures far apart: bundle kept."""
+    """
+    Same date, arrivals within a minute, departures far apart: bundle kept.
+    """
     bundle = ('Casino', '2026-10-21', 70200, 'Central', 80000)
     feed = ('Casino', '2026-10-21', 72360, 'Central', 80030)
     report, trips, aliases = twin_merge(bundle=bundle, feed=feed)

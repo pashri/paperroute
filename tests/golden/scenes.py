@@ -1141,7 +1141,11 @@ def strip_scene(*, view: LiveView) -> State:
     )
     patterns: dict[str, TripPattern | None] = {
         trip: measured(
-            made=line_pattern(trip_id=trip, stations=stations, minutes=minutes),
+            made=line_pattern(
+                trip_id=trip,
+                stations=stations,
+                minutes=minutes,
+            ),
             line=line,
         )
         for trip, (stations, minutes) in STRIP_TRIPS.items()

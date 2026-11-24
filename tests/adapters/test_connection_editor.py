@@ -156,7 +156,10 @@ def test_unknown_stop_starts_over() -> None:
 def test_draft_from_query() -> None:
     """A draft reads the form's fields; `more` asks for one change more."""
     query = MultiDict([
-        ('stop', 'G2145615'), ('off', 'G215254'), ('on', '2145648'), ('allow', '7'),
+        ('stop', 'G2145615'),
+        ('off', 'G215254'),
+        ('on', '2145648'),
+        ('allow', '7'),
         ('allow_for', '2145648'), ('off2', 'a'), ('on2', 'b'),
         ('allow2', '3'), ('allow2_for', 'b'), ('to', '214510'),
         ('changes', '1'), ('more', '1'), ('back', 'from=G'),

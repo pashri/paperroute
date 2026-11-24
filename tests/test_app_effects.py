@@ -397,7 +397,9 @@ async def test_modes_load_logs_modes_sorted(
         )
     assert posted == [
         ModesLoaded(
-            mpp=8, box=box, modes=frozenset({SydneyFeed.TRAIN, SydneyFeed.BUS}),
+            mpp=8,
+            box=box,
+            modes=frozenset({SydneyFeed.TRAIN, SydneyFeed.BUS}),
         ),
     ]
     [record] = [r for r in caplog.records if r.message == 'modes near']
@@ -831,7 +833,11 @@ async def test_service_span_failure_is_none(
         posted = await posted_by(
             ports=ports_of(timetable=SpanFailingTimetable()),
             effects=[
-                LoadServiceSpan(pin=pin, day=date(2026, 10, 16), timetable='v'),
+                LoadServiceSpan(
+                    pin=pin,
+                    day=date(2026, 10, 16),
+                    timetable='v',
+                ),
             ],
         )
     assert posted == [

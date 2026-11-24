@@ -322,7 +322,10 @@ def test_awake_map_asks_again_when_the_school_setting_flips() -> None:
         state,
         settings=replace(
             state.settings,
-            board=replace(board, skip_school_buses=not board.skip_school_buses),
+            board=replace(
+                board,
+                skip_school_buses=not board.skip_school_buses,
+            ),
         ),
     )
     (load,) = asked(state=flipped)

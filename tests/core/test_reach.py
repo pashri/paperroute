@@ -841,7 +841,7 @@ def positioned_across_reach(
     ))
 
 
-def test_build_reach_hangs_a_picked_kerb_spur_below_whatever_it_heads() -> None:
+def test_build_reach_hangs_a_picked_kerb_spur_below_what_it_heads() -> None:
     """A picked-kerb way heading the kerb across's way still hangs below."""
     points: dict[str, Point] = {
         'C': (0, 0), 'A1': (-1000, 0), 'B1': (1000, 0), 'D1': (-900, 100),

@@ -1281,7 +1281,9 @@ def test_install_release_checks_the_zone(
     build = script_function(path=BIN / 'install-release', name='build')
     assert '[[ ! $ZONE =~ $ZONE_RE || ' in build
     assert '-f "/usr/share/zoneinfo/$ZONE"' in build
-    if status == 0 and not Path('/usr/share/zoneinfo/Australia/Sydney').is_file():
+    if status == 0 and not Path(
+        '/usr/share/zoneinfo/Australia/Sydney',
+    ).is_file():
         pytest.skip('this machine has no zoneinfo for Australia/Sydney')
     tree = zone_stage(root=tmp_path, output=output)
     program = (
@@ -2775,8 +2777,12 @@ def test_before_release_moves_the_old_staged_tiles_first() -> None:
 def test_before_release_carries_on_without_the_tile_tool(
     tmp_path: Path,
 ) -> None:
-    """With no tile tool on the Pi the hook says so, uploads nothing, exits 0."""
-    script = tmp_path / 'apps' / 'paperroute-sydney' / 'scripts' / 'before-release'
+    """
+    With no tile tool on the Pi the hook says so, uploads nothing, exits 0.
+    """
+    script = (
+        tmp_path / 'apps' / 'paperroute-sydney' / 'scripts' / 'before-release'
+    )
     script.parent.mkdir(parents=True)
     shutil.copy(BEFORE_RELEASE, script)
     (tmp_path / 'data').mkdir()
@@ -3744,8 +3750,8 @@ def test_install_sudoers_refuses_a_release_path(tmp_path: Path) -> None:
         'pashri ALL=(root) NOPASSWD:'
         ' /usr/local/sbin/paperroute-demo-install-tiles'
         ' "", /usr/local/sbin/paperroute-demo-job ""',
-        'pashri ALL=(root) NOPASSWD: /usr/local/sbin/paperroute-install-release'
-        ' ""',
+        'pashri ALL=(root) NOPASSWD:'
+        ' /usr/local/sbin/paperroute-install-release ""',
         rule('demo').replace('pashri ', 'root ', 1),
         rule('demo').replace('pashri ', '#1000 ', 1),
         '# a comment that continues \\',
@@ -3903,7 +3909,9 @@ def test_app_tools_come_from_the_provisioned_copy(tmp_path: Path) -> None:
 
 @pytest.mark.parametrize('kit', ('install-release', 'install-files'))
 def test_app_tool_cannot_replace_a_kit_tool(tmp_path: Path, kit: str) -> None:
-    """An app tool named like a kit tool stops provision, installing nothing."""
+    """
+    An app tool named like a kit tool stops provision, installing nothing.
+    """
     result = run_app_tools(
         root=tmp_path,
         shipped={'install-tiles': 'tiles\n', kit: 'app copy\n'},
@@ -4114,7 +4122,11 @@ def test_an_allowed_app_part_installs_tools_then_sudoers(
 @pytest.mark.parametrize(
     ('tool', 'status', 'stderr'),
     (
-        ('Bad Name', 1, 'provision-device: app tool Bad Name is not allowed\n'),
+        (
+            'Bad Name',
+            1,
+            'provision-device: app tool Bad Name is not allowed\n',
+        ),
         ('install-job', 0, ''),
     ),
     ids=('refused', 'allowed'),
@@ -4183,7 +4195,10 @@ def test_provision_names_no_deploy_user() -> None:
     """Only the shipped sudoers default names pashri; provision does not."""
     text = script_text(path=BIN / 'provision-device')
     assert 'pashri' not in text.replace('${line/#pashri /', '')
-    assert commands(path=BIN / 'provision-device', word='paperroute-stage') == [
+    assert commands(
+        path=BIN / 'provision-device',
+        word='paperroute-stage',
+    ) == [
         'make_dir "$DEPLOY_USER" 0700 /var/cache/paperroute-stage',
     ]
     assert 'DEPLOY_USER=$SUDO_USER' in text.splitlines()

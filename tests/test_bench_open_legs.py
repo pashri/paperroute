@@ -66,14 +66,17 @@ def test_bench_prints_a_line_per_pair(
         '--db', str(db),
         '--repeat', '1',
         '--at', '2026-10-16T07:00:00+11:00',
-        '--pairs', '2145615:215254', 'Hollis St Opp Constitution Hill Library:215020',
+        '--pairs',
+        '2145615:215254',
+        'Hollis St Opp Constitution Hill Library:215020',
     ])
     lines = capsys.readouterr().out.splitlines()
     assert status == 0
     assert len(lines) == 2
     assert all(LINE.match(line) for line in lines)
     assert lines[0].startswith(
-        'Hollis St Opp Constitution Hill Library -> Hammers Rd Opp Sherwood St: ',
+        'Hollis St Opp Constitution Hill Library'
+        ' -> Hammers Rd Opp Sherwood St: ',
     )
 
 

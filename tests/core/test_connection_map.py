@@ -329,7 +329,9 @@ def test_no_pairs_keeps_framing() -> None:
     )
     assert not view.base.route
     assert not view.pairs
-    assert view.empty == 'No connections to Westmead Station in the next 3 hours'
+    assert view.empty == (
+        'No connections to Westmead Station in the next 3 hours'
+    )
 
 
 def test_chains_hide_the_direct_list_notice() -> None:

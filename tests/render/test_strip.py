@@ -733,8 +733,11 @@ def test_an_exit_label_keeps_to_three_lines() -> None:
     )
     joined = ' '.join(lines)
     assert LONG_NAMES[-1] not in joined
-    one = exit_lines(canvas=canvas, names=('Aaaaaaaaaaaaaaaaaaaaaaaaaaaa',) * 1,
-                     width=60.0)
+    one = exit_lines(
+        canvas=canvas,
+        names=('Aaaaaaaaaaaaaaaaaaaaaaaaaaaa',),
+        width=60.0,
+    )
     assert len(one) == 1
 
 

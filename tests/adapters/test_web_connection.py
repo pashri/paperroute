@@ -27,7 +27,10 @@ from tests.adapters.transit_web import transit_display
 Client = TestClient[web.Request, web.Application]
 
 FULL: Final[list[tuple[str, str]]] = [
-    ('stop', 'G2145615'), ('off', 'G215254'), ('on', '2145648'), ('allow', '4'),
+    ('stop', 'G2145615'),
+    ('off', 'G215254'),
+    ('on', '2145648'),
+    ('allow', '4'),
     ('allow_for', '2145648'), ('to', '214510'),
 ]
 TWO: Final[list[tuple[str, str]]] = [

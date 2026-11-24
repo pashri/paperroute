@@ -169,7 +169,11 @@ def inked(
     covering = tiles_covering(
         left=left, top=top, right=left + MAP_WIDTH, bottom=top + MAP_HEIGHT,
     )
-    return build(out=out, tiles={tile: ink for tile in covering}, labels=labels)
+    return build(
+        out=out,
+        tiles={tile: ink for tile in covering},
+        labels=labels,
+    )
 
 
 def test_suburb_name_knocked_out_off_the_route(tmp_path: Path) -> None:

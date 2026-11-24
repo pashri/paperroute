@@ -97,7 +97,8 @@ SYDNEY_MODULES: Final[frozenset[str]] = frozenset({
 })
 CITY_IMPORTS: Final[str] = (
     'import paperroute_sydney.city, paperroute_transit.build.extras, sys; '
-    "loaded = sorted(name for name in sys.modules if name.startswith('google')); "
+    'loaded = sorted('
+    "name for name in sys.modules if name.startswith('google')); "
     'assert not loaded, loaded'
 )
 MOVED: Final[tuple[str, ...]] = (

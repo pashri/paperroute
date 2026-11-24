@@ -609,7 +609,12 @@ def test_second_tick_does_not_load_again() -> None:
 
 def test_mixed_modes_fetch_each_needed_feed_once() -> None:
     """Each mode's feed is fetched once; a ferry adds none."""
-    modes = [SydneyFeed.BUS, SydneyFeed.TRAIN, SydneyFeed.REGIONAL, SydneyFeed.FERRY]
+    modes = [
+        SydneyFeed.BUS,
+        SydneyFeed.TRAIN,
+        SydneyFeed.REGIONAL,
+        SydneyFeed.FERRY,
+    ]
     deps = tuple(
         departure(departs=START + timedelta(minutes=3 * (i + 1)), mode=mode)
         for i, mode in enumerate(modes)
@@ -787,7 +792,10 @@ def test_modes_loaded_narrows_the_polled_feeds() -> None:
     """The area's modes replace the every-mode feeds already polled."""
     state, _ = step(fresh(centre=CENTRE), PRESS)
     event = ModesLoaded(
-        mpp=8, box=area_box(centre=CENTRE, mpp=8), modes=frozenset({SydneyFeed.BUS})
+        mpp=8, box=area_box(
+            centre=CENTRE,
+            mpp=8,
+        ), modes=frozenset({SydneyFeed.BUS})
     )
     state, effects = step(state, event)
     assert not effects_of(effects=effects, kind=FetchFeed)
@@ -1095,7 +1103,12 @@ def test_loaded_shapes_and_positions_are_drawn() -> None:
 
 
 FALL_BACK_EVE = datetime(2026, 4, 5, 1, 30, tzinfo=SYDNEY_ZONE)
-MODES = [SydneyFeed.BUS, SydneyFeed.TRAIN, SydneyFeed.REGIONAL, SydneyFeed.FERRY]
+MODES = [
+    SydneyFeed.BUS,
+    SydneyFeed.TRAIN,
+    SydneyFeed.REGIONAL,
+    SydneyFeed.FERRY,
+]
 
 
 @st.composite
@@ -2025,8 +2038,9 @@ def check_render(
 ) -> None:
     """
     Assert a rendered view is the sleep screen while asleep, else the
-    Building screen with no timetable, else the chooser's stage or the Live view shown, and fits the
-    screen, and the Strip's stored scroll is within its reach.
+    Building screen with no timetable, else the chooser's stage or the Live
+    view shown, and fits the screen, and the Strip's stored scroll is within
+    its reach.
 
     Parameters
     ----------
@@ -3414,7 +3428,10 @@ def test_clock_wait_gives_up_after_two_minutes() -> None:
 
 def test_sync_jump_starts_afresh() -> None:
     """A synced tick hours later reloads, fires a cycle and draws once."""
-    state, _ = step(fresh(now=UNSYNCED_AT), Tick(now=UNSYNCED_AT, synced=False))
+    state, _ = step(
+        fresh(now=UNSYNCED_AT),
+        Tick(now=UNSYNCED_AT, synced=False),
+    )
     state, early = step(
         state, Tick(now=UNSYNCED_AT + timedelta(seconds=5), synced=False),
     )

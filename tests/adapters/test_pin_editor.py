@@ -30,7 +30,10 @@ def options() -> FakePinOptions:
     """
     return FakePinOptions(
         places={'H': HOME, 'W': WORK, 'F': FAR},
-        lines={('H', SydneyMode.TRAIN): (T1, T2), ('W', SydneyMode.BUS): (BUS,)},
+        lines={
+            ('H', SydneyMode.TRAIN): (T1, T2),
+            ('W', SydneyMode.BUS): (BUS,),
+        },
         to={('H', 'train:T1'): (WORK, FAR)},
         only={('H', SydneyMode.TRAIN): ('T1', 'T2')},
     )

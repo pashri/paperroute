@@ -66,7 +66,12 @@ def load_script() -> ModuleType:
 recorder = load_script()
 
 
-def trip_rows(*, route: str, count: int, other: int = 1) -> list[dict[str, str]]:
+def trip_rows(
+    *,
+    route: str,
+    count: int,
+    other: int = 1,
+) -> list[dict[str, str]]:
     """
     Make the trips of one route: some on the day, some on another day.
 
@@ -784,7 +789,9 @@ def test_main_refuses_a_key_in_the_raw_positions_body(
     printed = capsys.readouterr()
     assert status == 1
     assert not out.exists()
-    assert 'the key is in bods_positions_raw.pb; nothing written' in printed.err
+    assert (
+        'the key is in bods_positions_raw.pb; nothing written' in printed.err
+    )
     assert KEY not in printed.out + printed.err
 
 

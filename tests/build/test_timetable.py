@@ -492,7 +492,10 @@ def test_hidden_trip_kept_as_non_service(
     tmp_path: Path, caplog: pytest.LogCaptureFixture,
 ) -> None:
     """A Z35 trip on a non-revenue route stays, with its stop times."""
-    with caplog.at_level(logging.INFO, logger='paperroute_transit.build.timetable'):
+    with caplog.at_level(
+        logging.INFO,
+        logger='paperroute_transit.build.timetable',
+    ):
         db = build_db(tmp_path=tmp_path, start=date(2026, 10, 16), days=1,
                       sources=categorised_bus(tmp_path=tmp_path,
                                               categories=['A8']))

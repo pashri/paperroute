@@ -117,7 +117,9 @@ def tracked_id(*, trip: TripPattern) -> str:
 def test_the_id_changes_with_the_calls() -> None:
     """Two trips on one shape with the same hops but another end differ."""
     short = replace(
-        RAIL, stops=RAIL.stops[:2], along=RAIL.along[:2] if RAIL.along else None,
+        RAIL,
+        stops=RAIL.stops[:2],
+        along=RAIL.along[:2] if RAIL.along else None,
     )
     ids = {tracked_id(trip=trip) for trip in (RAIL, short)}
     assert len(ids) == 2

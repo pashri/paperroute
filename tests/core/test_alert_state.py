@@ -251,7 +251,10 @@ def test_two_modes_poll_each_feed() -> None:
 def test_ferry_pin_polls_ferry_alerts() -> None:
     """A ferry pin fetches the ferry alerts feed."""
     pin = replace(PARRAMATTA_CENTRAL, kind=SydneyMode.FERRY)
-    _, effects = loaded_with(state=started(pins=(pin,)), modes=(SydneyFeed.FERRY,))
+    _, effects = loaded_with(
+        state=started(pins=(pin,)),
+        modes=(SydneyFeed.FERRY,),
+    )
     assert alert_fetches(effects=effects) == [
         FetchFeed(feed=FERRIES, kind=FeedKind.ALERTS),
     ]
@@ -524,7 +527,9 @@ def test_kindless_pin_asked_again_once_trips_load() -> None:
 def test_ferry_wharf_alert_takes_banner() -> None:
     """A wharf closure naming the ferry pin's wharf takes the banner."""
     state, _ = loaded_with(
-        state=started(pins=(ROSE_BAY_PIN,)), modes=(SydneyFeed.FERRY,), route='F9',
+        state=started(pins=(ROSE_BAY_PIN,)),
+        modes=(SydneyFeed.FERRY,),
+        route='F9',
     )
     state = fresh_with(
         state=state,
@@ -590,7 +595,10 @@ def trainlink_fetches(
 def test_trainlink_answer_fetches_its_feed_at_once() -> None:
     """A TrainLink feed newly needed is fetched at once, and only it."""
     pin = PARRAMATTA_CENTRAL
-    state, _ = loaded_with(state=started(pins=(pin,)), modes=(SydneyFeed.TRAIN,))
+    state, _ = loaded_with(
+        state=started(pins=(pin,)),
+        modes=(SydneyFeed.TRAIN,),
+    )
     event = BetweenLoaded(pin=pin, names=frozenset(), agency_alerts=True)
     state, effects = step(state, event)
     assert alert_fetches(effects=effects) == [

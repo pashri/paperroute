@@ -249,7 +249,10 @@ def test_connection_positions_union() -> None:
 
 def test_connection_legs_poll_their_light_rail_anywhere() -> None:
     """A light rail leg polls every light rail feed, near the map or not."""
-    second = tuple(replace(item, source=SydneyFeed.LIGHT_RAIL) for item in LEG2)
+    second = tuple(
+        replace(item, source=SydneyFeed.LIGHT_RAIL)
+        for item in LEG2
+    )
     state, _ = legs_loaded(state=started(view=LiveView.MAP), second=second)
     mpp = ZOOMS[0]  # the Changes fit
     state = replace(state, map=replace(
@@ -352,7 +355,10 @@ def test_new_frame_drops_area_modes() -> None:
     state, _ = fitted_on()
     state = replace(state, map=replace(
         state.map,
-        area_modes={5: frozenset({SydneyFeed.FERRY}), 8: frozenset({SydneyFeed.BUS})},
+        area_modes={
+            5: frozenset({SydneyFeed.FERRY}),
+            8: frozenset({SydneyFeed.BUS}),
+        },
         pending_modes=frozenset({14}),
     ))
     state, effects = step(state, turn(steps=-1))

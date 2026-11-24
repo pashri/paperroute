@@ -436,7 +436,9 @@ def test_route_patterns_are_trip_level(network: sqlite3.Connection) -> None:
 def test_load_runs_skips_hidden_block_trips_and_orphans(
     network_db: Path, tmp_path: Path,
 ) -> None:
-    """A hidden block trip has no run; unmatched trips and calls are skipped."""
+    """
+    A hidden block trip has no run; unmatched trips and calls are skipped.
+    """
     db = tmp_path / 'timetable.db'
     shutil.copy(network_db, db)
     with closing(sqlite3.connect(db)) as conn:
@@ -470,7 +472,9 @@ def test_load_runs_skips_hidden_block_trips_and_orphans(
 def test_merged_trainlink_train_gets_a_run(tmp_path: Path) -> None:
     """The feed's NRC trip, given the bundle's agency 711, still runs."""
     out = tmp_path / 'timetable.db'
-    build_timetable(city_ref=SYDNEY_REF, sources=regional_sources(tmp_path=tmp_path),
+    build_timetable(city_ref=SYDNEY_REF, sources=regional_sources(
+        tmp_path=tmp_path,
+    ),
                     window=Window(start=date(2026, 10, 16), days=2), out=out)
     with closing(sqlite3.connect(out)) as conn:
         agency, runs = conn.execute(
@@ -482,7 +486,9 @@ def test_merged_trainlink_train_gets_a_run(tmp_path: Path) -> None:
 
 
 def test_run_calls_of_joins_stopping_stations() -> None:
-    """A carry-on's stops chain on; the meeting station stops if either does."""
+    """
+    A carry-on's stops chain on; the meeting station stops if either does.
+    """
     x1 = hand_trip(trip_id='x1', route='T1', stations='A B C',
                    first_dep=0, last_arr=100, passes=(1,))
     x2 = hand_trip(trip_id='x2', route='T1', stations='C D E',

@@ -372,7 +372,9 @@ def test_extras_program_runs_the_tail_and_swaps(
     shutil.copy(loaded, record.scratch)
     handoff = data_dir / 'work' / 'handoff.json'
     write_handoff(path=handoff, record=record)
-    assert extras.main(argv=[SYDNEY_REF, str(record.scratch), '', str(handoff)]) == 0
+    assert extras.main(
+        argv=[SYDNEY_REF, str(record.scratch), '', str(handoff)],
+    ) == 0
     with closing(sqlite3.connect(data_dir / 'timetable.db')) as conn:
         assert conn.execute('SELECT count(*) FROM runs').fetchone()[0] > 0
     assert not list((data_dir / 'work').iterdir())
@@ -397,7 +399,9 @@ def test_failed_extras_keep_the_old_timetable(
     record.scratch.write_bytes(b'not a timetable')
     handoff = data_dir / 'work' / 'handoff.json'
     write_handoff(path=handoff, record=record)
-    assert extras.main(argv=[SYDNEY_REF, str(record.scratch), '', str(handoff)]) == 1
+    assert extras.main(
+        argv=[SYDNEY_REF, str(record.scratch), '', str(handoff)],
+    ) == 1
     assert (data_dir / 'timetable.db').read_bytes() == b'old timetable'
     assert not (data_dir / 'sources' / 'sources.json').exists()
     assert not list((data_dir / 'work').iterdir())
@@ -456,7 +460,9 @@ def test_lost_lock_stops_the_swap(data_dir: Path, loaded: Path) -> None:
     shutil.copy(loaded, record.scratch)
     handoff = data_dir / 'work' / 'handoff.json'
     write_handoff(path=handoff, record=record)
-    assert extras.main(argv=[SYDNEY_REF, str(record.scratch), '', str(handoff)]) == 1
+    assert extras.main(
+        argv=[SYDNEY_REF, str(record.scratch), '', str(handoff)],
+    ) == 1
     assert (data_dir / 'timetable.db').read_bytes() == b'old timetable'
     assert 'LockLostError' in (data_dir / 'log' / 'errors.jsonl').read_text(
         encoding='utf-8',
@@ -586,10 +592,14 @@ def test_plain_build_hand_over_replaces_out(
     handoff = tmp_path / 'timetable.handoff.json'
     write_handoff(path=handoff, record=record)
     with pytest.raises(HandoffError):
-        extras.main(argv=[SYDNEY_REF, str(tmp_path / 'other.new'), '', str(handoff)])
+        extras.main(
+            argv=[SYDNEY_REF, str(tmp_path / 'other.new'), '', str(handoff)],
+        )
     assert not handoff.exists()
     write_handoff(path=handoff, record=record)
-    assert extras.main(argv=[SYDNEY_REF, str(record.scratch), '', str(handoff)]) == 0
+    assert extras.main(
+        argv=[SYDNEY_REF, str(record.scratch), '', str(handoff)],
+    ) == 0
     assert not handoff.exists() and not record.scratch.exists()
     with closing(sqlite3.connect(out)) as conn:
         assert conn.execute('SELECT count(*) FROM runs').fetchone()[0] > 0
@@ -638,7 +648,9 @@ def test_unreadable_handoff_is_logged(
     handoff = tmp_path / 'handoff.json'
     handoff.write_text('[]', encoding='utf-8')
     for path in (tmp_path / 'missing.json', handoff):
-        assert extras.main(argv=[SYDNEY_REF, str(tmp_path / 'x.new'), '', str(path)]) == 1
+        assert extras.main(
+            argv=[SYDNEY_REF, str(tmp_path / 'x.new'), '', str(path)],
+        ) == 1
     assert capsys.readouterr().err.count('handoff unreadable') == 2
 
 
@@ -670,7 +682,9 @@ def test_unchecked_lock_fd_is_left_open(
         shutil.copy(loaded, record.scratch)
         handoff = data_dir / 'work' / 'handoff.json'
         write_handoff(path=handoff, record=record)
-        assert extras.main(argv=[SYDNEY_REF, str(record.scratch), '', str(handoff)]) == 1
+        assert extras.main(
+            argv=[SYDNEY_REF, str(record.scratch), '', str(handoff)],
+        ) == 1
         os.fstat(unrelated.fileno())
 
 
@@ -740,7 +754,10 @@ def test_swap_in_removes_the_rule_file_of_a_forgotten_copy(
     state = SourceState(etag=None, last_modified=None, sha256='ab' * 32)
     save_states(path=layout.states, states={'rail': state, 'bods': state})
     for name in ('rail', 'bods'):
-        rule_file(directory=layout.sources, name=name).write_text('A', encoding='utf-8')
+        rule_file(
+            directory=layout.sources,
+            name=name,
+        ).write_text('A', encoding='utf-8')
     built = layout.work / 'timetable.db'
     built.write_bytes(b'db')
     fetched = Fetched(states={'bods': state}, downloaded=(), changed=())

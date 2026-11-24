@@ -238,7 +238,9 @@ async def test_cross_site_refused_on_device_posts(
     ('device.html', '/device'),
 ])
 def test_nav_on_every_page(name: str, current: str | None) -> None:
-    """Every page links Live, Pins, Settings and Device, marking the open one."""
+    """
+    Every page links Live, Pins, Settings and Device, marking the open one.
+    """
     text = (
         page_frame(name=name, nav=SYDNEY_NAV, current=current)
         if name in SHELL_PAGES

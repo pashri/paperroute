@@ -592,7 +592,9 @@ def test_live_frame_is_drawn_at_its_own_size() -> None:
     assert 'overflow-x: auto' in box
     nodes = parse_tree(text=page_text(name='live.html'))
     holder = next(
-        node for node in nodes if 'frame-box' in (node.attrs.get('class') or '')
+        node
+        for node in nodes
+        if 'frame-box' in (node.attrs.get('class') or '')
     )
     assert by_id(nodes=nodes, ident='frame') in inside(
         nodes=nodes, outer=holder,

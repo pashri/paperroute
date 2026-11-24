@@ -967,7 +967,11 @@ def test_round_trips_nickname_and_filter(path: Path) -> None:
     assert repository.load().saved.pins == (pin,)
 
 
-def stored_with(*, path: Path, pin_fields: dict[str, object]) -> dict[str, Any]:
+def stored_with(
+    *,
+    path: Path,
+    pin_fields: dict[str, object],
+) -> dict[str, Any]:
     """
     Save the sample, then overwrite fields on its second pin.
 
@@ -1200,7 +1204,11 @@ def test_migrates_v8_to_current(path: Path) -> None:
     data = flat_v11(data=json.loads(path.read_text()))
     data['schema_version'] = 8
     del data['settings']['connection_map']
-    for pin in (*data['pins'], data['unpinned'], data['auto']['before']['place']):
+    for pin in (
+        *data['pins'],
+        data['unpinned'],
+        data['auto']['before']['place'],
+    ):
         del pin['ways']
         del pin['never']
     path.write_text(json.dumps(data))
@@ -1237,7 +1245,11 @@ def test_bad_change_drops_way_alone(
     """A change that can't be read drops its way with one warning."""
     settings = ROTATED
     BoardStates(path=path, city=SYDNEY).save(
-        saved=replace(sample(), pins=(sample().pins[0], WORK), settings=settings),
+        saved=replace(
+            sample(),
+            pins=(sample().pins[0], WORK),
+            settings=settings,
+        ),
     )
     data = json.loads(path.read_text())
     data['board']['pins'][1]['ways'][0]['changes'][0] = {'alight': 3}

@@ -433,7 +433,12 @@ def test_all_failed_releases_hold() -> None:
         assert not _renders(effects=effects)
     _, effects = step(
         state,
-        FeedFailed(feed=last.feed, at=HELD_AT, reason='backing off', sent=False),
+        FeedFailed(
+            feed=last.feed,
+            at=HELD_AT,
+            reason='backing off',
+            sent=False,
+        ),
     )
     assert len(_renders(effects=effects)) == 1
 
@@ -664,7 +669,9 @@ def test_an_estimating_board_shows_the_usual_banners() -> None:
 
 
 def test_estimates_day_of_polling_stays_inside_the_first_guard() -> None:
-    """A weekday polls positions at most 1,170 times, never the derived feed."""
+    """
+    A weekday polls positions at most 1,170 times, never the derived feed.
+    """
     city = replace(
         ESTIMATING_CITY,
         peak_windows=(

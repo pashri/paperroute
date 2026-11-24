@@ -75,7 +75,11 @@ STRATHFIELD_PIN = station_pin(
 BETWEEN = frozenset({'Burwood', 'Redfern', 'Central'})
 
 
-def trains(*, route: str = 'T1', mode: SydneyFeed = SydneyFeed.TRAIN) -> list[Departure]:
+def trains(
+    *,
+    route: str = 'T1',
+    mode: SydneyFeed = SydneyFeed.TRAIN,
+) -> list[Departure]:
     """
     Two departures on one route.
 

@@ -297,7 +297,9 @@ def test_no_chains_text() -> None:
     )
     assert view.hero is None
     assert not view.rows
-    assert view.empty == 'No connections to Westmead Station in the next 3 hours'
+    assert view.empty == (
+        'No connections to Westmead Station in the next 3 hours'
+    )
     loading = empty_text(destination='Westmead Station', loaded=False)
     view = build_connection_view(
         stop_view=replace(STOP, empty=loading),
@@ -323,7 +325,9 @@ def test_no_direct_trip_still_says_no_chains() -> None:
         zone=SYDNEY_ZONE,
         city=SYDNEY,
     )
-    assert view.empty == 'No connections to Westmead Station in the next 3 hours'
+    assert view.empty == (
+        'No connections to Westmead Station in the next 3 hours'
+    )
 
 
 def test_no_chains_without_destination() -> None:
@@ -380,7 +384,12 @@ def test_a_chain_is_uncertain_when_any_leg_is() -> None:
         legs=(legs[0], replace(legs[1], uncertain=True), legs[2]),
     )
     now = at(7, 0)
-    assert chain_row(chain=unsure, pin=TWO, now=now, zone=SYDNEY_ZONE).uncertain
+    assert chain_row(
+        chain=unsure,
+        pin=TWO,
+        now=now,
+        zone=SYDNEY_ZONE,
+    ).uncertain
     assert chain_hero(
         chain=unsure, pin=TWO, now=now, zone=SYDNEY_ZONE, city=SYDNEY,
     ).uncertain
@@ -508,7 +517,7 @@ def test_rows_carry_the_mark_the_word_and_the_struck_arrival() -> None:
     assert (plain.mark, plain.tight, plain.was) == ('', False, '')
 
 
-def test_missed_stay_on_row_keeps_stay_on_and_strikes_the_old_arrival() -> None:
+def test_missed_stay_on_row_keeps_stay_on_and_strikes_old_arrival() -> None:
     row = chain_row(
         chain=folded_chain(), pin=WORK, now=at(7, 30), zone=SYDNEY_ZONE,
     )

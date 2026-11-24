@@ -63,21 +63,75 @@ def leg(
 
 
 GOOD: Final[Journey] = Journey(legs=(
-    leg(origin='G2145615', destination='G215254', route='606', departs='20:48', arrives='20:54'),
-    leg(origin='2145648_1', destination='214510', route='660', departs='21:01', arrives='21:12'),
+    leg(
+        origin='G2145615',
+        destination='G215254',
+        route='606',
+        departs='20:48',
+        arrives='20:54',
+    ),
+    leg(
+        origin='2145648_1',
+        destination='214510',
+        route='660',
+        departs='21:01',
+        arrives='21:12',
+    ),
 ))
 UNKNOWN: Final[Journey] = Journey(legs=(
-    leg(origin='G2145615', destination='NEW1', route='607', departs='20:50', arrives='20:56'),
-    leg(origin='NEW2', destination='214510', route='661', departs='21:03', arrives='21:20'),
+    leg(
+        origin='G2145615',
+        destination='NEW1',
+        route='607',
+        departs='20:50',
+        arrives='20:56',
+    ),
+    leg(
+        origin='NEW2',
+        destination='214510',
+        route='661',
+        departs='21:03',
+        arrives='21:20',
+    ),
 ))
 THREE: Final[Journey] = Journey(legs=(
-    leg(origin='G2145615', destination='G215254', route='606', departs='20:40', arrives='20:46'),
-    leg(origin='2145648', destination='214510', route='660', departs='20:50', arrives='20:55'),
-    leg(origin='214510', destination='214510', route='T1', departs='21:00', arrives='21:05'),
-    leg(origin='214510', destination='214510', route='T5', departs='21:10', arrives='21:25'),
+    leg(
+        origin='G2145615',
+        destination='G215254',
+        route='606',
+        departs='20:40',
+        arrives='20:46',
+    ),
+    leg(
+        origin='2145648',
+        destination='214510',
+        route='660',
+        departs='20:50',
+        arrives='20:55',
+    ),
+    leg(
+        origin='214510',
+        destination='214510',
+        route='T1',
+        departs='21:00',
+        arrives='21:05',
+    ),
+    leg(
+        origin='214510',
+        destination='214510',
+        route='T5',
+        departs='21:10',
+        arrives='21:25',
+    ),
 ))
 DIRECT: Final[Journey] = Journey(legs=(
-    leg(origin='G2145615', destination='214510', route='609', departs='20:30', arrives='21:30'),
+    leg(
+        origin='G2145615',
+        destination='214510',
+        route='609',
+        departs='20:30',
+        arrives='21:30',
+    ),
 ))
 
 
@@ -221,7 +275,9 @@ async def test_planner_failure_keeps_inputs() -> None:
     for planner in (FakeTripPlanner(down=True), None):
         status, text = await fetched(planner=planner, fields=SEARCH)
         assert status == HTTPStatus.OK
-        assert text.count("Trip Planner didn't answer. Try again in a minute.") == 1
+        assert text.count(
+            "Trip Planner didn't answer. Try again in a minute.",
+        ) == 1
         assert 'name="day" value="2026-10-28"' in text
         assert 'name="time" value="07:30"' in text
         assert 'value="dep" checked' in text
@@ -231,7 +287,9 @@ async def test_planner_failure_keeps_inputs() -> None:
 
 
 async def test_earlier_later_one_call_each() -> None:
-    """Earlier asks arrive by a minute before; Later leave at a minute after."""
+    """
+    Earlier asks arrive by a minute before; Later leave at a minute after.
+    """
     planner = FakeTripPlanner(journeys=(GOOD,))
     edges = [('first', '2026-10-27T20:48:00+00:00'),
              ('last', '2026-10-27T20:58:00+00:00')]
@@ -270,7 +328,8 @@ async def test_edges_are_first_arrival_and_last_departure() -> None:
 async def test_default_search_on_ways_page() -> None:
     """Past 9:00 the page defaults to arrive by 9:00 the next weekday."""
     client = await started(planner=FakeTripPlanner())
-    text = await (await client.get('/pins/ways?from=G2145615&to=214510')).text()
+    response = await client.get('/pins/ways?from=G2145615&to=214510')
+    text = await response.text()
     script = await (await client.get('/suggest.js')).text()
     bad = await (await client.get(
         '/pins/ways?from=G2145615&to=214510&day=x&time=y&mode=arr',

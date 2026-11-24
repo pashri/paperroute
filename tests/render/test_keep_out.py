@@ -20,7 +20,7 @@ from paperroute_transit.core.tiles import (
 from paperroute_transit.render.keep_out import NO_KEEP_OUT, KeepOut, keep_out
 from paperroute_transit.render.map_base import window_of
 from paperroute_transit.render.map_corners import credit_box, scale_box
-from tests.render.test_map_base import CENTRE, MPP, base, build, street
+from tests.render.map_base.helpers import CENTRE, MPP, base, build, street
 from tests.render.test_map_labels import place_label
 
 

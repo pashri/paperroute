@@ -26,14 +26,7 @@ from paperroute_transit.core.tiles import (
     to_pixels,
 )
 from paperroute_transit.render.map_base import draw_map_base, window_of
-from tests.render.test_map_base import (
-    CENTRE,
-    MPP,
-    across,
-    base,
-    build,
-    centre_row,
-)
+from tests.render.map_base.helpers import CENTRE, MPP, across, base, build, centre_row
 
 
 def place_label(

@@ -29,8 +29,8 @@ from paperroute_transit.render.trip_marks import (
     draw_trip_lines,
     draw_trip_points,
 )
-from tests.render.test_map_base import CENTRE as STOP
-from tests.render.test_map_base import base as base_of
+from tests.render.map_base.helpers import CENTRE as STOP
+from tests.render.map_base.helpers import base as base_of
 
 MPP: Final[int] = 8
 CENTRE: Final[Point] = (0.0, 0.0)

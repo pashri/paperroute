@@ -867,7 +867,9 @@ class SqliteTimetableRepository:
         route : str
             Route short name.
         source : str
-            Feed source the route belongs to.
+            Feed source the route belongs to, as the city's classifier
+            sorts it; trips of a same-named route on another feed source
+            are left out.
         day : date
             Later of the two service days.
 
@@ -880,7 +882,7 @@ class SqliteTimetableRepository:
         before = day - timedelta(days=1)
         rows = self.fetch(
             sql=ROUTE_TRIPS.format(service=self.service_filter()),
-            params=(route, source, before.isoformat(), day.isoformat()),
+            params=(route, before.isoformat(), day.isoformat()),
         )
         return tuple(
             RouteTrip(
@@ -890,7 +892,12 @@ class SqliteTimetableRepository:
                 ends=int(str(last)),
                 direction=None if way is None else int(str(way)),
             )
-            for trip, when, first, last, way in rows
+            for trip, when, first, last, way, kind, agency in rows
+            if self.classify(
+                route_type=int(str(kind)),
+                agency_id=str(agency) if agency else None,
+                short_name=route,
+            ).source == source
         )
 
     def running_days(

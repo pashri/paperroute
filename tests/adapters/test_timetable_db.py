@@ -2677,7 +2677,7 @@ def test_route_trips_lists_the_route_on_the_day_and_the_day_before(
 ) -> None:
     """Both days' trips of the route come with their first and last times."""
     day = date(2026, 10, 16)
-    found = repo.route_trips(route='606', source='bundle', day=day)
+    found = repo.route_trips(route='606', source=SydneyFeed.BUS, day=day)
     assert {t.day for t in found} == {day - timedelta(days=1), day}
     first = next(t for t in found if t.trip_id == 'bus-0803')
     assert first.starts < first.ends
@@ -2689,7 +2689,22 @@ def test_route_trips_leaves_out_other_routes(
 ) -> None:
     """Another route name or another source finds nothing."""
     day = date(2026, 10, 16)
-    other = repo.route_trips(route='T1', source='bundle', day=day)
+    other = repo.route_trips(
+        route='T1', source=SydneyFeed.TRAIN, day=day,
+    )
     assert other
     assert 'bus-0803' not in {t.trip_id for t in other}
     assert not repo.route_trips(route='606', source='nope', day=day)
+
+
+def test_route_trips_match_the_feed_source(
+    repo: SqliteTimetableRepository,
+) -> None:
+    """Route trips are found by feed source, not the timetable source."""
+    found = repo.route_trips(
+        route='606', source=SydneyFeed.BUS, day=date(2026, 10, 16),
+    )
+    assert 'bus-0803' in {trip.trip_id for trip in found}
+    assert not repo.route_trips(
+        route='606', source=SydneyFeed.TRAIN, day=date(2026, 10, 16),
+    )

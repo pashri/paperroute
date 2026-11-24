@@ -9,6 +9,7 @@ from paperroute_transit.core.gauge import call_stops
 from paperroute_transit.core.gauge_buses import GaugeBus
 from paperroute_transit.core.gauge_line import (
     BREAK_SLOTS,
+    BusSlot,
     GaugeBreak,
     GaugeLine,
     GaugeMark,
@@ -462,7 +463,8 @@ def route_line(
         room=room,
     )
     marks, runs = street_runs(marks=line.marks, rules=rules)
-    return replace(line, marks=marks, runs=runs)
+    line = replace(line, marks=marks, runs=runs)
+    return replace(line, buses=placed(line=line, buses=buses))
 
 
 def slot_of(*, line: GaugeLine, spot: float) -> float:
@@ -519,3 +521,73 @@ def break_of(*, line: GaugeLine, slot: float) -> GaugeBreak | None:
         ),
         None,
     )
+
+
+def folded(*, slot: float, group: Sequence[GaugeBus]) -> BusSlot:
+    """
+    Make the badge for buses sharing a place.
+
+    Parameters
+    ----------
+    slot : float
+        Position in slots.
+    group : Sequence[GaugeBus]
+        The buses; two or more become a count.
+
+    Returns
+    -------
+    BusSlot
+        A bus badge, or a count whose direction and liveness are None
+        when the buses differ.
+    """
+    rights = {bus.right for bus in group}
+    lives = {bus.live for bus in group}
+    return BusSlot(
+        slot=slot,
+        right=rights.pop() if len(rights) == 1 else None,
+        live=lives.pop() if len(lives) == 1 else None,
+        count=len(group) if len(group) > 1 else 0,
+    )
+
+
+def placed(
+    *, line: GaugeLine, buses: Sequence[GaugeBus],
+) -> tuple[BusSlot, ...]:
+    """
+    Place buses on the line, folding crowded ones into counts.
+
+    Two or more buses in one break, or past the arrow, become one count
+    at the middle of the buses in a break or at the arrow.
+
+    Parameters
+    ----------
+    line : GaugeLine
+        The laid-out line.
+    buses : Sequence[GaugeBus]
+        Buses on the route.
+
+    Returns
+    -------
+    tuple[BusSlot, ...]
+        Badges and counts in slot order.
+    """
+    groups: dict[object, list[tuple[float, GaugeBus]]] = {}
+    for bus in buses:
+        slot = slot_of(line=line, spot=bus.spot)
+        gap = break_of(line=line, slot=slot)
+        beyond = line.arrow and bus.spot > line.stops[-1]
+        key = ('arrow',) if beyond else gap or ('bus', len(groups))
+        groups.setdefault(key, []).append((slot, bus))
+    return tuple(sorted(
+        (
+            folded(
+                slot=(
+                    min(slot for slot, _ in members)
+                    + max(slot for slot, _ in members)
+                ) / 2,
+                group=[bus for _, bus in members],
+            )
+            for members in groups.values()
+        ),
+        key=lambda badge: badge.slot,
+    ))

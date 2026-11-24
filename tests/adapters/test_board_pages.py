@@ -20,7 +20,7 @@ from paperroute_transit.core.messages import Event
 from paperroute_transit.core.model import pin_ref
 from tests.adapters.test_connection_editor import OPTIONS
 from tests.adapters.test_web_pin_search import MATCH
-from tests.adapters.test_web_pins import Pins
+from tests.adapters.web_pins.helpers import Pins
 from tests.adapters.transit_web import transit_display
 
 Client = TestClient[web.Request, web.Application]

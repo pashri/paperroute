@@ -21,7 +21,7 @@ from paperroute_transit.core.model import pin_ref
 from paperroute_transit.observers import PinsSeen
 from tests.adapters.test_connection_editor import OPTIONS
 from tests.adapters.test_web_device import sydney_site
-from tests.adapters.test_web_pins import Pins
+from tests.adapters.web_pins.helpers import Pins
 from tests.adapters.transit_web import transit_display
 
 Client = TestClient[web.Request, web.Application]

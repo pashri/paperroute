@@ -146,7 +146,8 @@ def failed_at(*, minutes: int) -> State:
 @pytest.mark.parametrize(
     ('schema', 'expected'),
     [('4', True), ('5', True), ('6', True), ('7', True), ('8', True),
-     ('9', True), ('10', True), ('11', True), ('12', False),
+     ('9', True), ('10', True), ('11', True), ('12', True),
+     ('13', False),
      (None, False), ('x', False)],
 )
 def test_is_outdated(schema: str | None, expected: bool) -> None:
@@ -163,9 +164,9 @@ def test_is_outdated(schema: str | None, expected: bool) -> None:
         ('11', None, True),
         ('11', '151.2093,-33.8688', True),
         ('11', '0.0,51.5', True),
-        ('12', None, False),
-        ('12', '151.2093,-33.8688', False),
-        ('12', '0.0,51.5', True),
+        ('13', None, False),
+        ('13', '151.2093,-33.8688', False),
+        ('13', '0.0,51.5', True),
         (None, None, False),
     ],
 )
@@ -280,7 +281,7 @@ def test_current_schema_clears_outdated() -> None:
         events=[
             OLD,
             TimetableRebuilt(ok=True),
-            TimetableSeen(version='w', schema='12'),
+            TimetableSeen(version='w', schema='13'),
         ],
     )
     assert not state.rebuild.outdated

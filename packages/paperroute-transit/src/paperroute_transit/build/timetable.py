@@ -94,6 +94,8 @@ INDEXES: Final[str] = """
 CREATE INDEX stop_times_stop ON stop_times (stop_id, dep);
 CREATE INDEX stops_parent ON stops (parent_station);
 CREATE INDEX aliases_trip ON trip_aliases (trip_id);
+CREATE INDEX routes_short ON routes (short_name);
+CREATE INDEX trips_route ON trips (route_id);
 """
 
 

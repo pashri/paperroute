@@ -13,6 +13,7 @@ import pytest
 from paperroute_sydney.city import SydneyFeed
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_testkit.core.factories import place
+from paperroute_transit.adapters.route_trip_rows import ROUTE_TRIPS
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.passed import PASSED_SCHEMA
@@ -191,6 +192,24 @@ def test_departures_reads_one_kerb_beside_a_destination(
         'here', 'loop',
     ]
     assert not any(across for _, _, across in found)
+
+
+def test_route_trips_query_searches_stop_times_by_trip(
+    repo: SqliteTimetableRepository,
+) -> None:
+    """The route's trips are found by index, with no full table scan."""
+    assert repo.db.path is not None
+    with closing(sqlite3.connect(repo.db.path)) as conn:
+        plan = [
+            row[3]
+            for row in conn.execute(
+                'EXPLAIN QUERY PLAN ' + ROUTE_TRIPS.format(service=''),
+                ('606', '2026-10-15', '2026-10-16'),
+            )
+        ]
+    assert not any(line.startswith('SCAN') for line in plan)
+    assert any('SEARCH r USING INDEX routes_short' in x for x in plan)
+    assert any('SEARCH t USING INDEX trips_route' in x for x in plan)
 
 
 def test_route_trips_lists_the_route_on_the_day_and_the_day_before(

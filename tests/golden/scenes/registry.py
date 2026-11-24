@@ -19,6 +19,7 @@ from paperroute_transit.core.saved import LiveView, MapFraming, StopSides
 from paperroute_transit.core.state_model import State
 from tests.core.chooser_walks import BUSY_PAIR, at_kerbs
 from tests.core.test_alerts_view import on_alerts
+from tests.golden.scenes.base import COUNT_TRIPS, MIXED_COUNT_TRIPS
 from tests.golden.scenes.gauge import stop_gauge, stop_gauge_busy
 from tests.golden.scenes.maps import (
     destination_scene,
@@ -87,6 +88,12 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     'map_both_sides': lambda: both_sides_live(view=LiveView.MAP),
     'strip': lambda: strip_scene(view=LiveView.STRIP),
     'strip_map': lambda: strip_scene(view=LiveView.STRIP_MAP),
+    'strip_count': lambda: strip_scene(
+        view=LiveView.STRIP, trips=COUNT_TRIPS,
+    ),
+    'strip_count_mixed': lambda: strip_scene(
+        view=LiveView.STRIP, trips=MIXED_COUNT_TRIPS,
+    ),
     'strip_both_sides': lambda: both_sides_live(view=LiveView.STRIP),
     'strip_map_both_sides': lambda: both_sides_live(
         view=LiveView.STRIP_MAP,

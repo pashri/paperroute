@@ -141,7 +141,7 @@ def in_gutter(*, marker: Marker, spots: Mapping[str, Spot]) -> Marker:
 
 
 def counted(
-    *, marker: Marker, extra: int, bearings: Sequence[float | None] = (),
+    *, marker: Marker, extra: int, bearings: Sequence[float | None],
 ) -> Marker:
     """
     Turn a badge with others folded into it into a count.
@@ -219,6 +219,39 @@ def as_count(
     )
 
 
+def folded_bearings(
+    *,
+    facing: Sequence[Badge],
+    rows: Sequence[float],
+    ranks: Sequence[int],
+    row: float,
+) -> list[float | None]:
+    """
+    Give the headings of a row's badges that fold into its count.
+
+    Parameters
+    ----------
+    facing : Sequence[Badge]
+        The facing badges.
+    rows : Sequence[float]
+        Each one's y.
+    ranks : Sequence[int]
+        Each one's place along its row.
+    row : float
+        The row's y.
+
+    Returns
+    -------
+    list[float | None]
+        Bearings of the badges on the row from `FACING_CAP` on.
+    """
+    return [
+        each.marker.bearing
+        for each, y, rank in zip(facing, rows, ranks)
+        if y == row and rank >= FACING_CAP
+    ]
+
+
 def capped(*, badges: Sequence[Badge]) -> list[Badge]:
     """
     Keep a row's facing badges, folding them past `FACING_SLOTS`.
@@ -246,11 +279,9 @@ def capped(*, badges: Sequence[Badge]) -> list[Badge]:
                 marker=as_count(
                     marker=each.marker,
                     count=rows.count(y) - FACING_CAP,
-                    bearings=[
-                        also.marker.bearing
-                        for also, at, place in zip(facing, rows, ranks)
-                        if at == y and place >= FACING_CAP
-                    ],
+                    bearings=folded_bearings(
+                        facing=facing, rows=rows, ranks=ranks, row=y,
+                    ),
                 ),
                 extra=rows.count(y) - FACING_CAP - 1,
             )

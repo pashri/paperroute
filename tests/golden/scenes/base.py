@@ -93,6 +93,17 @@ STRIP_TRIPS: Final[dict[str, tuple[tuple[str, ...], int]]] = {
     'r': (SOUTH, 4),
 }
 
+COUNT_TRIPS: Final[dict[str, tuple[tuple[str, ...], int]]] = {
+    f'e{index}': (EAST, 0) for index in range(4)
+}
+
+MIXED_COUNT_TRIPS: Final[dict[str, tuple[tuple[str, ...], int]]] = {
+    'e0': (EAST, 0),
+    'e1': (EAST, 0),
+    'w0': (WEST, 0),
+    'w1': (WEST, 0),
+}
+
 
 def baseline_bytes(*, path: Path, data: bytes) -> bytes:
     """

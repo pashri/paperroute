@@ -38,10 +38,18 @@ from paperroute_transit.core.strip_state import strip_key
 from tests.core.test_connection import late_legs
 from tests.core.test_connection_screens import started, with_legs
 from tests.core.test_connection_strip import PATTERNS as LEG_PATTERNS
-from tests.golden.scenes.base import STRIP_TRIPS
+from tests.golden.scenes.base import (
+    COUNT_TRIPS,
+    MIXED_COUNT_TRIPS,
+    STRIP_TRIPS,
+)
 
 
-def strip_scene(*, view: LiveView) -> State:
+def strip_scene(
+    *,
+    view: LiveView,
+    trips: Mapping[str, tuple[tuple[str, ...], int]] = STRIP_TRIPS,
+) -> State:
     """
     Show trains on a branching line on a Strip view.
 
@@ -49,6 +57,8 @@ def strip_scene(*, view: LiveView) -> State:
     ----------
     view : LiveView
         The Strip or Strip + map.
+    trips : Mapping[str, tuple[tuple[str, ...], int]]
+        Each trip's stations and minutes after 8:00.
 
     Returns
     -------
@@ -57,7 +67,7 @@ def strip_scene(*, view: LiveView) -> State:
     """
     departures = tuple(
         train(minutes=minutes, trip_id=trip)
-        for trip, (_, minutes) in STRIP_TRIPS.items()
+        for trip, (_, minutes) in trips.items()
     )
     pin = replace(
         PIN,
@@ -79,7 +89,7 @@ def strip_scene(*, view: LiveView) -> State:
             ),
             line=line,
         )
-        for trip, (stations, minutes) in STRIP_TRIPS.items()
+        for trip, (stations, minutes) in trips.items()
     }
     return patterns_loaded(state=state, patterns=patterns, shapes=[line])
 

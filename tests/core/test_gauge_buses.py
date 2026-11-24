@@ -13,7 +13,6 @@ from paperroute_transit.core.gauge_buses import (
     HERO_STOPS,
     GaugeBus,
     along_index,
-    forget_held,
     gauge_buses,
     same_way,
     timetable_index,
@@ -215,12 +214,6 @@ SPUR: Final[TripPattern] = pattern(
         ),
     ),
 )
-
-
-@pytest.fixture(name='_fresh', autouse=True)
-def _fresh_fixture() -> None:
-    """Start each test with nothing remembered."""
-    forget_held()
 
 
 def buses_of(

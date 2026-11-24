@@ -3,10 +3,7 @@
 from datetime import date, datetime, timedelta
 from typing import Final
 
-import pytest
-
 from paperroute_sydney.city import SYDNEY_ZONE
-from paperroute_transit.core.gauge_buses import forget_held
 from paperroute_transit.core.model import service_time
 from paperroute_transit.core.route_trips import SPANS, RouteTrip, running
 
@@ -86,12 +83,6 @@ def test_running_drops_a_trip_at_its_end_plus_one_second() -> None:
     only = trip('a', starts=EIGHT, ends=EIGHT + 1800)
     assert running(trips=(only,), now=at(EIGHT + 1800), zone=ZONE) == (only,)
     assert not running(trips=(only,), now=at(EIGHT + 1801), zone=ZONE)
-
-
-@pytest.fixture(name='_fresh', autouse=True)
-def _fresh_fixture() -> None:
-    """Start each test with nothing remembered."""
-    forget_held()
 
 
 def test_running_works_spans_out_once_for_the_same_trips() -> None:

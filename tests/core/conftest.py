@@ -4,8 +4,10 @@ from collections.abc import Iterator
 
 import pytest
 
+from paperroute_transit.core.gauge_buses import HERO_STOPS
 from paperroute_transit.core.live import RESOLVED_MEMO
 from paperroute_transit.core.map_vehicles import HEARD_MEMO
+from paperroute_transit.core.route_trips import SPANS
 from paperroute_transit.core.state_views import STOP_VIEWS
 from paperroute_transit.core.strip_follow import REACHES, STEADY, common_pairs
 
@@ -46,3 +48,20 @@ def _per_poll_memos() -> Iterator[None]:
     STEADY.clear()
     REACHES.clear()
     STOP_VIEWS.clear()
+
+
+@pytest.fixture(name='gauge_memory', autouse=True)
+def _gauge_memory() -> Iterator[None]:
+    """
+    Empty the gauge's remembered stop mappings and trip spans.
+
+    Yields
+    ------
+    None
+        Control to the test.
+    """
+    HERO_STOPS.clear()
+    SPANS.clear()
+    yield
+    HERO_STOPS.clear()
+    SPANS.clear()

@@ -12,7 +12,7 @@ from paperroute_transit.core.memo import SameMemo
 from paperroute_transit.core.model import service_seconds
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.positions import VehiclePosition
-from paperroute_transit.core.route_trips import SPANS, RouteTrip
+from paperroute_transit.core.route_trips import RouteTrip
 
 MEMO_SIZE: Final[int] = 512
 HERO_STOPS: Final[SameMemo[tuple[tuple[int, float], ...]]] = SameMemo(
@@ -41,12 +41,6 @@ class GaugeBus:
     right: bool
     live: bool
     trip_id: str
-
-
-def forget_held() -> None:
-    """Forget every remembered stop mapping and trip span."""
-    HERO_STOPS.clear()
-    SPANS.clear()
 
 
 def mapped(*, pattern: TripPattern) -> list[tuple[int, Point]]:

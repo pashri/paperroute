@@ -153,6 +153,42 @@ def arrival_call(
     return next(iter(exact or there or timed), None)
 
 
+def call_stops(
+    *, pattern: TripPattern, start: int, end: int | None,
+) -> tuple[int, ...]:
+    """
+    List the pattern indices the gauge marks after the From.
+
+    Passing stops, unnamed stops and repeats of the call before are
+    skipped, except the Destination.
+
+    Parameters
+    ----------
+    pattern : TripPattern
+        The trip.
+    start : int
+        Pattern index of the From.
+    end : int | None
+        Pattern index of the Destination.
+
+    Returns
+    -------
+    tuple[int, ...]
+        Pattern indices in running order.
+    """
+    kept: list[int] = []
+    last = ''
+    for index in range(start + 1, len(pattern.stops)):
+        stop = pattern.stops[index]
+        name = base_name(name=stop.name)
+        repeat = bool(kept) and last == name
+        if index != end and (stop.passes or not stop.name or repeat):
+            continue
+        kept.append(index)
+        last = name
+    return tuple(kept)
+
+
 def gauge_calls(
     *,
     pattern: TripPattern,
@@ -190,14 +226,10 @@ def gauge_calls(
     """
     calls: list[GaugeCall] = []
     place = None
-    for index in range(start + 1, len(pattern.stops)):
-        stop = pattern.stops[index]
-        name = base_name(name=stop.name)
-        repeat = bool(calls) and calls[-1].name == name
-        if index != end and (stop.passes or not stop.name or repeat):
-            continue
+    for index in call_stops(pattern=pattern, start=start, end=end):
+        name = base_name(name=pattern.stops[index].name)
         moment = service_time(
-            day=day, seconds=stop.arrives + delay, zone=zone,
+            day=day, seconds=pattern.stops[index].arrives + delay, zone=zone,
         )
         minutes = clock_text(moment=moment, zone=zone)[-3:]
         calls.append(GaugeCall(name=name, minutes=minutes))

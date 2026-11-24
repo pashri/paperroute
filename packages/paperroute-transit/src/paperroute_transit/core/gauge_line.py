@@ -91,6 +91,29 @@ class GaugeRun:
 
 
 @dataclass(frozen=True)
+class BusSlot:
+    """
+    A bus badge, or a count of buses, placed on the line.
+
+    Attributes
+    ----------
+    slot : float
+        Position in slots.
+    right : bool | None
+        True facing right; on a count, None when the buses differ.
+    live : bool | None
+        True for a live badge; on a count, None when the buses differ.
+    count : int
+        Buses in a hollow ``+n`` count badge, or 0 for one bus.
+    """
+
+    slot: float
+    right: bool | None
+    live: bool | None
+    count: int = 0
+
+
+@dataclass(frozen=True)
 class GaugeLine:
     """
     The gauge laid out in slots.
@@ -102,9 +125,9 @@ class GaugeLine:
     bus : float | None
         The badge's spot in slots, or None.
     back : GaugeBreak | None
-        Break before the From.
+        Break left of the From.
     ahead : GaugeBreak | None
-        Break before the Destination.
+        Break right of the From.
     ride : tuple[int, int] | None
         Slots of the From and the Destination.
     runs : tuple[GaugeRun, ...]
@@ -113,6 +136,12 @@ class GaugeLine:
         True when the first mark is the trip's first stop.
     arrow : bool
         True when calls are left off the end.
+    stops : tuple[int, ...]
+        Pattern index at each mark, or empty.
+    buses : tuple[BusSlot, ...]
+        Buses placed on the line.
+    cut : bool
+        True when the line ends left in an arrow.
     """
 
     marks: tuple[GaugeMark, ...]
@@ -123,6 +152,9 @@ class GaugeLine:
     runs: tuple[GaugeRun, ...] = ()
     starts: bool = False
     arrow: bool = False
+    stops: tuple[int, ...] = ()
+    buses: tuple[BusSlot, ...] = ()
+    cut: bool = False
 
 
 def behind_marks(

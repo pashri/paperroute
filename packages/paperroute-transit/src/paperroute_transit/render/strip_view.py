@@ -66,6 +66,7 @@ from paperroute_transit.render.strip import (
     draw_rows,
     draw_strip_markers,
 )
+from paperroute_transit.render.strip_rings import draw_rings, draw_spurs
 
 NAME_X: Final[int] = TRACK_X + int(HALF_WIDE)
 TIME_RIGHT: Final[int] = 424
@@ -615,7 +616,7 @@ def draw_strip(canvas: Canvas, *, view: StripView) -> None:
         The view.
     """
     with canvas.clipped(box=(0, HEADER, STRIP_RIGHT, HEIGHT)):
-        draw_rows(
+        columns = draw_rows(
             canvas,
             rows=view.rows,
             track_x=TRACK_X,
@@ -624,6 +625,8 @@ def draw_strip(canvas: Canvas, *, view: StripView) -> None:
             right=STRIP_RIGHT,
             rules=view.name_rules,
         )
+        draw_rings(canvas, rows=view.rows, columns=columns)
+        draw_spurs(canvas, rows=view.rows, columns=columns)
         draw_strip_markers(canvas, markers=view.markers)
         if view.band is not None:
             draw_band(canvas, band=view.band, left=BAND_LEFT, right=BAND_RIGHT)
@@ -844,7 +847,7 @@ def draw_pane(canvas: Canvas, *, view: StripMapView) -> None:
     canvas.rect(box=(left, HEADER, left + RULE_WIDTH, HEIGHT), grey=INK)
     window = PANE_TOP + (BANNER_ROWS * ROW_H if view.map.banner else 0)
     with canvas.clipped(box=(left + RULE_WIDTH, window, WIDTH, HEIGHT)):
-        draw_rows(
+        columns = draw_rows(
             canvas,
             rows=view.pane.rows,
             track_x=PANE_TRACK_X,
@@ -853,6 +856,8 @@ def draw_pane(canvas: Canvas, *, view: StripMapView) -> None:
             right=WIDTH,
             rules=view.map.name_rules,
         )
+        draw_rings(canvas, rows=view.pane.rows, columns=columns)
+        draw_spurs(canvas, rows=view.pane.rows, columns=columns)
         draw_strip_markers(canvas, markers=view.pane.markers)
     draw_short_list(canvas, view=view)
 

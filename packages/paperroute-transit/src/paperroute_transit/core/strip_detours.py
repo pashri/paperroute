@@ -175,19 +175,23 @@ def spans_of(*, stops: Sequence[PatternStop]) -> list[Span]:
     Returns
     -------
     list[Span]
-        Index pairs with at least `MIN_BETWEEN` calls between.
+        Index pairs with at least `MIN_BETWEEN` calls between. Two calls
+        are at one place when they share a station or a `place_key`.
     """
     last: dict[str, int] = {}
     spans = []
     for index, stop in enumerate(stops):
-        key = place_key(stop=stop)
-        if key in last and index - last[key] - 1 >= MIN_BETWEEN:
-            spans.append((last[key], index))
-        last[key] = index
+        keys = {place_key(stop=stop), f'station:{stop.station or index}'}
+        seen = max((last[key] for key in keys if key in last), default=None)
+        if seen is not None and index - seen - 1 >= MIN_BETWEEN:
+            spans.append((seen, index))
+        last.update(dict.fromkeys(keys, index))
     return spans
 
 
-def candidate(*, span: Span, spans: list[Span], count: int) -> bool:
+def candidate(
+    *, span: Span, spans: list[Span], count: int, mid: bool = False,
+) -> bool:
     """
     Say whether a return is short, mid-trip and holds no other.
 
@@ -199,6 +203,8 @@ def candidate(*, span: Span, spans: list[Span], count: int) -> bool:
         Every return on the trip.
     count : int
         Calls on the trip.
+    mid : bool
+        True when the trip has calls before these.
 
     Returns
     -------
@@ -211,7 +217,7 @@ def candidate(*, span: Span, spans: list[Span], count: int) -> bool:
         for other in spans
     )
     return (
-        0 < first
+        (mid or 0 < first)
         and last < count - 1
         and last - first - 1 <= MAX_BETWEEN
         and not holds
@@ -239,7 +245,9 @@ def kind_of(*, stops: Sequence[PatternStop]) -> DetourKind | None:
     return DetourKind.SPUR if spur_levels(stops=stops) >= 2 else None
 
 
-def find_detours(*, stops: Sequence[PatternStop]) -> tuple[Detour, ...]:
+def find_detours(
+    *, stops: Sequence[PatternStop], mid: bool = False,
+) -> tuple[Detour, ...]:
     """
     Find the loops and spurs drawn on a trip.
 
@@ -247,6 +255,9 @@ def find_detours(*, stops: Sequence[PatternStop]) -> tuple[Detour, ...]:
     ----------
     stops : Sequence[PatternStop]
         A trip's calls.
+    mid : bool
+        True when the trip has calls before these, so a detour may
+        leave the first.
 
     Returns
     -------
@@ -257,7 +268,7 @@ def find_detours(*, stops: Sequence[PatternStop]) -> tuple[Detour, ...]:
     kinds = [
         (span, kind_of(stops=stops[span[0]:span[1] + 1]))
         for span in spans
-        if candidate(span=span, spans=spans, count=len(stops))
+        if candidate(span=span, spans=spans, count=len(stops), mid=mid)
     ]
     return tuple(
         Detour(kind=kind, first=first, last=last)

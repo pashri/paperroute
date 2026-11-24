@@ -19,6 +19,7 @@ from paperroute_transit.core.strip_model import (
     Band,
     StripRow,
 )
+from paperroute_transit.core.strip_rings import handed_rows
 from paperroute_transit.render.chrome import ARROW_WIDTH, arrow
 from paperroute_transit.render.kerb_menu import MARK_RIGHT_GAP, two_way_mark
 from paperroute_transit.render.markers import (
@@ -490,46 +491,66 @@ def draw_end(canvas: Canvas, *, row: StripRow, columns: Columns) -> float:
     Returns
     -------
     float
-        Where the name must end.
+        Where the name must end: short of a time wider than usual.
     """
     edge = columns.time_right - NAME_ROOM
     if row.tag:
         left = draw_tag(canvas, row=row, right=columns.time_right)
         return min(edge, left - TAG_GAP)
     if row.time:
-        canvas.text(
+        width = canvas.text(
             at=(columns.time_right, row.y + BASELINE_DROP),
             text=row.time,
             face=SMALL_TIME_FACE if row.kind is RowKind.EARLIER else TIME_FACE,
             grey=PAPER if row.cursor else INK,
             anchor='rs',
         )
+        return min(edge, columns.time_right - width - TAG_GAP)
     return edge
 
 
-def hook_arrow(canvas: Canvas, *, x: float, y: float) -> float:
+def hook_arrow(
+    canvas: Canvas,
+    *,
+    x: float,
+    y: float,
+    size: float = 1.0,
+    bearing: float = 90.0,
+) -> float:
     """
-    Draw an exit hook's filled arrow pointing right.
+    Draw an exit hook's filled arrow, pointing right unless turned.
 
     Parameters
     ----------
     canvas : Canvas
         Target.
     x : float
-        The arrow's base.
+        The middle of the arrow's base.
     y : float
-        Centre line.
+        The middle of the arrow's base.
+    size : float
+        Scale; 1 for an exit's arrow.
+    bearing : float
+        Compass degrees the tip points, 90 right.
 
     Returns
     -------
     float
         Width used, the gap before the label included.
     """
+    turn = math.radians(bearing)
+    ahead = (math.sin(turn), -math.cos(turn))
+    side = (math.cos(turn), math.sin(turn))
+    half, tip = HOOK_HALF * size, HOOK_TIP * size
     canvas.polygon(
-        points=[(x, y - HOOK_HALF), (x + HOOK_TIP, y), (x, y + HOOK_HALF)],
+        points=[
+            (x - side[0] * half, y - side[1] * half),
+            (x + ahead[0] * tip, y + ahead[1] * tip),
+            (x + side[0] * half, y + side[1] * half),
+        ],
         grey=INK,
     )
-    return HOOK_TIP + HOOK_GAP
+    return tip + HOOK_GAP
 
 
 def name_start(canvas: Canvas, *, row: StripRow, columns: Columns
@@ -777,9 +798,11 @@ def draw_rows(
     time_right: int,
     right: int,
     rules: NameRules,
-) -> None:
+) -> Columns:
     """
     Draw a strip's track, then each row over it.
+
+    Rows a whole ring or spur stands for are left to `strip_rings`.
 
     Parameters
     ----------
@@ -797,6 +820,11 @@ def draw_rows(
         Right edge of the strip.
     rules : NameRules
         Word lists and options for shortening row names.
+
+    Returns
+    -------
+    Columns
+        Where the strip's parts sit.
     """
     columns = Columns(
         track_x=track_x,
@@ -809,7 +837,8 @@ def draw_rows(
         ),
     )
     stubs = {row.y for row in rows if row.kind is RowKind.DASHED}
-    for row in rows:
+    tracks, marks = handed_rows(rows=rows, track_x=track_x)
+    for row in (each for k, each in enumerate(rows) if k not in tracks):
         draw_track(
             canvas,
             row=row,
@@ -818,8 +847,9 @@ def draw_rows(
                 row.kind is not RowKind.DASHED and row.parent_y in stubs
             ),
         )
-    for row in rows:
+    for row in (each for k, each in enumerate(rows) if k not in marks):
         draw_row(canvas, row=row, columns=columns)
+    return columns
 
 
 def upright_arrow(canvas: Canvas, *, x: float, y: float, up: bool) -> None:

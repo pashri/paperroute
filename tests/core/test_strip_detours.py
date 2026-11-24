@@ -235,3 +235,19 @@ def test_pair_name_joins_names_that_share_nothing() -> None:
     assert pair_name(
         first='Museum', second='Downing Centre',
     ) == 'Museum / Downing Centre'
+
+
+def test_detours_of_matches_a_shared_station_under_other_names() -> None:
+    """Two kerbs of one station are one place, whatever their names."""
+    calls: list[Call] = [
+        ('in', 'Badajoz Rd', (0.0, -800.0)),
+        ('j', 'Twin Rd Opp Ryde East Public School', (0.0, 0.0)),
+        ('a1', 'Twin Rd Opp John Miller St', (0.0, 300.0)),
+        ('turn', 'Moncrieff Dr', (0.0, 600.0)),
+        ('a2', 'Twin Rd At John Miller St', (20.0, 300.0)),
+        ('j', 'Ryde East Public School, Twin Rd', (20.0, 0.0)),
+        ('out', 'Arndell School, Badajoz Rd', (800.0, 0.0)),
+    ]
+    assert detours_of(pattern=pattern(calls)) == (
+        Detour(kind=SPUR, first=1, last=5),
+    )

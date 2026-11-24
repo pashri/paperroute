@@ -343,3 +343,124 @@ def spur_point(
     part = spot - index
     point = (x0 + (x1 - x0) * part, y0 + (y1 - y0) * part)
     return point, compass(dx=x1 - x0, dy=y1 - y0)
+
+
+def spur_places(*, rows: Sequence[StripRow], group: int) -> list[int] | None:
+    """
+    Find a spur's rows, junction first.
+
+    Parameters
+    ----------
+    rows : Sequence[StripRow]
+        The strip's rows.
+    group : int
+        The spur's detour group.
+
+    Returns
+    -------
+    list[int] | None
+        Indexes of the junction and each level in turn, or None when any
+        is missing, so the spur draws as rows.
+    """
+    places = sorted(
+        (
+            (each.detour.slot, index)
+            for index, each in enumerate(rows)
+            if each.detour is not None
+            and each.detour.kind is DetourKind.SPUR
+            and each.detour.group == group
+        ),
+    )
+    if not places:
+        return None
+    indexes = [index for _, index in places]
+    first = rows[indexes[0]].detour
+    size = first.size if first is not None else -1
+    whole = [slot for slot, _ in places] == list(range(size + 1))
+    contiguous = indexes == list(range(indexes[0], indexes[-1] + 1))
+    return indexes if whole and contiguous else None
+
+
+def groups_of(*, rows: Sequence[StripRow], kind: DetourKind) -> list[int]:
+    """
+    List the detour groups of one kind on a strip's rows.
+
+    Parameters
+    ----------
+    rows : Sequence[StripRow]
+        The strip's rows.
+    kind : DetourKind
+        Ring or spur.
+
+    Returns
+    -------
+    list[int]
+        Each group once, in row order.
+    """
+    return list(dict.fromkeys(
+        each.detour.group
+        for each in rows
+        if each.detour is not None and each.detour.kind is kind
+    ))
+
+
+def handed_rows(
+    *,
+    rows: Sequence[StripRow],
+    track_x: float,
+) -> tuple[frozenset[int], frozenset[int]]:
+    """
+    Say which rows a ring or spur draws in place of the usual drawing.
+
+    Parameters
+    ----------
+    rows : Sequence[StripRow]
+        The strip's rows.
+    track_x : float
+        The trunk's x.
+
+    Returns
+    -------
+    tuple[frozenset[int], frozenset[int]]
+        Indexes whose track it draws, and indexes whose mark, name and
+        time it draws: a whole ring's rows and the stand below it, and a
+        whole spur's levels past the junction.
+    """
+    tracks: set[int] = set()
+    marks: set[int] = set()
+    for group in groups_of(rows=rows, kind=DetourKind.LOOP):
+        if ring_of(rows=rows, group=group, track_x=track_x) is None:
+            continue
+        places = loop_places(rows=rows, group=group)
+        marks.update(places)
+        tracks.update([*places, places[-1] + 1])
+    for group in groups_of(rows=rows, kind=DetourKind.SPUR):
+        levels = spur_places(rows=rows, group=group) or []
+        marks.update(levels[1:])
+        tracks.update(levels[1:])
+    return frozenset(tracks), frozenset(marks)
+
+
+def loop_places(*, rows: Sequence[StripRow], group: int) -> list[int]:
+    """
+    Find a loop's rows.
+
+    Parameters
+    ----------
+    rows : Sequence[StripRow]
+        The strip's rows.
+    group : int
+        The loop's detour group.
+
+    Returns
+    -------
+    list[int]
+        Indexes of its rows, top first.
+    """
+    return [
+        index
+        for index, each in enumerate(rows)
+        if each.detour is not None
+        and each.detour.kind is DetourKind.LOOP
+        and each.detour.group == group
+    ]

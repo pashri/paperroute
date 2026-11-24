@@ -179,3 +179,12 @@ def test_followed_reach_leaves_a_detour_off_a_line_strip() -> None:
     assert reach is not None
     assert reach.trip is None
     assert not any(row.detour for row in reach.rows)
+
+
+def test_followed_reach_rings_a_loop_leaving_the_first_row() -> None:
+    """A stand straight below the From still brackets the ring."""
+    inputs = bus_inputs(calls=QVB[1:])
+    assert parts(inputs=inputs)[1:3] == [
+        DetourPart(kind=LOOP, group=0, slot=1, size=2),
+        DetourPart(kind=LOOP, group=0, slot=0, size=2),
+    ]

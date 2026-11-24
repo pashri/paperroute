@@ -48,10 +48,14 @@ from tests.golden.scenes.stops import (
 )
 from tests.golden.scenes.strips import (
     EASY_LATES,
+    LOOP_441,
     MISSED_LATES,
+    SPUR_18,
+    SPUR_506,
     TIGHT_LATES,
     connection,
     connection_strip,
+    detour_scene,
     late_connection,
     strip_scene,
     train_strip_scene,
@@ -86,6 +90,21 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     'strip_both_sides': lambda: both_sides_live(view=LiveView.STRIP),
     'strip_map_both_sides': lambda: both_sides_live(
         view=LiveView.STRIP_MAP,
+    ),
+    'strip_loop': lambda: detour_scene(
+        view=LiveView.STRIP, trip=LOOP_441, origin=3, route='441',
+    ),
+    'strip_map_loop': lambda: detour_scene(
+        view=LiveView.STRIP_MAP, trip=LOOP_441[3:], origin=0, route='441',
+    ),
+    'strip_spur': lambda: detour_scene(
+        view=LiveView.STRIP, trip=SPUR_18, origin=3, route='18',
+    ),
+    'strip_map_spur': lambda: detour_scene(
+        view=LiveView.STRIP_MAP, trip=SPUR_18[3:], origin=0, route='18',
+    ),
+    'strip_spur_506': lambda: detour_scene(
+        view=LiveView.STRIP, trip=SPUR_506, origin=2, route='506',
     ),
     'train_strip': lambda: train_strip_scene(destination='Petersham'),
     'train_strip_ends': lambda: train_strip_scene(destination='Lidcombe'),

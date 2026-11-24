@@ -88,7 +88,9 @@ def spur_rows(*, detour: Detour, group: int,
     ]
 
 
-def shaped_rows(*, stops: Sequence[PatternStop]) -> list[Shaped]:
+def shaped_rows(
+    *, stops: Sequence[PatternStop], mid: bool = False,
+) -> list[Shaped]:
     """
     Lay a trip's calls out as strip rows.
 
@@ -96,6 +98,8 @@ def shaped_rows(*, stops: Sequence[PatternStop]) -> list[Shaped]:
     ----------
     stops : Sequence[PatternStop]
         The calls in calling order.
+    mid : bool
+        True when the trip has calls before these.
 
     Returns
     -------
@@ -103,7 +107,10 @@ def shaped_rows(*, stops: Sequence[PatternStop]) -> list[Shaped]:
         Each row's call indexes, out call first, and its detour part;
         a call outside any detour is a row of its own.
     """
-    detours = {detour.first: detour for detour in find_detours(stops=stops)}
+    detours = {
+        detour.first: detour
+        for detour in find_detours(stops=stops, mid=mid)
+    }
     rows: list[Shaped] = []
     index = group = 0
     while index < len(stops):
@@ -140,7 +147,7 @@ def detour_layout(*, calls: list[tuple[str, PatternStop]]) -> list[Shaped]:
         return held
     return LAYOUTS.put(
         inputs=(calls,),
-        value=shaped_rows(stops=[stop for _, stop in calls]),
+        value=shaped_rows(stops=[stop for _, stop in calls], mid=True),
     )
 
 

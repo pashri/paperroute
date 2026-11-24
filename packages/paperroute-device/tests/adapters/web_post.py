@@ -5,7 +5,10 @@ from aiohttp.test_utils import TestClient
 
 
 async def post_once(
-    *, client: TestClient[web.Request, web.Application], path: str, data: dict[str, str],
+    *,
+    client: TestClient[web.Request, web.Application],
+    path: str,
+    data: dict[str, str],
 ) -> int:
     """
     Post a form, then close the client.

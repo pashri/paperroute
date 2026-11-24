@@ -99,6 +99,7 @@ def tiles_from(*, path: Path, origin: str | None) -> Path:
     [('0.0,51.5', False), (ORIGIN, True), (None, True)],
 )
 def test_other_origin_refused(
+    *,
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
     origin: str | None,

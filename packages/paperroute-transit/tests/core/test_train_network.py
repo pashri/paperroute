@@ -64,7 +64,7 @@ def test_expanded_inserts_passed_stations() -> None:
 
 def test_expanded_of_no_stations_is_empty() -> None:
     """Nothing in, nothing out."""
-    assert expanded(network=network_of(hops={}), stations=[]) == ()
+    assert not expanded(network=network_of(hops={}), stations=[])
 
 
 def test_a_missing_hop_is_outside() -> None:

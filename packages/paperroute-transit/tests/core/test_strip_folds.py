@@ -120,8 +120,8 @@ def test_quiet_far_end_folds_into_one_row() -> None:
 
 def test_fold_thresholds() -> None:
     """Under 5% of the busiest first link, and four stations at least."""
-    assert folds_of(reach=reach_from(specs=line(100, 5, 5, 5, 5))) == ()
-    assert folds_of(reach=reach_from(specs=line(100, 100, 4, 4, 4))) == ()
+    assert not folds_of(reach=reach_from(specs=line(100, 5, 5, 5, 5)))
+    assert not folds_of(reach=reach_from(specs=line(100, 100, 4, 4, 4)))
     (fold,) = folds_of(reach=reach_from(specs=line(100, 4, 4, 4, 4)))
     assert (fold.key, fold.rows) == ('E2', range(2, 6))
 
@@ -155,7 +155,7 @@ def test_floor_ignores_exit_rows() -> None:
 
 def test_fold_needs_nothing_busy_beyond_it() -> None:
     """A quiet stretch with a busier station after it stays open."""
-    assert folds_of(reach=reach_from(specs=line(100, 4, 4, 4, 4, 50))) == ()
+    assert not folds_of(reach=reach_from(specs=line(100, 4, 4, 4, 4, 50)))
 
 
 def test_fold_takes_the_branches_beyond_it() -> None:

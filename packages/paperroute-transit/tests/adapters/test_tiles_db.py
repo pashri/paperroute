@@ -199,7 +199,7 @@ def test_null_tiles_is_empty() -> None:
     assert tiles.tile(
         zoom=14, col=0, row=0, variant=TileVariant.BITS
     ) is None
-    assert tiles.street_labels(zoom=14, box=(0, 0, 1, 1)) == []
+    assert not tiles.street_labels(zoom=14, box=(0, 0, 1, 1))
     assert tiles.version() is None
 
 

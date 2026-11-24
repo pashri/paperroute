@@ -73,7 +73,7 @@ def test_a_station_snaps_to_every_node_within_150_m(
 
 def test_a_station_beyond_150_m_snaps_to_nothing(graph: TrackGraph) -> None:
     """A point 151 m from the line has no node."""
-    assert snapped(graph=graph, point=(400.0, 151.0)) == ()
+    assert not snapped(graph=graph, point=(400.0, 151.0))
 
 
 def test_a_winding_path_is_refused() -> None:

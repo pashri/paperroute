@@ -169,7 +169,7 @@ def test_weekends_do_not_count() -> None:
     trips = [(1, 'A', DEPARTURE, days_from(offsets=[0, 1, 5, 6, 12, 13]))]
     with timetable_of(trips=trips) as conn:
         assert write_weekday_runs(conn=conn, kinds=KINDS) == 0
-        assert trains_by_run(conn=conn) == {}
+        assert not trains_by_run(conn=conn)
 
 
 def test_a_timetable_of_two_weekdays_has_nothing_regular() -> None:
@@ -207,4 +207,4 @@ def test_a_run_with_no_regular_key_gets_no_row() -> None:
     trips = [(1, 'A', DEPARTURE, days_from(offsets=[0, 1]))]
     with timetable_of(trips=trips) as conn:
         assert write_weekday_runs(conn=conn, kinds=KINDS) == 0
-        assert trains_by_run(conn=conn) == {}
+        assert not trains_by_run(conn=conn)

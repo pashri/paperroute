@@ -65,12 +65,12 @@ def test_ridden_stops_skip_stops_without_points() -> None:
         departure=ride, pattern=pattern(stops=stops), window=None,
         zone=ZONE,
     ) == (POINTS['A'], POINTS['C'])
-    assert ridden_stops(
+    assert not ridden_stops(
         departure=ride,
         pattern=None,
         window=None,
         zone=ZONE,
-    ) == ()
+    )
 
 
 def test_route_stops_once_each() -> None:

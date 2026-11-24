@@ -39,7 +39,7 @@ def test_stop_distances_skips_zero_length_segments() -> None:
 def test_stop_distances_handles_no_stops_and_a_point_shape() -> None:
     """No stops give an empty result; a one-point shape places at zero."""
     point = make_shape(shape_id='point', points=[(5.0, 5.0)])
-    assert stop_distances(shape=TINY, stops=[]) == ()
+    assert not stop_distances(shape=TINY, stops=[])
     assert stop_distances(shape=point, stops=[(1.0, 1.0)]) == (0.0,)
     assert forward_distances(shape=point, stops=[(1.0, 1.0)]) == (0.0,)
 

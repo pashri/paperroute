@@ -3,6 +3,7 @@
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
+from functools import lru_cache
 from typing import Final
 
 from paperroute_transit.core.live import LiveDeparture
@@ -195,16 +196,16 @@ def followed_runs(
     return found
 
 
-def common_lengths(*, first: Sequence[str], second: Sequence[str]
+def common_lengths(*, first: tuple[str, ...], second: tuple[str, ...]
                    ) -> list[list[int]]:
     """
     Measure the longest common run from each pair of positions on.
 
     Parameters
     ----------
-    first : Sequence[str]
+    first : tuple[str, ...]
         Stations in order.
-    second : Sequence[str]
+    second : tuple[str, ...]
         Stations in order.
 
     Returns
@@ -225,22 +226,24 @@ def common_lengths(*, first: Sequence[str], second: Sequence[str]
     return longest
 
 
-def common_pairs(*, first: Sequence[str], second: Sequence[str]
-                 ) -> list[tuple[int, int]]:
+@lru_cache(maxsize=256)
+def common_pairs(*, first: tuple[str, ...], second: tuple[str, ...]
+                 ) -> tuple[tuple[int, int], ...]:
     """
     Match up two station sequences, keeping each one's order.
 
     Parameters
     ----------
-    first : Sequence[str]
+    first : tuple[str, ...]
         Stations in order.
-    second : Sequence[str]
+    second : tuple[str, ...]
         Stations in order.
 
     Returns
     -------
-    list[tuple[int, int]]
+    tuple[tuple[int, int], ...]
         Index pairs of a longest run of stations both share in order.
+        Equal arguments give the cached result.
     """
     longest = common_lengths(first=first, second=second)
     pairs: list[tuple[int, int]] = []
@@ -254,7 +257,7 @@ def common_pairs(*, first: Sequence[str], second: Sequence[str]
             else (i + 1, j) if step
             else (i, j + 1)
         )
-    return pairs
+    return tuple(pairs)
 
 
 def merge_into(*, rows: Sequence[Row], served: Served, train: int
@@ -279,8 +282,8 @@ def merge_into(*, rows: Sequence[Row], served: Served, train: int
         the rows' own stops come first.
     """
     pairs = common_pairs(
-        first=[row[0] for row in rows],
-        second=[station for station, _, _ in served],
+        first=tuple(row[0] for row in rows),
+        second=tuple(station for station, _, _ in served),
     )
     merged: list[Row] = []
     at, back = 0, 0

@@ -652,8 +652,23 @@ def test_a_stop_only_a_skipping_train_shares_falls_in_place() -> None:
 
 def test_common_pairs_keep_both_orders() -> None:
     """Shared stations are matched in order, either side skipping."""
-    assert common_pairs(first='ABCE', second='XBYE') == [(1, 1), (3, 3)]
-    assert common_pairs(first='AE', second='BCDE') == [(1, 3)]
+    assert common_pairs(
+        first=tuple('ABCE'),
+        second=tuple('XBYE'),
+    ) == ((1, 1), (3, 3))
+    assert common_pairs(
+        first=tuple('AE'),
+        second=tuple('BCDE'),
+    ) == ((1, 3),)
+
+
+def test_common_pairs_is_remembered_for_equal_sequences() -> None:
+    """Equal station runs are matched once and then served from cache."""
+    common_pairs.cache_clear()
+    first = common_pairs(first=('A', 'B'), second=('B', 'C'))
+    again = common_pairs(first=('A', 'B'), second=('B', 'C'))
+    assert again == first
+    assert common_pairs.cache_info().hits == 1
 
 
 def test_rows_above_the_from_show_only_the_shown_train() -> None:

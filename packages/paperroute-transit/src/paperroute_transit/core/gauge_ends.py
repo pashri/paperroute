@@ -559,7 +559,8 @@ def placed(
 
     Two or more buses in one break become a count at the break's
     centre. Two or more past an arrow become a count at the arrow: slot
-    0 for the left arrow and the last mark's slot for the right one.
+    0 for the left arrow. Buses past the right arrow, one or more, go
+    one slot past the last mark, where no mark is.
 
     Parameters
     ----------
@@ -588,7 +589,7 @@ def placed(
             gaps.setdefault(gap, []).append((slot, bus))
         else:
             singles.append(folded(slot=slot, group=[bus]))
-    ends = [(0.0, left), (float(line.marks[-1].slot), right)]
+    ends = [(0.0, left), (float(line.marks[-1].slot + 1), right)]
     centres = [
         (
             members[0][0] if len(members) == 1 else (gap.first + gap.last) / 2,

@@ -34,7 +34,7 @@ from paperroute_transit.render.gauge_route import (
 )
 from paperroute_transit.render.markers import badge_box
 from paperroute_transit.render.names import Naming
-from paperroute_transit.render.strip import RING_RADIUS
+from paperroute_transit.render.strip import DISC_RADIUS, RING_RADIUS
 
 NAMING: Final[Naming] = Naming(rules=NameRules())
 NONE: Final[NDArray[np.bool_]] = np.zeros((HEIGHT, WIDTH), dtype=bool)
@@ -251,3 +251,20 @@ def test_folded_leaves_badges_apart_unfolded() -> None:
     shown, ticks = folded(markers=(badge(x=100), badge(x=200)))
     assert [marker.route for marker in shown] == ['A', 'A']
     assert not ticks
+
+
+@pytest.mark.parametrize('spots', [(30.0,), (30.0, 35.0)])
+def test_draw_route_gauge_keeps_buses_past_the_arrow_off_the_last_disc(
+    spots: tuple[float, ...],
+) -> None:
+    """Buses past the right arrow leave the last mark as it is bare."""
+    gauge = gauge_of(40, end=20)
+    busy = replace(gauge, buses=tuple(bus(spot) for spot in spots))
+    plan = route_plan(gauge=busy, keep=NONE, naming=NAMING)
+    assert plan.line.arrow
+    x = slot_x(plan=plan, slot=plan.line.marks[-1].slot)
+    rows, cols = np.ogrid[:HEIGHT, :WIDTH]
+    disc = (cols - x) ** 2 + (rows - plan.line_y) ** 2 <= (
+        DISC_RADIUS ** 2
+    )
+    assert (drawn(busy)[0][disc] == drawn(gauge)[0][disc]).all()

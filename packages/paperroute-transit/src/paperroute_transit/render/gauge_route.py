@@ -19,11 +19,15 @@ from paperroute_transit.core.gauge_line import BREAK_SLOTS, BusSlot
 from paperroute_transit.core.map_view import Marker
 from paperroute_transit.core.names import base_name
 from paperroute_transit.render.gauge_draw import (
+    ARROW,
+    band,
     counts_ink,
+    draw_arrow,
     draw_brackets,
     draw_dots,
     draw_marks,
     draw_track,
+    mark_edge,
     names_ink,
 )
 from paperroute_transit.render.gauge_plan import (
@@ -52,6 +56,7 @@ from paperroute_transit.render.markers import (
     draw_live,
 )
 from paperroute_transit.render.names import Naming
+from paperroute_transit.render.strip import DISC_RADIUS, TRACK_WIDTH
 
 SPREAD_MOST: Final[float] = 2.0  # times PITCH
 FOLD_GAP: Final[float] = 2.0  # px between same-way badges before they fold
@@ -85,7 +90,10 @@ def slot_budget(*, pitch: float, right_end: float) -> tuple[int, int]:
 
 def line_end(*, gauge: RouteGauge) -> float:
     """
-    Give the pixel x the last slot may reach, leaving the end name room.
+    Give the pixel x the last slot may reach, leaving the end room.
+
+    The end name must rise whole, and buses past the Destination must
+    fit, with the arrow, after the last mark.
 
     Parameters
     ----------
@@ -95,9 +103,21 @@ def line_end(*, gauge: RouteGauge) -> float:
     Returns
     -------
     float
-        Pixel x, short enough that the last name rises whole before
-        ``EDGE``.
+        Pixel x, short enough that the last name and any buses past
+        the end stop before ``EDGE``.
     """
+    past = 0 if gauge.end is None else sum(
+        bus.spot > gauge.end for bus in gauge.buses
+    )
+    label = gauge.pattern.route if past == 1 else f'+{past}'
+    beyond = (
+        DISC_RADIUS
+        + 2 * badge_box(route=label, centre=(0, 0))[2]
+        + 2 * FOLD_GAP
+        + ARROW[0]
+        if past
+        else 0.0
+    )
     if gauge.end is not None:
         name = base_name(name=gauge.pattern.stops[gauge.end].name)
     elif gauge.calls:
@@ -106,7 +126,7 @@ def line_end(*, gauge: RouteGauge) -> float:
         return RIGHT_END
     width = min(text_width(text=name, face=BOLD_FACE), DEST_LONGEST)
     rise = width * COS + cap_height(face=BOLD_FACE) + END_CLEAR
-    return min(RIGHT_END, EDGE - rise)
+    return min(RIGHT_END, EDGE - max(rise, beyond))
 
 
 def route_plan_at(
@@ -297,6 +317,51 @@ def folded(
     return shown, sorted(ticks)
 
 
+def past_end(*, plan: GaugePlan, bus: BusSlot) -> bool:
+    """
+    Tell whether a bus is past the right arrow.
+
+    Parameters
+    ----------
+    plan : GaugePlan
+        The measurements.
+    bus : BusSlot
+        The placed bus.
+
+    Returns
+    -------
+    bool
+        True when it lies beyond the last mark.
+    """
+    return bus.slot > plan.line.marks[-1].slot
+
+
+def end_x(*, plan: GaugePlan, label: str) -> float:
+    """
+    Give the centre x of a badge just past the last mark.
+
+    Parameters
+    ----------
+    plan : GaugePlan
+        The measurements.
+    label : str
+        The badge's text.
+
+    Returns
+    -------
+    float
+        Pixel x, the badge ``FOLD_GAP`` clear of the last mark.
+    """
+    last = plan.line.marks[-1]
+    half = badge_box(route=label, centre=(0, 0))[2]
+    return (
+        slot_x(plan=plan, slot=last.slot)
+        + mark_edge(kind=last.kind)
+        + FOLD_GAP
+        + half
+    )
+
+
 def bus_marker(*, plan: GaugePlan, bus: BusSlot, route: str) -> Marker:
     """
     Make the badge for a bus or a count placed on the line.
@@ -319,9 +384,14 @@ def bus_marker(*, plan: GaugePlan, bus: BusSlot, route: str) -> Marker:
     bearing = None if bus.right is None else (
         90.0 if bus.right else 270.0
     )
+    label = f'+{bus.count}' if bus.count else route
     return Marker(
-        route=f'+{bus.count}' if bus.count else route,
-        x=slot_x(plan=plan, slot=bus.slot),
+        route=label,
+        x=(
+            end_x(plan=plan, label=label)
+            if past_end(plan=plan, bus=bus)
+            else slot_x(plan=plan, slot=bus.slot)
+        ),
         y=float(plan.line_y),
         bearing=bearing,
         live=bool(bus.live) and not bus.count,
@@ -369,7 +439,13 @@ def draw_buses(canvas: Canvas, *, plan: GaugePlan, route: str) -> None:
     markers, ticks = folded(markers=[
         bus_marker(plan=plan, bus=bus, route=route)
         for bus in plan.line.buses
+        if not past_end(plan=plan, bus=bus)
     ])
+    markers.extend(
+        bus_marker(plan=plan, bus=bus, route=route)
+        for bus in plan.line.buses
+        if past_end(plan=plan, bus=bus)
+    )
     y = plan.line_y
     bottom = y + BADGE_HALF_HEIGHT + TICK
     for x in ticks:
@@ -379,6 +455,32 @@ def draw_buses(canvas: Canvas, *, plan: GaugePlan, route: str) -> None:
         )
     for marker in markers:
         draw_badge(canvas, marker=marker)
+
+
+def draw_end(canvas: Canvas, *, plan: GaugePlan, route: str) -> None:
+    """
+    Run the line and its arrow past the badge beyond the last mark.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target, with the track drawn without its right arrow.
+    plan : GaugePlan
+        The measurements.
+    route : str
+        Route label.
+    """
+    past = [bus for bus in plan.line.buses if past_end(plan=plan, bus=bus)]
+    if not past:
+        return
+    marker = bus_marker(plan=plan, bus=past[0], route=route)
+    right = badge_box(route=marker.route, centre=(marker.x, 0))[2]
+    head = right + FOLD_GAP
+    start = slot_x(plan=plan, slot=plan.line.marks[-1].slot)
+    band(
+        canvas, left=start, right=head, y=plan.line_y, height=TRACK_WIDTH,
+    )
+    draw_arrow(canvas, right=head, y=plan.line_y)
 
 
 def draw_route_gauge(
@@ -405,7 +507,13 @@ def draw_route_gauge(
     """
     keep = keep_out(ink=canvas.grey() < 128)
     plan = route_plan(gauge=gauge, keep=keep, naming=naming)
-    draw_track(canvas, plan=plan)
+    if any(past_end(plan=plan, bus=bus) for bus in plan.line.buses):
+        draw_track(
+            canvas, plan=replace(plan, line=replace(plan.line, arrow=False)),
+        )
+        draw_end(canvas, plan=plan, route=route)
+    else:
+        draw_track(canvas, plan=plan)
     for gap in (plan.line.back, plan.line.ahead):
         if gap is not None:
             draw_dots(canvas, plan=plan, gap=gap)

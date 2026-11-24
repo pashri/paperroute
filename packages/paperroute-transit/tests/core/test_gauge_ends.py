@@ -84,15 +84,16 @@ def test_placed_keeps_one_bus_left_of_a_cut_line_at_slot_zero() -> None:
     assert found == (BusSlot(slot=0.0, right=True, live=False),)
 
 
-def test_placed_folds_buses_past_the_right_arrow_at_the_last_mark() -> None:
-    """Buses past the last stop fold into a count at the last mark."""
+def test_placed_folds_buses_past_the_right_arrow_past_the_last_mark(
+) -> None:
+    """Buses past the last stop fold into a count one slot past it."""
     found = placed(
         line=broken(arrow=True),
         buses=[bus(11), bus(12, live=True), bus(0)],
     )
     assert found == (
         BusSlot(slot=0.0, right=True, live=False),
-        BusSlot(slot=9.0, right=True, live=None, count=2),
+        BusSlot(slot=10.0, right=True, live=None, count=2),
     )
 
 

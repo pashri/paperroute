@@ -105,16 +105,19 @@ def heard_vehicles(
     ----------
     positions : Mapping[str, PositionsSnapshot]
         The latest download of each positions feed. The result is reused
-        while this is the same object.
+        while the feeds and the very download objects are the same, even
+        in a new mapping.
 
     Returns
     -------
     tuple[Heard, ...]
         Each vehicle with its download; age it with `position_age`.
     """
-    held = HEARD_MEMO.get(inputs=(positions,))
+    inputs = tuple(positions.values())
+    same = tuple(positions)
+    held = HEARD_MEMO.get(inputs=inputs, same=same)
     if held is not None:
         return held
     return HEARD_MEMO.put(
-        inputs=(positions,), value=pick_vehicles(positions=positions),
+        inputs=inputs, same=same, value=pick_vehicles(positions=positions),
     )

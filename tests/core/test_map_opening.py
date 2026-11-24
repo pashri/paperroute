@@ -12,11 +12,17 @@ from paperroute_transit.core.day_lines import line_choice
 from paperroute_transit.core.map_fit import line_framed, steady_frame
 from paperroute_transit.core.map_requests import (
     map_effects,
+    map_feeds,
     map_inputs,
     pin_map_inputs,
     settled_key,
 )
+from paperroute_transit.core.map_vehicles import heard_vehicles
 from paperroute_transit.core.model import Departure, TripFacts
+from paperroute_transit.core.positions import (
+    PositionsSnapshot,
+    VehiclePosition,
+)
 from paperroute_transit.core.saved import LiveView, MapFraming
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import live_stop_view
@@ -109,3 +115,31 @@ def test_a_z2_frame_has_no_settled_key() -> None:
     state = opened(kind='train', departures=(train(),))
     inputs = map_inputs(state=state, stop_view=live_stop_view(state=state))
     assert settled_key(state=state, inputs=inputs) is None
+
+
+def test_pin_map_inputs_vehicles_reused_across_ticks() -> None:
+    """Two builds from one state pick the vehicles once."""
+    state = opened(kind='bus', departures=bus_pin())
+    bus = VehiclePosition(
+        trip_id='t1',
+        route_id='r',
+        label='606',
+        point=(0.0, 0.0),
+        bearing=None,
+        timestamp=1,
+        start_date=None,
+    )
+    feed = map_feeds(state=state)[0]
+    download = PositionsSnapshot(
+        fetched_at=state.now, header_time=1, vehicles=(bus,),
+    )
+    state = replace(
+        state, map=replace(state.map, positions={feed: download}),
+    )
+    shown = live_stop_view(state=state)
+    first = pin_map_inputs(state=state, stop_view=shown).positions
+    again = pin_map_inputs(state=state, stop_view=shown).positions
+    assert first
+    picked = heard_vehicles(positions=first)
+    assert picked
+    assert heard_vehicles(positions=again) is picked

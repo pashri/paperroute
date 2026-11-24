@@ -33,7 +33,7 @@ ARROW_SCALES: Final[tuple[tuple[float, int], ...]] = ((1.6, PAPER), (1.0, INK))
 DOTS: Final[tuple[tuple[float, int], ...]] = ((6.0, PAPER), (4.0, INK))
 MARK_HALF: Final[float] = 8.0
 NUMBERS_MEMO_SIZE: Final[int] = 4  # placements held
-NUMBERS_MEMO: Final[SameMemo[list['Number']]] = SameMemo(
+NUMBERS_MEMO: Final[SameMemo[tuple['Number', ...]]] = SameMemo(
     size=NUMBERS_MEMO_SIZE,
 )
 NUMBER_MPP: Final[int] = 14  # numbers at this many m/px and closer
@@ -325,7 +325,7 @@ def place_numbers(
     markers: Sequence[Marker],
     taken: Sequence[Box],
     keep_out: KeepOut,
-) -> list[Number]:
+) -> tuple[Number, ...]:
     """
     Place route numbers in order, each clear of everything before it.
 
@@ -342,9 +342,9 @@ def place_numbers(
 
     Returns
     -------
-    list[Number]
+    tuple[Number, ...]
         The numbers placed; a number with no free spot is left out. Equal
-        arguments give the same list, which callers must not change.
+        arguments give the same tuple.
     """
     same = (tuple(markers), tuple(taken), keep_out)
     held = NUMBERS_MEMO.get(inputs=(), same=same)
@@ -353,8 +353,10 @@ def place_numbers(
     return NUMBERS_MEMO.put(
         inputs=(),
         same=same,
-        value=place_free_numbers(
-            markers=markers, taken=taken, keep_out=keep_out,
+        value=tuple(
+            place_free_numbers(
+                markers=markers, taken=taken, keep_out=keep_out,
+            ),
         ),
     )
 

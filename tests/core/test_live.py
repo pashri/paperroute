@@ -505,3 +505,13 @@ def test_resolved_recomputed_for_a_new_frame_time() -> None:
         now=START + timedelta(seconds=30), snap=snap, deps=deps,
     )
     assert later is not first
+
+
+def test_resolved_recomputed_for_new_snapshots_or_departures() -> None:
+    """New snapshot or departure objects are not served the old result."""
+    deps, snap = (DEP,), {'f': snapshot()}
+    first = resolved_at(now=START, snap=snap, deps=deps)
+    other_snap = resolved_at(now=START, snap={'f': snapshot()}, deps=deps)
+    other_deps = resolved_at(now=START, snap=snap, deps=(DEP,))
+    assert other_snap is not first
+    assert other_deps is not first

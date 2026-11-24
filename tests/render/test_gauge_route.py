@@ -323,3 +323,9 @@ def test_draw_route_gauge_keeps_buses_past_the_arrow_off_the_last_disc(
         return np.asarray(ink[inside], dtype=bool)
 
     assert (disc(busy) == disc(gauge)).all()
+
+
+def test_folded_puts_a_count_at_the_mean_of_its_buses() -> None:
+    """A count of three sits at the mean x of the three, not a midpoint."""
+    shown, _ = folded(markers=(badge(x=100), badge(x=110), badge(x=118)))
+    assert shown[0].marker.x == pytest.approx((100 + 110 + 118) / 3)

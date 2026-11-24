@@ -8,6 +8,7 @@ baselines. ``GOLDEN_UPDATE=1`` redraws this platform's; on a Mac,
 
 import hashlib
 import json
+import math
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -28,6 +29,7 @@ from paperroute_transit.core.connection_strip import (
 )
 from paperroute_transit.core.connection_view import ConnectionView
 from paperroute_transit.core.gauge_ends import RouteGauge
+from paperroute_transit.core.gauge_line import MarkKind
 from paperroute_transit.core.kerb_menu import MENU_HINT
 from paperroute_transit.core.map_view import MapView, Marker
 from paperroute_transit.core.messages import ScreenView
@@ -49,6 +51,7 @@ from paperroute_transit.render.gauge_plan import (
     mark_lines,
     slot_x,
 )
+from paperroute_transit.render.markers import STRIP_WEDGE, badge_box
 from paperroute_transit.render.names import Naming
 from tests.golden.scenes import (
     GOLDEN,
@@ -376,6 +379,42 @@ def test_the_busy_break_counts_the_three_buses_in_it(
     ]
     assert held == ['+3']
     assert sum(gauge_route.buses_in(marker=badge) for badge in badges) == 20
+
+
+def test_the_busy_near_from_count_points_both_ways(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The count nearest the From mixes directions and points both ways."""
+    badges: list[gauge_route.GaugeBadge] = []
+    draw_badge = gauge_route.draw_badge
+
+    def kept_badge(
+        canvas: skia.Canvas, *, badge: gauge_route.GaugeBadge,
+    ) -> None:
+        """Record a badge and draw it."""
+        badges.append(badge)
+        draw_badge(canvas, badge=badge)
+
+    monkeypatch.setattr(gauge_route, 'draw_badge', kept_badge)
+    ink = frame_of(state=SCENES['stop_gauge_busy']()) < 128
+    plan = gauge_route.route_plan(
+        gauge=view_gauge(scene='stop_gauge_busy'),
+        keep=keep_out(ink=np.zeros((480, 800), dtype=bool)),
+        naming=Naming(rules=NameRules()),
+    )
+    origin = next(
+        slot_x(plan=plan, slot=mark.slot)
+        for mark in plan.line.marks
+        if mark.kind is MarkKind.FROM
+    )
+    count = min(badges, key=lambda badge: abs(badge.marker.x - origin))
+    assert count.mixed
+    marker = count.marker
+    y = round(marker.y)
+    left, _, right, _ = badge_box(route=marker.route, centre=(marker.x, y))
+    tip = STRIP_WEDGE.tip
+    for apex in (math.floor(left - tip + 3), math.ceil(right + tip - 3)):
+        assert ink[y, apex]
 
 
 def test_the_gauge_names_its_destination_in_full(

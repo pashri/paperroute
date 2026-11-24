@@ -229,10 +229,31 @@ class GaugeBadge:
         What to draw and where.
     mixed : bool
         True for a count of buses going both ways; it points both ways.
+    spots : tuple[float, ...]
+        Pixel x of each bus a count folds in; empty to take the badge's
+        own x for each.
     """
 
     marker: Marker
     mixed: bool = False
+    spots: tuple[float, ...] = ()
+
+
+def bus_spots(*, badge: GaugeBadge) -> tuple[float, ...]:
+    """
+    Give the pixel x of each bus a badge stands for.
+
+    Parameters
+    ----------
+    badge : GaugeBadge
+        The badge.
+
+    Returns
+    -------
+    tuple[float, ...]
+        One x per bus.
+    """
+    return badge.spots or (badge.marker.x,) * buses_in(marker=badge.marker)
 
 
 def buses_in(*, marker: Marker) -> int:
@@ -277,7 +298,7 @@ def badge_span(*, badge: GaugeBadge) -> tuple[float, float]:
 
 def merged(*, first: GaugeBadge, second: GaugeBadge) -> GaugeBadge:
     """
-    Fold two badges into one count midway between them.
+    Fold two badges into one count at the mean of their buses.
 
     Parameters
     ----------
@@ -294,17 +315,18 @@ def merged(*, first: GaugeBadge, second: GaugeBadge) -> GaugeBadge:
     """
     one, two = first.marker, second.marker
     mixed = first.mixed or second.mixed or one.bearing != two.bearing
-    count = buses_in(marker=one) + buses_in(marker=two)
+    spots = bus_spots(badge=first) + bus_spots(badge=second)
     return GaugeBadge(
         marker=replace(
             one,
-            route=f'+{count}',
-            x=(one.x + two.x) / 2,
+            route=f'+{len(spots)}',
+            x=sum(spots) / len(spots),
             bearing=None if mixed else one.bearing,
             live=one.live and two.live,
             age=None,
         ),
         mixed=mixed,
+        spots=spots,
     )
 
 

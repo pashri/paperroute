@@ -3,6 +3,7 @@
 import importlib.util
 import sys
 import threading
+from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from types import ModuleType
@@ -19,15 +20,23 @@ class Handler(BaseHTTPRequestHandler):
     """Serves a body only to a request carrying the key."""
 
     def do_GET(self) -> None:
-        """Answer a GET with the body, or 403 without the key."""
-        ok = (
-            self.headers.get('Authorization') == f'apikey {KEY}'
-            or f'api_key={KEY}' in self.path
-        )
-        ok = ok and self.headers.get('Accept') == ACCEPT
-        self.send_response(200 if ok else 403)
+        """
+        Answer a GET with the body, 403 without the key, or 406 like BODS.
+
+        TfNSW needs the protobuf Accept header; BODS refuses it.
+        """
+        tfnsw = self.headers.get('Authorization') == f'apikey {KEY}'
+        bods = f'api_key={KEY}' in self.path
+        accept = self.headers.get('Accept')
+        if bods and accept == ACCEPT:
+            status = HTTPStatus.NOT_ACCEPTABLE
+        elif (tfnsw and accept == ACCEPT) or bods:
+            status = HTTPStatus.OK
+        else:
+            status = HTTPStatus.FORBIDDEN
+        self.send_response(status)
         self.end_headers()
-        self.wfile.write(BODY if ok else b'')
+        self.wfile.write(BODY if status == HTTPStatus.OK else b'')
 
     def log_message(self, format: str, *args: object) -> None:
         """Stay quiet."""

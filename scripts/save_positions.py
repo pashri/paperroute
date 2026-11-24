@@ -116,7 +116,7 @@ async def bods_body(*, key: str, base_url: str) -> bytes:
     bytes
         The protobuf body, with coaches unnamed.
     """
-    async with aiohttp.ClientSession(headers={'Accept': ACCEPT}) as session:
+    async with aiohttp.ClientSession() as session:
         request = bods.BodsRequest(
             session=session, key=key, box=CAMBRIDGE_BBOX, base_url=base_url,
         )

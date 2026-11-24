@@ -193,6 +193,7 @@ async def test_app_without_a_release_is_not_listed(box: Box) -> None:
     'sleep 5 & wait',
 ])
 async def test_broken_card_falls_back_to_the_key(
+    *,
     box: Box,
     script: str,
     monkeypatch: pytest.MonkeyPatch,
@@ -283,7 +284,7 @@ async def test_missing_directories_list_nothing(tmp_path: Path) -> None:
         data=tmp_path / 'data',
     )
     await switch.refresh()
-    assert switch.installed() == ()
+    assert not switch.installed()
 
 
 async def test_missing_apps_folder_lists_nothing(box: Box) -> None:
@@ -292,7 +293,7 @@ async def test_missing_apps_folder_lists_nothing(box: Box) -> None:
         own=lambda: OWN, share=box.share, opt=box.root / 'none',
     )
     await switch.refresh()
-    assert switch.installed() == ()
+    assert not switch.installed()
 
 
 async def test_installed_refreshes_in_the_background_when_stale(

@@ -50,7 +50,6 @@ from paperroute_device.render.panel import (
     TOP_BOX,
     draw_panel_view,
 )
-from paperroute_device.render.qr import qr_image
 
 START = datetime(2026, 10, 16, 8, 0, tzinfo=UTC)
 WIFI_QR = 'WIFI:T:WPA;S:paperroute-setup;P:7Q4K9W2M;;'

@@ -76,6 +76,7 @@ def run_screen(
     ],
 )
 def test_screen_main_turns_frame_when_rotated(
+    *,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     state: str | None,

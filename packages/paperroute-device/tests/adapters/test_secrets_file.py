@@ -1,6 +1,5 @@
 """Tests for the file holding an API key."""
 
-import logging
 import stat
 from pathlib import Path
 from typing import Final

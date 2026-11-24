@@ -118,11 +118,11 @@ def test_defaults_are_the_kit_ones() -> None:
     app, device = Bare(), DeviceState(now=START)
     assert app.offline_phrase == ''
     assert app.quiet_label is None
-    assert app.menu_rows == ()
+    assert not app.menu_rows
     assert app.reset_hint == KIT_RESET_HINT
     assert app.confirm_copy == KIT_CONFIRM_COPY
     assert app.section() is None
-    assert app.migrations() == {}
+    assert not app.migrations()
     assert app.zone() is None
     assert app.on_tick(state=1, device=device, tick=Tick(now=START)) == (1, ())
     assert app.on_event(state=1, device=device, event='x') == (1, ())
@@ -133,7 +133,7 @@ def test_defaults_are_the_kit_ones() -> None:
     assert app.settle(
         before=0, after=1, device=device, event='x', effects=('e',),
     ) == (1, ('e',))
-    assert app.banners(state=1, device=device) == ()
+    assert not app.banners(state=1, device=device)
     assert not app.in_menu(state=1)
     assert not app.needs_full(before='a', after='b')
     assert app.may_sleep(state=1, now=START)
@@ -141,8 +141,8 @@ def test_defaults_are_the_kit_ones() -> None:
     assert app.sleep_view(state=1, device=device) == PlainSleepView(
         band=SLEEP_BAND,
     )
-    assert app.device_rows(state=1, device=device) == ()
-    assert app.status(state=1) == {}
+    assert not app.device_rows(state=1, device=device)
+    assert not app.status(state=1)
     assert app.saved(state=1) is None
     assert not app.save_due(before=0, after=1)
     app.observe(before=0, after=1, event='x')
@@ -178,8 +178,8 @@ def test_command_line_defaults_are_the_kit_ones() -> None:
     with app.opened(args=args, last_error=LastError(zone=ZONE)) as opened:
         assert opened is None
     assert not vars(args)
-    assert app.keys() == ()
-    assert app.erased(args=args) == ()
+    assert not app.keys()
+    assert not app.erased(args=args)
     assert app.web(args=args, timings=KitTimings()) == AppWeb()
 
 

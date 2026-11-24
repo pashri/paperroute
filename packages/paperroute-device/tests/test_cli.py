@@ -378,7 +378,7 @@ async def test_device_for_probes_and_resets_every_key(
         app=FakeApp(),
         last_error=last_error,
     )
-    assert keyless.keys == ()
+    assert not keyless.keys
     assert isinstance(keyless.resets, NullResets)
 
 
@@ -467,7 +467,7 @@ def test_a_replaying_app_gets_no_probe_keys_or_resets(
         args=args, app=app, last_error=LastError(zone=HOBART),
     )
     assert device.probe is None
-    assert device.keys == ()
+    assert not device.keys
     assert isinstance(device.resets, NullResets)
     assert cli.clock_for(app=app, zone=HOBART).now() == START
     assert isinstance(cli.clock_for(app=FakeApp(), zone=HOBART), SystemClock)
@@ -724,6 +724,7 @@ def test_run_takes_a_splash_picture() -> None:
     ids=['panel', 'no-panel'],
 )
 def test_web_main_asks_for_the_splash_first(
+    *,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     flags: list[str],

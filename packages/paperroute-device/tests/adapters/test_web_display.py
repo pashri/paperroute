@@ -522,6 +522,7 @@ def test_page_click_handler_constants() -> None:
     ('reboot', 'Restart now?', 'Restart'),
 ])
 async def test_power_works_without_script(
+    *,
     site: DeviceSite,
     client: Client,
     action: str,

@@ -175,6 +175,7 @@ async def test_unknown_value_is_400(
     ({'alarm': '7am'}, 'alarm', ALARM_ERROR),
 ])
 async def test_bad_time_is_422_for_json_and_303_for_forms(
+    *,
     site: Site,
     client: Client,
     fields: dict[str, str],
@@ -313,4 +314,3 @@ def test_line_filled_replaces_the_marks_whole_line(
     assert line_filled(page='a\n    {{m}}\nc\n', mark='{{m}}', lines=lines) == (
         expected
     )
-

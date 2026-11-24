@@ -162,6 +162,7 @@ def _row(*, label: str, value: str) -> str:
     ({'facts': None}, 'Wi-Fi', '-'),
 ])
 async def test_device_page_values(
+    *,
     device: DeviceSite,
     client: Client,
     change: dict[str, object],
@@ -182,6 +183,7 @@ async def test_device_page_values(
     (PanelTimes(partial_s=0.5, ok=False), 'not answering'),
 ])
 async def test_device_page_panel_line(
+    *,
     device: DeviceSite, client: Client, panel: PanelTimes, value: str,
 ) -> None:
     """The Panel line says what the panel has done, or that it is silent."""
@@ -201,6 +203,7 @@ async def test_device_page_without_panel_has_no_line(client: Client) -> None:
     (False, 'not answering'),
 ])
 async def test_device_page_knobs_line(
+    *,
     device: DeviceSite, client: Client, knobs: bool, value: str,
 ) -> None:
     """The Knobs line says whether the knobs' lines opened."""
@@ -232,6 +235,7 @@ def test_ago_text_units(seconds: float, shown: str) -> None:
     (KEY, NOW - 300, 'Key set · last used 5 min ago'),
 ])
 async def test_device_page_key_states(
+    *,
     device: DeviceSite,
     client: Client,
     key: str | None,
@@ -282,6 +286,7 @@ async def test_join_another_network_asks_device(
     ('erase', ConfirmAction.ERASE),
 ])
 async def test_reset_asks_device(
+    *,
     device: DeviceSite, client: Client, kind: str, action: ConfirmAction
 ) -> None:
     """Each reset asks the panel and says so."""
@@ -466,6 +471,7 @@ async def test_power_post_from_script_is_204(
     ('POST', '/power'),
 ])
 async def test_power_unknown_action_400(
+    *,
     device: DeviceSite, client: Client, method: str, path: str
 ) -> None:
     """An unknown power action is refused and nothing is posted."""
@@ -520,6 +526,7 @@ def two_keys() -> tuple[DeviceSite, FakeKeys]:
     ({'key': 'b'}, EVIL, HTTPStatus.FORBIDDEN, None, None),
 ])
 async def test_second_key_saved_by_name(
+    *,
     form: dict[str, str],
     headers: dict[str, str],
     status: HTTPStatus,

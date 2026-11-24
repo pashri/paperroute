@@ -70,13 +70,13 @@ def mapped(*, pattern: TripPattern) -> list[tuple[int, Point]]:
     ]
 
 
-def same_way(*, hero: TripPattern, pattern: TripPattern) -> bool:
+def same_way(*, hero: TripPattern, pattern: TripPattern) -> bool | None:
     """
     Tell whether a trip runs the hero's way.
 
     Direction ids decide when both trips have one and share a route ID.
     Otherwise the order of the first two stations the trips share
-    decides.
+    decides. With fewer than two shared stations the way is unknown.
 
     Parameters
     ----------
@@ -87,9 +87,9 @@ def same_way(*, hero: TripPattern, pattern: TripPattern) -> bool:
 
     Returns
     -------
-    bool
-        True when it runs the same way; also when the trips share fewer
-        than two stations.
+    bool | None
+        True when it runs the same way, False when it runs the other
+        way, None when the trips share fewer than two stations.
     """
     if (
         hero.direction is not None
@@ -105,7 +105,9 @@ def same_way(*, hero: TripPattern, pattern: TripPattern) -> bool:
         for stop in pattern.stops
         if stop.station in order
     ]
-    return len(shared) < 2 or shared[0] < shared[1]
+    if len(shared) < 2:
+        return None
+    return shared[0] < shared[1]
 
 
 def along_index(*, pattern: TripPattern, point: Point) -> float:
@@ -359,12 +361,15 @@ def live_bus(
     Returns
     -------
     GaugeBus | None
-        The bus, or None once it has reached its last stop.
+        The bus, or None once it has reached its last stop or when its
+        way is unknown.
     """
     index = along_index(pattern=pattern, point=vehicle.point)
     if index >= last_index(pattern=pattern):
         return None
     right = same_way(hero=hero, pattern=pattern)
+    if right is None:
+        return None
     spot = hero_spot(
         hero=hero, pattern=pattern, index=index, right=right, known=known,
     )
@@ -403,14 +408,16 @@ def timetable_bus(
     Returns
     -------
     GaugeBus | None
-        The bus, or None when the trip is not under way or has reached
-        its last stop.
+        The bus, or None when the trip is not under way, has reached
+        its last stop or runs a way that is unknown.
     """
     seconds = service_seconds(day=trip.day, moment=now, zone=zone)
     index = timetable_index(pattern=pattern, seconds=seconds)
     if index is None or index >= len(pattern.stops) - 1:
         return None
     right = same_way(hero=hero, pattern=pattern)
+    if right is None:
+        return None
     spot = hero_spot(
         hero=hero, pattern=pattern, index=index, right=right, known=known,
     )

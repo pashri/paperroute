@@ -373,6 +373,37 @@ def test_same_way_across_route_ids_compares_stop_order() -> None:
     assert same_way(hero=hero, pattern=other)
 
 
+def test_same_way_is_unknown_with_one_shared_station() -> None:
+    """One shared station gives no order to compare."""
+    assert same_way(hero=run(order=range(10)), pattern=run(order=[2])) is None
+
+
+def test_same_way_is_unknown_with_no_shared_station() -> None:
+    """Trips with no station in common cannot be compared."""
+    other = pattern(
+        stops=(call(station='X', x=5.0, y=9.0, at_s=EIGHT),),
+        trip_id='x',
+    )
+    assert same_way(hero=HERO, pattern=other) is None
+
+
+def test_bus_slots_leave_out_a_bus_of_unknown_way() -> None:
+    """A bus sharing one station with the hero is left off the gauge."""
+    lone = pattern(
+        trip_id='t2',
+        stops=(
+            call(station='S3', x=300.0, y=0.0, at_s=EIGHT),
+            call(station='X', x=300.0, y=90.0, at_s=EIGHT + STEP),
+        ),
+    )
+    buses = buses_of(
+        patterns={'t2': lone},
+        vehicles=(at_point(trip_id='t2', point=S3),),
+        trips_running=(route_trip(trip_id='t2'),),
+    )
+    assert not buses
+
+
 def test_along_index_finds_the_nearest_segment() -> None:
     """A point near a segment gives the fraction along it."""
     assert along_index(

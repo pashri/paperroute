@@ -212,6 +212,8 @@ def ring_row(
     """
     Draw a ring row's stop on the ring, its name beside it and its time.
 
+    The name starts past a badge beside the stop (see `name_after`).
+
     Parameters
     ----------
     canvas : Canvas
@@ -231,7 +233,7 @@ def ring_row(
     draw_name(
         canvas,
         row=row,
-        left=x + RING_RADIUS + NAME_GAP,
+        left=max(x + RING_RADIUS + NAME_GAP, row.name_after or 0.0),
         face=face,
         edge=draw_end(canvas, row=row, columns=columns),
         naming=columns.naming,

@@ -22,6 +22,7 @@ from paperroute_transit.core.strip_follow import (
     origin_of,
     picked_calls,
 )
+from paperroute_transit.core.strip_from_loop import from_loop
 from paperroute_transit.core.strip_list import listed_rows
 from paperroute_transit.core.strip_model import (
     ALL_TAG,
@@ -636,6 +637,35 @@ def names_clear(*, rows: Sequence[StripRow], markers: Sequence[Marker],
     )
 
 
+def ringed(*, inputs: StripInputs, rows: Sequence[StripRow],
+           reach: Reach | None) -> Sequence[StripRow]:
+    """
+    Lay a loop round the From out as a ring.
+
+    Parameters
+    ----------
+    inputs : StripInputs
+        The view's inputs.
+    rows : Sequence[StripRow]
+        Visible rows.
+    reach : Reach | None
+        The reach drawn, or None.
+
+    Returns
+    -------
+    Sequence[StripRow]
+        The rows, reshaped by `from_loop` along the followed trip when
+        its pattern is loaded.
+    """
+    trip = None if reach is None or reach.trip is None else reach.trip
+    pattern = None if trip is None else inputs.patterns.get(trip)
+    if reach is None or pattern is None:
+        return rows
+    return from_loop(
+        rows=rows, pattern=pattern, station_of=reach.station_of,
+    )
+
+
 def with_vehicles(*, inputs: StripInputs, rows: Sequence[StripRow],
                   track_x: int, reach: Reach | None
                   ) -> tuple[tuple[StripRow, ...], tuple[Marker, ...]]:
@@ -660,6 +690,7 @@ def with_vehicles(*, inputs: StripInputs, rows: Sequence[StripRow],
         on a ring under a badge covered (see `covered_from`), and the
         badges.
     """
+    rows = ringed(inputs=inputs, rows=rows, reach=reach)
     ways = ways_of(
         rows=rows,
         spots=[spot_of(row=row, track_x=track_x) for row in rows],

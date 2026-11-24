@@ -1004,7 +1004,7 @@ class FaultyRuns:
 
     def __call__(
         self, *, conn: sqlite3.Connection, classify: Classifier,
-        rail_types: Collection[int],
+        rail_types: Collection[int], turns: bool,
     ) -> object:
         """
         Count the call, then fail or build the run tables.
@@ -1017,6 +1017,8 @@ class FaultyRuns:
             The city's classifier.
         rail_types : Collection[int]
             The city's rail route types.
+        turns : bool
+            Whether to store the turnarounds.
 
         Returns
         -------
@@ -1031,7 +1033,9 @@ class FaultyRuns:
         self.calls += 1
         if conn.execute(self.sql).fetchone():
             raise ValueError('the run tables refused a trip')
-        return load_runs(conn=conn, classify=classify, rail_types=rail_types)
+        return load_runs(
+            conn=conn, classify=classify, rail_types=rail_types, turns=turns,
+        )
 
 
 def run_here(path: str, argv: list[str]) -> NoReturn:

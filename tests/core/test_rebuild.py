@@ -154,7 +154,7 @@ def failed_at(*, minutes: int) -> State:
 @pytest.mark.parametrize(
     ('schema', 'expected'),
     [('4', True), ('5', True), ('6', True), ('7', True), ('8', True),
-     ('9', True), ('10', True), ('11', False), ('12', False),
+     ('9', True), ('10', True), ('11', True), ('12', False),
      (None, False), ('x', False)],
 )
 def test_is_outdated(schema: str | None, expected: bool) -> None:
@@ -168,9 +168,12 @@ def test_is_outdated(schema: str | None, expected: bool) -> None:
         ('8', None, True),
         ('9', None, True),
         ('10', None, True),
-        ('11', None, False),
-        ('11', '151.2093,-33.8688', False),
+        ('11', None, True),
+        ('11', '151.2093,-33.8688', True),
         ('11', '0.0,51.5', True),
+        ('12', None, False),
+        ('12', '151.2093,-33.8688', False),
+        ('12', '0.0,51.5', True),
         (None, None, False),
     ],
 )
@@ -279,13 +282,13 @@ def test_rebuilt_ok_waits_before_any_retry() -> None:
 
 
 def test_current_schema_clears_outdated() -> None:
-    """A later schema-11 file is no longer outdated."""
+    """A later schema-12 file is no longer outdated."""
     state, _ = run_events(
         state=pinned(),
         events=[
             OLD,
             TimetableRebuilt(ok=True),
-            TimetableSeen(version='w', schema='11'),
+            TimetableSeen(version='w', schema='12'),
         ],
     )
     assert not state.rebuild.outdated

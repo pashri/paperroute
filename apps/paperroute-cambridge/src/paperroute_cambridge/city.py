@@ -316,6 +316,7 @@ CAMBRIDGE: Final[City] = City(
     catalogue=CAMBRIDGE_CATALOGUE,
     timetable=TimetableRules(
         merge=merge_cambridge, holiday_source='bods', compact=True,
+        turnarounds=True,
     ),
     alerts=CAMBRIDGE_ALERTS,
     default_pin=Pin(origin=DRUMMER_STREET, kind=CambridgeMode.BUS),

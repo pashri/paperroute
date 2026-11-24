@@ -22,6 +22,7 @@ from paperroute_transit.build.passed import write_passed
 from paperroute_transit.build.runs import RUN_SCHEMA, load_runs
 from paperroute_transit.build.swap import land
 from paperroute_transit.build.track_db import read_track_db
+from paperroute_transit.build.turns import TURN_SCHEMA
 from paperroute_transit.build.weekday import write_weekday_runs
 from paperroute_transit.core.city import City
 from paperroute_transit.core.modes import end_point_modes
@@ -165,12 +166,14 @@ def run_extras(*, path: Path, city: City, tiles: Path | None) -> None:
         conn.executescript(CATALOGUE_SCHEMA)
         conn.executescript(PAIR_SCHEMA)
         conn.executescript(PARENT_KERB_SCHEMA)
+        conn.executescript(TURN_SCHEMA)
         timed(
             phase='runs',
             step=lambda: load_runs(
                 conn=conn,
                 classify=city.classify,
                 rail_types=city.catalogue.rail_types,
+                turns=city.timetable.turnarounds,
             ),
         )
         timed(

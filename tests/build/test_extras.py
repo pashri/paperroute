@@ -7,6 +7,7 @@ import sqlite3
 import subprocess
 import sys
 from array import array
+from collections.abc import Collection
 from contextlib import closing
 from datetime import date
 from pathlib import Path
@@ -24,16 +25,18 @@ from paperroute_transit.build.handoff import (
     hand_over,
     write_handoff,
 )
+from paperroute_transit.build.runs import RunReport, load_runs
 from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.build.track_db import RailTrack, write_track
 from paperroute_transit.core.geo import to_metres
+from paperroute_transit.core.modes import Classifier
 from tests.build.network_feed import LAT, LON, STEP_LON, network_feed
 
 RUN_TABLES: Final[set[str]] = {
     'runs', 'run_stops', 'run_calls', 'trip_runs', 'trip_next',
     'trip_joins', 'route_patterns', 'chooser_routes', 'chooser_towards',
     'rail_hops', 'track_places', 'weekday_runs', 'stop_pairs',
-    'parent_kerbs',
+    'parent_kerbs', 'trip_turns',
 }
 IMPORTS_ONLY: Final[str] = (
     'import paperroute_transit.build.extras, sys; '
@@ -252,6 +255,37 @@ def test_run_extras_survives_a_parent_kerbs_failure(
             'SELECT COUNT(*) FROM parent_kerbs',
         ).fetchone() == (0,)
     assert 'parent kerbs failed' in caplog.text
+
+
+@pytest.mark.parametrize('turnarounds', [False, True])
+def test_run_extras_passes_the_turnarounds_flag(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, turnarounds: bool,
+) -> None:
+    """The run build records turnarounds only for a city that asks."""
+    seen: list[bool] = []
+
+    def spy(
+        *, conn: sqlite3.Connection, classify: Classifier,
+        rail_types: Collection[int], turns: bool,
+    ) -> RunReport:
+        """Record the flag and build the runs."""
+        seen.append(turns)
+        return load_runs(
+            conn=conn, classify=classify, rail_types=rail_types, turns=turns,
+        )
+
+    monkeypatch.setattr(timetable, 'build_extras', skip_extras)
+    monkeypatch.setattr(extras, 'load_runs', spy)
+    db = network_build(folder=tmp_path)
+    city = dataclasses.replace(
+        SYDNEY,
+        timetable=dataclasses.replace(
+            SYDNEY.timetable, turnarounds=turnarounds,
+        ),
+    )
+    extras.run_extras(path=db, city=city, tiles=None)
+    assert seen == [turnarounds]
+    assert 'trip_turns' in tables_of(db=db)
 
 
 def test_run_parent_kerbs_skips_a_city_without_them(

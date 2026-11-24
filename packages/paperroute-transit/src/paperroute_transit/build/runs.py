@@ -12,6 +12,7 @@ from operator import itemgetter
 from typing import Final
 
 from paperroute_transit.build.gtfs_files import insert_many
+from paperroute_transit.build.turns import block_pairs, runs_on, trip_turns
 from paperroute_transit.core.model import HIDDEN_HEADSIGNS, until_repeated_hop
 from paperroute_transit.core.modes import Classifier
 
@@ -347,34 +348,6 @@ def next_trips(
     return {trip_id: after for trip_id, after in found if after is not None}
 
 
-def runs_on(
-    *, current: TripCalls, after: TripCalls | None, joined: set[str],
-) -> bool:
-    """
-    Decide whether a run carries on from one trip into the next.
-
-    Rail trips run on into any route; others only into the same route
-    short name. A trip already in the run is never joined again.
-
-    Parameters
-    ----------
-    current : TripCalls
-        Last trip in the run so far.
-    after : TripCalls | None
-        Its next trip on the block, if any.
-    joined : set[str]
-        Trip IDs already in the run.
-
-    Returns
-    -------
-    bool
-        True when after joins the run.
-    """
-    if after is None or after.trip_id in joined:
-        return False
-    return current.rail or after.route == current.route
-
-
 def joined_passes(
     *, passes: set[int], at: int, after: TripCalls,
 ) -> set[int]:
@@ -633,34 +606,7 @@ def trip_joins(
     tuple[str, str]
         Trip ID and the next trip's ID, where runs_on joins them.
     """
-    for trip in trips:
-        after = nexts.get(trip.trip_id)
-        if trip.shown and after is not None and runs_on(
-            current=trip, after=after, joined={trip.trip_id},
-        ) and not reverses(trip=trip, after=after):
-            yield trip.trip_id, after.trip_id
-
-
-def reverses(*, trip: TripCalls, after: TripCalls) -> bool:
-    """
-    Say whether a vehicle turns back where one trip becomes the next.
-
-    Parameters
-    ----------
-    trip : TripCalls
-        Earlier trip.
-    after : TripCalls
-        Trip it becomes.
-
-    Returns
-    -------
-    bool
-        True when after's second station is trip's second-to-last.
-    """
-    return (
-        len(trip.stations) > 1 and len(after.stations) > 1
-        and after.stations[1] == trip.stations[-2]
-    )
+    yield from block_pairs(trips=trips, nexts=nexts, turned=False)
 
 
 def trip_days(*, conn: sqlite3.Connection) -> dict[str, int]:
@@ -907,9 +853,12 @@ def block_trip_runs(
 
 def load_block_runs(
     *, conn: sqlite3.Connection, table: RunTable, blocks: list[TripCalls],
+    turns: bool,
 ) -> None:
     """
     Chain block trips into runs; store trip_runs, trip_next, trip_joins.
+
+    With turns, also store trip_turns.
 
     Parameters
     ----------
@@ -919,11 +868,16 @@ def load_block_runs(
         Runs so far.
     blocks : list[TripCalls]
         Block trips in trip ID order; emptied once chained.
+    turns : bool
+        Whether to store the turnarounds in trip_turns.
     """
     nexts = next_trips(trips=blocks)
     tags = carry_ons(trips=blocks, nexts=nexts)
     insert_many(conn=conn, sql='INSERT INTO trip_joins VALUES (?, ?)',
                 rows=trip_joins(trips=blocks, nexts=nexts))
+    if turns:
+        insert_many(conn=conn, sql='INSERT INTO trip_turns VALUES (?, ?)',
+                    rows=trip_turns(trips=blocks, nexts=nexts))
     insert_many(conn=conn, sql='INSERT INTO trip_runs VALUES (?, ?)',
                 rows=block_trip_runs(trips=blocks, nexts=nexts, table=table))
     blocks.clear()
@@ -960,7 +914,7 @@ def write_run_table(*, conn: sqlite3.Connection, table: RunTable) -> None:
 
 def load_runs(
     *, conn: sqlite3.Connection, classify: Classifier,
-    rail_types: Collection[int],
+    rail_types: Collection[int], turns: bool = False,
 ) -> RunReport:
     """
     Store every shown trip's run, the runs, their stops and the patterns.
@@ -976,6 +930,8 @@ def load_runs(
         Sorts a route into a mode.
     rail_types : Collection[int]
         GTFS route types run on rails.
+    turns : bool
+        Whether to store the turnarounds in trip_turns, which must exist.
 
     Returns
     -------
@@ -991,6 +947,6 @@ def load_runs(
                     ),
                     table=table, blocks=blocks,
                 ))
-    load_block_runs(conn=conn, table=table, blocks=blocks)
+    load_block_runs(conn=conn, table=table, blocks=blocks, turns=turns)
     write_run_table(conn=conn, table=table)
     return RunReport(runs=len(table.ids), trips=table.mapped)

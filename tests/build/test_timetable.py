@@ -261,7 +261,7 @@ def test_meta_records_schema_version(tmp_path: Path) -> None:
     assert query(db=db, sql="SELECT value FROM meta "
                             "WHERE key = 'schema_version'") == [
         (SCHEMA_VERSION,)]
-    assert SCHEMA_VERSION == '11'
+    assert SCHEMA_VERSION == '12'
 
 
 def test_stop_times_carry_metres_along_the_stored_line(
@@ -320,7 +320,7 @@ def test_meta_records_origin(tmp_path: Path) -> None:
         sql="SELECT key, value FROM meta"
             " WHERE key IN ('schema_version', 'origin') ORDER BY key",
     )
-    assert rows == [('origin', '151.2093,-33.8688'), ('schema_version', '11')]
+    assert rows == [('origin', '151.2093,-33.8688'), ('schema_version', '12')]
 
 
 def test_meta_records_each_source_end(tmp_path: Path) -> None:

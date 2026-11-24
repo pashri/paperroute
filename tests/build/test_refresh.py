@@ -330,7 +330,7 @@ def test_unchanged_headers_skip_download(
     report = run(server=server, data_dir=data_dir)
     assert server.state.hits == {'HEAD': 3}
     assert not report.rebuilt
-    assert report.downloaded == ()
+    assert not report.downloaded
 
 
 def test_new_etag_same_bytes_skips_rebuild(
@@ -344,7 +344,7 @@ def test_new_etag_same_bytes_skips_rebuild(
     report = run(server=server, data_dir=data_dir)
     assert server.state.hits['GET'] == 1
     assert report.downloaded == ('metro',)
-    assert report.changed == ()
+    assert not report.changed
     assert not report.rebuilt
     states = json.loads(
         (data_dir / 'sources' / 'sources.json').read_text(encoding='utf-8'),
@@ -381,7 +381,7 @@ def test_force_rebuilds_without_changes(
     run(server=server, data_dir=data_dir)
     report = run(server=server, data_dir=data_dir, force=True)
     assert report.rebuilt
-    assert report.changed == ()
+    assert not report.changed
 
 
 def test_refresh_keeps_old_timetable_when_download_fails(
@@ -522,6 +522,7 @@ def test_stale_source_brings_the_last_day_forward(
 
 
 def test_rebuilds_from_stored_zips_keep_the_last_day(
+    *,
     server: FeedServer,
     data_dir: Path,
     tmp_path: Path,
@@ -612,6 +613,7 @@ def test_refresh_clears_stale_scratch(
 
 
 def test_integrity_failure_keeps_old(
+    *,
     server: FeedServer,
     data_dir: Path,
     tmp_path: Path,
@@ -664,6 +666,7 @@ def test_window_running_out_rebuilds_from_stored_zips(
 
 
 def test_crash_before_states_saved_rebuilds_next_run(
+    *,
     server: FeedServer,
     data_dir: Path,
     tmp_path: Path,
@@ -737,7 +740,7 @@ def test_refresh_rebuilds_when_schema_version_differs(
     server.state.hits.clear()
     report = run(server=server, data_dir=data_dir)
     assert server.state.hits == {'HEAD': 3}
-    assert report.changed == ()
+    assert not report.changed
     assert report.rebuilt
 
 
@@ -754,7 +757,7 @@ def test_refresh_rebuilds_a_schema_eight_timetable(
         conn.commit()
     server.state.hits.clear()
     report = run(server=server, data_dir=data_dir)
-    assert report.changed == ()
+    assert not report.changed
     assert report.rebuilt
 
 
@@ -763,6 +766,7 @@ def test_refresh_rebuilds_a_schema_eight_timetable(
     [('0.0,51.5', True), ('151.2093,-33.8688', False), (None, False)],
 )
 def test_update_rebuilds_on_other_origin(
+    *,
     server: FeedServer,
     data_dir: Path,
     origin: str | None,
@@ -781,7 +785,7 @@ def test_update_rebuilds_on_other_origin(
     server.state.hits.clear()
     report = run(server=server, data_dir=data_dir)
     assert server.state.hits == {'HEAD': 3}
-    assert report.changed == ()
+    assert not report.changed
     assert report.rebuilt is rebuilt
 
 
@@ -1112,6 +1116,7 @@ def test_a_one_line_rule_file_is_cut_again(
 
 
 def test_a_failed_rule_write_fails_only_that_source(
+    *,
     server: FeedServer,
     data_dir: Path,
     tmp_path: Path,
@@ -1169,7 +1174,7 @@ def test_a_source_with_no_rule_leaves_no_rule_file(
     """Sources without a rule store no rule file, and no extra state."""
     serve_extra(server=server, tmp_path=tmp_path, comment=b'one')
     run_extra(server=server, data_dir=data_dir)
-    assert list((data_dir / 'sources').glob('*.rule')) == []
+    assert not list((data_dir / 'sources').glob('*.rule'))
     raw = json.loads(
         (data_dir / 'sources' / 'sources.json').read_text(encoding='utf-8'),
     )
@@ -1206,7 +1211,7 @@ def test_a_refused_cut_keeps_the_stored_cut(
     )
     assert (report.failed, report.all_failed) == (('extra',), False)
     assert (data_dir / 'sources' / 'extra.zip').read_bytes() == stored
-    assert report.rebuilt and report.changed == ()
+    assert report.rebuilt and not report.changed
     after = load_states(path=data_dir / 'sources' / 'sources.json')
     assert after['extra'] == before['extra']
 
@@ -1363,6 +1368,7 @@ def test_cut_into_turns_a_failed_hash_into_a_source_error(
     [RuntimeError('encrypted'), NotImplementedError('compression')],
 )
 def test_a_failing_cut_keeps_the_stored_cut(
+    *,
     server: FeedServer, data_dir: Path, tmp_path: Path, error: Exception,
 ) -> None:
     """A cut that raises something unexpected fails the source only."""
@@ -1393,7 +1399,7 @@ def test_a_damaged_download_keeps_the_stored_cut(
     )
     assert (report.failed, report.all_failed) == (('extra',), False)
     assert (data_dir / 'sources' / 'extra.zip').read_bytes() == stored
-    assert report.rebuilt and report.changed == ()
+    assert report.rebuilt and not report.changed
     after = load_states(path=data_dir / 'sources' / 'sources.json')
     assert after['extra'] == before['extra']
 
@@ -1418,6 +1424,7 @@ def test_without_optional_leaves_out_every_optional_source() -> None:
 
 
 def test_a_fallback_build_starts_after_the_failure_is_handled(
+    *,
     server: FeedServer, data_dir: Path, tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

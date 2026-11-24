@@ -7,7 +7,6 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_sydney.adapters.web_board import SuggestPlug
 from paperroute_sydney.city import SYDNEY, SydneyMode
 from paperroute_testkit.fake_pins import FakePinOptions

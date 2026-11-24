@@ -12,7 +12,6 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_sydney.adapters.web_board import (
     SYDNEY_HINT,
     SYDNEY_NAV,
@@ -20,7 +19,6 @@ from paperroute_sydney.adapters.web_board import (
 )
 from paperroute_sydney.city import SYDNEY, SydneyMode
 from paperroute_testkit.core.connection_factories import WORK as CONNECTION
-from paperroute_testkit.core.connection_factories import WORK_CHANGE
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_testkit.page_markup import inside, parse_page, parse_tree
 from paperroute_transit.adapters.board_head import BoardHead
@@ -36,7 +34,6 @@ from paperroute_transit.adapters.web_pins import (
 )
 from paperroute_transit.core.chooser import Choice
 from paperroute_transit.core.messages import (
-    Event,
     PinDeleted,
     PinMoved,
     PinSaved,
@@ -47,7 +44,6 @@ from paperroute_transit.core.modes import end_point_modes
 from paperroute_transit.core.pin_choices import PinDraft, StopMatch
 from paperroute_transit.core.route_colours import RouteColour
 from paperroute_transit.observers import PinsSeen
-from tests.adapters.test_pin_editor import OPTIONS, ROUTED
 from tests.adapters.test_web_device import sydney_site
 from tests.adapters.transit_web import transit_display
 

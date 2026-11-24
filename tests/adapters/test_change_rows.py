@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from paperroute_sydney.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_REF
+from paperroute_sydney.city import SYDNEY, SYDNEY_REF
 from paperroute_transit.adapters.change_rows import CHANGE_COUNT, CHANGE_M
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.adapters.pin_options import SqlitePinOptions
@@ -155,5 +155,5 @@ def test_no_network_tables_empty(built: Path, tmp_path: Path) -> None:
         old = SqlitePinOptions(network=network)
         place = StopPlace(stop_id='215020', name='P', point=(0.0, 0.0))
         assert old.change_stops(place=place) == ()
-        assert old.reached_from(place=place) == ()
-        assert old.routes_between(origin=place, destination=place) == ()
+        assert not old.reached_from(place=place)
+        assert not old.routes_between(origin=place, destination=place)

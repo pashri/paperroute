@@ -17,11 +17,7 @@ from paperroute_device.core.device_model import (
     PowerAction,
     ResetKind,
 )
-from paperroute_device.core.device_settings import (
-    DeviceSettings,
-    QuietMode,
-    Window,
-)
+from paperroute_device.core.device_settings import DeviceSettings, Window
 from paperroute_device.core.kit_effects import (
     ControlPower,
     ProbeDevice,

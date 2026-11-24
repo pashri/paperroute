@@ -105,7 +105,7 @@ def test_station_name_and_square_boxes(tmp_path: Path) -> None:
         (x - 7.0, y - 7.0, x + 7.0, y + 7.0),
         *corners(),
     )
-    assert boxes.streets == ()
+    assert not boxes.streets
 
 
 def test_turned_street_box_bounds_the_text(tmp_path: Path) -> None:
@@ -185,7 +185,7 @@ def test_labels_off_the_map_are_left_out(tmp_path: Path) -> None:
     label = street(name='Far Road', x=gx + 600.0, y=gy)
     with closing(build(out=tmp_path / 'tiles.db', labels=[label])) as tiles:
         boxes = keep_out(base=base(), tiles=tiles)
-    assert boxes.streets == ()
+    assert not boxes.streets
 
 
 def test_no_centre_keeps_out_the_corners_only(tmp_path: Path) -> None:

@@ -327,13 +327,13 @@ def test_gauge_buses_keeps_a_bus_past_the_from_until_its_last_stop(
 
 def test_gauge_buses_skips_a_vehicle_without_a_pattern() -> None:
     """A vehicle with no pattern, or an unknown trip, is left out."""
-    assert buses_of(
+    assert not buses_of(
         patterns={'x': None},
         vehicles=(
             at_point(trip_id='x', point=S3),
             at_point(trip_id='unknown', point=S3),
         ),
-    ) == ()
+    )
 
 
 def test_gauge_buses_orders_the_buses_by_spot() -> None:
@@ -428,10 +428,10 @@ def test_gauge_buses_drops_a_bus_at_its_last_stop_with_a_position() -> None:
         ),
     )
     ragged = pattern(trip_id='t2', stops=stops, direction=0)
-    assert buses_of(
+    assert not buses_of(
         patterns={'t2': ragged},
         vehicles=(at_point(trip_id='t2', point=S8),),
-    ) == ()
+    )
 
 
 def test_gauge_buses_maps_each_pattern_once_and_hands_out_tuples() -> None:

@@ -13,13 +13,7 @@ import pytest
 from paperroute_device.core.kit_effects import Render, is_kit_effect
 from paperroute_device.core.kit_events import Tick
 from paperroute_device_testkit.device_fakes import FixedClock
-from paperroute_sydney.city import (
-    SYDNEY,
-    SYDNEY_PROJECTION,
-    SYDNEY_REF,
-    SYDNEY_ZONE,
-    SydneyMode,
-)
+from paperroute_sydney.city import SYDNEY, SYDNEY_REF, SYDNEY_ZONE, SydneyMode
 from paperroute_testkit.core.factories import live
 from paperroute_testkit.core.kit_steps import step
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
@@ -30,7 +24,6 @@ from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.core.chains import chains_of
 from paperroute_transit.core.connection_strip import ConnectionStripView
-from paperroute_transit.core.map_view import DEFAULT_ZOOM
 from paperroute_transit.core.messages import (
     Effect,
     Event,

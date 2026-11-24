@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from paperroute_sydney.city import SYDNEY, SYDNEY_PROJECTION, SydneyMode
+from paperroute_sydney.city import SYDNEY, SydneyMode
 from paperroute_transit.adapters import pin_options
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.adapters.pin_options import SqlitePinOptions
@@ -330,7 +330,7 @@ def test_destinations_without_line_tables(
             kind=SydneyMode.TRAIN,
             line=Choice(key='train:T1', label='Line T1', badge='T1'),
         )
-    assert found == ()
+    assert not found
 
 
 def test_filters_for_bus_include_school_and_replacement(
@@ -354,7 +354,7 @@ def test_filters_for_bus_include_school_and_replacement(
             stop_id='B2', kind=SydneyMode.TRAIN,
         )
     assert {'809', '811', 'S901', 'T1X'} <= set(found)
-    assert trains == ()
+    assert not trains
 
 
 def test_filters_for_train_are_its_lines(options: SqlitePinOptions) -> None:
@@ -396,9 +396,9 @@ def test_old_file_offers_nothing(built: Path, tmp_path: Path) -> None:
     )) as network:
         old = SqlitePinOptions(network=network)
         centre = StopPlace(stop_id='C', name='C', point=(0.0, 0.0))
-        assert old.search(text='stop') == ()
-        assert old.lines_at(stop_id='C', kind=SydneyMode.TRAIN) == ()
-        assert old.filters_at(stop_id='C', kind=SydneyMode.TRAIN) == ()
+        assert not old.search(text='stop')
+        assert not old.lines_at(stop_id='C', kind=SydneyMode.TRAIN)
+        assert not old.filters_at(stop_id='C', kind=SydneyMode.TRAIN)
         assert old.nearby(place=centre, kind=None) == ()
 
 
@@ -437,7 +437,7 @@ def test_route_colours_without_network(built: Path, tmp_path: Path) -> None:
         city=SYDNEY,
     )) as network:
         found = SqlitePinOptions(network=network).route_colours(names=('T1',))
-    assert found == {}
+    assert not found
 
 
 def test_call_order_unknown_kind_sorts_as_non_station() -> None:

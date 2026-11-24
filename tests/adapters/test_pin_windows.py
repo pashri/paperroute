@@ -65,7 +65,7 @@ def test_add_and_remove_rows() -> None:
 
 def test_rows_ignore_bad_fields() -> None:
     """A bad count, day or index is ignored, and the count is capped."""
-    assert rows_of(fields=fields(('wn', 'x'))) == ()
+    assert not rows_of(fields=fields(('wn', 'x')))
     assert len(rows_of(fields=fields(('wn', '99')))) == 20
     assert rows_of(fields=fields(
         ('wn', '1'), ('w0_day', 'funday'), ('remove_window', '5'),

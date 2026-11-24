@@ -12,7 +12,6 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_sydney.adapters.web_board import SuggestPlug
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute_sydney.core.trip_search import Journey, JourneyLeg
@@ -25,7 +24,7 @@ from paperroute_testkit.core.factories import place
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages
-from paperroute_transit.core.messages import Event, PinSaved
+from paperroute_transit.core.messages import PinSaved
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.pin_choices import ChangeStop, StopMatch
 from paperroute_transit.observers import PinsSeen

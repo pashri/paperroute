@@ -34,7 +34,6 @@ from paperroute_hardware.core.knob_events import (
 )
 from paperroute_sydney.city import (
     SYDNEY,
-    SYDNEY_PROJECTION,
     SYDNEY_ZONE,
     TOWN_HALL,
     SydneyFeed,
@@ -84,7 +83,6 @@ from paperroute_transit.core.chooser import (
 )
 from paperroute_transit.core.chooser_lists import preview_steps
 from paperroute_transit.core.chooser_previews import read_previews
-from paperroute_transit.core.chooser_steps import trip_feeds
 from paperroute_transit.core.chooser_view import ChooserView
 from paperroute_transit.core.connection_strip import (
     ConnectionStripMapView,

@@ -151,7 +151,7 @@ def test_position_feeds_are_sorted_and_unique() -> None:
         'v1/gtfs/vehiclepos/buses',
         'v2/gtfs/vehiclepos/sydneytrains',
     )
-    assert PLAN.position_feeds(sources=[SydneyFeed.COACH], box=None) == ()
+    assert not PLAN.position_feeds(sources=[SydneyFeed.COACH], box=None)
 
 
 def test_alert_feeds_are_sorted_and_unique() -> None:

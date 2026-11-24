@@ -278,6 +278,7 @@ MARKERS = st.builds(
     streets=st.lists(BOXES, max_size=10),
 )
 def test_numbers_never_overlap_taken(
+    *,
     markers: list[Marker],
     taken: list[Box],
     places: list[Box],

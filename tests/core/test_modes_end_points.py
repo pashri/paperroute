@@ -32,8 +32,8 @@ def test_a_stored_train_route_is_ignored_everywhere() -> None:
     """An old train pin's routes reach no reader."""
     pin = replace(PIN, kind=train_mode(), routes=('T1',))
     ends = frozenset({train_mode()})
-    assert pin_routes(pin=pin, end_points=ends) == ()
-    assert strip_key(pin=pin, end_points=ends).routes == ()
+    assert not pin_routes(pin=pin, end_points=ends)
+    assert not strip_key(pin=pin, end_points=ends).routes
 
 
 def test_a_line_pin_keeps_its_routes() -> None:

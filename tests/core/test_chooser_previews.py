@@ -45,9 +45,9 @@ def test_read_chain_passes_single_row_columns() -> None:
 
 def test_read_chain_of_a_missing_column_is_empty() -> None:
     """A path with no column gives an empty chain."""
-    assert read_chain(
+    assert not read_chain(
         network=WALK, path=(*BUS, (Level.GROUP, '1-99')),
-    ) == ()
+    )
 
 
 def test_read_chain_stops_after_the_last_collapsed_column() -> None:

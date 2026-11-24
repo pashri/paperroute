@@ -31,6 +31,7 @@ ZOOM_TABLE = [
     ZOOM_TABLE,
 )
 def test_line_sizes_match_the_spec_at_every_zoom(
+    *,
     mpp: int,
     solid: float,
     dashes: float,

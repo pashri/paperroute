@@ -496,12 +496,13 @@ class ByDepth:
 
 
 @given(
-    ROW_KINDS,
-    ROW_KINDS,
-    st.lists(st.sampled_from(['turn', 'press', 'back']), max_size=30),
-    st.lists(st.integers(-4, 4), min_size=30, max_size=30),
+    stations=ROW_KINDS,
+    tos=ROW_KINDS,
+    moves=st.lists(st.sampled_from(['turn', 'press', 'back']), max_size=30),
+    steps=st.lists(st.integers(-4, 4), min_size=30, max_size=30),
 )
 def test_station_and_to_cursors_stay_focusable(
+    *,
     stations: list[str], tos: list[str], moves: list[str], steps: list[int],
 ) -> None:
     """Turns, presses and backs never land on a heading or dim row."""

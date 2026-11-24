@@ -35,13 +35,13 @@ def test_partings_find_where_solid_lines_part() -> None:
 
 def test_lines_parting_before_300_m_do_not_count() -> None:
     """Lines that share under 300 m before parting have no parting."""
-    assert partings(lines=fork(split=225.0)) == ()
+    assert not partings(lines=fork(split=225.0))
 
 
 def test_dashed_lines_have_no_partings() -> None:
     """Only solid lines part."""
     dashed = tuple(replace(line, solid=None) for line in fork(split=3000.0))
-    assert partings(lines=dashed) == ()
+    assert not partings(lines=dashed)
 
 
 def test_a_parting_with_300_m_shared_counts() -> None:

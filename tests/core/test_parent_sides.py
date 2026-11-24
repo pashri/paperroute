@@ -104,10 +104,10 @@ def test_line_pairs_skips_a_parent_the_line_cannot_orient() -> None:
     lost = replace(PARENT_KERBS, kerbs=(
         replace(one, onward=away), replace(two, onward=away),
     ))
-    assert line_pairs(line=KERB_LINE, pairs={}, parents={'s2': lost}) == ()
-    assert line_pairs(
+    assert not line_pairs(line=KERB_LINE, pairs={}, parents={'s2': lost})
+    assert not line_pairs(
         line=KERB_LINE[2:3], pairs={}, parents={'s2': PARENT_KERBS},
-    ) == ()
+    )
 
 
 def test_line_pairs_prefers_the_parent_and_drops_a_pair_with_itself() -> None:
@@ -120,7 +120,7 @@ def test_line_pairs_prefers_the_parent_and_drops_a_pair_with_itself() -> None:
         line=KERB_LINE, pairs={'s2': QUIET_PAIR}, parents={},
     ) == (QUIET_PAIR,)
     itself = replace(QUIET_PAIR, other=place('s2', name='Orchard Close'))
-    assert line_pairs(line=KERB_LINE, pairs={'s2': itself}, parents={}) == ()
+    assert not line_pairs(line=KERB_LINE, pairs={'s2': itself}, parents={})
 
 
 def test_line_pairs_reads_a_station_once_at_its_first_call() -> None:
@@ -146,7 +146,7 @@ def test_line_pairs_falls_back_to_the_facing_pair_when_unoriented() -> None:
     assert line_pairs(
         line=KERB_LINE, pairs={'s2': QUIET_PAIR}, parents=lost,
     ) == (QUIET_PAIR,)
-    assert line_pairs(line=KERB_LINE, pairs={}, parents=lost) == ()
+    assert not line_pairs(line=KERB_LINE, pairs={}, parents=lost)
 
 
 def test_line_pairs_falls_back_when_both_kerbs_hold_the_neighbour() -> None:
@@ -155,7 +155,7 @@ def test_line_pairs_falls_back_when_both_kerbs_hold_the_neighbour() -> None:
     assert line_pairs(
         line=KERB_LINE, pairs={'s2': QUIET_PAIR}, parents=both,
     ) == (QUIET_PAIR,)
-    assert line_pairs(line=KERB_LINE, pairs={}, parents=both) == ()
+    assert not line_pairs(line=KERB_LINE, pairs={}, parents=both)
 
 
 def test_line_pairs_orients_the_first_station_by_the_next() -> None:

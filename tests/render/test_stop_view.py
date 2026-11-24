@@ -915,7 +915,7 @@ def test_hero_due_shows_the_words_alone_without_an_estimate() -> None:
     assert canvas.drawn == ['2 stops away']
     quiet = Recording()
     hero_due(quiet, row=row(), top=100, place='')
-    assert quiet.drawn == []
+    assert not quiet.drawn
 
 
 def test_a_destination_view_draws_its_gauge_under_the_due_line() -> None:

@@ -321,6 +321,7 @@ def test_route_line_tiny_room_keeps_the_destination_in_the_last_slot(
     ],
 )
 def test_finished_line_from_left_end_matches_route_line(
+    *,
     start: int,
     end: int | None,
     budget: int,

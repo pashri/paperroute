@@ -234,6 +234,7 @@ def test_feed_sources_by_route_type(
     (715, '2436', 'OD1', None),
 ])
 def test_modes_by_route_type(
+    *,
     route_type: int, agency_id: str | None, short_name: str,
     kind: SydneyMode | None,
 ) -> None:

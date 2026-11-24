@@ -490,7 +490,7 @@ def test_cancelled_trip_not_drawn() -> None:
             for item in inputs.departures
         ),
     )
-    assert build_strip_view(inputs=cancelled).markers == ()
+    assert not build_strip_view(inputs=cancelled).markers
 
 
 def test_platform_stops_place_badges_on_their_station_rows() -> None:
@@ -542,7 +542,7 @@ def test_vehicle_off_strip_not_drawn() -> None:
             'e': line_pattern(trip_id='e', stations=('C', 'X'), minutes=0),
         },
     )
-    assert build_strip_view(inputs=inputs).markers == ()
+    assert not build_strip_view(inputs=inputs).markers
 
 
 def test_overlapping_badges_pushed_down() -> None:
@@ -660,7 +660,7 @@ def test_unavailable_and_loading_texts() -> None:
     ))
     bare = build_strip_view(inputs=inputs_of(reach=lonely))
     assert (bare.empty, bare.rows, bare.markers) == (NO_STRIP, (), ())
-    assert build_strip_pane(inputs=inputs_of(reach=None)).rows == ()
+    assert not build_strip_pane(inputs=inputs_of(reach=None)).rows
 
 
 def test_pane_puts_from_on_third_row_and_never_bands() -> None:
@@ -735,7 +735,7 @@ def test_line_reach_has_no_origin_and_from_cursor_tag() -> None:
     assert view.band is None
     assert [row.tag for row in view.rows] == ['', 'FROM?', '']
     assert [row.cursor for row in view.rows] == [False, True, False]
-    assert view.panel.rows == ()
+    assert not view.panel.rows
     assert view.panel.hint == (
         'Bottom: press to set From \u2022 Top: press to go back'
     )
@@ -847,7 +847,7 @@ def test_exit_spot_is_hook_middle() -> None:
 def test_vehicle_past_the_exit_station_is_gone() -> None:
     """Once the train reaches W1 it leaves the strip."""
     now = START + timedelta(minutes=7)
-    assert build_strip_view(inputs=west_inputs(now=now)).markers == ()
+    assert not build_strip_view(inputs=west_inputs(now=now)).markers
 
 
 def test_scroll_reaches_the_first_stop() -> None:

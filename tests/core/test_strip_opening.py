@@ -25,7 +25,6 @@ from paperroute_testkit.core.strip_factories import (
     turn,
 )
 from paperroute_transit.core.chooser import Stage, to_row, turned_to
-from paperroute_transit.core.map_view import DEFAULT_ZOOM
 from paperroute_transit.core.messages import StripLoaded, TimetableSeen
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.reach import (

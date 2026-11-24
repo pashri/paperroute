@@ -41,7 +41,6 @@ from paperroute_transit.core.messages import (
     FetchFeed,
     PositionsFetched,
     ScreenView,
-    SettingsChanged,
 )
 from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.places import shown

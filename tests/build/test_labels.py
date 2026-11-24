@@ -365,7 +365,7 @@ def test_default_rules_draw_today_s_kinds() -> None:
     """The default rules read and draw the four kinds, no extras."""
     rules = MapPlaces()
     assert rules.kinds == {'suburb', 'town', 'locality', 'village'}
-    assert rules.extras == ()
+    assert not rules.extras
 
 
 def test_a_city_can_drop_a_kind(store: FeatureStore) -> None:

@@ -322,6 +322,7 @@ def read_unit(name: str) -> dict[str, dict[str, str]]:
 
 
 def run_script(
+    *,
     name: str,
     args: tuple[str, ...],
     env: dict[str, str],
@@ -1834,6 +1835,7 @@ def copy_deploy(tmp_path: Path, app: Path = WITH_UNITS) -> Path:
 
 
 def run_provision(
+    *,
     copy: Path,
     sudo_user: str | None,
     app: str = 'demo',
@@ -2470,7 +2472,7 @@ def test_install_tiles_checks_free_disk_before_copying(
     )
     assert result.returncode == 1
     assert 'not enough free disk' in result.stderr
-    assert list(tiles.data.glob('tiles.db.*')) == []
+    assert not list(tiles.data.glob('tiles.db.*'))
     assert snapshot(root=tiles.root) == before
 
 
@@ -4058,6 +4060,7 @@ def provision_tools(
     ids=('sudoers-line', 'tool-name'),
 )
 def test_a_refused_app_part_installs_nothing(
+    *,
     tmp_path: Path,
     shipped: dict[str, str],
     app_lines: str,

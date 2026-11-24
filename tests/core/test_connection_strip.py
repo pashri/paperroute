@@ -258,7 +258,7 @@ def test_leg_calls_missing_end() -> None:
         end='nowhere',
         zone=SYDNEY_ZONE,
     )
-    assert calls == ()
+    assert not calls
 
 
 def test_stay_on_ends_at_last_leg_visit() -> None:
@@ -526,7 +526,7 @@ def test_no_pairs_no_sections() -> None:
         stale_after=STALE_LIMIT,
         zone=SYDNEY_ZONE,
     )
-    assert view.sections == ()
+    assert not view.sections
     assert view.selected == 0
     assert view.empty == 'No connections to Westmead Station in the next 3 hours'
 

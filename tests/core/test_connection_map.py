@@ -168,7 +168,7 @@ def test_cut_leg_drops_a_reversed_leg() -> None:
         ends=(ride.end, ride.start),
         shapes={'s665': LEG_TWO},
     )
-    assert found == ()
+    assert not found
 
 
 def test_reversed_leg_two_draws_no_stroke() -> None:
@@ -247,7 +247,7 @@ def test_connection_map_sidebar() -> None:
         mode=ConnectionMap.CHANGES,
     )
     assert len(view.pairs) == 4
-    assert view.sidebar == ()
+    assert not view.sidebar
     assert view.pairs[0].detail == (
         '24 min · change at Constitution Hill, North West Twy'
     )
@@ -289,7 +289,7 @@ def test_no_shape_no_line() -> None:
         chains=SHAPED,
         mode=ConnectionMap.CHANGES,
     )
-    assert view.base.route == ()
+    assert not view.base.route
     assert view.base.trip is not None
     assert view.base.trip.second == ()
 
@@ -327,8 +327,8 @@ def test_no_pairs_keeps_framing() -> None:
         chains=(),
         mode=ConnectionMap.CHANGES,
     )
-    assert view.base.route == ()
-    assert view.pairs == ()
+    assert not view.base.route
+    assert not view.pairs
     assert view.empty == 'No connections to Westmead Station in the next 3 hours'
 
 

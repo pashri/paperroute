@@ -8,7 +8,6 @@ import pytest
 from aiohttp import ClientResponse, web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_device_testkit.device_pages import HOTSPOT, DeviceSite
 from paperroute_sydney.adapters.tfnsw import TFNSW_KEY
 from paperroute_sydney.city import SYDNEY
@@ -142,4 +141,3 @@ async def test_setup_refuses_public_address(
         assert not setup.posted
     finally:
         await client.close()
-

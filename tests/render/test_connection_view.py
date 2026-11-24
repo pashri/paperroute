@@ -224,7 +224,8 @@ def test_stranded_hero_draws_no_arrival() -> None:
     assert VIEW.hero is not None
     canvas = Recording()
     hero_footer(canvas, hero=replace(VIEW.hero, arrives_at=''), top=HEADER)
-    assert canvas.drawn == [] and canvas.shapes == []
+    assert not canvas.drawn
+    assert not canvas.shapes
     assert canvas.grey()[HEADER + FOOTER_RULE, HERO_LEFT + 5] < 128
 
 

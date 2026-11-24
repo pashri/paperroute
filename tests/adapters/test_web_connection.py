@@ -10,7 +10,6 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_sydney.adapters.web_board import SuggestPlug
 from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.connection_factories import WORK
@@ -140,7 +139,7 @@ async def test_works_without_js(client: Client) -> None:
     assert '<legend>Change 2</legend>' in text
     assert '<label for="pin-allow2">Allow (minutes)</label>' in text
     assert '<legend>Leg 3</legend>' in text
-    assert unlabelled(text=text) == []
+    assert not unlabelled(text=text)
     assert '<script>' not in text
 
 

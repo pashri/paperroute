@@ -420,7 +420,7 @@ def test_never_route_removed() -> None:
     only_665 = tuple(
         item for item in lived(LEG2) if item.departure.route == '665'
     )
-    assert work_chains(first=lived(LEG1), second=only_665, pin=pin) == ()
+    assert not work_chains(first=lived(LEG1), second=only_665, pin=pin)
 
 
 def test_never_route_removed_from_direct() -> None:
@@ -429,13 +429,13 @@ def test_never_route_removed_from_direct() -> None:
         item=run(departs=(7, 35), arrives=(7, 50), route='609', trip_id='d'),
     )
     pin = replace(WORK, never=('609',))
-    assert work_chains(first=(), second=(), direct=(quick,), pin=pin) == ()
+    assert not work_chains(first=(), second=(), direct=(quick,), pin=pin)
 
 
 def test_unticked_way_ignored() -> None:
     """An unticked way gives no chains."""
     pin = replace(WORK, ways=(replace(WORK.ways[0], ticked=False),))
-    assert work_chains(first=lived(LEG1), second=lived(LEG2), pin=pin) == ()
+    assert not work_chains(first=lived(LEG1), second=lived(LEG2), pin=pin)
 
 
 def test_leg_key_names_stops() -> None:
@@ -624,6 +624,7 @@ def two_change_case(
 @settings(max_examples=60, deadline=None)
 @given(first=TIMES, second=TIMES, third=TIMES, allow=st.integers(1, 15))
 def test_chains_are_workable(
+    *,
     first: list[tuple[int, int]],
     second: list[tuple[int, int]],
     third: list[tuple[int, int]],
@@ -751,7 +752,7 @@ def test_held_change_to_a_cancelled_bus_is_missed() -> None:
 
 def test_held_change_to_a_vanished_bus_with_nothing_later_is_dropped() -> None:
     """A vanished second bus with nothing after it leaves no chain."""
-    assert work_chains(first=lived(LEG1[:1]), second=(), kept=KEPT) == ()
+    assert not work_chains(first=lived(LEG1[:1]), second=(), kept=KEPT)
 
 
 def test_held_chain_is_not_dropped_for_a_shared_last_trip() -> None:
@@ -829,6 +830,7 @@ def test_held_chain_missed_at_its_first_change() -> None:
 @settings(max_examples=60, deadline=None)
 @given(first=TIMES, second=TIMES, third=TIMES, allow=st.integers(1, 15))
 def test_offered_chains_search_again_unchanged(
+    *,
     first: list[tuple[int, int]],
     second: list[tuple[int, int]],
     third: list[tuple[int, int]],

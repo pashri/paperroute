@@ -23,7 +23,7 @@ from paperroute_testkit.core.factories import (
     place,
 )
 from paperroute_testkit.core.kit_steps import step
-from paperroute_transit.core.chooser import ChooserState, Failure, Level, Stage
+from paperroute_transit.core.chooser import ChooserState, Failure, Stage
 from paperroute_transit.core.chooser_lists import preview_steps
 from paperroute_transit.core.chooser_steps import (
     DEPARTURES_FAILED,
@@ -31,7 +31,6 @@ from paperroute_transit.core.chooser_steps import (
     from_inputs,
 )
 from paperroute_transit.core.chooser_view import LOADING_LISTS, ChooserView
-from paperroute_transit.core.map_view import DEFAULT_ZOOM
 from paperroute_transit.core.messages import (
     ChooserDeparturesFailed,
     ChooserDeparturesLoaded,

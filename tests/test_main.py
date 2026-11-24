@@ -490,7 +490,7 @@ def test_tiles_installed_while_running_are_checked(
         assert tiles.version() is None
         old_tiles(out=out)
         assert tiles.version() is None
-        assert tiles.street_labels(zoom=8, box=(0.0, 0.0, 1.0, 1.0)) == []
+        assert not tiles.street_labels(zoom=8, box=(0.0, 0.0, 1.0, 1.0))
         grey = TileVariant.GREY
         assert tiles.tile(zoom=8, col=0, row=0, variant=grey) is None
         assert tiles.version() is None
@@ -511,7 +511,7 @@ def test_matching_tiles_installed_while_running_are_read(
                 'zooms': levels_text(zooms=ZOOMS), 'style': TILE_STYLE,
             })
         assert tiles.version() is not None
-        assert tiles.street_labels(zoom=8, box=(0.0, 0.0, 1.0, 1.0)) == []
+        assert not tiles.street_labels(zoom=8, box=(0.0, 0.0, 1.0, 1.0))
         grey = TileVariant.GREY
         assert tiles.tile(zoom=8, col=0, row=0, variant=grey) is None
 
@@ -955,4 +955,4 @@ async def test_device_for_probes_and_resets_every_key(
         app=TransitApp(city=SYDNEY, parts=parts_with(keys=())),
         last_error=last_error,
     )
-    assert keyless.keys == ()
+    assert not keyless.keys

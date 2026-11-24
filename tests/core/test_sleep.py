@@ -241,7 +241,7 @@ def test_connection_sleep_screen_draws_the_next_connection() -> None:
     view = sleep_view(state=state, stop_view=live_stop_view(state=state))
     assert view.map.empty is None
     assert view.map.base.route is not None
-    assert view.map.pairs == ()
+    assert not view.map.pairs
     empty = slept(state=connection_loaded(second=()))
     gone = sleep_view(state=empty, stop_view=live_stop_view(state=empty))
     assert gone.map.empty is not None

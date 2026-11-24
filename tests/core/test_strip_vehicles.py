@@ -166,7 +166,7 @@ def test_one_stop_next_trip_gives_no_badge() -> None:
             stops=calls(stations='C', start=EIGHT + 720, points=LINE),
         )
         alone = replace(inputs, patterns={**inputs.patterns, 'b': lone})
-        assert build_strip_view(inputs=alone).markers == ()
+        assert not build_strip_view(inputs=alone).markers
 
 
 def test_hop_marker_needs_two_ends() -> None:

@@ -118,6 +118,7 @@ def test_solid_line_is_cased_in_paper(tmp_path: Path) -> None:
      (45, {1, 2}, 10)],
 )
 def test_dashes_are_half_width(
+    *,
     tmp_path: Path, mpp: int, widths: set[int], dash: int,
 ) -> None:
     """Dashes are half the solid width, at L6's dash length."""
@@ -212,6 +213,7 @@ def test_solid_hides_a_dashed_line_beside_it(tmp_path: Path) -> None:
      (3, False, 6.75), (8, False, 6), (45, False, 4.25)],
 )
 def test_rings_reach_3_5_px_past_the_stroke(
+    *,
     tmp_path: Path, mpp: int, solid: bool, radius: float,
 ) -> None:
     """A ring's radius is half its stroke plus 3.5, with a paper centre."""

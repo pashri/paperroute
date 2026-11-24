@@ -805,6 +805,7 @@ def test_main_refuses_a_key_in_the_raw_positions_body(
     ],
 )
 def test_main_names_what_the_recording_lacks(
+    *,
     keyed: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

@@ -309,7 +309,7 @@ def test_replay_builds_no_probe_and_uses_the_replay_clock(
             args=args, app=app, last_error=LastError(zone=UTC),
         )
     assert device.probe is None
-    assert device.keys == ()
+    assert not device.keys
 
 
 class LoggedResets(RecordingResets):

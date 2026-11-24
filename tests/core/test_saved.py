@@ -25,7 +25,7 @@ def test_board_settings_defaults() -> None:
     settings = BoardSettings()
     assert settings.peak_rate is Rate.FAST
     assert settings.offpeak_rate is Rate.SLOW
-    assert settings.peak_windows == ()
+    assert not settings.peak_windows
     assert settings.alert_lookahead is Lookahead.WEEK
     assert settings.connection_map is ConnectionMap.CHANGES
     assert settings.skip_school_buses is True

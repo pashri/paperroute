@@ -377,7 +377,7 @@ def test_a_knob_train_pin_has_no_routes() -> None:
     chooser, _ = turned(chooser=chooser, steps=1, reach=None)
     _, pin = knob_pressed(chooser=chooser, reach=None)
     assert isinstance(pin, Pin)
-    assert pin.routes == ()
+    assert not pin.routes
     assert pin == pin_of(
         draft=PinDraft(kind=SydneyMode.TRAIN),
         origin=T1_PLACES['E2'],
@@ -401,7 +401,7 @@ def test_a_knob_train_pin_without_a_destination_stores_the_from() -> None:
     assert isinstance(pin, Pin)
     assert pin.origin == T1_PLACES['E2']
     assert pin.destination is None
-    assert pin.routes == ()
+    assert not pin.routes
 
 
 def test_replacement_route_commits_replacement_kind() -> None:

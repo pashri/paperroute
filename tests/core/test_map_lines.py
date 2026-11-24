@@ -318,7 +318,7 @@ def test_plain_map_view_carries_lines_and_rings() -> None:
         patterns={RIDE.trip_id: east_pattern(trip_id=RIDE.trip_id)},
     )
     base = plain_map_view(inputs=inputs, choice=CHOICE).base
-    assert base.route == ()
+    assert not base.route
     assert base.lines == plain_lines(inputs=inputs, choice=CHOICE)
     assert (base.stops, base.dashed_stops) == ring_points(
         inputs=inputs, lines=base.lines, departures=(RIDE,),

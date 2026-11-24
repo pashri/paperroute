@@ -233,7 +233,7 @@ def test_transit_style_other_layers() -> None:
     assert transit_style(layer='rail', mpp=3)[0][0] == 5
     assert transit_style(layer='rail', mpp=5)[0][0] == 5
     assert transit_style(layer='rail', mpp=14)[0][0] == 3
-    assert transit_style(layer='other', mpp=14) == []
+    assert not transit_style(layer='other', mpp=14)
 
 
 @pytest.mark.parametrize(
@@ -288,5 +288,5 @@ def test_platform_strokes_and_order() -> None:
     """Open platforms are 2 px dark grey at 3 and 5 m/px, over roads."""
     assert extra_strokes(layer='platform', mpp=3) == [(2, DARK, None)]
     assert extra_strokes(layer='platform', mpp=5) == [(2, DARK, None)]
-    assert extra_strokes(layer='platform', mpp=8) == []
+    assert not extra_strokes(layer='platform', mpp=8)
     assert OVER_ROADS == ('platform',)

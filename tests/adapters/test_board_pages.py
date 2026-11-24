@@ -9,7 +9,6 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 from multidict import MultiMapping
 
-from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_device.adapters.web_frame import LIVE_NAV
 from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.connection_factories import WORK

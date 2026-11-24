@@ -177,6 +177,7 @@ def test_poll_every_follows_rate() -> None:
     ],
 )
 def test_guard_only_slows(
+    *,
     calls: int, rate: Rate, day: date, every: timedelta
 ) -> None:
     """Over 80% or 95% of the day's calls slows polling, never speeds it."""
@@ -259,6 +260,7 @@ def test_frame_time_holds_between_ticks() -> None:
     ],
 )
 def test_stale_after_is_poll_interval_plus_a_minute(
+    *,
     hour: int, rate: Rate, calls: int, limit: timedelta
 ) -> None:
     """Only a missed fetch makes data stale, at every rate and guard."""

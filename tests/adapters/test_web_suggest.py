@@ -9,7 +9,6 @@ from urllib.parse import urlencode
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_sydney.adapters.web_board import SuggestPlug
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_sydney.core.trip_search import Journey, JourneyLeg, TripSearch
@@ -32,6 +31,7 @@ PLATFORMS: Final = replace(OPTIONS, parents={'2145648_1': '2145648'})
 
 
 def leg(
+    *,
     origin: str, destination: str, route: str, departs: str, arrives: str,
 ) -> JourneyLeg:
     """
@@ -63,21 +63,21 @@ def leg(
 
 
 GOOD: Final[Journey] = Journey(legs=(
-    leg('G2145615', 'G215254', '606', '20:48', '20:54'),
-    leg('2145648_1', '214510', '660', '21:01', '21:12'),
+    leg(origin='G2145615', destination='G215254', route='606', departs='20:48', arrives='20:54'),
+    leg(origin='2145648_1', destination='214510', route='660', departs='21:01', arrives='21:12'),
 ))
 UNKNOWN: Final[Journey] = Journey(legs=(
-    leg('G2145615', 'NEW1', '607', '20:50', '20:56'),
-    leg('NEW2', '214510', '661', '21:03', '21:20'),
+    leg(origin='G2145615', destination='NEW1', route='607', departs='20:50', arrives='20:56'),
+    leg(origin='NEW2', destination='214510', route='661', departs='21:03', arrives='21:20'),
 ))
 THREE: Final[Journey] = Journey(legs=(
-    leg('G2145615', 'G215254', '606', '20:40', '20:46'),
-    leg('2145648', '214510', '660', '20:50', '20:55'),
-    leg('214510', '214510', 'T1', '21:00', '21:05'),
-    leg('214510', '214510', 'T5', '21:10', '21:25'),
+    leg(origin='G2145615', destination='G215254', route='606', departs='20:40', arrives='20:46'),
+    leg(origin='2145648', destination='214510', route='660', departs='20:50', arrives='20:55'),
+    leg(origin='214510', destination='214510', route='T1', departs='21:00', arrives='21:05'),
+    leg(origin='214510', destination='214510', route='T5', departs='21:10', arrives='21:25'),
 ))
 DIRECT: Final[Journey] = Journey(legs=(
-    leg('G2145615', '214510', '609', '20:30', '21:30'),
+    leg(origin='G2145615', destination='214510', route='609', departs='20:30', arrives='21:30'),
 ))
 
 

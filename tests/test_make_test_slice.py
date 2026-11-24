@@ -129,6 +129,7 @@ def test_add_shapes_refuses_a_second_shapes_member(tmp_path: Path) -> None:
     ],
 )
 def test_add_shapes_fails_clearly_and_leaves_the_fixture(
+    *,
     tmp_path: Path, shapes: list[str], column: bool, message: str
 ) -> None:
     """Each way of finding nothing to add is an error, with no change."""

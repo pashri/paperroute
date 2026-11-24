@@ -1007,6 +1007,7 @@ async def test_power_post_posts_event(
     ('reboot', 'Restart now?', 'Restart'),
 ])
 async def test_power_works_without_script(
+    *,
     site: DeviceSite,
     client: Client,
     action: str,

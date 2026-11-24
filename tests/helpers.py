@@ -8,8 +8,6 @@ from typing import Final
 
 from paperroute_sydney.build.dedupe import merge_rail
 from paperroute_transit.build.gtfs_files import Source
-from paperroute_transit.core.messages import Effect, Event
-from paperroute_transit.core.state_model import State
 
 REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'
 

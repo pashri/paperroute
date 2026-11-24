@@ -38,7 +38,6 @@ from paperroute_transit.render.strip import (
     NAME_ROOM,
     NOTE_MAX,
     RING_RADIUS,
-    SPUR_PX,
     TAG_GAP,
     TAG_HALF,
     draw_band,
@@ -749,7 +748,7 @@ def test_an_exit_label_wraps_at_word_breaks() -> None:
     assert exit_lines(canvas=canvas, names=names, width=1000.0) == (
         'to Cronulla, Waterfall, Kiama, Campbelltown',
     )
-    assert exit_lines(canvas=canvas, names=(), width=100.0) == ()
+    assert not exit_lines(canvas=canvas, names=(), width=100.0)
 
 
 def test_a_named_exit_draws_its_lines_about_the_row() -> None:

@@ -158,7 +158,7 @@ def test_live_chains_from_board() -> None:
     ]
     assert [len(chain_legs(chain=chain)) for chain in chains] == [2] * 5
     plain = replace(WORK, ways=())
-    assert live_chains(state=loaded(pin=plain)) == ()
+    assert not live_chains(state=loaded(pin=plain))
 
 
 def test_direct_list_competes() -> None:

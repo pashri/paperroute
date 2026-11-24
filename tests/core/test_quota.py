@@ -3,7 +3,7 @@
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 
-from paperroute_device.core.kit_effects import SaveState, Stop
+from paperroute_device.core.kit_effects import Stop
 from paperroute_device.core.kit_events import QuitRequested, Tick
 from paperroute_device.core.kit_state import SAVE_WAIT, with_app
 from paperroute_sydney.city import SYDNEY_ZONE

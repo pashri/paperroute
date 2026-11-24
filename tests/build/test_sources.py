@@ -72,6 +72,7 @@ def _server() -> Iterator[FeedServer]:
     ],
 )
 def test_needs_download_matrix(
+    *,
     stored: SourceState | None,
     fresh: SourceState,
     zip_exists: bool,

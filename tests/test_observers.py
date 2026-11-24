@@ -424,5 +424,3 @@ def test_group_sends_every_event_to_observers() -> None:
         'device_settings_seen',
         'panel_refreshed',
     ]
-
-

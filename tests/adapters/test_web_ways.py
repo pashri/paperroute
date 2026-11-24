@@ -9,7 +9,6 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_sydney.adapters.web_board import SuggestPlug
 from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.connection_factories import CAMPBELLTOWN_WAY, WORK
@@ -84,7 +83,7 @@ async def test_page_of_saved_pin(client: Client) -> None:
     assert 'Routes ticked here are never used on any leg.' in text
     assert 'value="Work"' in text
     assert '>Delete pin</button>' in text
-    assert unlabelled(text=text) == []
+    assert not unlabelled(text=text)
     assert '<script src="/vendor/tom-select.complete.min.js" defer>' in text
 
 
@@ -152,7 +151,7 @@ async def test_refusals(pins: Pins, client: Client) -> None:
     start = await (await client.get('/pins/ways')).text()
     assert '<form class="search"' not in start
     assert 'placeholder="Pick a stop">' in start
-    assert unlabelled(text=start) == []
+    assert not unlabelled(text=start)
     unknown = await (await client.get('/pins/ways?from_q=Nowhere')).text()
     assert 'No stop or station matches “Nowhere”.' in unknown
     assert pins.posted == []

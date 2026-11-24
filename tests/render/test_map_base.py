@@ -1,7 +1,6 @@
 """Facts about the drawn map base (no golden images)."""
 
 import math
-import re
 from collections.abc import Sequence
 from contextlib import closing
 from dataclasses import replace
@@ -11,13 +10,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute_device.render.canvas import (
-    INK,
-    PAPER,
-    Canvas,
-    Face,
-    text_width,
-)
+from paperroute_device.render.canvas import INK, PAPER, Canvas, text_width
 from paperroute_sydney.city import SYDNEY_PROJECTION
 from paperroute_transit.adapters.tiles_db import (
     NullTiles,
@@ -49,7 +42,6 @@ from paperroute_transit.core.tiles import (
     StreetLabel,
     TileVariant,
     tile_of,
-    tiles_covering,
     to_pixels,
 )
 from paperroute_transit.render.map_base import (
@@ -62,12 +54,7 @@ from paperroute_transit.render.map_base import (
     window_of,
 )
 from paperroute_transit.render.map_corners import BOX_FACE
-from paperroute_transit.render.tile_codec import (
-    diffuse,
-    pack_bits,
-    pack_grey,
-    quantise4,
-)
+from paperroute_transit.render.tile_codec import diffuse, pack_bits, pack_grey
 
 MPP = 8
 CENTRE: Point = to_metres(

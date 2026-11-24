@@ -30,12 +30,7 @@ from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.geo import Point, make_shape
 from paperroute_transit.core.map_fit import BANNER_ROOM, CREDIT_ROOM, FrameKey
 from paperroute_transit.core.map_lines import first_per_line
-from paperroute_transit.core.map_requests import (
-    map_feeds,
-    map_inputs,
-    pin_ends,
-    pruned,
-)
+from paperroute_transit.core.map_requests import map_feeds, map_inputs, pruned
 from paperroute_transit.core.map_state import area_box, area_frame
 from paperroute_transit.core.map_view import DEFAULT_ZOOM, MAP_WIDTH
 from paperroute_transit.core.messages import (

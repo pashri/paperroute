@@ -297,4 +297,3 @@ def test_clamped_knob_turns_hide_no_detents(direction: int) -> None:
     back, _ = step(state, turn(steps=-direction))
     assert back.map.step == clamped + direction
     assert drawn_zoom(state=back) != drawn_zoom(state=state)
-

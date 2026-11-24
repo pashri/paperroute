@@ -1197,7 +1197,7 @@ def test_draw_short_list_draws_nothing_without_departures() -> None:
     for rows in ((), (panel_row(pill=Pill.CANCELLED),)):
         canvas = Recording()
         draw_short_list(canvas, view=short_view(rows=rows))
-        assert canvas.drawn == []
+        assert not canvas.drawn
         assert (canvas.grey() == PAPER).all()
 
 

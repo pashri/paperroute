@@ -28,7 +28,6 @@ from paperroute_testkit.core.steps import (
     device_rows,
     step_untouched,
 )
-from paperroute_transit.core.map_view import DEFAULT_ZOOM
 from paperroute_transit.core.messages import (
     ColumnLoaded,
     Effect,

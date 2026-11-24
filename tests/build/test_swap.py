@@ -362,6 +362,7 @@ def test_lock_fd_survives_exec(tmp_path: Path, keep: str, code: int) -> None:
 
 @pytest.mark.usefixtures('restored_logging')
 def test_extras_program_runs_the_tail_and_swaps(
+    *,
     data_dir: Path, loaded: Path, lock_fd: int,
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -408,6 +409,7 @@ def test_failed_extras_keep_the_old_timetable(
 
 @pytest.mark.usefixtures('restored_logging')
 def test_extras_check_counts_only_the_required_sources(
+    *,
     data_dir: Path, loaded: Path, lock_fd: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -531,6 +533,7 @@ def test_lost_lock_never_hands_back(
 
 @pytest.mark.usefixtures('restored_logging')
 def test_failure_inside_the_swap_never_hands_back(
+    *,
     data_dir: Path, loaded: Path, lock_fd: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -695,6 +698,7 @@ def test_handoff_refuses_bools_and_bad_state_values(data_dir: Path) -> None:
     [((), False, 0), (('metro',), False, 0), (('metro',), True, 1)],
 )
 def test_printed_fails_only_when_every_source_failed(
+    *,
     failed: tuple[str, ...], all_failed: bool, code: int,
     capsys: pytest.CaptureFixture[str],
 ) -> None:

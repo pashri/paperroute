@@ -18,7 +18,6 @@ from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.stop_under import GaugeCall
 from paperroute_transit.render.gauge_draw import COUNT_FACES
 from paperroute_transit.render.gauge_plan import (
-    EDGE,
     FIRST_X,
     PITCH,
     WIDE_PITCH,
@@ -37,7 +36,7 @@ from paperroute_transit.render.gauge_route import (
 )
 from paperroute_transit.render.markers import badge_box
 from paperroute_transit.render.names import Naming
-from paperroute_transit.render.strip import DISC_RADIUS, RING_RADIUS
+from paperroute_transit.render.strip import DISC_RADIUS
 
 NAMING: Final[Naming] = Naming(rules=NameRules())
 NONE: Final[NDArray[np.bool_]] = np.zeros((HEIGHT, WIDTH), dtype=bool)

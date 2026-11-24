@@ -101,7 +101,7 @@ def test_load_parent_kerbs_skips_kerbs_over_a_kilometre_apart(
 ) -> None:
     """Load parent kerbs skips kerbs over a kilometre apart."""
     far_pair(conn=conn, metres=1200.0)
-    assert kerb_rows(conn=conn) == []
+    assert not kerb_rows(conn=conn)
 
 
 def test_load_parent_kerbs_keeps_kerbs_a_few_hundred_metres_apart(
@@ -118,7 +118,7 @@ def test_load_parent_kerbs_skips_kerbs_sharing_a_next_stop(
     """Load parent kerbs skips kerbs sharing a next stop."""
     add_trip(conn=conn, trip_id='t0', route='6', way=0, stops=('pa', 'end1'))
     add_trip(conn=conn, trip_id='t1', route='7', way=0, stops=('pb', 'end1'))
-    assert kerb_rows(conn=conn) == []
+    assert not kerb_rows(conn=conn)
 
 
 def test_load_parent_kerbs_reads_past_the_other_kerb(
@@ -135,7 +135,7 @@ def test_load_parent_kerbs_reads_past_the_other_kerb(
     assert onward['pa'] == frozenset({'end1'})
     assert onward['pb'] == frozenset({'end1', 'end2'})
     assert trips == {'pa': 1, 'pb': 2}
-    assert kerb_rows(conn=conn) == []
+    assert not kerb_rows(conn=conn)
 
 
 def test_load_parent_kerbs_skips_a_stop_passed_through(
@@ -161,7 +161,7 @@ def test_load_parent_kerbs_skips_a_kerb_with_no_way_on(
     """Load parent kerbs skips a kerb with no way on."""
     add_trip(conn=conn, trip_id='t0', route='6', way=0, stops=('pa', 'end1'))
     add_trip(conn=conn, trip_id='t1', route='6', way=1, stops=('end2', 'pb'))
-    assert kerb_rows(conn=conn) == []
+    assert not kerb_rows(conn=conn)
 
 
 def test_load_parent_kerbs_skips_three_kerbs(
@@ -172,7 +172,7 @@ def test_load_parent_kerbs_skips_three_kerbs(
     add_trip(conn=conn, trip_id='t0', route='6', way=0, stops=('pa', 'end1'))
     add_trip(conn=conn, trip_id='t1', route='6', way=1, stops=('pb', 'end2'))
     add_trip(conn=conn, trip_id='t2', route='8', way=0, stops=('pc', 'a'))
-    assert kerb_rows(conn=conn) == []
+    assert not kerb_rows(conn=conn)
 
 
 def test_load_parent_kerbs_skips_a_parent_with_a_rail_stop(
@@ -184,7 +184,7 @@ def test_load_parent_kerbs_skips_a_parent_with_a_rail_stop(
         conn=conn, trip_id='t1', route='T1', way=1, stops=('pb', 'end2'),
         kind=2,
     )
-    assert kerb_rows(conn=conn) == []
+    assert not kerb_rows(conn=conn)
 
 
 def test_load_parent_kerbs_ignores_trips_out_of_service(
@@ -196,7 +196,7 @@ def test_load_parent_kerbs_ignores_trips_out_of_service(
         conn=conn, trip_id='t1', route='6', way=1, stops=('pb', 'end2'),
         service=0,
     )
-    assert kerb_rows(conn=conn) == []
+    assert not kerb_rows(conn=conn)
 
 
 def test_load_parent_kerbs_marks_a_busy_pair(

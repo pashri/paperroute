@@ -274,13 +274,13 @@ def test_approaching_bus_with_neither_sits_between_rows() -> None:
 def test_approaching_bus_beyond_the_rows_is_not_drawn() -> None:
     """At P5, five stops out with three rows, nothing is drawn."""
     markers, _ = badges_of(inputs=approaching(minutes=1))
-    assert markers == ()
+    assert not markers
 
 
 def test_single_kerb_strip_draws_no_approaching_bus() -> None:
     """A strip fed by one kerb places approaching buses as today."""
     markers, _ = badges_of(inputs=approaching(minutes=10, key=TRAIN))
-    assert markers == ()
+    assert not markers
 
 
 def test_bus_approaching_the_kerb_across_comes_up_from_below() -> None:
@@ -325,7 +325,7 @@ def test_bus_run_past_the_last_row_below_draws_no_approach() -> None:
     markers, _ = badges_of(inputs=approaching(
         minutes=13, stations=('P1', 'C', 'B1', 'B2', 'B3', 'D1', 'D2'),
     ))
-    assert markers == ()
+    assert not markers
 
 
 def test_bus_at_the_from_bound_off_the_rows_is_not_approaching() -> None:
@@ -333,7 +333,7 @@ def test_bus_at_the_from_bound_off_the_rows_is_not_approaching() -> None:
     markers, _ = badges_of(inputs=approaching(
         minutes=6, stations=('P2', 'P1', 'C', 'D9'),
     ))
-    assert markers == ()
+    assert not markers
 
 
 def test_reached_branch_row_above_the_from_takes_that_row() -> None:
@@ -425,7 +425,7 @@ def test_carry_on_through_the_from_is_not_drawn_approaching() -> None:
         },
     )
     markers, _ = badges_of(inputs=inputs)
-    assert markers == ()
+    assert not markers
 
 
 def test_approaching_bus_goes_beside_a_departed_one_on_its_row() -> None:

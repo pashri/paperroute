@@ -174,7 +174,7 @@ def test_parse_three_changes() -> None:
 
 def test_parse_walk_only_is_empty() -> None:
     """A journey of only walking is not offered."""
-    assert parse_journeys(data=fixture(name='walk_only')) == ()
+    assert not parse_journeys(data=fixture(name='walk_only'))
 
 
 def test_bad_journey_skipped() -> None:
@@ -188,8 +188,8 @@ def test_bad_journey_skipped() -> None:
     ]
     data['journeys'] = [*broken, *data['journeys']]
     assert len(parse_journeys(data=data)) == 2
-    assert parse_journeys(data=['not', 'a', 'reply']) == ()
-    assert parse_journeys(data={'journeys': 'x'}) == ()
+    assert not parse_journeys(data=['not', 'a', 'reply'])
+    assert not parse_journeys(data={'journeys': 'x'})
 
 
 async def serve(

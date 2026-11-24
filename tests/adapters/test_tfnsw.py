@@ -427,6 +427,7 @@ async def test_server_errors_are_unavailable(
     ],
 )
 async def test_refusal_carries_the_reason(
+    *,
     status: HTTPStatus, headers: dict[str, str], body: str, detail: str,
 ) -> None:
     """A 429 or 403 keeps X-Error-Detail and the start of the body."""

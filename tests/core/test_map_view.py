@@ -8,7 +8,6 @@ import pytest
 
 from paperroute_sydney.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute_testkit.core.factories import (
-    EIGHT,
     START,
     calls,
     departure,
@@ -381,7 +380,7 @@ def test_stale_vehicle_without_pattern_is_not_drawn() -> None:
     view = build_map_view(
         inputs=replace(base, patterns={'gone': None}),
     )
-    assert view.markers == ()
+    assert not view.markers
 
 
 def test_stale_vehicle_not_running_is_not_drawn() -> None:
@@ -391,7 +390,7 @@ def test_stale_vehicle_not_running_is_not_drawn() -> None:
     view = build_map_view(
         inputs=inputs(vehicles=(bus,), fetched_at=late, now=late),
     )
-    assert view.markers == ()
+    assert not view.markers
 
 
 def test_pin_trip_without_live_vehicle_is_hollow_while_running() -> None:
@@ -402,7 +401,7 @@ def test_pin_trip_without_live_vehicle_is_hollow_while_running() -> None:
     before = build_map_view(
         inputs=inputs(departures=(pin(),), fetched_at=early, now=early),
     )
-    assert before.markers == ()
+    assert not before.markers
 
 
 def test_alias_vehicle_counts_as_live() -> None:
@@ -452,7 +451,7 @@ def test_pinned_route_markers_come_first() -> None:
 def test_vehicles_outside_view_are_dropped() -> None:
     """A vehicle off the map rectangle gets no marker."""
     bus = vehicle(timestamp=heard(age=0), point=(100_000.0, 0.0))
-    assert build_map_view(inputs=inputs(vehicles=(bus,))).markers == ()
+    assert not build_map_view(inputs=inputs(vehicles=(bus,))).markers
 
 
 def test_no_centre_gives_empty_map_text() -> None:
@@ -462,7 +461,7 @@ def test_no_centre_gives_empty_map_text() -> None:
         inputs=replace(inputs(vehicles=(bus,)), centre=None),
     )
     assert view.empty == NO_LOCATION
-    assert view.markers == ()
+    assert not view.markers
     assert view.base.centre is None
 
 
@@ -516,7 +515,7 @@ def test_missing_shape_draws_no_route_line_and_uses_the_chord() -> None:
             patterns={'t1': pattern(shape_id='dropped')},
         ),
     )
-    assert view.base.route == ()
+    assert not view.base.route
     (marker,) = view.markers
     point = timetable_point(
         pattern=pattern(),

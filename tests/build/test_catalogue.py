@@ -54,7 +54,7 @@ from paperroute_transit.core.modes import (
     named_line_modes,
     replacing_modes,
 )
-from tests.build.network_feed import EAST_WEST, network_feed
+from tests.build.network_feed import network_feed
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 LOGGER: Final[str] = 'paperroute_transit.build.route_tags'

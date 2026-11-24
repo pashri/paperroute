@@ -7,12 +7,7 @@ from typing import Final
 
 import pytest
 
-from paperroute_sydney.city import (
-    SYDNEY_PROJECTION,
-    SYDNEY_REF,
-    SYDNEY_ZONE,
-    SydneyMode,
-)
+from paperroute_sydney.city import SYDNEY_REF, SYDNEY_ZONE, SydneyMode
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository

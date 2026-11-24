@@ -1389,6 +1389,7 @@ def test_unknown_kind_drops_unpinned_and_before(
 )
 @pytest.mark.parametrize('broken', [None, 3], ids=['missing', 'number'])
 def test_missing_section_reset(
+    *,
     path: Path, section: str, expected: Saved, broken: int | None,
 ) -> None:
     """A missing or non-object section resets alone; the other is kept."""

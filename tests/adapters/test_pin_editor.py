@@ -81,7 +81,7 @@ def test_unoffered_stop_drops_everything() -> None:
     found = edited(options=options(), draft=draft)
     assert found.origin is None
     assert found.draft == PinDraft(nickname='Me', ref='abc')
-    assert found.kinds == ()
+    assert not found.kinds
 
 
 def test_unoffered_line_is_dropped_with_its_to() -> None:
@@ -90,7 +90,7 @@ def test_unoffered_line_is_dropped_with_its_to() -> None:
     found = edited(options=options(), draft=draft)
     assert found.draft.route == ''
     assert found.draft.to == ''
-    assert found.destinations == ()
+    assert not found.destinations
     assert found.pin is None
 
 
@@ -114,7 +114,7 @@ def test_nearby_comes_only_from_the_missing_pin() -> None:
     fake = options()
     fake.near = (WORK,)
     missing = Pin(HOME, kind=SydneyMode.TRAIN, routes=('T1',), missing=True)
-    assert edited(options=fake, draft=PinDraft()).nearby == ()
+    assert not edited(options=fake, draft=PinDraft()).nearby
     found = edited(options=fake, draft=PinDraft(), missing=missing)
     assert found.nearby == (WORK,)
 
@@ -213,7 +213,7 @@ def test_a_train_pin_needs_no_line() -> None:
         options=OPTIONS, draft=PinDraft(stop='S', kind='train', to='D1'),
         modes=ROUTED,
     )
-    assert editor.lines == ()
+    assert not editor.lines
     assert editor.draft.route == ''
     assert editor.pin is not None
     assert (editor.pin.destination, editor.pin.routes) == (D1, ())
@@ -256,7 +256,7 @@ def test_without_modes_the_line_comes_first() -> None:
     editor = edited(options=OPTIONS, draft=draft)
     assert editor.draft.route == ''
     assert editor.pin is None
-    assert editor.destinations == ()
+    assert not editor.destinations
 
 
 def test_a_bus_pin_still_needs_its_route() -> None:

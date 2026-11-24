@@ -11,7 +11,6 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_device.adapters.web_frame import SHELL_WEB, page_frame
 from paperroute_device.adapters.web_live import live_page
 from paperroute_sydney.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV
@@ -282,6 +281,7 @@ async def test_font_is_served(client: Client) -> None:
     ('tom-select.css', 'text/css', TOM_SELECT_CSS_SHA256),
 ])
 async def test_tom_select_is_served(
+    *,
     client: Client,
     name: str,
     kind: str,

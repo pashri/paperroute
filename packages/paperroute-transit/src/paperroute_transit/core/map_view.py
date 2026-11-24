@@ -9,6 +9,7 @@ from typing import Final
 from paperroute_transit.core.connection_view import PairRow
 from paperroute_transit.core.geo import Point, Projection, Shape
 from paperroute_transit.core.map_line import MapLine
+from paperroute_transit.core.map_vehicles import heard_vehicles, position_age
 from paperroute_transit.core.model import Departure
 from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.patterns import TripPattern, timetable_point
@@ -387,34 +388,6 @@ def nearby(
     )
 
 
-def position_age(
-    *,
-    vehicle: VehiclePosition,
-    snapshot: PositionsSnapshot,
-    now: datetime,
-) -> float:
-    """
-    Find how long ago a vehicle reported, on the feed server's clock.
-
-    Parameters
-    ----------
-    vehicle : VehiclePosition
-        The vehicle; a timestamp of 0 counts as the feed header time.
-    snapshot : PositionsSnapshot
-        The download it came in.
-    now : datetime
-        The frame time.
-
-    Returns
-    -------
-    float
-        The header time minus the vehicle's timestamp, plus the seconds
-        since the download.
-    """
-    lag = snapshot.header_time - (vehicle.timestamp or snapshot.header_time)
-    return lag + (now - snapshot.fetched_at).total_seconds()
-
-
 def pin_trips(*, departures: Sequence[Departure]) -> frozenset[str]:
     """
     Collect the pin's trip IDs and their aliases.
@@ -523,18 +496,13 @@ def heard(*, inputs: MapInputs) -> tuple[tuple[VehiclePosition, float], ...]:
         on one trip only the most recently heard is kept; vehicles with no
         trip ID are all kept.
     """
-    best: dict[tuple[str, int], tuple[VehiclePosition, float]] = {}
-    for feed, snapshot in inputs.positions.items():
-        for index, vehicle in enumerate(snapshot.vehicles):
-            key = (vehicle.trip_id, -1) if vehicle.trip_id else (feed, index)
-            age = position_age(
-                vehicle=vehicle,
-                snapshot=snapshot,
-                now=inputs.now,
-            )
-            if key not in best or age < best[key][1]:
-                best[key] = (vehicle, age)
-    return tuple(best.values())
+    return tuple(
+        (
+            vehicle,
+            position_age(vehicle=vehicle, snapshot=snapshot, now=inputs.now),
+        )
+        for vehicle, snapshot in heard_vehicles(positions=inputs.positions)
+    )
 
 
 def is_fresh(*, age: float, limit: timedelta) -> bool:

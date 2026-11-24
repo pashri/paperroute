@@ -5,7 +5,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, tzinfo
 
-from paperroute_transit.core.map_view import Marker, is_fresh, position_age
+from paperroute_transit.core.map_vehicles import position_age
+from paperroute_transit.core.map_view import Marker, is_fresh
 from paperroute_transit.core.model import Departure, service_seconds
 from paperroute_transit.core.patterns import TripPattern, hop_at, hop_near
 from paperroute_transit.core.positions import VehiclePosition

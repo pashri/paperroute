@@ -16,6 +16,7 @@ from paperroute_testkit.core.factories import (
     vehicle,
 )
 from paperroute_transit.core.geo import Point, make_shape
+from paperroute_transit.core.map_vehicles import heard_vehicles, position_age
 from paperroute_transit.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
@@ -31,7 +32,6 @@ from paperroute_transit.core.map_view import (
     pin_trips,
     pinned_routes,
     plain_marks,
-    position_age,
     route_lines,
     screen_point,
     visible,
@@ -676,3 +676,18 @@ def test_build_map_view_carries_the_name_rules() -> None:
         ),
     )
     assert result.name_rules == RULES
+
+
+def test_heard_vehicles_reused_within_a_poll() -> None:
+    """The same positions object gives the same picked vehicles."""
+    positions = inputs(vehicles=(vehicle(timestamp=heard(age=0)),)).positions
+    assert heard_vehicles(positions=positions) is heard_vehicles(
+        positions=positions,
+    )
+
+
+def test_heard_vehicles_recomputed_for_new_positions() -> None:
+    """A new download is picked afresh."""
+    one = inputs(vehicles=(vehicle(timestamp=heard(age=0)),)).positions
+    two = inputs(vehicles=(vehicle(timestamp=heard(age=0)),)).positions
+    assert heard_vehicles(positions=one) is not heard_vehicles(positions=two)

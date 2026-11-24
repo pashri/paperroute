@@ -344,3 +344,18 @@ def test_overlapping_arrows_stay_filled() -> None:
     grey = canvas.grey()
     assert int(grey[50, 50]) == INK
     assert int(grey[50, 49]) == INK
+
+
+def test_place_numbers_reused_for_the_same_markers() -> None:
+    """Equal markers, boxes and keep-out give the very same list."""
+    first = place_numbers(
+        markers=[other()], taken=[], keep_out=NO_KEEP_OUT,
+    )
+    again = place_numbers(
+        markers=[other()], taken=[], keep_out=NO_KEEP_OUT,
+    )
+    moved = place_numbers(
+        markers=[other(at=(300.0, 100.0))], taken=[], keep_out=NO_KEEP_OUT,
+    )
+    assert again is first
+    assert moved is not first

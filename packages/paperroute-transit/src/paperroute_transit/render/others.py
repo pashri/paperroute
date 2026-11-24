@@ -20,6 +20,7 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_transit.core.map_view import Marker
+from paperroute_transit.core.memo import SameMemo
 from paperroute_transit.render.keep_out import KeepOut
 
 ARROW: Final[tuple[Point, ...]] = (
@@ -31,6 +32,10 @@ ARROW: Final[tuple[Point, ...]] = (
 ARROW_SCALES: Final[tuple[tuple[float, int], ...]] = ((1.6, PAPER), (1.0, INK))
 DOTS: Final[tuple[tuple[float, int], ...]] = ((6.0, PAPER), (4.0, INK))
 MARK_HALF: Final[float] = 8.0
+NUMBERS_MEMO_SIZE: Final[int] = 4  # placements held
+NUMBERS_MEMO: Final[SameMemo[list['Number']]] = SameMemo(
+    size=NUMBERS_MEMO_SIZE,
+)
 NUMBER_MPP: Final[int] = 14  # numbers at this many m/px and closer
 NUMBER_FACE: Final[Face] = Face(weight=800, px=12, squeeze=0.78)
 NUMBER_HALO: Final[int] = 2
@@ -334,6 +339,43 @@ def place_numbers(
     keep_out : KeepOut
         Baked names and corner boxes; a street name may be covered when
         neither side is free.
+
+    Returns
+    -------
+    list[Number]
+        The numbers placed; a number with no free spot is left out. Equal
+        arguments give the same list, which callers must not change.
+    """
+    same = (tuple(markers), tuple(taken), keep_out)
+    held = NUMBERS_MEMO.get(inputs=(), same=same)
+    if held is not None:
+        return held
+    return NUMBERS_MEMO.put(
+        inputs=(),
+        same=same,
+        value=place_free_numbers(
+            markers=markers, taken=taken, keep_out=keep_out,
+        ),
+    )
+
+
+def place_free_numbers(
+    *,
+    markers: Sequence[Marker],
+    taken: Sequence[Box],
+    keep_out: KeepOut,
+) -> list[Number]:
+    """
+    Place route numbers in order, each clear of everything before it.
+
+    Parameters
+    ----------
+    markers : Sequence[Marker]
+        Other vehicles in placing order, at their map pixels.
+    taken : Sequence[Box]
+        Map-pixel boxes already claimed.
+    keep_out : KeepOut
+        Baked names and corner boxes.
 
     Returns
     -------

@@ -14,7 +14,8 @@ from paperroute_transit.core.gauge import (
 from paperroute_transit.core.gauge_buses import gauge_buses
 from paperroute_transit.core.gauge_ends import RouteGauge
 from paperroute_transit.core.gauge_requests import GaugeData
-from paperroute_transit.core.map_view import is_fresh, position_age
+from paperroute_transit.core.map_vehicles import position_age
+from paperroute_transit.core.map_view import is_fresh
 from paperroute_transit.core.model import Departure, service_time
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.positions import (

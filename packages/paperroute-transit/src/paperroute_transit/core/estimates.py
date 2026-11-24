@@ -13,7 +13,7 @@ from paperroute_transit.core.lateness import (
     line_of,
     locate,
 )
-from paperroute_transit.core.map_view import position_age
+from paperroute_transit.core.map_vehicles import position_age
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.positions import (
     PositionsSnapshot,

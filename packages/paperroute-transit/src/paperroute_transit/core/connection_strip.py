@@ -15,7 +15,8 @@ from paperroute_transit.core.connection_view import (
     no_pair_text,
 )
 from paperroute_transit.core.live import LiveDeparture
-from paperroute_transit.core.map_view import MapView, is_fresh, position_age
+from paperroute_transit.core.map_vehicles import position_age
+from paperroute_transit.core.map_view import MapView, is_fresh
 from paperroute_transit.core.model import (
     Change,
     Departure,

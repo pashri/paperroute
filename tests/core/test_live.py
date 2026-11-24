@@ -6,10 +6,10 @@ from typing import Final
 
 import pytest
 
-from paperroute_sydney.city import SYDNEY_ZONE
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_testkit.core.factories import START, departure
-from paperroute_transit.core.live import resolve
-from paperroute_transit.core.model import CarryOn, TripFacts
+from paperroute_transit.core.live import LiveDeparture, resolve, resolved
+from paperroute_transit.core.model import CarryOn, Departure, TripFacts
 from paperroute_transit.core.realtime import (
     EVERY_STOP,
     RealtimeSnapshot,
@@ -454,3 +454,54 @@ def test_resolve_leaves_a_feed_time_unmarked() -> None:
         zone=SYDNEY_ZONE,
     )
     assert found.live and not found.estimated and not found.uncertain
+
+
+def resolved_at(
+    *,
+    now: datetime,
+    snap: dict[str, RealtimeSnapshot],
+    deps: tuple[Departure, ...],
+) -> tuple[LiveDeparture, ...]:
+    """
+    Resolve departures against some snapshots.
+
+    Parameters
+    ----------
+    now : datetime
+        The frame time.
+    snap : dict[str, RealtimeSnapshot]
+        Snapshots by feed.
+    deps : tuple[Departure, ...]
+        Departures.
+
+    Returns
+    -------
+    tuple[LiveDeparture, ...]
+        The live departures.
+    """
+    return resolved(
+        departures=deps,
+        snapshots=snap,
+        now=now,
+        limit=LIMIT,
+        zone=SYDNEY_ZONE,
+        plan=SYDNEY.feeds,
+    )
+
+
+def test_resolved_reused_within_a_frame() -> None:
+    """An equal but separately built frame time gives the same object."""
+    deps, snap = (DEP,), {'f': snapshot()}
+    first = resolved_at(now=START, snap=snap, deps=deps)
+    again = resolved_at(now=START + timedelta(0), snap=snap, deps=deps)
+    assert again is first
+
+
+def test_resolved_recomputed_for_a_new_frame_time() -> None:
+    """A later frame time is worked out afresh."""
+    deps, snap = (DEP,), {'f': snapshot()}
+    first = resolved_at(now=START, snap=snap, deps=deps)
+    later = resolved_at(
+        now=START + timedelta(seconds=30), snap=snap, deps=deps,
+    )
+    assert later is not first

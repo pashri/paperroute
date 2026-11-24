@@ -3,13 +3,20 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, tzinfo
+from typing import Final
 
 from paperroute_transit.core.feed_plan import FeedPlan
+from paperroute_transit.core.memo import SameMemo
 from paperroute_transit.core.model import Departure, shifted
 from paperroute_transit.core.realtime import (
     RealtimeSnapshot,
     StopUpdate,
     TripRealtime,
+)
+
+RESOLVED_MEMO_SIZE: Final[int] = 4  # frames held
+RESOLVED_MEMO: Final[SameMemo[tuple['LiveDeparture', ...]]] = SameMemo(
+    size=RESOLVED_MEMO_SIZE,
 )
 
 
@@ -326,17 +333,30 @@ def resolved(
     Returns
     -------
     tuple[LiveDeparture, ...]
-        Every departure, with its feed's live times where known.
+        Every departure, with its feed's live times where known. The
+        same object comes back for the same `departures`, `snapshots`
+        and `plan` objects and an equal `now`, `limit` and `zone`.
     """
-    return tuple(
-        resolve(
-            departure=dep,
-            snapshot=snapshots.get(plan.trip_feed(source=dep.source) or ''),
-            now=now,
-            limit=limit,
-            zone=zone,
-        )
-        for dep in departures
+    inputs = (departures, snapshots, plan)
+    same = (now, limit, zone)
+    held = RESOLVED_MEMO.get(inputs=inputs, same=same)
+    if held is not None:
+        return held
+    return RESOLVED_MEMO.put(
+        inputs=inputs,
+        same=same,
+        value=tuple(
+            resolve(
+                departure=dep,
+                snapshot=snapshots.get(
+                    plan.trip_feed(source=dep.source) or '',
+                ),
+                now=now,
+                limit=limit,
+                zone=zone,
+            )
+            for dep in departures
+        ),
     )
 
 

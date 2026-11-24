@@ -12,6 +12,7 @@ import pytest
 SCRIPT = Path(__file__).parent.parent / 'scripts' / 'save_positions.py'
 BODY = b'feed-bytes'
 KEY = 'secret-key-123'
+ACCEPT = 'application/x-google-protobuf'
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -19,7 +20,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         """Answer a GET with the body, or 403 without the key."""
-        ok = self.headers.get('Authorization') == f'apikey {KEY}'
+        ok = (
+            self.headers.get('Authorization') == f'apikey {KEY}'
+            or f'api_key={KEY}' in self.path
+        )
+        ok = ok and self.headers.get('Accept') == ACCEPT
         self.send_response(200 if ok else 403)
         self.end_headers()
         self.wfile.write(BODY if ok else b'')
@@ -46,10 +51,11 @@ def load_script() -> ModuleType:
     return module
 
 
+@pytest.mark.parametrize('source', ['tfnsw', 'bods'])
 def test_save_positions_writes_the_body_and_hides_the_key(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+    source: str, tmp_path: Path, capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """The feed is saved with the key sent, and the key is not printed."""
+    """Each source's feed is saved with the key sent, and not printed."""
     key_file = tmp_path / 'key'
     key_file.write_text(KEY + '\n', encoding='utf-8')
     server = HTTPServer(('127.0.0.1', 0), Handler)
@@ -58,6 +64,7 @@ def test_save_positions_writes_the_body_and_hides_the_key(
     try:
         status = load_script().main(
             argv=[
+                '--source', source,
                 '--out', str(tmp_path / 'p.pb'),
                 '--key-file', str(key_file),
                 '--base-url', f'http://127.0.0.1:{server.server_port}/',
@@ -81,4 +88,4 @@ def test_save_positions_missing_key_fails(
         argv=['--out', str(tmp_path / 'p.pb'), '--key-file', str(tmp_path)],
     )
     assert status == 1
-    assert 'no TfNSW key in' in capsys.readouterr().err
+    assert 'no tfnsw key found' in capsys.readouterr().err

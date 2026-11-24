@@ -11,12 +11,13 @@ from datetime import datetime, time, timedelta
 from functools import partial
 from pathlib import Path
 from typing import Final
+from unittest import mock
 
 from paperroute_cambridge.city import CAMBRIDGE
 from paperroute_sydney.city import SYDNEY
-from paperroute_transit.adapters.gtfs_rt import parse_positions
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
-from paperroute_transit.app_effects import map_data
+from paperroute_transit.app_effects import labelled_positions, map_data
+from paperroute_transit.core import state_views
 from paperroute_transit.core.city import City
 from paperroute_transit.core.gauge_requests import (
     GaugeData,
@@ -36,6 +37,7 @@ from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import LiveView, Saved, default_settings
 from paperroute_transit.core.state_model import Board, State
 from paperroute_transit.core.state_views import live_stop_view
+from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.measures import StopMeasures
 from paperroute_transit.render.stop_view import draw_stop_view
 
@@ -300,13 +302,19 @@ def stop_state(
 
 
 def decode_feed(
-    *, data: bytes, state: State, repeat: int,
-) -> tuple[State, Stats]:
+    *,
+    repo: SqliteTimetableRepository,
+    data: bytes,
+    state: State,
+    repeat: int,
+) -> tuple[State, Stats] | None:
     """
-    Decode a saved positions feed, timing it, into the hero's feeds.
+    Decode a saved positions feed as a poll does, timing it.
 
     Parameters
     ----------
+    repo : SqliteTimetableRepository
+        Timetable, which labels the vehicles.
     data : bytes
         A serialised vehicle-positions FeedMessage.
     state : State
@@ -316,15 +324,20 @@ def decode_feed(
 
     Returns
     -------
-    tuple[State, Stats]
+    tuple[State, Stats] | None
         State holding the decoded vehicles under each feed the gauge
-        polls for the hero, and the decode's median and p90 milliseconds.
+        polls for the hero, and the decode's median and p90 milliseconds;
+        None when the gauge polls no feed.
     """
+    feeds = gauge_feeds(state=state, stop_view=live_stop_view(state=state))
+    if not feeds:
+        return None
     decode = partial(
-        parse_positions,
+        labelled_positions,
+        timetable=repo,
+        parsers=state.city.feeds.parsers(feed=feeds[0]),
         data=data,
         fetched_at=state.now,
-        projection=state.city.projection,
     )
     snapshot = decode()
     millis = []
@@ -332,30 +345,56 @@ def decode_feed(
         began = clock_time.perf_counter()
         decode()
         millis.append((clock_time.perf_counter() - began) * 1000)
-    feeds = gauge_feeds(state=state, stop_view=live_stop_view(state=state))
     held = {**state.map.positions, **dict.fromkeys(feeds, snapshot)}
     state = replace(state, map=replace(state.map, positions=held))
     return state, stats_of(millis=millis)
 
 
-def without_buses(*, state: State) -> State:
+def skip_detail(*, view: StopView, **_: object) -> StopView:
     """
-    Empty the gauge's buses: its route trips and the live positions.
+    Stand in for `with_detail`, adding no gauge.
+
+    Parameters
+    ----------
+    view : StopView
+        The view.
+    **_ : object
+        The arguments `with_detail` takes; unused.
+
+    Returns
+    -------
+    StopView
+        The view as it is.
+    """
+    return view
+
+
+def timed_modes(*, state: State, mode: str, repeat: int) -> dict[str, Stats]:
+    """
+    Time the ticks of each mode asked for.
 
     Parameters
     ----------
     state : State
         State on the Stop view.
+    mode : str
+        'both', `GAUGE` or `TODAY`.
+    repeat : int
+        Number of timed runs.
 
     Returns
     -------
-    State
-        The same state with the gauge holding no trips and no positions.
+    dict[str, Stats]
+        Each mode's timings. `TODAY` builds the view with no gauge at
+        all, so none of the gauge's layout or drawing runs.
     """
-    gauge = replace(state.map.gauge, trips=(), positions={})
-    return replace(
-        state, map=replace(state.map, gauge=gauge, positions={}),
-    )
+    results = {}
+    if mode in {'both', GAUGE}:
+        results[GAUGE] = timed_ticks(state=state, repeat=repeat)
+    if mode in {'both', TODAY}:
+        with mock.patch.object(state_views, 'with_detail', skip_detail):
+            results[TODAY] = timed_ticks(state=state, repeat=repeat)
+    return results
 
 
 def overhead(*, gauge: Stats, today: Stats) -> float:
@@ -391,6 +430,36 @@ def report(*, name: str, stats: Stats) -> None:
     print(f'{name}: median {stats.median:.1f} ms, p90 {stats.p90:.1f} ms')
 
 
+def positive(text: str) -> int:
+    """
+    Read a whole number of at least 1.
+
+    Parameters
+    ----------
+    text : str
+        The argument.
+
+    Returns
+    -------
+    int
+        The number.
+
+    Raises
+    ------
+    argparse.ArgumentTypeError
+        When it is not a whole number or is below 1.
+    """
+    try:
+        number = int(text)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            f'{text!r} is not a number',
+        ) from error
+    if number < 1:
+        raise argparse.ArgumentTypeError('must be at least 1')
+    return number
+
+
 def parser() -> argparse.ArgumentParser:
     """
     Build the command-line parser.
@@ -407,7 +476,9 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument(
         '--at', type=datetime.fromisoformat, help='ISO time of the tick',
     )
-    result.add_argument('--repeat', type=int, default=DEFAULT_REPEAT)
+    result.add_argument(
+        '--repeat', type=positive, default=DEFAULT_REPEAT,
+    )
     result.add_argument(
         '--positions',
         type=Path,
@@ -459,6 +530,29 @@ def pin_and_departures(
     return replace(pin, kind=ordered[0].facts.kind), ordered
 
 
+def missing_file(*, db: Path, positions: Path | None) -> str | None:
+    """
+    Name the first input file that is missing.
+
+    Parameters
+    ----------
+    db : Path
+        The timetable.
+    positions : Path | None
+        The saved positions feed, or None.
+
+    Returns
+    -------
+    str | None
+        A message naming it; None when all exist.
+    """
+    if not db.is_file():
+        return f'no timetable at {db}'
+    if positions and not positions.is_file():
+        return f'no positions at {positions}'
+    return None
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """
     Print the Stop view tick's median and p90 for each mode.
@@ -478,11 +572,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser().parse_args(argv)
     city = CITIES[args.city]
     db = args.db or DEFAULT_DBS[args.city]
-    if not db.is_file():
-        print(f'no timetable at {db}', file=sys.stderr)
-        return 1
-    if args.positions and not args.positions.is_file():
-        print(f'no positions at {args.positions}', file=sys.stderr)
+    problem = missing_file(db=db, positions=args.positions)
+    if problem:
+        print(problem, file=sys.stderr)
         return 1
     start = start_time(at=args.at, city=city)
     with closing(SqliteTimetableRepository(path=db, city=city)) as repo:
@@ -492,23 +584,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         state = stop_state(
             repo=repo, city=city, pin=loaded[0], found=loaded[1], at=start,
         )
-    if args.positions:
-        state, decoded = decode_feed(
-            data=args.positions.read_bytes(),
-            state=state,
-            repeat=args.repeat,
-        )
-        print(f'feed decode: median {decoded.median:.1f} ms')
-    results = {}
-    if args.mode in {'both', GAUGE}:
-        results[GAUGE] = timed_ticks(state=state, repeat=args.repeat)
-    if args.mode in {'both', TODAY}:
-        results[TODAY] = timed_ticks(
-            state=without_buses(state=state), repeat=args.repeat,
-        )
+        if args.positions:
+            decoded = decode_feed(
+                repo=repo,
+                data=args.positions.read_bytes(),
+                state=state,
+                repeat=args.repeat,
+            )
+            if decoded is None:
+                print('the gauge polls no feed for this stop', file=sys.stderr)
+                return 1
+            state = decoded[0]
+            print(f'feed decode: median {decoded[1].median:.1f} ms')
+    results = timed_modes(state=state, mode=args.mode, repeat=args.repeat)
     for name, stats in results.items():
         report(name=name, stats=stats)
-    if len(results) < len(MODES) - 1:
+    if TODAY in results:
+        print(f'{TODAY} = Stop view without a gauge (conservative)')
+    if args.mode != 'both':
         return 0
     extra = overhead(gauge=results[GAUGE], today=results[TODAY])
     print(f'overhead: {extra:+.1f}%')

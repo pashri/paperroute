@@ -71,6 +71,7 @@ def small_args(*, db: Path) -> list[str]:
         '--stop', STOP,
         '--at', '2026-10-16T07:00:00+11:00',
         '--repeat', '2',
+        '--limit', '1000000',
     ]
 
 
@@ -83,6 +84,7 @@ def test_bench_stop_prints_median_and_p90(
     for name in ('with gauge', 'today'):
         assert re.search(LINE.format(name=name), out, re.M)
     assert re.search(r'^overhead: [+-][\d.]+%$', out, re.M)
+    assert 'today = Stop view without a gauge (conservative)' in out
 
 
 def test_bench_stop_one_mode_prints_only_that_mode(
@@ -155,3 +157,13 @@ def test_bench_stop_missing_positions_fails(
     argv = [*small_args(db=db), '--positions', str(tmp_path / 'x.pb')]
     assert load_script().main(argv=argv) == 1
     assert 'no positions at' in capsys.readouterr().err
+
+
+def test_bench_stop_repeat_must_be_at_least_one(
+    db: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A zero `--repeat` is refused by the parser."""
+    with pytest.raises(SystemExit) as error:
+        load_script().main(argv=[*small_args(db=db), '--repeat', '0'])
+    assert error.value.code == 2
+    assert 'at least 1' in capsys.readouterr().err

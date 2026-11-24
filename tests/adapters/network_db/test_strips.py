@@ -42,7 +42,7 @@ from tests.adapters.network_db.helpers import (
     set_runs,
     tails_from,
 )
-from tests.build.network_feed import network_files
+from tests.build.network_feed import pass_through_files
 from tests.helpers import has_runs, old_schema, schema_three
 
 REAL_DB: Final[Path] = Path(__file__).parents[3] / 'data' / 'timetable.db'
@@ -109,12 +109,7 @@ def test_t2_strip_at_c_hangs_two_exits_at_j(network_db: Path) -> None:
 
 def test_pass_through_station_stays_on_the_strip(tmp_path: Path) -> None:
     """T1 runs through R2 without stopping: not cut there, no exit."""
-    files = network_files()
-    files['stop_times.txt'] = [
-        {**row, 'pickup_type': '1', 'drop_off_type': '1'}
-        if row['stop_id'] == 'R2_1' else row
-        for row in files['stop_times.txt']
-    ]
+    files = pass_through_files()
     out = tmp_path / 'timetable.db'
     build_timetable(
         sources=[Source(

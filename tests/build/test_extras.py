@@ -9,7 +9,6 @@ import sys
 from array import array
 from collections.abc import Collection
 from contextlib import closing
-from datetime import date
 from pathlib import Path
 from typing import Final
 
@@ -18,7 +17,6 @@ import pytest
 from paperroute_sydney.city import SYDNEY, SYDNEY_REF
 from paperroute_transit.build import extras, timetable
 from paperroute_transit.build.extras import build_extras
-from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.handoff import (
     Handoff,
     HandoffRecord,
@@ -26,11 +24,10 @@ from paperroute_transit.build.handoff import (
     write_handoff,
 )
 from paperroute_transit.build.runs import RunReport, load_runs
-from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.build.track_db import RailTrack, write_track
 from paperroute_transit.core.geo import to_metres
 from paperroute_transit.core.modes import Classifier
-from tests.build.network_feed import LAT, LON, STEP_LON, network_feed
+from tests.build.network_feed import LAT, LON, STEP_LON, build_network_db
 
 RUN_TABLES: Final[set[str]] = {
     'runs', 'run_stops', 'run_calls', 'trip_runs', 'trip_next',
@@ -72,12 +69,7 @@ def network_build(*, folder: Path) -> Path:
     Path
         Timetable file.
     """
-    out = folder / 'timetable.db'
-    source = Source(name='sydneytrains',
-                    archive=network_feed(path=folder / 'network.zip'))
-    build_timetable(city_ref=SYDNEY_REF, sources=[source],
-                    window=Window(start=date(2026, 10, 5), days=3), out=out)
-    return out
+    return build_network_db(folder=folder)
 
 
 def skip_extras(*, path: Path, city_ref: str, tiles: Path | None) -> None:

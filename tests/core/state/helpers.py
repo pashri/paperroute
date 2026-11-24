@@ -1,5 +1,6 @@
 """Shared helpers for the state tests."""
 
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
@@ -387,3 +388,53 @@ def at(*, seconds: int) -> Tick:
         The tick.
     """
     return Tick(now=START + timedelta(seconds=seconds))
+
+
+def started_on(*, view: LiveView) -> State:
+    """
+    Make a state with one pin shown on a view, drawn once.
+
+    Parameters
+    ----------
+    view : LiveView
+        The view to show.
+
+    Returns
+    -------
+    State
+        The state after its first tick.
+    """
+    saved = Saved(
+        settings=default_settings(city=SYDNEY),
+        pins=(pin_at('first', x=100.0),),
+        current=0,
+        unpinned=None,
+        view=view,
+    )
+    state = begun(saved=saved)
+    return step(state, Tick(now=START))[0]
+
+
+def run_events(
+    *, state: State, events: Sequence[Event],
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Apply events in turn.
+
+    Parameters
+    ----------
+    state : State
+        State before.
+    events : Sequence[Event]
+        Events.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State after, and every effect in order.
+    """
+    effects: tuple[Effect, ...] = ()
+    for event in events:
+        state, more = step(state, event)
+        effects = (*effects, *more)
+    return state, effects

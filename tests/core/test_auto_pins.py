@@ -39,7 +39,8 @@ from paperroute_transit.core.saved import (
 from paperroute_transit.core.state_model import Places, State
 from tests.core.alert_factories import alert
 from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, NEXT, REACH, TO_STAGE
-from tests.core.test_chooser_steps import picked, run_events
+from tests.core.state.helpers import run_events
+from tests.core.test_chooser_steps import picked
 
 DAY: Final[date] = START.date()
 WEEKDAYS: Final[frozenset[int]] = frozenset(range(5))

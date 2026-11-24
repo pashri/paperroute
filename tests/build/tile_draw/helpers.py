@@ -20,6 +20,7 @@ from paperroute_transit.core.tiles import (
     tile_of,
     to_pixels,
 )
+from tests.build.tile_inputs import pixel_vertices
 
 FRAME_HALF: Final[float] = 800.0  # metres
 
@@ -121,11 +122,7 @@ def add_pixel_line(
     store.add_line(
         layer=layer,
         name='',
-        points=np.array([from_pixels(
-            pixel=p,
-            mpp=mpp,
-            projection=SYDNEY_PROJECTION,
-        ) for p in pixels]),
+        points=pixel_vertices(pixels=pixels, mpp=mpp),
     )
 
 

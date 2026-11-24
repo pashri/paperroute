@@ -52,3 +52,29 @@ def fixture_lock_fd(data_dir: Path) -> Iterator[int]:
         os.close(fd)
     except OSError:
         pass
+
+
+@pytest.fixture(name='synced')
+def fixture_synced(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """
+    Record the inode of every file descriptor passed to fsync.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        Patches fsync for the test.
+
+    Returns
+    -------
+    list[int]
+        The inodes, filled as the test runs.
+    """
+    inodes: list[int] = []
+    real_fsync = os.fsync
+
+    def fsync(fd: int) -> None:
+        inodes.append(os.fstat(fd).st_ino)
+        real_fsync(fd)
+
+    monkeypatch.setattr(os, 'fsync', fsync)
+    return inodes

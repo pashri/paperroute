@@ -362,16 +362,11 @@ def test_bits_names_dither_the_four_level_name(tmp_path: Path) -> None:
     """In BITS a redrawn name is the dithered copy of its grey name."""
     gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     label = street(name='Church Street', x=gx + LABEL_SHIFT, y=gy)
-    drawn = {}
-    for variant in TileVariant:
-        with closing(
-            build(out=tmp_path / f'{variant}.db', labels=[label]),
-        ) as tiles:
-            drawn[variant] = draw_map_base(
-                base=base(route=across(half=5000.0)),
-                tiles=tiles,
-                variant=variant,
-            )
+    drawn = variants_drawn(
+        tmp_path=tmp_path,
+        label=label,
+        map_base=base(route=across(half=5000.0)),
+    )
     region = name_region(label=label, offset=window_of(base=base()))
     paper = diffuse(grey=drawn[TileVariant.GREY][region])
     np.testing.assert_array_equal(

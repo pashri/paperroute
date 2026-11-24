@@ -9,13 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from paperroute_sydney.city import SYDNEY, SYDNEY_REF
+from paperroute_sydney.city import SYDNEY_REF
 from paperroute_transit.adapters.change_rows import CHANGE_COUNT, CHANGE_M
-from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.adapters.pin_options import SqlitePinOptions
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.core.model import StopPlace
+from tests.helpers import network_opened
 
 REAL = Path(__file__).parent.parent / 'fixtures' / 'real'
 
@@ -63,10 +63,7 @@ def _options(built: Path) -> Iterator[SqlitePinOptions]:
     SqlitePinOptions
         Options, closed after the test.
     """
-    with closing(SqliteNetworkRepository(
-        path=built,
-        city=SYDNEY,
-    )) as network:
+    with network_opened(path=built) as network:
         yield SqlitePinOptions(network=network)
 
 
@@ -148,10 +145,7 @@ def test_no_network_tables_empty(built: Path, tmp_path: Path) -> None:
             'DROP TABLE run_stops;',
         )
         conn.commit()
-    with closing(SqliteNetworkRepository(
-        path=copy,
-        city=SYDNEY,
-    )) as network:
+    with network_opened(path=copy) as network:
         old = SqlitePinOptions(network=network)
         place = StopPlace(stop_id='215020', name='P', point=(0.0, 0.0))
         assert old.change_stops(place=place) == ()

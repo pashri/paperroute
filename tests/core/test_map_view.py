@@ -42,6 +42,7 @@ from paperroute_transit.core.patterns import timetable_point
 from paperroute_transit.core.positions import VehiclePosition
 from paperroute_transit.core.stop_view import SIDEBAR_ROWS, Row, StopView
 from paperroute_transit.core.tiles import ZOOMS
+from tests.helpers import parramatta_bus_row
 
 CENTRE: Point = (0.0, 0.0)
 ZOOM: int = 2
@@ -65,17 +66,12 @@ def row(*, route: str = '606') -> Row:
     Row
         The row.
     """
-    return Row(
+    return parramatta_bus_row(
         route=route,
-        vehicle='bus',
-        where='',
-        destination='Parramatta',
         countdown='5',
         leaves_at='8:05',
         arrives_at='8:35',
         ride_minutes=30,
-        live=True,
-        pill=None,
     )
 
 

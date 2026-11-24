@@ -21,7 +21,7 @@ from paperroute_hardware.core.knob_events import (
     KnobTurned,
 )
 from paperroute_sydney.city import SYDNEY
-from paperroute_testkit.core.factories import START, begun, pin_at
+from paperroute_testkit.core.factories import START
 from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.steps import (
     answer_fetches,
@@ -50,7 +50,7 @@ from paperroute_transit.core.rebuild import (
     forced,
     is_outdated,
 )
-from paperroute_transit.core.saved import LiveView, Saved, default_settings
+from paperroute_transit.core.saved import LiveView
 from paperroute_transit.core.state_model import Rebuild, State
 from tests.core.chooser_walks import (
     DOWN,
@@ -60,6 +60,7 @@ from tests.core.chooser_walks import (
     TRAIN,
     previews_of,
 )
+from tests.core.state.helpers import started_on
 
 OLD = TimetableSeen(version='v', schema='4')
 CURRENT = TimetableSeen(version='v', schema=TIMETABLE_SCHEMA)
@@ -75,15 +76,7 @@ def pinned() -> State:
     State
         The state after its first tick.
     """
-    saved = Saved(
-        settings=default_settings(city=SYDNEY),
-        pins=(pin_at('first', x=100.0),),
-        current=0,
-        unpinned=None,
-        view=LiveView.STOP,
-    )
-    state = begun(saved=saved)
-    return step(state, Tick(now=START))[0]
+    return started_on(view=LiveView.STOP)
 
 
 def rebuilds(*, effects: Sequence[Effect]) -> int:

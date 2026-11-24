@@ -245,6 +245,25 @@ def network_feed(*, path: Path) -> Path:
     return write_feed(path=path, files=network_files())
 
 
+def pass_through_files() -> dict[str, list[dict[str, str]]]:
+    """
+    Give the network feed with T1 passing through R2 without stopping.
+
+    Returns
+    -------
+    dict[str, list[dict[str, str]]]
+        The feed's files, with the R2 platform calls closed to boarding and
+        alighting.
+    """
+    files = network_files()
+    files['stop_times.txt'] = [
+        {**row, 'pickup_type': '1', 'drop_off_type': '1'}
+        if row['stop_id'] == 'R2_1' else row
+        for row in files['stop_times.txt']
+    ]
+    return files
+
+
 def build_network_db(*, folder: Path) -> Path:
     """
     Build the network feed, with its run tables, over a 3-day window.

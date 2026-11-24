@@ -10,7 +10,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute_device.adapters.web_frame import page_frame
 from paperroute_device.core.device_events import PowerRequested
-from paperroute_device.core.device_model import PowerAction
+from paperroute_device.core.device_model import DeviceFacts, PowerAction
 from paperroute_device_testkit.device_pages import KEY, NOW, DeviceSite
 from paperroute_sydney.adapters.tfnsw import TFNSW_KEY
 from paperroute_sydney.adapters.web_board import SYDNEY_NAV
@@ -31,6 +31,31 @@ SHELL_PAGES: Final[frozenset[str]] = frozenset(
 )
 
 
+def sydney_data(*, facts: DeviceFacts | None) -> str:
+    """
+    Give the Data section of Sydney's device pages at the fixed time.
+
+    Parameters
+    ----------
+    facts : DeviceFacts | None
+        The device's status facts, or None.
+
+    Returns
+    -------
+    str
+        The section's HTML.
+    """
+    return data_section(
+        status=APP_STATUS,
+        facts=facts,
+        feeds={TRAINS: NOW - 12, BUSES: NOW - 40},
+        now=NOW,
+        label=feed_label,
+        daily_limit=DAILY_LIMIT,
+        zone=SYDNEY_ZONE,
+    )
+
+
 def sydney_site() -> DeviceSite:
     """
     Give the device pages as Sydney's app builds them.
@@ -49,14 +74,8 @@ def sydney_site() -> DeviceSite:
         nav=SYDNEY_NAV,
         reset_hint=RESET_HINT,
     )
-    site.data = lambda: data_section(
-        status=APP_STATUS,
+    site.data = lambda: sydney_data(
         facts=None if site.status is None else site.status.facts,
-        feeds={TRAINS: NOW - 12, BUSES: NOW - 40},
-        now=NOW,
-        label=feed_label,
-        daily_limit=DAILY_LIMIT,
-        zone=SYDNEY_ZONE,
     )
     return site
 

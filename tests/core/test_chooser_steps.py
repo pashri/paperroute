@@ -1,6 +1,5 @@
 """Tests for the route chooser in the reducer."""
 
-from collections.abc import Sequence
 from dataclasses import replace
 from datetime import timedelta
 from typing import Final
@@ -38,7 +37,6 @@ from paperroute_transit.core.messages import (
     ColumnLoaded,
     DeparturesLoaded,
     Effect,
-    Event,
     LineFailed,
     LineLoaded,
     LoadChooserDepartures,
@@ -81,6 +79,7 @@ from tests.core.chooser_walks import (
     chooser_departures,
     previews_of,
 )
+from tests.core.state.helpers import run_events
 from tests.core.test_chooser_lists import ASKING
 
 PINS: Final[tuple[Pin, ...]] = (
@@ -159,31 +158,6 @@ def effects_of[T](
         The matching effects, in order.
     """
     return [effect for effect in effects if isinstance(effect, kind)]
-
-
-def run_events(
-    *, state: State, events: Sequence[Event],
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Apply events in turn.
-
-    Parameters
-    ----------
-    state : State
-        State before.
-    events : Sequence[Event]
-        Events.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        State after, and every effect in order.
-    """
-    effects: tuple[Effect, ...] = ()
-    for event in events:
-        state, more = step(state, event)
-        effects = (*effects, *more)
-    return state, effects
 
 
 def top(*, steps: int) -> KnobTurned:

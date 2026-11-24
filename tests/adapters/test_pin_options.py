@@ -30,6 +30,7 @@ STOP_ROWS: str = (
     "INSERT INTO run_stops VALUES ('B2', 90, 1), ('B2', 91, 0)"
 )
 from tests.build.network_feed import build_network_db
+from tests.helpers import network_opened
 
 
 @pytest.fixture(name='built', scope='module')
@@ -65,10 +66,7 @@ def _network(built: Path) -> Iterator[SqliteNetworkRepository]:
     SqliteNetworkRepository
         Repository, closed after the test.
     """
-    with closing(SqliteNetworkRepository(
-        path=built,
-        city=SYDNEY,
-    )) as repo:
+    with network_opened(path=built) as repo:
         yield repo
 
 
@@ -139,10 +137,7 @@ def test_search_lists_routes_naturally(built: Path, tmp_path: Path) -> None:
             )
             conn.execute(f"INSERT INTO run_stops VALUES ('C', {number}, 0)")
         conn.commit()
-    with closing(SqliteNetworkRepository(
-        path=copy,
-        city=SYDNEY,
-    )) as network:
+    with network_opened(path=copy) as network:
         found = SqlitePinOptions(network=network).search(text='c st')
     assert found[0].routes == ('T1', 'T2', '3', '9', '10', '20')
     assert found[0].kinds == (SydneyMode.BUS, SydneyMode.TRAIN)
@@ -161,10 +156,7 @@ def test_search_can_leave_out_school_routes(
         )
         conn.execute("INSERT INTO run_stops VALUES ('SO', 90, 2)")
         conn.commit()
-    with closing(SqliteNetworkRepository(
-        path=copy,
-        city=SYDNEY,
-    )) as network:
+    with network_opened(path=copy) as network:
         options = SqlitePinOptions(network=network)
         skipped = {
             m.place.stop_id: m
@@ -221,9 +213,7 @@ def test_reached_from_for_a_train_skips_stations_it_passes(
     """A train kind offers only stations a stopping run calls at."""
     copy = Path(shutil.copy(built, tmp_path / 'timetable.db'))
     set_runs(path=copy, runs=[('W2 C E1', 3), ('W2 ~C E1 E2', 3)])
-    with closing(SqliteNetworkRepository(
-        path=copy, city=SYDNEY,
-    )) as repo:
+    with network_opened(path=copy) as repo:
         options = SqlitePinOptions(network=repo)
         place = at(options=options, stop_id='C')
         train = options.reached_from(place=place, kind=SydneyMode.TRAIN)
@@ -318,10 +308,7 @@ def test_destinations_without_line_tables(
     with closing(sqlite3.connect(copy)) as conn:
         conn.execute('DROP TABLE line_stations')
         conn.commit()
-    with closing(SqliteNetworkRepository(
-        path=copy,
-        city=SYDNEY,
-    )) as network:
+    with network_opened(path=copy) as network:
         found = SqlitePinOptions(network=network).destinations(
             origin=StopPlace(stop_id='C', name='C Stop', point=None),
             kind=SydneyMode.TRAIN,
@@ -340,10 +327,7 @@ def test_filters_for_bus_include_school_and_replacement(
         conn.execute(REPLACEMENT_RUN)
         conn.execute(STOP_ROWS)
         conn.commit()
-    with closing(SqliteNetworkRepository(
-        path=copy,
-        city=SYDNEY,
-    )) as network:
+    with network_opened(path=copy) as network:
         found = SqlitePinOptions(network=network).filters_at(
             stop_id='B2', kind=SydneyMode.BUS,
         )
@@ -387,10 +371,7 @@ def test_old_file_offers_nothing(built: Path, tmp_path: Path) -> None:
     with closing(sqlite3.connect(copy)) as conn:
         conn.execute('DROP TABLE chooser_routes')
         conn.commit()
-    with closing(SqliteNetworkRepository(
-        path=copy,
-        city=SYDNEY,
-    )) as network:
+    with network_opened(path=copy) as network:
         old = SqlitePinOptions(network=network)
         centre = StopPlace(stop_id='C', name='C', point=(0.0, 0.0))
         assert not old.search(text='stop')
@@ -412,10 +393,7 @@ def test_route_colours_reads_timetable(built: Path, tmp_path: Path) -> None:
             [('x:1', '0098CD'), ('x:2', 'f99d1c'), ('x:3', 'bad')],
         )
         conn.commit()
-    with closing(SqliteNetworkRepository(
-        path=copy,
-        city=SYDNEY,
-    )) as network:
+    with network_opened(path=copy) as network:
         found = SqlitePinOptions(network=network).route_colours(
             names=('T1', 'T2', '809'),
         )
@@ -429,10 +407,7 @@ def test_route_colours_without_network(built: Path, tmp_path: Path) -> None:
         conn.execute("UPDATE routes SET color = 'F99D1C'")
         conn.execute('DROP TABLE chooser_routes')
         conn.commit()
-    with closing(SqliteNetworkRepository(
-        path=copy,
-        city=SYDNEY,
-    )) as network:
+    with network_opened(path=copy) as network:
         found = SqlitePinOptions(network=network).route_colours(names=('T1',))
     assert not found
 
@@ -459,10 +434,7 @@ def test_lines_at_a_station_lists_named_lines_apart(
     """Two lines of one badge are both offered, each with its value."""
     copy = Path(shutil.copy(built, tmp_path / 'timetable.db'))
     add_named_lines(path=copy)
-    with closing(SqliteNetworkRepository(
-        path=copy,
-        city=SYDNEY,
-    )) as network:
+    with network_opened(path=copy) as network:
         found = SqlitePinOptions(network=network).lines_at(
             stop_id='C', kind=SydneyMode.TRAIN,
         )

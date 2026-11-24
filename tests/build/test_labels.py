@@ -30,6 +30,7 @@ from paperroute_transit.core.tiles import (
     tiles_covering,
     to_pixels,
 )
+from tests.build.tile_inputs import pixel_vertices
 
 EDGE = 20480.0  # a block boundary at every zoom
 MIDDLE = EDGE + 1024.0
@@ -89,11 +90,7 @@ def add_street(
     store.add_line(
         layer=layer,
         name=name,
-        points=np.array([from_pixels(
-            pixel=p,
-            mpp=mpp,
-            projection=SYDNEY_PROJECTION,
-        ) for p in pixels]),
+        points=pixel_vertices(pixels=pixels, mpp=mpp),
     )
 
 

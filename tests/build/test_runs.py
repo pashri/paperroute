@@ -14,7 +14,6 @@ from pathlib import Path
 import pytest
 
 from paperroute_sydney.city import RAIL_TYPES, SYDNEY, SYDNEY_REF, SydneyMode
-from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.runs import (
     RUN_SCHEMA,
     RUN_STOPS_INDEX,
@@ -36,7 +35,7 @@ from paperroute_transit.build.runs import (
 )
 from paperroute_transit.build.timetable import Window, build_timetable
 from tests.build.feeds import regional_sources
-from tests.build.network_feed import EAST_WEST, network_feed
+from tests.build.network_feed import EAST_WEST, build_network_db
 
 
 @pytest.fixture(name='network_db', scope='module')
@@ -54,13 +53,7 @@ def fixture_network_db(tmp_path_factory: pytest.TempPathFactory) -> Path:
     Path
         Timetable file.
     """
-    folder = tmp_path_factory.mktemp('network')
-    out = folder / 'timetable.db'
-    source = Source(name='sydneytrains',
-                    archive=network_feed(path=folder / 'network.zip'))
-    build_timetable(city_ref=SYDNEY_REF, sources=[source],
-                    window=Window(start=date(2026, 10, 5), days=3), out=out)
-    return out
+    return build_network_db(folder=tmp_path_factory.mktemp('network'))
 
 
 @pytest.fixture(name='network', scope='module')

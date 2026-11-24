@@ -2,7 +2,6 @@
 
 import hashlib
 import json
-import os
 from datetime import timedelta
 from pathlib import Path
 
@@ -152,17 +151,9 @@ def test_crash_before_states_saved_rebuilds_next_run(
 def test_swap_fsyncs_sources_directory(
     server: FeedServer,
     data_dir: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    synced: list[int],
 ) -> None:
     """The renames into sources/ are flushed before the states are saved."""
-    synced: list[int] = []
-    real_fsync = os.fsync
-
-    def fsync(fd: int) -> None:
-        synced.append(os.fstat(fd).st_ino)
-        real_fsync(fd)
-
-    monkeypatch.setattr(os, 'fsync', fsync)
     run(server=server, data_dir=data_dir)
     assert (data_dir / 'sources').stat().st_ino in synced
 

@@ -128,19 +128,16 @@ def test_tiles_cli_refuses_a_short_bbox() -> None:
         )
 
 
-def test_refresh_takes_data_dir_and_error_log() -> None:
+def test_refresh_takes_data_dir_and_error_log(tmp_path: Path) -> None:
     """The refresh subcommand reads its paths, days and force flag."""
+    log = tmp_path / 'log' / 'errors.jsonl'
     args = parsed(
         argv=[
-            'refresh',
-            '--data-dir',
-            '/var/lib/paperroute',
-            '--error-log',
-            '/var/lib/paperroute/log/errors.jsonl',
+            'refresh', '--data-dir', str(tmp_path), '--error-log', str(log),
         ],
     )
-    assert args.data_dir == Path('/var/lib/paperroute')
-    assert args.error_log == Path('/var/lib/paperroute/log/errors.jsonl')
+    assert args.data_dir == tmp_path
+    assert args.error_log == log
     assert args.days == 14
     assert not args.force
 

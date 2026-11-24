@@ -1,6 +1,5 @@
 """Tests for picking a station and a destination on one line."""
 
-from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from typing import Final
 
@@ -11,7 +10,7 @@ from hypothesis import strategies as st
 from paperroute_device.core.kit_events import Tick
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyMode
-from paperroute_testkit.core.factories import START, begun, pin_at, place
+from paperroute_testkit.core.factories import place
 from paperroute_testkit.core.kit_steps import step
 from paperroute_transit.core.chooser import (
     Choice,
@@ -36,7 +35,6 @@ from paperroute_transit.core.chooser_view import (
 from paperroute_transit.core.messages import (
     ChooserDeparturesLoaded,
     ColumnLoaded,
-    Effect,
     Event,
     LoadChooserDepartures,
     LoadColumn,
@@ -46,7 +44,7 @@ from paperroute_transit.core.messages import (
 )
 from paperroute_transit.core.model import Pin, shifted
 from paperroute_transit.core.places import feeds_of
-from paperroute_transit.core.saved import LiveView, Saved, default_settings
+from paperroute_transit.core.saved import LiveView
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.stop_view import HORIZON
 from tests.core.chooser_walks import (
@@ -68,6 +66,7 @@ from tests.core.chooser_walks import (
     chooser_departures,
     opened_at_kind,
 )
+from tests.core.state.helpers import run_events, started_on
 
 PENRITH_PATH: Final = (*T1, (Level.STATION, 'E2'))
 
@@ -99,40 +98,7 @@ def started() -> State:
     State
         The state after its first tick.
     """
-    saved = Saved(
-        settings=default_settings(city=SYDNEY),
-        pins=(pin_at('first', x=100.0),),
-        current=0,
-        unpinned=None,
-        view=LiveView.MAP,
-    )
-    state = begun(saved=saved)
-    return step(state, Tick(now=START))[0]
-
-
-def run_events(
-    *, state: State, events: Sequence[Event],
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Apply events in turn.
-
-    Parameters
-    ----------
-    state : State
-        State before.
-    events : Sequence[Event]
-        Events.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        State after, and every effect in order.
-    """
-    effects: tuple[Effect, ...] = ()
-    for event in events:
-        state, more = step(state, event)
-        effects = (*effects, *more)
-    return state, effects
+    return started_on(view=LiveView.MAP)
 
 
 def penrith_departures() -> ChooserDeparturesLoaded:

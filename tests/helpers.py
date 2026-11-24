@@ -20,12 +20,13 @@ from paperroute_device.core.device_settings import (
 )
 from paperroute_sydney.build.dedupe import merge_rail
 from paperroute_sydney.city import SYDNEY
+from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.realtime import StopUpdate, TripRealtime
 from paperroute_transit.core.saved import BoardSettings, Rate, Settings
-from paperroute_transit.core.stop_view import StopView
+from paperroute_transit.core.stop_view import Pill, Row, StopView
 
 REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'
 M9B_DB: Final[Path] = Path(__file__).parents[1] / 'data' / 'timetable-m9b.db'
@@ -454,4 +455,74 @@ def changed_settings() -> Settings:
             offpeak_rate=Rate.STEADY,
             peak_windows=(Window(start=time(7), end=time(9)),),
         ),
+    )
+
+
+def network_opened(*, path: Path) -> closing[SqliteNetworkRepository]:
+    """
+    Open a network repository over a timetable file as Sydney's.
+
+    Parameters
+    ----------
+    path : Path
+        Timetable file.
+
+    Returns
+    -------
+    closing[SqliteNetworkRepository]
+        Context manager that closes the repository on exit.
+    """
+    return closing(SqliteNetworkRepository(path=path, city=SYDNEY))
+
+
+def parramatta_bus_row(
+    *,
+    route: str,
+    countdown: str,
+    leaves_at: str,
+    arrives_at: str,
+    ride_minutes: int,
+    live: bool = True,
+    pill: Pill | None = None,
+    onto: str | None = None,
+) -> Row:
+    """
+    Make a Stop view row for a bus to Parramatta.
+
+    Parameters
+    ----------
+    route : str
+        Route label.
+    countdown : str
+        Countdown text.
+    leaves_at : str
+        Departure time text.
+    arrives_at : str
+        Arrival time text.
+    ride_minutes : int
+        Minutes to the destination.
+    live : bool
+        True for a realtime row.
+    pill : Pill | None
+        Marker.
+    onto : str | None
+        Route the vehicle becomes before the Destination.
+
+    Returns
+    -------
+    Row
+        The row.
+    """
+    return Row(
+        route=route,
+        vehicle='bus',
+        where='',
+        destination='Parramatta',
+        countdown=countdown,
+        leaves_at=leaves_at,
+        arrives_at=arrives_at,
+        ride_minutes=ride_minutes,
+        live=live,
+        pill=pill,
+        onto=onto,
     )

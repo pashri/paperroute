@@ -481,10 +481,8 @@ def services(*, db: Path) -> dict[object, object]:
         Trip ID to its service column.
     """
     return {
-        str(trip_id): str(service)
-        for trip_id, service in query(
-            db=db, sql='SELECT trip_id, service FROM trips',
-        )
+        row[0]: row[1]
+        for row in query(db=db, sql='SELECT trip_id, service FROM trips')
     }
 
 

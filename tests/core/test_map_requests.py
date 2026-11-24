@@ -559,7 +559,7 @@ def along_four_minutes() -> tuple[State, tuple[Departure, ...]]:
 
 def test_knob_moves_one_level_from_a_held_coarser_frame() -> None:
     """Held at 8 m/px where 5 would fit, one detent goes to 5 or 14."""
-    state, departures = along_four_minutes()
+    state, _ = along_four_minutes()
     assert state.map.frame == ((CENTRE[0] - 400.0, CENTRE[1] + 24.0), 2)
     finer, _ = step(state, turn(steps=1))
     coarser, _ = step(state, turn(steps=-1))

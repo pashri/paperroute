@@ -12,7 +12,7 @@ from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.line_stations import Spot, station_aliases
 from paperroute_transit.build.timetable import Window, build_timetable
-from tests.build.network_feed import network_files
+from tests.build.network_feed import network_files, pass_through_files
 
 SEYMOUR: Final[str] = 'Seymour Station'
 T1_TAIL: Final[list[tuple[str, str]]] = [
@@ -92,12 +92,7 @@ def test_station_aliases_tie_goes_to_the_smallest_id() -> None:
 
 def test_pass_through_calls_leave_the_station_off(tmp_path: Path) -> None:
     """No T1 call at R2 picks up or sets down: R2 is track, not listed."""
-    files = network_files()
-    files['stop_times.txt'] = [
-        {**row, 'pickup_type': '1', 'drop_off_type': '1'}
-        if row['stop_id'] == 'R2_1' else row
-        for row in files['stop_times.txt']
-    ]
+    files = pass_through_files()
     with closing(built(tmp_path=tmp_path, files=files)) as conn:
         rows = t1_rows(conn=conn)
         track = {station for (station,) in conn.execute(

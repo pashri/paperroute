@@ -21,16 +21,13 @@ from paperroute_sydney.adapters.web_board import (
     SYDNEY_NAV,
     SuggestPlug,
 )
-from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
-from paperroute_sydney.sydney_feeds import DAILY_LIMIT, feed_label
+from paperroute_sydney.city import SYDNEY
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages
 from paperroute_transit.adapters.board_routes import RESET_HINT
-from paperroute_transit.adapters.device_data import data_section
 from paperroute_transit.adapters.settings_form import form_values
-from tests.adapters.test_device_data import BUSES
 from tests.adapters.test_device_data import SYDNEY_STATUS as STATUS
-from tests.adapters.test_device_data import TRAINS
+from tests.adapters.test_web_device import sydney_data
 from tests.adapters.test_web_suggest import NOW as SEARCH_NOW
 from tests.adapters.test_web_suggest import PLATFORMS
 from tests.adapters.transit_web import transit_display
@@ -38,7 +35,6 @@ from tests.adapters.web_pins.helpers import HOME, ODD, WORK, Pins
 from tests.golden.scenes import GOLDEN, baseline_bytes
 from tests.golden.test_golden_state import RICH_SAVED
 from tests.planner_fakes import FakeTripPlanner
-from tests.test_observers import APP_STATUS
 
 Client = TestClient[web.Request, web.Application]
 PAGES: Final[dict[str, str]] = {
@@ -96,15 +92,7 @@ def display(*, status: DeviceStatus, keys: KeyStore) -> WebDisplay:
         nav=SYDNEY_NAV,
         reset_hint=RESET_HINT,
         sheets=('palette.css',),
-        data=lambda: data_section(
-            status=APP_STATUS,
-            facts=status.facts,
-            feeds={TRAINS: NOW - 12, BUSES: NOW - 40},
-            now=NOW,
-            label=feed_label,
-            daily_limit=DAILY_LIMIT,
-            zone=SYDNEY_ZONE,
-        ),
+        data=lambda: sydney_data(facts=status.facts),
     )
     return transit_display(
         status=lambda: {'settings': form_values(settings=RICH_SAVED.settings)},

@@ -17,6 +17,7 @@ from paperroute_transit.core.map_view import (
     screen_point,
 )
 from paperroute_transit.core.stop_view import Pill, Row, empty_text
+from tests.helpers import parramatta_bus_row
 from tests.render.map_base.helpers import CENTRE, MPP
 
 ROW_TOPS = (110, 182, 254, 326, 398)
@@ -56,11 +57,8 @@ def row(
     Row
         A bus row leaving at 8:09.
     """
-    return Row(
+    return parramatta_bus_row(
         route=route,
-        vehicle='bus',
-        where='',
-        destination='Parramatta',
         countdown=countdown,
         leaves_at='8:09',
         arrives_at='8:45',

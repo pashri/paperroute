@@ -1,7 +1,6 @@
 """Tests for Sydney's timetable sources and the TfNSW downloader."""
 
 import hashlib
-import os
 import traceback
 from collections.abc import Iterator
 from http import HTTPStatus
@@ -150,17 +149,9 @@ def test_download_streams_and_hashes(
 def test_download_fsyncs_zip(
     server: FeedServer,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    synced: list[int],
 ) -> None:
     """The zip is on disk, not just in the page cache, when it returns."""
-    synced: list[int] = []
-    real_fsync = os.fsync
-
-    def fsync(fd: int) -> None:
-        synced.append(os.fstat(fd).st_ino)
-        real_fsync(fd)
-
-    monkeypatch.setattr(os, 'fsync', fsync)
     server.state.files['/' + SPEC.path] = Served(body=b'zip')
     out = tmp_path / 'metro.zip'
     downloader(server=server).download(

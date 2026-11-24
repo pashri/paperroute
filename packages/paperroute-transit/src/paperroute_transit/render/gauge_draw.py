@@ -504,13 +504,11 @@ def count_choice(
         Text, face and x shift; the last wording unshifted when none
         fits.
     """
-    options = (
-        *(
-            (f'+{stops_text(stops=count)}', face)
-            for face in COUNT_FACES
-        ),
-        (f'+{count}', COUNT_FACES[0]),
-    )[: 3 if short else 2]
+    options = tuple(
+        (f'+{stops_text(stops=count)}', face) for face in COUNT_FACES
+    )
+    if short:
+        options = (*options, (f'+{count}', COUNT_FACES[0]))
     left = max(0, int(near) - COUNT_PAD)
     right = min(avoid.shape[1], int(far) + COUNT_PAD)
     top = max(0, line_y - COUNT_RISE)

@@ -40,6 +40,7 @@ from paperroute_transit.render.gauge_plan import (
     slot_x,
 )
 from paperroute_transit.render.markers import (
+    BADGE_HALF_HEIGHT,
     STRIP_WEDGE,
     badge_box,
     draw_dashed,
@@ -50,7 +51,7 @@ from paperroute_transit.render.names import Naming
 
 SPREAD_MOST: Final[float] = 2.0  # times PITCH
 FOLD_GAP: Final[float] = 2.0  # px between same-way badges before they fold
-TICK: Final[int] = 4  # px a folded bus's tick reaches below the line
+TICK: Final[int] = 4  # px a folded bus's tick shows below its badge
 TICK_WIDTH: Final[int] = 2  # px
 RIGHT_END: Final[float] = EDGE - 30  # px the last slot may reach
 
@@ -198,6 +199,8 @@ def beside(*, shown: Sequence[Marker], counts: dict[int, int]) -> list[Marker]:
     """
     Add each fold's count right of its first badge.
 
+    A badge the count would cover moves right to clear it.
+
     Parameters
     ----------
     shown : Sequence[Marker]
@@ -211,7 +214,11 @@ def beside(*, shown: Sequence[Marker], counts: dict[int, int]) -> list[Marker]:
         The badges with their counts after them.
     """
     out: list[Marker] = []
+    edge = -math.inf
     for index, marker in enumerate(shown):
+        left = badge_box(route=marker.route, centre=(marker.x, 0))[0]
+        if index - 1 in counts and left < edge + FOLD_GAP:
+            marker = replace(marker, x=marker.x + edge + FOLD_GAP - left)
         out.append(marker)
         if index not in counts:
             continue
@@ -219,6 +226,7 @@ def beside(*, shown: Sequence[Marker], counts: dict[int, int]) -> list[Marker]:
         right = badge_box(route=marker.route, centre=(marker.x, 0))[2]
         half = badge_box(route=count.route, centre=(0, 0))[2]
         out.append(replace(count, x=right + FOLD_GAP + half))
+        edge = right + FOLD_GAP + 2 * half
     return out
 
 
@@ -291,9 +299,10 @@ def draw_buses(canvas: Canvas, *, plan: GaugePlan, route: str) -> None:
         for bus in plan.line.buses
     ])
     y = plan.line_y
+    bottom = y + BADGE_HALF_HEIGHT + TICK
     for x in ticks:
         canvas.rect(
-            box=(x - TICK_WIDTH / 2, y, x + TICK_WIDTH / 2, y + TICK),
+            box=(x - TICK_WIDTH / 2, y, x + TICK_WIDTH / 2, bottom),
             grey=INK,
         )
     for marker in markers:

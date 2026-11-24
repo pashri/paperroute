@@ -179,3 +179,25 @@ def test_draw_route_gauge_busy_route_keeps_from_name_clear() -> None:
     _, bare = drawn(SHORT)
     _, names = drawn(replace(SHORT, buses=busy))
     assert (bare == names).all()
+
+
+def test_draw_route_gauge_shows_a_folded_bus_tick_below_the_badge(
+) -> None:
+    """A folded bus's tick shows just under the badge it is folded into."""
+    ink, _ = drawn(replace(SHORT, buses=(bus(2.0), bus(2.2))))
+    plan = route_plan(gauge=SHORT, keep=NONE, naming=NAMING)
+    x = slot_x(plan=plan, slot=2.2)
+    bottom = round(badge_box(route='A', centre=(x, plan.line_y))[3])
+    assert ink[bottom + 1 : bottom + 3, round(x)].all()
+
+
+def test_folded_shifts_a_badge_the_count_would_cover() -> None:
+    """A badge after a count moves clear of it."""
+    shown, _ = folded(markers=(
+        badge(x=100), badge(x=110), badge(x=140, bearing=270.0),
+    ))
+    count, after = shown[1], shown[2]
+    assert (
+        badge_box(route=after.route, centre=(after.x, 0))[0]
+        >= badge_box(route=count.route, centre=(count.x, 0))[2] + 2
+    )

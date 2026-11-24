@@ -106,9 +106,12 @@ def test_parse_positions_reads_entity_by_entity_past_a_broken_tail() -> None:
     assert snapshot.header_time == int(NOW.timestamp())
 
 
-def test_parse_positions_falls_back_to_fetch_time_without_a_header_time() -> None:
+def test_parse_positions_falls_back_to_fetch_time_without_a_header() -> None:
     """Parse positions falls back to fetch time without a header time."""
-    body = positions_body(vehicles=(('3300', 'VJ1', '57428', '', 0),), header=0)
+    body = positions_body(
+        vehicles=(('3300', 'VJ1', '57428', '', 0),),
+        header=0,
+    )
     snapshot = parse_positions(
         data=body, fetched_at=NOW, projection=CAMBRIDGE_PROJECTION,
     )

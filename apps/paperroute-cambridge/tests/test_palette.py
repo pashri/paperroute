@@ -322,7 +322,8 @@ def test_rules_that_board_css_also_sets_double_their_class() -> None:
         if not rule.context
     }
     for rule in css_rules(css=BOARD_CSS):
-        if re.fullmatch(r'\.[a-z-]+', rule.selector) and rule.selector in palette:
+        is_class = re.fullmatch(r'\.[a-z-]+', rule.selector)
+        if is_class and rule.selector in palette:
             assert not palette[rule.selector] & tokens_and_properties(rule), (
                 rule.selector
             )

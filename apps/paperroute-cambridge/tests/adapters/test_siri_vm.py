@@ -19,7 +19,12 @@ def test_coach_sightings_read_operator_vehicle_line_and_time() -> None:
         ),
     )
     assert coach_sightings(data=data) == (
-        CoachSighting(operator='NATX', vehicle='217', line='777', recorded=990),
+        CoachSighting(
+            operator='NATX',
+            vehicle='217',
+            line='777',
+            recorded=990,
+        ),
         CoachSighting(
             operator='FLIX', vehicle='9', line='UK083', recorded=1_000,
         ),

@@ -227,7 +227,9 @@ class RaisingSession:
         raise self.error
 
 
-KEYED_URL: Final[URL] = URL('http://bods.test/gtfsrtdatafeed/?api_key=k-secret')
+KEYED_URL: Final[URL] = URL(
+    'http://bods.test/gtfsrtdatafeed/?api_key=k-secret',
+)
 
 
 def leaking_error(*, case: str) -> aiohttp.ClientError:

@@ -69,7 +69,9 @@ SIGHTINGS = [
 
 def test_recorded_join_matches_the_raw_bodies() -> None:
     """Recorded join matches the raw bodies."""
-    joined = parse(named(data=read('bods_positions_raw.pb'), sightings=SIGHTINGS))
+    joined = parse(
+        named(data=read('bods_positions_raw.pb'), sightings=SIGHTINGS),
+    )
     assert joined == parse(read('bods_positions.pb'))
     assert any(v.label and not v.trip_id for v in joined.vehicles)
 

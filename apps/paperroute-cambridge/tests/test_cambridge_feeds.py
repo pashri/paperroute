@@ -52,7 +52,10 @@ def test_position_sources_are_bus_and_coach() -> None:
 
 def test_position_feeds_is_one_feed_for_a_bus_or_coach_source() -> None:
     """Position feeds is one feed for a bus or coach source."""
-    assert PLAN.position_feeds(sources=('coach',), box=None) == (POSITIONS_FEED,)
+    assert PLAN.position_feeds(
+        sources=('coach',),
+        box=None,
+    ) == (POSITIONS_FEED,)
     assert PLAN.position_feeds(sources=('bus', 'coach'), box=None) == (
         POSITIONS_FEED,
     )
@@ -83,7 +86,9 @@ def test_parsers_read_positions_in_the_projection() -> None:
 
 
 def test_estimates_are_worked_out_from_the_positions_feed() -> None:
-    """The estimates feed comes from the positions feed and is never fetched."""
+    """
+    The estimates feed comes from the positions feed and is never fetched.
+    """
     assert PLAN.estimated_from(feed=ESTIMATES_FEED) == POSITIONS_FEED
     assert PLAN.estimated_from(feed=POSITIONS_FEED) is None
     assert PLAN.kind(feed=ESTIMATES_FEED) is FeedKind.ESTIMATES

@@ -30,14 +30,17 @@ def text(name: str) -> str:
 
 def sydney_text(name: str) -> str:
     """Read Sydney's file of the same name."""
-    return (APP.parent / 'paperroute-sydney' / name.replace('cambridge', 'sydney')).read_text(
+    swapped_name = name.replace('cambridge', 'sydney')
+    return (APP.parent / 'paperroute-sydney' / swapped_name).read_text(
         encoding='utf-8',
     )
 
 
 def test_deploy_files_are_the_same_set_as_sydneys() -> None:
     """Deploy files are the same set as sydneys."""
-    assert files_under(DEPLOY) == [swapped(name) for name in files_under(SYDNEY)]
+    assert files_under(
+        DEPLOY,
+    ) == [swapped(name) for name in files_under(SYDNEY)]
     assert (APP / 'scripts' / 'before-release').is_file()
 
 
@@ -54,7 +57,9 @@ def test_only_the_board_reads_the_bus_data_key() -> None:
         'Environment=PAPERROUTE_KEY_FILE_BODS='
         '/var/lib/paperroute/apps/cambridge/secrets\n'
     ) in conf
-    assert 'KEY_FILE' not in text('deploy/systemd/paperroute-timetable.service')
+    assert 'KEY_FILE' not in text(
+        'deploy/systemd/paperroute-timetable.service',
+    )
     paths = files_under(DEPLOY)
     assert paths
     for path in paths:
@@ -90,7 +95,9 @@ def test_files_differ_from_sydneys_only_as_planned() -> None:
 def test_before_release_checks_and_ships_cambridge_tiles() -> None:
     """Before release checks and ships cambridge tiles."""
     script = text('scripts/before-release')
-    assert 'TILES=/usr/local/sbin/paperroute-cambridge-install-tiles\n' in script
+    assert (
+        'TILES=/usr/local/sbin/paperroute-cambridge-install-tiles\n' in script
+    )
     assert (
         'uv run python -m paperroute_cambridge.build check-tiles '
         'data/cambridge/tiles.db'

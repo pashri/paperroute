@@ -52,7 +52,10 @@ def positions_body(
     return bytes(message.SerializeToString())
 
 
-def siri_body(*, activities: Sequence[tuple[str, str, str, str, str]]) -> bytes:
+def siri_body(
+    *,
+    activities: Sequence[tuple[str, str, str, str, str]],
+) -> bytes:
     """
     Build a SIRI-VM body.
 

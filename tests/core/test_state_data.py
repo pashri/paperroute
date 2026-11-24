@@ -1,13 +1,14 @@
 """Tests for storing map data."""
 
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime
-from typing import Final
+from typing import Any, Final
 
 import pytest
 
 from paperroute_testkit.core.factories import START
-from paperroute_transit.core import strip_state
+from paperroute_transit.core import state_views, strip_state
 from paperroute_transit.core.messages import (
     LoadPatterns,
     MapDataFailed,
@@ -143,6 +144,34 @@ def counted(*, monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return calls
 
 
+def recording(*, name: str, real: Callable[..., Any], ran: list[str]
+) -> Callable[..., Any]:
+    """
+    Wrap a settle step so each call is noted.
+
+    Parameters
+    ----------
+    name : str
+        Name noted per call.
+    real : Callable[..., Any]
+        The step to call.
+    ran : list[str]
+        Gains `name` per call.
+
+    Returns
+    -------
+    Callable[..., Any]
+        The wrapped step.
+    """
+
+    def wrapped(**kwargs: object) -> object:
+        """Note the call, then make it."""
+        ran.append(name)
+        return real(**kwargs)
+
+    return wrapped
+
+
 def loaded(*, trip_ids: frozenset[str]) -> PatternsLoaded:
     """
     Build an answer holding no patterns.
@@ -165,11 +194,19 @@ def test_reduce_patterns_loaded_waits_for_the_last_pattern(
 ) -> None:
     """Strip steps wait while patterns are pending; others still run."""
     calls = counted(monkeypatch=monkeypatch)
+    ran: list[str] = []
+    for name in ('map_effects', 'pattern_effects'):
+        real = getattr(state_views, name)
+        monkeypatch.setattr(
+            f'paperroute_transit.core.state_views.{name}',
+            recording(name=name, real=real, ran=ran),
+        )
     state = pending(trip_ids=frozenset({'a', 'b'}))
     state, _ = on_map_event(
         state=state, event=loaded(trip_ids=frozenset({'a'})),
     )
     assert not calls
+    assert ran == ['map_effects', 'pattern_effects']
     assert state.map.pending_patterns == frozenset({'b'})
 
 

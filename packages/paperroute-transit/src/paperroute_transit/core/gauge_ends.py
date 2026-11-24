@@ -1,5 +1,6 @@
 """The route gauge's line: earlier stops, the From, calls and the end."""
 
+from bisect import bisect_right
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from typing import Final
@@ -126,16 +127,16 @@ def left_named(
     Parameters
     ----------
     start : int
-        Pattern index of the From.
+        Position of the From among the stops the trip calls at.
     behind : Sequence[float]
-        Spots of buses behind the From.
+        Positions, among those stops, of buses behind the From.
     budget : int
         Last slot the left end may take.
 
     Returns
     -------
     tuple[tuple[int, ...], bool]
-        Pattern indices shown, and True when an arrow ends the line.
+        Positions shown, and True when an arrow ends the line.
     """
     floors = sorted(
         {int(spot) for spot in behind if spot < start},
@@ -175,11 +176,13 @@ def right_named(
     kept = max(0, room - BREAK_SLOTS - 1)
     if place is None and calls <= room:
         return list(range(FROM, calls)), False
+    whole = sorted({*range(FROM, (place or 0) + 1), last})
+    if place is not None and max(laid(named=whole)[0].values()) <= room:
+        return whole, False
+    if room <= BREAK_SLOTS:
+        return list(range(FROM, room)), True
     if place is None:
         return [*range(FROM, kept), last], False
-    whole = sorted({*range(FROM, place + 1), last})
-    if max(laid(named=whole)[0].values()) <= room:
-        return whole, False
     return [*range(FROM, min(kept, place)), place], place < last
 
 
@@ -300,20 +303,33 @@ def left_end(
     GaugeLine
         The left marks, the left break and the arrow flag.
     """
-    behind = [bus.spot for bus in buses if bus.spot < start]
-    named, cut = left_named(start=start, behind=behind, budget=budget)
+    calling = call_stops(pattern=pattern, start=-1, end=start)
+    calling = calling[:calling.index(start) + 1]
+    behind = [
+        float(bisect_right(calling, bus.spot) - 1)
+        for bus in buses
+        if calling[0] <= bus.spot < start
+    ]
+    named, cut = left_named(
+        start=len(calling) - 1,
+        behind=behind,
+        budget=budget,
+    )
     slots, gaps = laid(named=named)
     shift = int(cut)
     marks = left_marks(
         pattern=pattern,
-        slots={index: slot + shift for index, slot in slots.items()},
+        slots={
+            calling[index]: slot + shift
+            for index, slot in slots.items()
+        },
         start=start,
     )
     return GaugeLine(
         marks=tuple(marks),
         back=shifted(gap=gaps[0] if gaps else None, by=shift),
         starts=not cut,
-        stops=tuple(sorted(slots)),
+        stops=tuple(calling[index] for index in sorted(slots)),
         cut=cut,
     )
 

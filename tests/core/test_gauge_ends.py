@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from dataclasses import replace
 from typing import Final
 
 from paperroute_sydney.city import SYDNEY_ZONE
@@ -230,3 +231,63 @@ def test_slot_of_puts_a_bus_beyond_the_arrow_at_the_arrow() -> None:
     )
     assert slot_of(line=line, spot=1.0) == 0.0
     assert slot_of(line=line, spot=19.5) == 12.0
+
+
+def passing_at(*, index: int) -> TripPattern:
+    """
+    P20 with one stop the trip runs through.
+
+    Parameters
+    ----------
+    index : int
+        Pattern index of the passing stop.
+
+    Returns
+    -------
+    TripPattern
+        The pattern.
+    """
+    stops = list(P20.stops)
+    stops[index] = replace(stops[index], passes=True)
+    return replace(P20, stops=tuple(stops))
+
+
+def test_route_line_neither_names_nor_counts_a_passing_stop_behind(
+) -> None:
+    """The left break counts calls, and the fill skips a passing stop."""
+    trip = passing_at(index=10)
+    line = route_line(
+        pattern=trip,
+        start=12,
+        end=None,
+        calls=calls_of(start=12, end=None),
+        buses=(bus(spot=10.5),),
+        budget=10,
+        room=6,
+        rules=RULES,
+    )
+    assert line.stops[:4] == (0, 9, 11, 12)
+    assert line.back == GaugeBreak(first=0, last=3, count=8)
+
+
+def test_route_line_left_break_counts_calls_only() -> None:
+    """A passing stop inside the left break is not counted."""
+    line = route_line(
+        pattern=passing_at(index=5),
+        start=12,
+        end=None,
+        calls=calls_of(start=12, end=None),
+        buses=(),
+        budget=10,
+        room=6,
+        rules=RULES,
+    )
+    assert line.back == GaugeBreak(first=0, last=3, count=10)
+
+
+def test_route_line_tiny_room_ends_at_the_last_call_that_fits() -> None:
+    """With no room for a break, the line stops at the room with an arrow."""
+    line = line_of(room=2)
+    assert line.stops[-3:] == (12, 13, 14)
+    assert (line.ahead, line.arrow) == (None, True)
+    assert line.marks[-1].slot == 3 + 2

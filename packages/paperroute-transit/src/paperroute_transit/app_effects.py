@@ -199,6 +199,11 @@ def strip_built(
         except sqlite3.Error:
             logger.warning('reading the kerb pairs failed', exc_info=True)
         else:
+            if not pairs:
+                logger.info(
+                    'no kerb pairs for the strip',
+                    extra={'station': effect.key.station},
+                )
             data = replace(data, facing=facing_of(pairs=pairs))
     reach = None if data is None else build_reach(data=data)
     elapsed = (time.perf_counter() - started) * MS_PER_SECOND

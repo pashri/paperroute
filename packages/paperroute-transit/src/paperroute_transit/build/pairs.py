@@ -9,6 +9,7 @@ from paperroute_transit.core.geo import METRES_PER_DEGREE_LAT, Projection
 from paperroute_transit.core.modes import is_road
 
 PAIR_RADIUS: Final[float] = 150.0  # metres
+PAIR_MARGIN: Final[float] = 0.5  # nearest over runner-up distance
 BUSY_HOURLY: Final[int] = 4  # departures an hour, at each kerb's peak
 PAIR_SCHEMA: Final[str] = """
 CREATE TABLE stop_pairs (station_id TEXT PRIMARY KEY,
@@ -42,7 +43,9 @@ CREATE INDEX temp.kerb_points_cell ON kerb_points (cx, cy);
 """
 KERB_CANDIDATES: Final[str] = """
 WITH near AS (
-  SELECT a.place AS one, b.place AS two FROM kerb_points a
+  SELECT a.place AS one, b.place AS two,
+    (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y) AS sq
+  FROM kerb_points a
   JOIN kerb_points b ON b.cx IN (a.cx - 1, a.cx, a.cx + 1)
     AND b.cy BETWEEN a.cy - 1 AND a.cy + 1 AND b.place <> a.place
   WHERE (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y)
@@ -50,8 +53,15 @@ WITH near AS (
     AND EXISTS (SELECT 1 FROM kerb_routes ka JOIN kerb_routes kb
       ON kb.place = b.place AND kb.route = ka.route
       WHERE ka.place = a.place AND ka.way <> kb.way)),
-sole AS MATERIALIZED (SELECT one, MIN(two) AS two FROM near GROUP BY one
-  HAVING COUNT(*) = 1)
+ranked AS (
+  SELECT one, two, sq,
+    ROW_NUMBER() OVER (PARTITION BY one ORDER BY sq, two) AS rank,
+    LEAD(sq) OVER (PARTITION BY one ORDER BY sq, two) AS runner_up
+  FROM near),
+sole AS MATERIALIZED (
+  SELECT one, two FROM ranked
+  WHERE rank = 1
+    AND (runner_up IS NULL OR sq <= :margin * :margin * runner_up))
 SELECT s.one, s.two FROM sole s JOIN sole t ON t.one = s.two
 WHERE t.two = s.one ORDER BY s.one
 """
@@ -142,7 +152,10 @@ def kerb_points(*, conn: sqlite3.Connection, projection: Projection) -> None:
 
 def kerb_candidates(*, conn: sqlite3.Connection) -> list[tuple[str, str]]:
     """
-    List the places that are each other's only opposite kerb.
+    List the places that are each other's clearly nearest opposite kerb.
+
+    A kerb's candidate is its nearest opposite kerb when it has no other,
+    or when it is at most `PAIR_MARGIN` times as far as the runner-up.
 
     Each place appears with its candidate, so a pair is listed both ways
     round.
@@ -155,9 +168,11 @@ def kerb_candidates(*, conn: sqlite3.Connection) -> list[tuple[str, str]]:
     Returns
     -------
     list[tuple[str, str]]
-        Place and its sole candidate.
+        Place and its nearest candidate.
     """
-    rows = conn.execute(KERB_CANDIDATES, {'radius': PAIR_RADIUS})
+    rows = conn.execute(
+        KERB_CANDIDATES, {'radius': PAIR_RADIUS, 'margin': PAIR_MARGIN},
+    )
     return list(rows)
 
 

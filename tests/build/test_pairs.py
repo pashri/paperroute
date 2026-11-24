@@ -177,6 +177,18 @@ def test_load_pairs_leaves_two_candidates_single(
     assert pairs_of(conn=conn) == []
 
 
+def test_load_pairs_takes_a_clearly_nearest_candidate(
+    conn: sqlite3.Connection,
+) -> None:
+    """A kerb pairs with a much nearer candidate over a farther one."""
+    add_stop(conn=conn, stop_id='b', lat=LAT + NORTH)
+    add_stop(conn=conn, stop_id='c', lat=LAT - 3 * NORTH)
+    add_trip(conn=conn, trip_id='t0', route='6', way=0, stops=('a', 'end1'))
+    add_trip(conn=conn, trip_id='t1', route='6', way=1, stops=('b', 'end2'))
+    add_trip(conn=conn, trip_id='t2', route='6', way=1, stops=('c', 'end2'))
+    assert pairs_of(conn=conn) == [('a', 'b', 0), ('b', 'a', 0)]
+
+
 def test_load_pairs_needs_opposite_ways(conn: sqlite3.Connection) -> None:
     """Two stops on the same way of a route do not pair."""
     add_stop(conn=conn, stop_id='b', lat=LAT + NORTH)

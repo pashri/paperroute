@@ -119,6 +119,25 @@ async def test_load_strip_posts_reach(
     assert built[0].__dict__['ms'] >= 0
 
 
+async def test_strip_built_logs_when_no_pairs_are_found(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A strip fed by both kerbs logs once when the pairs table is empty."""
+    data = reach_data()
+    key = replace(STRIP_KEY, across='x2')
+    load = LoadStrip(key=key, origin=data.origin, timetable='v1')
+    with caplog.at_level(logging.INFO):
+        await posted_by(
+            ports=ports_of(network=FakeNetwork(data=data)), effects=[load]
+        )
+    found = [
+        r
+        for r in caplog.records
+        if r.message == 'no kerb pairs for the strip'
+    ]
+    assert [r.__dict__['station'] for r in found] == ['C']
+
+
 async def test_load_strip_without_runs_posts_no_reach() -> None:
     """A timetable with no run tables loads a strip with no reach."""
     load = LoadStrip(key=STRIP_KEY, origin=stop_at('C'), timetable='v1')

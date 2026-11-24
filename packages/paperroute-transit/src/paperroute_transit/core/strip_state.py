@@ -2,6 +2,7 @@
 
 from collections.abc import Collection, Mapping
 from dataclasses import replace
+from types import MappingProxyType
 from typing import Final
 
 from paperroute_transit.core.chooser import ChooserState, Stage
@@ -57,6 +58,7 @@ from paperroute_transit.core.train_follow import (
 )
 from paperroute_transit.core.train_window import shows_dash
 
+NO_POSITIONS: Final[Mapping[str, PositionsSnapshot]] = MappingProxyType({})
 STRIP_VIEWS: Final[frozenset[LiveView]] = frozenset(
     {LiveView.STRIP, LiveView.STRIP_MAP}
 )
@@ -490,7 +492,7 @@ def followed_trips(
         ),
         key=key,
         patterns=state.map.patterns,
-        positions={},
+        positions=NO_POSITIONS,
         now=frame,
         zone=state.city.zone,
         stale_after=limit,

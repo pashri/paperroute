@@ -7,6 +7,7 @@ from functools import lru_cache
 from typing import Final
 
 from paperroute_transit.core.live import LiveDeparture
+from paperroute_transit.core.memo import SameMemo
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.patterns import PatternStop
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind
@@ -20,10 +21,13 @@ from paperroute_transit.core.strip_times import (
 )
 
 FOLLOWED: Final[int] = 4  # next trains the rows below the From come from
+MEMO_SIZE: Final[int] = 4  # ticks held
 type Call = tuple[str, PatternStop]
 type Served = list[tuple[str, PatternStop, datetime]]
 type Timed = tuple[datetime, int]
 type Row = tuple[str, PatternStop, list[Timed]]
+STEADY: Final[SameMemo[tuple['Steady | None']]] = SameMemo(size=MEMO_SIZE)
+REACHES: Final[SameMemo['Reach']] = SameMemo(size=MEMO_SIZE)
 
 
 @dataclass(frozen=True)
@@ -327,8 +331,8 @@ def on_branch(*, served: Served, first: Served) -> Served:
     return served[:last + 1]
 
 
-def steady_of(*, reach: Reach, trips: TripInputs, target: str | None
-              ) -> Steady | None:
+def merged_steady(*, reach: Reach, trips: TripInputs, target: str | None
+                  ) -> Steady | None:
     """
     Merge the next trains' stops below the From into one run of rows.
 
@@ -376,6 +380,36 @@ def steady_of(*, reach: Reach, trips: TripInputs, target: str | None
         rows=[(station, stop) for station, stop, _ in rows],
         times=[timed for _, _, timed in rows],
     )
+
+
+def steady_of(*, reach: Reach, trips: TripInputs, target: str | None
+              ) -> Steady | None:
+    """
+    Merge the next trains' stops below the From, once per tick.
+
+    Parameters
+    ----------
+    reach : Reach
+        The reach; its rows down to the From are used.
+    trips : TripInputs
+        The strip's departures and live data; positions are not read.
+    target : str | None
+        The Destination's station ID, or None.
+
+    Returns
+    -------
+    Steady | None
+        The result of `merged_steady`, remembered for the same reach,
+        departures and patterns at the same frame time.
+    """
+    inputs = (reach, trips.departures, trips.patterns)
+    same = (trips.now, target, trips.key)
+    held = STEADY.get(inputs=inputs, same=same)
+    if held is not None:
+        return held[0]
+    steady = merged_steady(reach=reach, trips=trips, target=target)
+    STEADY.put(inputs=inputs, same=same, value=(steady,))
+    return steady
 
 
 def hooks_of(*, reach: Reach, origin: int) -> dict[str, list[ReachRow]]:
@@ -520,13 +554,44 @@ def followed_reach(*, reach: Reach, trips: TripInputs,
         (see `steady_of`). The fixed rows while the first train's
         pattern isn't loaded or there is none.
     """
+    inputs = (reach, trips.departures, trips.patterns)
+    same = (trips.now, target, trips.key)
+    held = REACHES.get(inputs=inputs, same=same)
+    if held is not None:
+        return held
+    return REACHES.put(
+        inputs=inputs,
+        same=same,
+        value=laid_reach(reach=reach, trips=trips, target=target),
+    )
+
+
+def laid_reach(*, reach: Reach, trips: TripInputs, target: str | None
+               ) -> Reach:
+    """
+    Lay a strip's rows below its From along the next trains, unremembered.
+
+    Parameters
+    ----------
+    reach : Reach
+        The strip's fixed rows.
+    trips : TripInputs
+        The strip's departures and live data.
+    target : str | None
+        The Destination's station ID, or None.
+
+    Returns
+    -------
+    Reach
+        The reach `followed_reach` gives.
+    """
     origin = origin_of(reach=reach)
     steady = steady_of(reach=reach, trips=trips, target=target)
     if origin is None or steady is None:
         return reach
     rows = path_rows(reach=reach, origin=origin, calls=steady.rows)
     first = steady.items[0].departure
-    return Reach(
+    laid = Reach(
         rows=rows,
         stations=sum(
             row.kind in (RowKind.MAIN, RowKind.BRANCH) for row in rows
@@ -536,6 +601,12 @@ def followed_reach(*, reach: Reach, trips: TripInputs,
         day=first.service_day,
         facing=reach.facing,
     )
+    STEADY.put(
+        inputs=(laid, trips.departures, trips.patterns),
+        same=(trips.now, target, trips.key),
+        value=(steady,),
+    )
+    return laid
 
 
 def line_rows(*, reach: Reach, steady: Steady) -> list[int] | None:

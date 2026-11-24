@@ -113,7 +113,9 @@ async def test_setup_escapes_ssid(setup: DeviceSite, client: Client) -> None:
     assert html.escape('<b>x</b>') in page
 
 
-async def test_setup_form_uses_credential_label(setup: DeviceSite) -> None:
+async def test_setup_form_uses_credential_label(
+    setup: DeviceSite, client: Client,
+) -> None:
     """The form asks for the key, and refuses it, in the app's words."""
     setup.credential = Credential(
         label='Test key',
@@ -128,15 +130,11 @@ async def test_setup_form_uses_credential_label(setup: DeviceSite) -> None:
         raise ValueError('not a valid API key')
 
     setup.keys.write = refuse  # type: ignore[method-assign]
-    client = await _start(setup=setup)
-    try:
-        page = await (await client.get('/setup')).text()
-        response = await _post(client=client, data={
-            'network': 'Home', 'password': 'pw12345678', 'api_key': 'short',
-        })
-        refused = await response.text()
-    finally:
-        await client.close()
+    page = await (await client.get('/setup')).text()
+    response = await _post(client=client, data={
+        'network': 'Home', 'password': 'pw12345678', 'api_key': 'short',
+    })
+    refused = await response.text()
     assert 'Test key' in page
     assert 'TfNSW' not in page
     assert 'Bad test key.' in refused
@@ -290,9 +288,7 @@ async def test_setup_asks_for_the_first_missing_key() -> None:
     assert site.posted[0] == ApiKeyChanged(missing=())
 
 
-async def test_setup_never_echoes_password(
-    setup: DeviceSite, client: Client
-) -> None:
+async def test_setup_never_echoes_password(client: Client) -> None:
     """Neither a refusal nor a redirect carries the password or key."""
     for data in (
         {'network': 'Home', 'password': 'secret-pass-1'},

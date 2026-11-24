@@ -86,7 +86,136 @@ class FakeState:
     wake: bool = False
 
 
-class FakeApp(App[FakeState]):
+class FlagHooks:
+    """The hooks of a fake app that read one flag of its state."""
+
+    def banners(
+        self, *, state: FakeState, device: DeviceState,
+    ) -> tuple[Banner, ...]:
+        """
+        Give the state's banner lines.
+
+        Parameters
+        ----------
+        state : FakeState
+            State.
+        device : DeviceState
+            Ignored.
+
+        Returns
+        -------
+        tuple[Banner, ...]
+            The lines.
+        """
+        del device
+        return state.banners
+
+    def in_menu(self, *, state: FakeState) -> bool:
+        """
+        Say whether the app shows its own menu.
+
+        Parameters
+        ----------
+        state : FakeState
+            State.
+
+        Returns
+        -------
+        bool
+            The state's flag.
+        """
+        return state.menu
+
+    def needs_full(self, *, before: object | None, after: object) -> bool:
+        """
+        Say whether a view marked ``!`` is entered or left.
+
+        Parameters
+        ----------
+        before : object | None
+            The last view.
+        after : object
+            The view to draw.
+
+        Returns
+        -------
+        bool
+            True when exactly one of the views ends in ``!``.
+        """
+        return str(before).endswith('!') != str(after).endswith('!')
+
+    def may_sleep(self, *, state: FakeState, now: datetime) -> bool:
+        """
+        Say whether the screen may sleep.
+
+        Parameters
+        ----------
+        state : FakeState
+            State.
+        now : datetime
+            Ignored.
+
+        Returns
+        -------
+        bool
+            The state's flag.
+        """
+        del now
+        return state.sleepy
+
+    def is_quiet(self, *, state: FakeState, now: datetime) -> bool:
+        """
+        Say whether it is the app's quiet hours.
+
+        Parameters
+        ----------
+        state : FakeState
+            State.
+        now : datetime
+            Ignored.
+
+        Returns
+        -------
+        bool
+            The state's flag.
+        """
+        del now
+        return state.quiet
+
+    def wakes(self, *, state: FakeState) -> bool:
+        """
+        Say whether the app ends a Sleep now sleep.
+
+        Parameters
+        ----------
+        state : FakeState
+            State.
+
+        Returns
+        -------
+        bool
+            The state's flag.
+        """
+        return state.wake
+
+    def saved(self, *, state: FakeState) -> object | None:
+        """
+        Keep the view.
+
+        Parameters
+        ----------
+        state : FakeState
+            State.
+
+        Returns
+        -------
+        object | None
+            The view.
+        """
+        return state.view
+
+
+class FakeApp(FlagHooks, App[FakeState]):
     """
     An app whose hooks read and record its state.
 
@@ -403,131 +532,6 @@ class FakeApp(App[FakeState]):
             device=device,
         )
         return after, tuple(effect for effect in effects if effect != HELD)
-
-    def banners(
-        self, *, state: FakeState, device: DeviceState,
-    ) -> tuple[Banner, ...]:
-        """
-        Give the state's banner lines.
-
-        Parameters
-        ----------
-        state : FakeState
-            State.
-        device : DeviceState
-            Ignored.
-
-        Returns
-        -------
-        tuple[Banner, ...]
-            The lines.
-        """
-        del device
-        return state.banners
-
-    def in_menu(self, *, state: FakeState) -> bool:
-        """
-        Say whether the app shows its own menu.
-
-        Parameters
-        ----------
-        state : FakeState
-            State.
-
-        Returns
-        -------
-        bool
-            The state's flag.
-        """
-        return state.menu
-
-    def needs_full(self, *, before: object | None, after: object) -> bool:
-        """
-        Say whether a view marked ``!`` is entered or left.
-
-        Parameters
-        ----------
-        before : object | None
-            The last view.
-        after : object
-            The view to draw.
-
-        Returns
-        -------
-        bool
-            True when exactly one of the views ends in ``!``.
-        """
-        return str(before).endswith('!') != str(after).endswith('!')
-
-    def may_sleep(self, *, state: FakeState, now: datetime) -> bool:
-        """
-        Say whether the screen may sleep.
-
-        Parameters
-        ----------
-        state : FakeState
-            State.
-        now : datetime
-            Ignored.
-
-        Returns
-        -------
-        bool
-            The state's flag.
-        """
-        del now
-        return state.sleepy
-
-    def is_quiet(self, *, state: FakeState, now: datetime) -> bool:
-        """
-        Say whether it is the app's quiet hours.
-
-        Parameters
-        ----------
-        state : FakeState
-            State.
-        now : datetime
-            Ignored.
-
-        Returns
-        -------
-        bool
-            The state's flag.
-        """
-        del now
-        return state.quiet
-
-    def wakes(self, *, state: FakeState) -> bool:
-        """
-        Say whether the app ends a Sleep now sleep.
-
-        Parameters
-        ----------
-        state : FakeState
-            State.
-
-        Returns
-        -------
-        bool
-            The state's flag.
-        """
-        return state.wake
-
-    def saved(self, *, state: FakeState) -> object | None:
-        """
-        Keep the view.
-
-        Parameters
-        ----------
-        state : FakeState
-            State.
-
-        Returns
-        -------
-        object | None
-            The view.
-        """
-        return state.view
 
 
 APP: Final[FakeApp] = FakeApp()

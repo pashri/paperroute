@@ -3,7 +3,6 @@
 import io
 import json
 import logging
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Final
 from zoneinfo import ZoneInfo
@@ -15,20 +14,7 @@ from paperroute_device.logs import LastError, configure_logging
 ZONE: Final[ZoneInfo] = ZoneInfo('Australia/Sydney')
 
 
-@pytest.fixture(autouse=True)
-def _restore_root_logger() -> Iterator[None]:
-    """Put the root logger back after each test."""
-    root = logging.getLogger()
-    access = logging.getLogger('aiohttp.access')
-    handlers, level = list(root.handlers), root.level
-    access_level = access.level
-    yield
-    access.setLevel(access_level)
-    for handler in list(root.handlers):
-        if handler not in handlers:
-            handler.close()
-    root.handlers[:] = handlers
-    root.setLevel(level)
+pytestmark = pytest.mark.usefixtures('restored_logging')
 
 
 def _configure(

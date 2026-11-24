@@ -153,7 +153,7 @@ def test_defaults_are_the_kit_ones() -> None:
 def test_required_hooks_are_abstract() -> None:
     """An app missing a required hook cannot be made."""
     with pytest.raises(TypeError):
-        App()  # type: ignore[abstract]
+        App.__new__(App)  # type: ignore[type-abstract]
 
 
 async def test_runtime_defaults_are_the_kit_ones() -> None:

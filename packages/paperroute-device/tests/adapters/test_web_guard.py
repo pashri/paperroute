@@ -43,6 +43,7 @@ def _status(
 
 
 def test_public_peer_refused() -> None:
+    """A public address is refused."""
     assert (
         _status(method='GET', path='/', remote='8.8.8.8')
         == HTTPStatus.FORBIDDEN
@@ -50,6 +51,7 @@ def test_public_peer_refused() -> None:
 
 
 def test_unknown_host_refused() -> None:
+    """A request for an unknown host is refused."""
     status = _status(
         method='GET', path='/', headers={'Host': 'evil.example'},
     )
@@ -57,6 +59,7 @@ def test_unknown_host_refused() -> None:
 
 
 def test_cross_site_post_refused() -> None:
+    """A cross-site POST is refused."""
     status = _status(
         method='POST',
         path='/x',
@@ -66,11 +69,13 @@ def test_cross_site_post_refused() -> None:
 
 
 def test_same_origin_post_allowed() -> None:
+    """A same-origin POST is allowed."""
     status = _status(method='POST', path='/x')
     assert status == HTTPStatus.NO_CONTENT
 
 
 def test_cross_site_get_allowed() -> None:
+    """A cross-site GET is allowed."""
     status = _status(
         method='GET',
         path='/',

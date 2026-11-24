@@ -115,10 +115,10 @@ def test_settings_change_is_saved() -> None:
     kit, effects = kit_step(kit=before, event=posted(rotate=True))
     assert effects == (Render(view=before.device.last_view, full=True),)
     _, effects = kit_step(kit=kit, event=Tick(now=START + SAVE_WAIT * 2))
-    saves = [effect for effect in effects if isinstance(effect, SaveState)]
-    assert len(saves) == 1
-    assert saves[0].saved.device.rotate is True
-    assert saves[0].saved.app == 'live'
+    asked = [effect for effect in effects if isinstance(effect, SaveState)]
+    assert len(asked) == 1
+    assert asked[0].saved.device.rotate is True
+    assert asked[0].saved.app == 'live'
 
 
 def test_settings_change_merges() -> None:

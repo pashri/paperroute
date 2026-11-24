@@ -32,6 +32,7 @@ from paperroute_hardware.core.knob_events import (
     KnobsHeld,
     KnobTurned,
 )
+from tests.adapters.web_post import post_once
 from tests.core.fake_app import kit_step
 from tests.core.test_reducer import sleeping
 
@@ -591,13 +592,10 @@ async def test_knobs_reach_app_bound_after_app() -> None:
     got: list[object] = []
     display.bind(post=got.append)
     await client.start_server()
-    try:
-        response = await client.post(
-            '/knob', data={'knob': 'top', 'action': 'press'},
-        )
-    finally:
-        await client.close()
-    assert response.status == HTTPStatus.NO_CONTENT
+    status = await post_once(
+        client=client, path='/knob', data={'knob': 'top', 'action': 'press'},
+    )
+    assert status == HTTPStatus.NO_CONTENT
     assert got == [KnobPressed(knob=Knob.TOP)]
 
 

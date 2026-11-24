@@ -101,7 +101,7 @@ def test_first_frame_is_full() -> None:
 def test_banner_line_reaches_render() -> None:
     """The device's line reaches `render`; the app's shows only alone."""
     missing = ApiKeyChanged(missing=('Test',))
-    kit, effects = kit_step(kit=drawn(), event=missing)
+    _, effects = kit_step(kit=drawn(), event=missing)
     assert renders(effects=effects) == [f'view:live {KEY_LINE}']
     lined = FakeState(banners=(Banner(text='App line'),))
     _, effects = kit_step(kit=drawn(app=lined), event=missing)

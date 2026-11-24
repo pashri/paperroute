@@ -1,13 +1,12 @@
 """Run the kit's Settings page script in node against stub browser globals."""
 
-import json
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
 
 from paperroute_device.adapters.web_frame import SHELL_WEB
+from tests.adapters.node_harness import run_in_node
 
 HARNESS = r"""
 import { pathToFileURL } from 'node:url';
@@ -124,20 +123,13 @@ console.log(JSON.stringify(results));
 @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
 def test_settings_script_in_node(tmp_path: Path) -> None:
     """Each card saves on change, one post at a time, and says how."""
-    script = tmp_path / 'settings.mjs'
-    script.write_text(
-        (SHELL_WEB / 'settings.js').read_text(encoding='utf-8'),
-        encoding='utf-8',
+    results = run_in_node(
+        tmp_path=tmp_path,
+        source=SHELL_WEB / 'settings.js',
+        name='settings.mjs',
+        harness=HARNESS,
     )
-    harness = tmp_path / 'harness.mjs'
-    harness.write_text(HARNESS, encoding='utf-8')
-    done = subprocess.run(
-        ['node', str(harness), str(script)],
-        capture_output=True,
-        check=True,
-        text=True,
-    )
-    results = json.loads(done.stdout)
+    assert isinstance(results, dict)
     assert results['hidesSave'] == [True, True]
     assert results['postsCard'] == [
         ['/settings', {'rotate': 'on', 'peak_rate': '60s'}],

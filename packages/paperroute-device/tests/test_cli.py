@@ -18,8 +18,8 @@ from zoneinfo import ZoneInfo
 import aiohttp
 import pytest
 
-import paperroute_device.adapters.tk_monitor as tk_monitor
 from paperroute_device import cli
+from paperroute_device.adapters import tk_monitor
 from paperroute_device.adapters.app_switch import SystemAppSwitch
 from paperroute_device.adapters.clocks import SystemClock
 from paperroute_device.adapters.resets import FileResets, NullResets
@@ -207,19 +207,6 @@ class CrashApp(FakeApp):
         yield  # pylint: disable=unreachable
 
 
-@pytest.fixture(name='restored_logging')
-def _restored_logging() -> Iterator[None]:
-    """Put the root logger back after a test that configures it."""
-    root = logging.getLogger()
-    handlers, level = list(root.handlers), root.level
-    yield
-    for handler in list(root.handlers):
-        if handler not in handlers:
-            handler.close()
-    root.handlers[:] = handlers
-    root.setLevel(level)
-
-
 def test_zone_prints_the_apps_zone(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -373,9 +360,10 @@ async def test_device_for_probes_and_resets_every_key(
     assert device.keys == keys
     assert device.probe is not None
     assert (await device.probe.probe()).missing_keys == ('B',)
-    assert isinstance(device.resets, FileResets)
-    assert device.resets.keys == (first, second)
-    assert device.resets.erased == (tmp_path / 'app.db',)
+    resets = device.resets
+    assert isinstance(resets, FileResets)
+    assert getattr(resets, 'keys') == (first, second)
+    assert getattr(resets, 'erased') == (tmp_path / 'app.db',)
     keyless = cli.device_for(
         args=argparse.Namespace(**{**vars(args), 'power': False}),
         app=FakeApp(),
@@ -762,7 +750,8 @@ def test_web_main_asks_for_the_splash_first(
     )
     with pytest.raises(Stopped):
         cli.web_main(args=args, app=app, last_error=LastError(zone=UTC))
-    [kwargs] = asked
+    assert len(asked) == 1
+    kwargs = asked[0]
     assert isinstance(kwargs['panel'], PanelDisplay) is made
     assert (kwargs['image'], kwargs['marker'], kwargs['state']) == (
         tmp_path / 'on.raw',
@@ -785,7 +774,7 @@ def test_web_main_stops_the_panel_when_the_splash_fails(
         real_stop(self)
 
     def failing_splash(
-        *, panel: PanelDisplay | None, **rest: object,
+        *, panel: PanelDisplay | None, **_rest: object,
     ) -> bool:
         """Fail as a broken marker directory might."""
         assert panel is not None

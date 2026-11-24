@@ -73,10 +73,10 @@ class ClockChange:
 class ClockPlug:
     """The clock's Settings section."""
 
-    switches: Final[frozenset[str]] = frozenset({'chime'})
-    radios: Final[frozenset[str]] = frozenset({'colour'})
-    sheets: Final[tuple[str, ...]] = ('clock.css',)
-    errors: Final[Mapping[str, str]] = {'alarm': ALARM_ERROR}
+    switches: frozenset[str] = frozenset({'chime'})
+    radios: frozenset[str] = frozenset({'colour'})
+    sheets: tuple[str, ...] = ('clock.css',)
+    errors: Mapping[str, str] = {'alarm': ALARM_ERROR}
 
     def sections(self) -> str:
         """

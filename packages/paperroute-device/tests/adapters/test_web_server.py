@@ -13,13 +13,13 @@ from paperroute_device.adapters.web_server import BindError, serving
 HOST = '127.0.0.1'
 
 
-async def hello(request: web.Request) -> web.Response:
+async def hello(_request: web.Request) -> web.Response:
     """
     Answer every request with a greeting.
 
     Parameters
     ----------
-    request : web.Request
+    _request : web.Request
         Ignored.
 
     Returns

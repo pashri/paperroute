@@ -12,6 +12,7 @@ from paperroute_device.adapters.web_frame import NavItem
 from paperroute_device.adapters.web_live import KNOB_HINT, LiveView, live_page
 from paperroute_device.adapters.web_shell import web_app
 from paperroute_hardware.core.knob_events import Knob, KnobInput, KnobPressed
+from tests.adapters.web_post import post_once
 
 Client = TestClient[web.Request, web.Application]
 
@@ -49,13 +50,11 @@ def test_knob_post_reaches_sink() -> None:
 
     async def main() -> int:
         client = await _client(live=live)
-        try:
-            response = await client.post(
-                '/knob', data={'knob': 'top', 'action': 'press'},
-            )
-        finally:
-            await client.close()
-        return response.status
+        return await post_once(
+            client=client,
+            path='/knob',
+            data={'knob': 'top', 'action': 'press'},
+        )
 
     assert asyncio.run(main()) == HTTPStatus.NO_CONTENT
     assert got == [KnobPressed(knob=Knob.TOP)]

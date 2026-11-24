@@ -1,5 +1,6 @@
 """Tests for the route gauge's line ends and its buses."""
 
+from dataclasses import replace
 from datetime import date
 from functools import partial
 
@@ -57,8 +58,34 @@ def test_placed_keeps_a_shared_direction_on_a_count() -> None:
     assert found[0].right is True
 
 
-def test_placed_folds_buses_past_the_arrow_at_the_arrow() -> None:
-    """Buses beyond the arrow fold into a count at the last mark."""
+def test_placed_centres_a_count_in_its_break() -> None:
+    """A count sits at the break's centre, not its buses' midpoint."""
+    found = placed(line=broken(), buses=[bus(1.8), bus(2.5)])
+    assert [badge.slot for badge in found] == [4.5]
+    assert found[0].count == 2
+
+
+def test_placed_folds_buses_left_of_a_cut_line_at_slot_zero() -> None:
+    """Buses left of the first stop fold into a count at the arrow."""
+    found = placed(
+        line=replace(broken(), cut=True, stops=(2, 3, 9, 10)),
+        buses=[bus(0), bus(1, live=True), bus(5)],
+    )
+    assert found[0] == BusSlot(slot=0.0, right=True, live=None, count=2)
+    assert len(found) == 2
+
+
+def test_placed_keeps_one_bus_left_of_a_cut_line_at_slot_zero() -> None:
+    """A lone bus left of the first stop stays a badge at the arrow."""
+    found = placed(
+        line=replace(broken(), cut=True, stops=(2, 3, 9, 10)),
+        buses=[bus(0)],
+    )
+    assert found == (BusSlot(slot=0.0, right=True, live=False),)
+
+
+def test_placed_folds_buses_past_the_right_arrow_at_the_last_mark() -> None:
+    """Buses past the last stop fold into a count at the last mark."""
     found = placed(
         line=broken(arrow=True),
         buses=[bus(11), bus(12, live=True), bus(0)],

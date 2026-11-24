@@ -556,8 +556,9 @@ def placed(
     """
     Place buses on the line, folding crowded ones into counts.
 
-    Two or more buses in one break, or past the arrow, become one count
-    at the middle of the buses in a break or at the arrow.
+    Two or more buses in one break become a count at the break's
+    centre. Two or more past an arrow become a count at the arrow: slot
+    0 for the left arrow and the last mark's slot for the right one.
 
     Parameters
     ----------
@@ -571,23 +572,37 @@ def placed(
     tuple[BusSlot, ...]
         Badges and counts in slot order.
     """
-    groups: dict[object, list[tuple[float, GaugeBus]]] = {}
+    left: list[GaugeBus] = []
+    right: list[GaugeBus] = []
+    gaps: dict[GaugeBreak, list[tuple[float, GaugeBus]]] = {}
+    singles: list[BusSlot] = []
     for bus in buses:
         slot = slot_of(line=line, spot=bus.spot)
         gap = break_of(line=line, slot=slot)
-        beyond = line.arrow and bus.spot > line.stops[-1]
-        key = ('arrow',) if beyond else gap or ('bus', len(groups))
-        groups.setdefault(key, []).append((slot, bus))
-    return tuple(sorted(
+        if line.cut and bus.spot < line.stops[0]:
+            left.append(bus)
+        elif line.arrow and bus.spot > line.stops[-1]:
+            right.append(bus)
+        elif gap is not None:
+            gaps.setdefault(gap, []).append((slot, bus))
+        else:
+            singles.append(folded(slot=slot, group=[bus]))
+    ends = [(0.0, left), (float(line.marks[-1].slot), right)]
+    centres = [
         (
-            folded(
-                slot=(
-                    min(slot for slot, _ in members)
-                    + max(slot for slot, _ in members)
-                ) / 2,
-                group=[bus for _, bus in members],
-            )
-            for members in groups.values()
-        ),
+            members[0][0] if len(members) == 1 else (gap.first + gap.last) / 2,
+            [bus for _, bus in members],
+        )
+        for gap, members in gaps.items()
+    ]
+    return tuple(sorted(
+        [
+            *singles,
+            *(
+                folded(slot=slot, group=group)
+                for slot, group in [*ends, *centres]
+                if group
+            ),
+        ],
         key=lambda badge: badge.slot,
     ))

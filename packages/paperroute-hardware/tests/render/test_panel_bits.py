@@ -90,7 +90,10 @@ def test_changed_box_aligns_to_bytes() -> None:
 def test_mono_patch_extremes() -> None:
     """Black sets every bit and white sets none."""
     box = Box(0, 0, 16, 4)
-    assert _bits(data=mono_patch(frame=_frame(value=0), box=box), box=box) == 64
+    assert _bits(
+        data=mono_patch(frame=_frame(value=0), box=box),
+        box=box,
+    ) == 64
     assert _bits(data=mono_patch(frame=_frame(), box=box), box=box) == 0
 
 

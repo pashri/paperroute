@@ -159,7 +159,10 @@ def test_swap_is_read_at_each_event() -> None:
 
 
 @pytest.mark.parametrize(('event', 'expected'), [
-    (KnobTurned(knob=Knob.TOP, steps=2), KnobTurned(knob=Knob.BOTTOM, steps=2)),
+    (
+        KnobTurned(knob=Knob.TOP, steps=2),
+        KnobTurned(knob=Knob.BOTTOM, steps=2),
+    ),
     (KnobPressed(knob=Knob.BOTTOM), KnobPressed(knob=Knob.TOP)),
     (KnobHeld(knob=Knob.TOP), KnobHeld(knob=Knob.BOTTOM)),
     (

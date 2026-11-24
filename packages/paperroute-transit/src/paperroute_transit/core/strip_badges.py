@@ -140,7 +140,9 @@ def in_gutter(*, marker: Marker, spots: Mapping[str, Spot]) -> Marker:
     return replace(marker, x=min((marker.x, *level)))
 
 
-def counted(*, marker: Marker, extra: int) -> Marker:
+def counted(
+    *, marker: Marker, extra: int, bearings: Sequence[float | None] = (),
+) -> Marker:
     """
     Turn a badge with others folded into it into a count.
 
@@ -150,6 +152,8 @@ def counted(*, marker: Marker, extra: int) -> Marker:
         The badge.
     extra : int
         Badges folded into it.
+    bearings : Sequence[float | None]
+        Headings of the badge and the folded ones.
 
     Returns
     -------
@@ -159,10 +163,31 @@ def counted(*, marker: Marker, extra: int) -> Marker:
     """
     if not extra:
         return marker
-    return as_count(marker=marker, count=extra + 1)
+    return as_count(marker=marker, count=extra + 1, bearings=bearings)
 
 
-def as_count(*, marker: Marker, count: int) -> Marker:
+def headings(*, marker: Marker) -> tuple[float | None, ...]:
+    """
+    Give the headings a badge stands for.
+
+    Parameters
+    ----------
+    marker : Marker
+        The badge, a count or not.
+
+    Returns
+    -------
+    tuple[float | None, ...]
+        Its bearing; for a count of both ways, that and the opposite.
+    """
+    if marker.ends and marker.bearing is not None:
+        return (marker.bearing, (marker.bearing + 180.0) % 360.0)
+    return (marker.bearing,)
+
+
+def as_count(
+    *, marker: Marker, count: int, bearings: Sequence[float | None],
+) -> Marker:
     """
     Make a hollow count badge where a badge is.
 
@@ -172,18 +197,25 @@ def as_count(*, marker: Marker, count: int) -> Marker:
         The badge.
     count : int
         Badges counted.
+    bearings : Sequence[float | None]
+        Headings of the badges counted.
 
     Returns
     -------
     Marker
-        A hollow '+<count>' badge with no wedge or age, at its place.
+        A hollow '+<count>' badge at its place, with no age. It keeps
+        the heading all its buses share; with buses going different
+        ways it has the first heading and a wedge at each end; with no
+        known heading it has no wedge.
     """
+    known = [each for each in bearings if each is not None]
     return replace(
         marker,
         route=f'+{count}',
-        bearing=None,
+        bearing=known[0] if known else None,
         live=False,
         age=None,
+        ends=any(each != known[0] for each in known),
     )
 
 
@@ -212,7 +244,13 @@ def capped(*, badges: Sequence[Badge]) -> list[Badge]:
             replace(
                 each,
                 marker=as_count(
-                    marker=each.marker, count=rows.count(y) - FACING_CAP,
+                    marker=each.marker,
+                    count=rows.count(y) - FACING_CAP,
+                    bearings=[
+                        also.marker.bearing
+                        for also, at, place in zip(facing, rows, ranks)
+                        if at == y and place >= FACING_CAP
+                    ],
                 ),
                 extra=rows.count(y) - FACING_CAP - 1,
             )
@@ -308,6 +346,7 @@ def beside(*, disc: Spot, crowd: Sequence[Badge]) -> list[Badge]:
             marker=counted(
                 marker=replace(each.marker, x=disc.x + SLOT_SPAN, y=disc.y),
                 extra=extra,
+                bearings=[also.marker.bearing for also in rest],
             ),
             extra=extra,
         )
@@ -336,7 +375,15 @@ def on_hooks(*, badges: Sequence[Badge]) -> list[Badge]:
     return [
         replace(
             first,
-            marker=counted(marker=first.marker, extra=len(rest)),
+            marker=counted(
+                marker=first.marker,
+                extra=len(rest),
+                bearings=[
+                    heading
+                    for each in (first, *rest)
+                    for heading in headings(marker=each.marker)
+                ],
+            ),
             extra=len(rest),
         )
         for first, *rest in spots.values()
@@ -554,7 +601,12 @@ def settle(*, badge: Badge, placed: list[Badge], keep: Keepouts,
     elif host is not None:
         extra = placed[host].extra + 1
         placed[host] = replace(placed[host], extra=extra, marker=counted(
-            marker=placed[host].marker, extra=extra,
+            marker=placed[host].marker,
+            extra=extra,
+            bearings=[
+                *headings(marker=placed[host].marker),
+                badge.marker.bearing,
+            ],
         ))
     else:
         # Last resort, no room on its hop: drawn on it over another badge,

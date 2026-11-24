@@ -30,6 +30,7 @@ from paperroute_transit.render.markers import (
     badge_half,
     badge_wedge,
     draw_dashed,
+    draw_hollow,
     draw_markers,
     draw_tab,
     marker_box,
@@ -645,3 +646,14 @@ def test_draw_dashed_outlines_with_gaps() -> None:
     assert (edge < 128).any()
     assert (edge >= 128).any()
     assert (grey[96:104, 94:106] < 128).any()
+
+
+def test_draw_hollow_inks_two_wedges_for_ends() -> None:
+    """A count with `ends` inks a wedge above and one below its box."""
+    count = replace(marker(bearing=180.0, live=False), route='+2', ends=True)
+    canvas = Canvas()
+    draw_hollow(canvas, marker=count, centre=SPOT, wedge=STRIP_WEDGE)
+    grey = canvas.grey()
+    half = badge_half(route='+2')[1]
+    assert int(grey[round(SPOT[1] + half + 4), 100]) == INK
+    assert int(grey[round(SPOT[1] - half - 4), 100]) == INK

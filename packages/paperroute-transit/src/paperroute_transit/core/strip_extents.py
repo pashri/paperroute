@@ -128,8 +128,9 @@ def reaches(*, marker: Marker) -> tuple[float, float]:
     -------
     tuple[float, float]
         Pixels above and below: half the badge and its outline, its wedge
-        on the side it points to, and a timetable badge's age tab on the
-        other side when it points down, else below.
+        on the side it points to (both sides for a count of both ways),
+        and a timetable badge's age tab on the other side when it points
+        down, else below.
     """
     heading = (
         0.0
@@ -139,11 +140,12 @@ def reaches(*, marker: Marker) -> tuple[float, float]:
     tab = 0.0 if marker.age is None or marker.live else TAB_REACH
     tab_up = tab if heading < 0 else 0.0
     tab_down = 0.0 if heading < 0 else tab
+    both = marker.ends and marker.bearing is not None
     up = BADGE_HALF + max(
-        OUTLINE, WEDGE_REACH if heading > 0 else 0.0, tab_up,
+        OUTLINE, WEDGE_REACH if heading > 0 or both else 0.0, tab_up,
     )
     down = BADGE_HALF + max(
-        OUTLINE, WEDGE_REACH if heading < 0 else 0.0, tab_down,
+        OUTLINE, WEDGE_REACH if heading < 0 or both else 0.0, tab_down,
     )
     return up, down
 

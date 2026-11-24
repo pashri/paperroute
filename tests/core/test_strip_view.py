@@ -557,11 +557,11 @@ def test_overlapping_badges_pushed_down() -> None:
         },
     )
     (count,) = build_strip_view(inputs=inputs).markers
-    assert (count.route, count.bearing) == ('+2', None)
+    assert (count.route, count.bearing) == ('+2', 180.0)
 
 
 def test_crowded_hop_folds_into_a_count() -> None:
-    """Six trains on one hop fold into two counts."""
+    """Six trains on one hop fold into one count; two would not fit."""
     now = START + timedelta(minutes=4)
     trips = [f't{i}' for i in range(6)]
     inputs = inputs_of(
@@ -573,9 +573,8 @@ def test_crowded_hop_folds_into_a_count() -> None:
         },
         now=now,
     )
-    first, count = build_strip_view(inputs=inputs).markers
-    assert (first.route, count.route) == ('+2', '+4')
-    assert count.y - first.y == 22
+    (count,) = build_strip_view(inputs=inputs).markers
+    assert (count.route, count.bearing) == ('+6', 180.0)
 
 
 def test_close_badges_pushed_to_one_step_apart() -> None:

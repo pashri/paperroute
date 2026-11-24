@@ -10,6 +10,7 @@ from paperroute_transit.core.connection_view import PairRow
 from paperroute_transit.core.geo import Point, Projection, Shape
 from paperroute_transit.core.map_line import MapLine
 from paperroute_transit.core.map_vehicles import heard_vehicles, position_age
+from paperroute_transit.core.marker import Marker
 from paperroute_transit.core.model import Departure
 from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.patterns import TripPattern, timetable_point
@@ -20,6 +21,8 @@ from paperroute_transit.core.positions import (
 from paperroute_transit.core.ridden import route_stops, stops_window
 from paperroute_transit.core.stop_view import NOT_PINNED, PinTag, Row, StopView
 from paperroute_transit.core.tiles import ZOOMS, to_pixels
+
+__all__ = ['Marker']
 
 MAP_WIDTH: Final[int] = 520
 MAP_HEIGHT: Final[int] = 440
@@ -102,38 +105,6 @@ class MapBase:
     stops: tuple[Point, ...] = ()
     lines: tuple[MapLine, ...] = ()
     dashed_stops: tuple[Point, ...] = ()
-
-
-@dataclass(frozen=True)
-class Marker:
-    """One vehicle as drawn.
-
-    Attributes
-    ----------
-    route : str
-        Route label.
-    x : float
-        Map pixels from the left.
-    y : float
-        Map pixels from the top.
-    bearing : float | None
-        Heading in degrees, or None for no wedge.
-    live : bool
-        True at a fresh reported position, False at a timetable position.
-    pinned : bool
-        True when the route is one of the pin's.
-    age : float | None
-        Seconds since a stale vehicle was last heard, floored to whole
-        minutes; None for a fresh vehicle or a trip that never reported.
-    """
-
-    route: str
-    x: float
-    y: float
-    bearing: float | None
-    live: bool
-    pinned: bool
-    age: float | None = None
 
 
 @dataclass(frozen=True)

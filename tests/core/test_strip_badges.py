@@ -10,6 +10,7 @@ from paperroute_transit.core.strip_badges import (
     Badge,
     Keepouts,
     Spot,
+    as_count,
     clear_of,
     overlaps,
     pushed,
@@ -574,13 +575,13 @@ def test_pushed_shows_three_facing_badges_and_folds_past_them() -> None:
 
 
 def test_pushed_folded_facing_count_is_hollow_and_plain() -> None:
-    """The count badge has no wedge and is not live."""
+    """The count keeps its buses' shared heading and is not live."""
     spots = {'A': Spot(x=30, y=100)}
     *_, count = pushed(
         badges=facing_row(routes='T1 T2 T3 T4'), keep=Keepouts(spots=spots),
     )
     assert (count.marker.route, count.marker.bearing, count.marker.live) == (
-        '+2', None, False,
+        '+2', 180.0, False,
     )
 
 
@@ -623,3 +624,33 @@ def test_pushed_without_facing_badges_is_unchanged_by_the_cap() -> None:
     spots = {'A': Spot(x=30, y=100), 'C': Spot(x=30, y=136)}
     departed = badge(x=30, y=112, low=100, high=136, bearing=0.0)
     assert shown(badges=[departed], spots=spots) == [('T1', 30, 112)]
+
+
+def test_as_count_keeps_one_wedge_when_all_go_one_way() -> None:
+    """Buses all heading one way make a count keeping that heading."""
+    one = badge(x=30, y=40, low=30, high=50).marker
+    count = as_count(marker=one, count=3, bearings=[180.0, 180.0, 180.0])
+    assert (count.route, count.bearing, count.ends) == ('+3', 180.0, False)
+
+
+def test_as_count_wedges_both_ends_when_mixed() -> None:
+    """Buses heading both ways make a count with a wedge at each end."""
+    one = badge(x=30, y=40, low=30, high=50).marker
+    count = as_count(marker=one, count=2, bearings=[0.0, 180.0])
+    assert (count.bearing, count.ends) == (0.0, True)
+
+
+def test_as_count_has_no_wedge_when_no_heading_is_known() -> None:
+    """A count of buses with no known heading has no wedge."""
+    one = badge(x=30, y=40, low=30, high=50).marker
+    count = as_count(marker=one, count=2, bearings=[None, None])
+    assert (count.bearing, count.ends) == (None, False)
+
+
+def test_reaches_gives_a_both_ways_count_a_wedge_each_side() -> None:
+    """A count with `ends` reaches as far above as below."""
+    one = badge(x=30, y=40, low=30, high=50).marker
+    count = as_count(marker=one, count=2, bearings=[0.0, 180.0])
+    up, down = reaches(marker=count)
+    assert up == down
+    assert up > reaches(marker=replace(count, ends=False, bearing=None))[0]

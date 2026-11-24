@@ -187,6 +187,46 @@ def badge_wedge(
     )
 
 
+def wedges(
+    *,
+    marker: Marker,
+    centre: Point,
+    size: WedgeSize,
+) -> list[list[Point]]:
+    """
+    Find the wedge triangles a badge draws.
+
+    Parameters
+    ----------
+    marker : Marker
+        The vehicle.
+    centre : Point
+        Badge centre.
+    size : WedgeSize
+        Wedge size.
+
+    Returns
+    -------
+    list[list[Point]]
+        None with no bearing; one; or, for a count of both ways, one at
+        the bearing and one opposite it.
+    """
+    if marker.bearing is None:
+        return []
+    bearings = [marker.bearing]
+    if marker.ends:
+        bearings.append(marker.bearing + 180.0)
+    return [
+        wedge_points(
+            centre=centre,
+            half=badge_half(route=marker.route),
+            bearing=each,
+            size=size,
+        )
+        for each in bearings
+    ]
+
+
 def tab_above(*, marker: Marker) -> bool:
     """
     Say whether a badge's age tab hangs above it.
@@ -634,8 +674,7 @@ def draw_hollow(
         anchor='mm',
     )
     if wedge is not None:
-        points = badge_wedge(marker=marker, centre=centre, size=wedge)
-        if points is not None:
+        for points in wedges(marker=marker, centre=centre, size=wedge):
             canvas.polygon(points=points, grey=INK)
     if marker.age is not None:
         draw_tab(

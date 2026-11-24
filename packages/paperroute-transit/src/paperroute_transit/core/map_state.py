@@ -5,6 +5,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Final
 
+from paperroute_transit.core.gauge_requests import GaugeData
 from paperroute_transit.core.geo import (
     MetreBox,
     Point,
@@ -17,6 +18,7 @@ from paperroute_transit.core.messages import (
     LoadDayLines,
     LoadModes,
     LoadPatterns,
+    LoadRouteTrips,
     LoadShapes,
     MapData,
     MapDataFailed,
@@ -92,6 +94,8 @@ class MapState:
         no held frame; None when no map is drawn.
     day_lines : DayLines | None
         The day's other lines asked for or loaded; None before the ask.
+    gauge : GaugeData
+        What the route gauge loaded.
     """
 
     step: int = 0
@@ -111,6 +115,7 @@ class MapState:
     frame_key: FrameKey | None = None
     fit_zoom: int | None = None
     day_lines: DayLines | None = None
+    gauge: GaugeData = field(default_factory=GaugeData)
 
 
 def area_frame(*, map_state: MapState) -> tuple[Point | None, int]:
@@ -293,6 +298,11 @@ def failed(
         case LoadModes(mpp=mpp):
             modes = map_state.pending_modes - {mpp}
             map_state = replace(map_state, pending_modes=modes)
+        case LoadRouteTrips() as request:
+            gauge = map_state.gauge
+            if gauge.request == request:
+                gauge = replace(gauge, request=None)
+                map_state = replace(map_state, gauge=gauge)
         case LoadDayLines() as request:
             held = map_state.day_lines
             if held is not None and held.request == request:

@@ -32,6 +32,7 @@ from paperroute_transit.core.messages import (
     LoadDepartures,
     LoadModes,
     LoadPatterns,
+    LoadRouteTrips,
     LoadShapes,
     MapDataFailed,
     MapRequest,
@@ -266,7 +267,13 @@ def background(
                 feed=feed, at=ports.clock.now(), reason='unexpected error'
             )
             return fetch(ports=ports, effect=effect, post=post), failed
-        case LoadShapes() | LoadPatterns() | LoadModes() | LoadDayLines():
+        case (
+            LoadShapes()
+            | LoadPatterns()
+            | LoadModes()
+            | LoadDayLines()
+            | LoadRouteTrips()
+        ):
             return (
                 load_map(ports=ports, effect=effect, post=post),
                 MapDataFailed(request=effect),

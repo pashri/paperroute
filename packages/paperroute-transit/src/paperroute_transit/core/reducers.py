@@ -64,6 +64,7 @@ from paperroute_transit.core.messages import (
     PositionsFetched,
     PreviewsFailed,
     PreviewsLoaded,
+    RouteTripsLoaded,
     ServiceSpanLoaded,
     SettingsChanged,
     ShapesLoaded,
@@ -694,6 +695,7 @@ def data_result(
             | PatternsLoaded()
             | ModesLoaded()
             | DayLinesLoaded()
+            | RouteTripsLoaded()
             | PositionsFetched()
             | MapDataFailed()
         ):

@@ -44,6 +44,7 @@ from paperroute_transit.core.messages import (
     LoadModes,
     LoadPatterns,
     LoadPreviews,
+    LoadRouteTrips,
     LoadServiceSpan,
     LoadShapes,
     LoadStrip,
@@ -53,6 +54,7 @@ from paperroute_transit.core.messages import (
     PatternsLoaded,
     PlacesFailed,
     PositionsFetched,
+    RouteTripsLoaded,
     ServiceSpanLoaded,
     ShapesLoaded,
     StripFailed,
@@ -69,7 +71,11 @@ from paperroute_transit.core.reach import build_reach
 from paperroute_transit.core.realtime import RealtimeSnapshot
 from paperroute_transit.core.strip_approach import approach_stations, facing_of
 from paperroute_transit.measures import StopMeasures
-from paperroute_transit.ports import NetworkRepository, TimetableRepository
+from paperroute_transit.ports import (
+    GaugeTimetable,
+    NetworkRepository,
+    TimetableRepository,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -802,6 +808,30 @@ def estimates_of(
     )
 
 
+def loaded_route_trips(
+    *, gauge: GaugeTimetable, effect: LoadRouteTrips
+) -> RouteTripsLoaded:
+    """
+    Read a route's trips from the timetable.
+
+    Parameters
+    ----------
+    gauge : GaugeTimetable
+        Timetable.
+    effect : LoadRouteTrips
+        Request, echoed back.
+
+    Returns
+    -------
+    RouteTripsLoaded
+        The route's trips on the day and the day before.
+    """
+    trips = gauge.route_trips(
+        route=effect.route, source=effect.source, day=effect.day,
+    )
+    return RouteTripsLoaded(request=effect, trips=trips)
+
+
 def map_data(
     *,
     timetable: TimetableRepository,
@@ -823,7 +853,8 @@ def map_data(
     Returns
     -------
     Event
-        ShapesLoaded, PatternsLoaded, ModesLoaded or DayLinesLoaded.
+        ShapesLoaded, PatternsLoaded, ModesLoaded, DayLinesLoaded or
+        RouteTripsLoaded.
     """
     match effect:
         case LoadShapes(shape_ids=shape_ids):
@@ -845,6 +876,8 @@ def map_data(
             return ModesLoaded(mpp=mpp, box=box, modes=modes)
         case LoadDayLines():
             return loaded_day_lines(timetable=timetable, effect=effect)
+        case LoadRouteTrips():
+            return loaded_route_trips(gauge=timetable, effect=effect)
 
 
 def placed(*, timetable: TimetableRepository, place: StopPlace) -> StopPlace:

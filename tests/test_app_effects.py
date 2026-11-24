@@ -57,6 +57,7 @@ from paperroute_transit.app_effects import (
     VersionWatch,
     estimates_of,
     labelled_positions,
+    loaded_route_trips,
     parse_feed,
 )
 from paperroute_transit.app_ports import Ports
@@ -86,6 +87,7 @@ from paperroute_transit.core.messages import (
     LoadLine,
     LoadModes,
     LoadPreviews,
+    LoadRouteTrips,
     LoadServiceSpan,
     LoadStrip,
     MatchPlaces,
@@ -94,6 +96,7 @@ from paperroute_transit.core.messages import (
     PlacesMatched,
     PreviewsFailed,
     PreviewsLoaded,
+    RouteTripsLoaded,
     ServiceSpanLoaded,
     StripFailed,
     StripLoaded,
@@ -1517,3 +1520,47 @@ async def test_load_strip_keeps_the_strip_when_the_pairs_read_fails(
         effects=[load],
     )
     assert failed == [StripFailed(key=both, timetable='v1')]
+
+
+@dataclass
+class RecordingGauge:
+    """A gauge timetable that knows one route's trips and notes each ask."""
+
+    trips: tuple[RouteTrip, ...]
+    asked: list[tuple[str, str, date]] = field(default_factory=list)
+
+    def route_trips(
+        self, *, route: str, source: str, day: date
+    ) -> tuple[RouteTrip, ...]:
+        """
+        Give the known trips, noting the ask.
+
+        Parameters
+        ----------
+        route : str
+            Route short name.
+        source : str
+            Feed source.
+        day : date
+            Later service day.
+
+        Returns
+        -------
+        tuple[RouteTrip, ...]
+            The known trips.
+        """
+        self.asked.append((route, source, day))
+        return self.trips
+
+
+def test_route_trips_effect_handler_reads_the_repository() -> None:
+    """The handler asks the repository and echoes the request back."""
+    day = date(2026, 10, 16)
+    trip = RouteTrip(
+        trip_id='t1', day=day, starts=EIGHT, ends=EIGHT + 600, direction=0,
+    )
+    gauge = RecordingGauge(trips=(trip,))
+    effect = LoadRouteTrips(route='606', source='bus', day=day)
+    loaded = loaded_route_trips(gauge=gauge, effect=effect)
+    assert loaded == RouteTripsLoaded(request=effect, trips=(trip,))
+    assert gauge.asked == [('606', 'bus', day)]

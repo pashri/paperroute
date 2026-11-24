@@ -817,8 +817,8 @@ def test_a_destination_stop_view_polls_its_heros_positions() -> None:
     assert fetched == {BUS_POSITIONS}
 
 
-def test_an_unflagged_mode_polls_no_positions_on_the_stop_view() -> None:
-    """A hero whose mode does not fetch positions adds no positions feed."""
+def test_an_unflagged_mode_still_polls_positions_for_the_gauge() -> None:
+    """The gauge polls the hero's source whatever the mode's own flag."""
     state, _ = on_view(
         view=LiveView.STOP,
         pin=OPEN,
@@ -829,9 +829,11 @@ def test_an_unflagged_mode_polls_no_positions_on_the_stop_view() -> None:
     )
     state = replace(state, city=replace(state.city, modes=modes))
     state, effects = step(state, Tick(now=START + timedelta(seconds=30)))
-    assert not position_fetches(effects=effects)
+    assert position_fetches(effects=effects) == {BUS_POSITIONS}
     stop_view = live_stop_view(state=state)
-    assert needed_feeds(state=state, stop_view=stop_view) == (BUSES,)
+    assert needed_feeds(state=state, stop_view=stop_view) == (
+        BUSES, BUS_POSITIONS,
+    )
 
 
 def test_a_coach_hero_polls_its_sources_positions() -> None:
@@ -847,8 +849,8 @@ def test_a_coach_hero_polls_its_sources_positions() -> None:
     assert not own
 
 
-def test_a_light_rail_hero_polls_only_its_own_lines_positions() -> None:
-    """Light rail at a From inside one line's area asks for that line."""
+def test_a_light_rail_hero_polls_every_line_of_its_source() -> None:
+    """Light rail asks for all its lines, not only the one near the From."""
     pin = Pin(
         origin=place('light', name='Westmead', point=CENTRE),
         kind=SydneyMode.LIGHT_RAIL,
@@ -856,7 +858,8 @@ def test_a_light_rail_hero_polls_only_its_own_lines_positions() -> None:
     _, fetched = stop_positions_after_a_tick(
         pin=pin, departures=hero_of(mode='light_rail', source='light_rail'),
     )
-    assert fetched == {PARRAMATTA_LINE}
+    assert fetched == set(positions_of(sources={'light_rail'}))
+    assert PARRAMATTA_LINE in fetched
 
 
 def test_stop_view_positions_count_as_calls() -> None:

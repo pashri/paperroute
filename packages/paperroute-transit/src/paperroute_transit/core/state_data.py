@@ -14,6 +14,7 @@ from paperroute_transit.core.messages import (
     ModesLoaded,
     PatternsLoaded,
     PositionsFetched,
+    RouteTripsLoaded,
     ShapesLoaded,
     StripFailed,
     StripLoaded,
@@ -65,6 +66,13 @@ def on_map_event(
             map_state = replace(
                 map_state,
                 day_lines=DayLines(request=request, departures=found),
+            )
+        case RouteTripsLoaded(request=request, trips=trips):
+            gauge = map_state.gauge
+            if gauge.request != request:
+                return state, ()
+            map_state = replace(
+                map_state, gauge=replace(gauge, trips=trips),
             )
         case PositionsFetched(feed=feed, snapshot=snapshot):
             draw = not answered_late(state=state, feed=feed)

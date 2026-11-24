@@ -57,6 +57,7 @@ from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.positions import ParkedAge, PositionsSnapshot
 from paperroute_transit.core.reach import Reach, StripKey
 from paperroute_transit.core.realtime import RealtimeSnapshot
+from paperroute_transit.core.route_trips import RouteTrip
 from paperroute_transit.core.saved import (
     ConnectionMap,
     Lookahead,
@@ -76,6 +77,7 @@ class MapData(StrEnum):
     PATTERNS = 'patterns'
     MODES = 'modes'
     LINES = 'lines'
+    TRIPS = 'trips'
 
 
 @dataclass(frozen=True)
@@ -136,6 +138,26 @@ class LoadPatterns:
     """Ask the timetable for trip patterns around a day."""
 
     trip_ids: frozenset[str]
+    day: date
+
+
+@dataclass(frozen=True)
+class LoadRouteTrips:
+    """
+    Ask the timetable for a route's trips on a service day.
+
+    Attributes
+    ----------
+    route : str
+        Route short name.
+    source : str
+        Feed source the route belongs to.
+    day : date
+        Later of the two service days read.
+    """
+
+    route: str
+    source: str
     day: date
 
 
@@ -255,7 +277,9 @@ class MatchPlaces:
     timetable: str | None = None
 
 
-MapRequest = LoadShapes | LoadPatterns | LoadModes | LoadDayLines
+MapRequest = (
+    LoadShapes | LoadPatterns | LoadModes | LoadDayLines | LoadRouteTrips
+)
 ChooserLoad = LoadColumn | LoadPreviews | LoadLine | LoadChooserDepartures
 Effect = (
     LoadDepartures
@@ -264,6 +288,7 @@ Effect = (
     | LoadPatterns
     | LoadModes
     | LoadDayLines
+    | LoadRouteTrips
     | LoadStrip
     | MatchPlaces
     | RebuildTimetable
@@ -575,6 +600,14 @@ class DayLinesLoaded:
 
 
 @dataclass(frozen=True)
+class RouteTripsLoaded:
+    """A route's trips arrived from the timetable."""
+
+    request: LoadRouteTrips
+    trips: tuple[RouteTrip, ...]
+
+
+@dataclass(frozen=True)
 class PositionsFetched:
     """A positions feed was downloaded and parsed."""
 
@@ -605,6 +638,8 @@ class MapDataFailed:
                 return MapData.PATTERNS
             case LoadDayLines():
                 return MapData.LINES
+            case LoadRouteTrips():
+                return MapData.TRIPS
         return MapData.MODES
 
 
@@ -756,6 +791,7 @@ MapEvent = (
     | PatternsLoaded
     | ModesLoaded
     | DayLinesLoaded
+    | RouteTripsLoaded
     | PositionsFetched
     | MapDataFailed
 )

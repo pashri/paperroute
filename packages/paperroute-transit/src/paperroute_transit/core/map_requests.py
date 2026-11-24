@@ -15,7 +15,12 @@ from paperroute_transit.core.day_lines import (
     line_choice,
     request_day_lines,
 )
-from paperroute_transit.core.geo import MetreBox, Point
+from paperroute_transit.core.gauge_requests import (
+    gauge_feeds,
+    gauge_trip_ids,
+    route_trips_effect,
+)
+from paperroute_transit.core.geo import Point
 from paperroute_transit.core.map_fit import (
     FrameKey,
     frame_key,
@@ -45,7 +50,7 @@ from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.rhythm import frame_time, stale_after
 from paperroute_transit.core.saved import LiveView
 from paperroute_transit.core.state_model import State, may_load
-from paperroute_transit.core.stop_view import StopView, hero_departure
+from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.core.strip_state import (
     picked_window,
     picking_to,
@@ -54,7 +59,6 @@ from paperroute_transit.core.strip_state import (
 )
 from paperroute_transit.core.tiles import ZOOMS
 
-STOP_BOX: Final[float] = 1.0  # metres across, round the From
 MAP_VIEWS: Final[frozenset[LiveView]] = frozenset(
     {LiveView.MAP, LiveView.STRIP_MAP}
 )
@@ -787,26 +791,6 @@ def sleep_effects(
     return state, (*day, *shapes, *loads)
 
 
-def stop_patterns(*, stop_view: StopView) -> frozenset[str]:
-    """
-    List the trips whose patterns the Stop view needs.
-
-    Parameters
-    ----------
-    stop_view : StopView
-        The state's Stop view.
-
-    Returns
-    -------
-    frozenset[str]
-        The hero's trip ID when the view has a hero; otherwise none.
-    """
-    hero = hero_departure(view=stop_view)
-    if stop_view.hero is None or hero is None:
-        return frozenset()
-    return frozenset({hero.trip_id})
-
-
 def stop_effects(
     *, state: State, stop_view: StopView
 ) -> tuple[State, tuple[Effect, ...], PatternAsk | None]:
@@ -823,25 +807,32 @@ def stop_effects(
     Returns
     -------
     tuple[State, tuple[Effect, ...], PatternAsk | None]
-        State keeping only the hero's pattern and the board's own trips'
-        patterns, no effects, and the patterns wanted.
+        State keeping only the gauge's patterns and the board's own
+        trips' patterns, the ask for the hero route's trips when it is
+        due, and the patterns wanted.
     """
-    wanted = stop_patterns(stop_view=stop_view)
+    wanted = gauge_trip_ids(state=state, stop_view=stop_view)
     departures = state.board.departures
     state = pruned(
         state=state,
         wanted=pin_trips(departures=departures) | wanted,
         departures=departures,
     )
+    request = route_trips_effect(state=state, stop_view=stop_view)
+    effects: tuple[Effect, ...] = ()
+    if request is not None and may_load(state=state, kind=MapData.TRIPS):
+        gauge = replace(state.map.gauge, request=request)
+        state = replace(state, map=replace(state.map, gauge=gauge))
+        effects = (request,)
     ask = PatternAsk(wanted=wanted, drawn=stop_view.head_departures[:1])
-    return state, (), ask
+    return state, effects, ask
 
 
 def stop_feeds(
     *, state: State, stop_view: StopView
 ) -> tuple[str, ...]:
     """
-    List the positions feed the Stop view polls for its hero.
+    List the positions feeds the Stop view polls for its hero.
 
     Parameters
     ----------
@@ -853,29 +844,12 @@ def stop_feeds(
     Returns
     -------
     tuple[str, ...]
-        The positions feeds of the hero's feed source, a light rail
-        source's only the line near the From (every line when the From has
-        no point); none unless the view is Stop with the chooser closed
-        and the hero's mode fetches positions.
+        The gauge's feeds; none unless the view is Stop with the chooser
+        closed.
     """
-    hero = hero_departure(view=stop_view)
-    pin = shown(state=state)
-    point = pin.origin.point
-    if (
-        state.view is not LiveView.STOP
-        or state.chooser is not None
-        or hero is None
-    ):
+    if state.view is not LiveView.STOP or state.chooser is not None:
         return ()
-    spec = state.city.mode(mode_id=hero.facts.kind)
-    if spec is None or not spec.stop_positions:
-        return ()
-    box: MetreBox | None = None
-    if point is not None:
-        x, y = point
-        half = STOP_BOX / 2
-        box = (x - half, y - half, x + half, y + half)
-    return state.city.feeds.position_feeds(sources=(hero.source,), box=box)
+    return gauge_feeds(state=state, stop_view=stop_view)
 
 
 def map_effects(

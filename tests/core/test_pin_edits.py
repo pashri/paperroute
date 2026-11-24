@@ -29,7 +29,7 @@ from tests.core.test_places import SECOND as B
 from tests.core.test_places import THIRD as C
 from tests.core.test_places import state_with
 from tests.core.test_sleep import asleep
-from tests.core.test_state import effects_of
+from tests.core.state.helpers import effects_of
 
 D = Pin(origin=replace(A.origin, stop_id='fourth'))
 

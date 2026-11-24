@@ -56,15 +56,7 @@ from paperroute_transit.core.state_views import current_view, live_stop_view
 from paperroute_transit.core.stop_view import HORIZON
 from tests.core.test_quiet import at as quiet_at
 from tests.core.test_quiet import evening
-from tests.core.test_state import (
-    ALERTS,
-    BUSES,
-    CENTRE,
-    PIN,
-    PRESS,
-    fresh,
-    loaded,
-)
+from tests.core.state.helpers import ALERTS, BUSES, CENTRE, PIN, PRESS, fresh, loaded
 
 SYDNEY = ZoneInfo('Australia/Sydney')
 MIDNIGHT: Final[datetime] = START.replace(hour=0, minute=0)

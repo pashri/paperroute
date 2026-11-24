@@ -30,7 +30,7 @@ from paperroute_transit.core.strip_model import (
 )
 from paperroute_transit.core.strip_select import panel_trains
 from paperroute_transit.core.strip_view import build_strip_view, marks_of
-from tests.core.test_state import check_selection
+from tests.core.state.helpers import check_selection
 from tests.core.test_strip_follow import (
     ALL_STOPS,
     carrying,

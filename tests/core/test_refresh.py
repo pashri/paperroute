@@ -25,7 +25,7 @@ from paperroute_transit.core.refresh import quick_now
 from paperroute_transit.core.saved import LiveView, seeded
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.stop_view import StopView
-from tests.core.test_state import PIN, PRESS, effects_of, fresh, loaded
+from tests.core.state.helpers import PIN, PRESS, effects_of, fresh, loaded
 
 IGNORED = KnobHeld(knob=Knob.TOP)
 TURN = KnobTurned(knob=Knob.BOTTOM, steps=1)

@@ -60,7 +60,7 @@ from tests.build.feeds import (
     raising,
     refused,
 )
-from tests.core.test_state import fresh
+from tests.core.state.helpers import fresh
 
 REAL: Final[Path] = Path(__file__).parent.parent / 'fixtures' / 'real'
 KEY: Final[str] = 'secret-key-0123456789'

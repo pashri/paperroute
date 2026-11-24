@@ -129,7 +129,7 @@ from tests.core.test_chains import TRAINS
 from tests.core.test_connection import late_legs
 from tests.core.test_connection_screens import started, with_legs
 from tests.core.test_connection_strip import PATTERNS as LEG_PATTERNS
-from tests.core.test_state import BUS_POSITIONS, CENTRE, PRESS, fresh, loaded
+from tests.core.state.helpers import BUS_POSITIONS, CENTRE, PRESS, fresh, loaded
 from tests.core.test_stop_hero import FROM, RUN, STAND
 from tests.core.test_stop_hero import stop as call_at
 

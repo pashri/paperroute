@@ -36,7 +36,7 @@ from paperroute_transit.core.places import shown
 from paperroute_transit.core.realtime import RealtimeSnapshot
 from paperroute_transit.core.state_model import RELOAD_BEFORE, State
 from paperroute_transit.core.stop_view import HORIZON
-from tests.core.test_state import CENTRE, PRESS, fresh
+from tests.core.state.helpers import CENTRE, PRESS, fresh
 
 TICK: Final[timedelta] = timedelta(seconds=5)
 IDLE_FOR: Final[timedelta] = timedelta(minutes=15)

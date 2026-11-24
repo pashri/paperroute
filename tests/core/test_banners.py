@@ -25,7 +25,7 @@ from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import device_notice, stop_view_of
 from paperroute_transit.transit_app import TransitApp
 from tests.core.test_idle_frames import board, idle
-from tests.core.test_state import CENTRE, fresh, loaded
+from tests.core.state.helpers import CENTRE, fresh, loaded
 
 FRIDAY: Final[date] = date(2026, 10, 16)  # START's day in Sydney
 ENDS_FRIDAY: Final[str] = 'Timetable ends Friday. Check the internet and key.'

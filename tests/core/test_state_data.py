@@ -13,7 +13,7 @@ from paperroute_transit.core.positions import (
 )
 from paperroute_transit.core.state_data import on_map_event
 from paperroute_transit.core.state_model import State
-from tests.core.test_state import fresh
+from tests.core.state.helpers import fresh
 
 
 def vehicle(*, timestamp: int) -> VehiclePosition:

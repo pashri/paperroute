@@ -36,7 +36,7 @@ from paperroute_transit.core.model import Departure, Pin
 from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import LiveView, Saved, default_settings
 from paperroute_transit.core.state_model import Board, State
-from paperroute_transit.core.state_views import STOP_VIEWS, live_stop_view
+from paperroute_transit.core.state_views import live_stop_view
 from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.measures import StopMeasures
 from paperroute_transit.render.stop_view import draw_stop_view
@@ -138,20 +138,20 @@ def stats_of(*, millis: list[float]) -> Stats:
     return Stats(median=statistics.median(ordered), p90=ordered[rank])
 
 
-def tick(*, state: State) -> None:
+def tick(*, state: State, step: int) -> None:
     """
     Build and draw the Stop view as a tick does.
-
-    Each tick has a new frame time, so the held Stop view is dropped
-    first.
 
     Parameters
     ----------
     state : State
         State on the Stop view.
+    step : int
+        Seconds after the state's time to draw at; each tick on the
+        device has a new time, so views held for a time are not reused.
     """
-    STOP_VIEWS.clear()
-    draw_stop_view(view=live_stop_view(state=state))
+    later = replace(state, now=state.now + timedelta(seconds=step))
+    draw_stop_view(view=live_stop_view(state=later))
 
 
 def timed_ticks(*, state: State, repeat: int) -> Stats:
@@ -170,11 +170,11 @@ def timed_ticks(*, state: State, repeat: int) -> Stats:
     Stats
         The median and p90 milliseconds.
     """
-    tick(state=state)
+    tick(state=state, step=0)
     millis = []
-    for _ in range(repeat):
+    for step in range(1, repeat + 1):
         began = clock_time.perf_counter()
-        tick(state=state)
+        tick(state=state, step=step)
         millis.append((clock_time.perf_counter() - began) * 1000)
     return stats_of(millis=millis)
 

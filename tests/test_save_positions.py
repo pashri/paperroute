@@ -1,0 +1,84 @@
+"""Tests for the positions saving script."""
+
+import importlib.util
+import sys
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
+from types import ModuleType
+
+import pytest
+
+SCRIPT = Path(__file__).parent.parent / 'scripts' / 'save_positions.py'
+BODY = b'feed-bytes'
+KEY = 'secret-key-123'
+
+
+class Handler(BaseHTTPRequestHandler):
+    """Serves a body only to a request carrying the key."""
+
+    def do_GET(self) -> None:
+        """Answer a GET with the body, or 403 without the key."""
+        ok = self.headers.get('Authorization') == f'apikey {KEY}'
+        self.send_response(200 if ok else 403)
+        self.end_headers()
+        self.wfile.write(BODY if ok else b'')
+
+    def log_message(self, format: str, *args: object) -> None:
+        """Stay quiet."""
+
+
+def load_script() -> ModuleType:
+    """
+    Import the script.
+
+    Returns
+    -------
+    ModuleType
+        The script as a module.
+    """
+    spec = importlib.util.spec_from_file_location('save_positions', SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules['save_positions'] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_save_positions_writes_the_body_and_hides_the_key(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The feed is saved with the key sent, and the key is not printed."""
+    key_file = tmp_path / 'key'
+    key_file.write_text(KEY + '\n', encoding='utf-8')
+    server = HTTPServer(('127.0.0.1', 0), Handler)
+    thread = threading.Thread(target=server.serve_forever)
+    thread.start()
+    try:
+        status = load_script().main(
+            argv=[
+                '--out', str(tmp_path / 'p.pb'),
+                '--key-file', str(key_file),
+                '--base-url', f'http://127.0.0.1:{server.server_port}/',
+            ],
+        )
+    finally:
+        server.shutdown()
+        thread.join()
+        server.server_close()
+    assert status == 0
+    assert (tmp_path / 'p.pb').read_bytes() == BODY
+    captured = capsys.readouterr()
+    assert KEY not in captured.out + captured.err
+
+
+def test_save_positions_missing_key_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A missing key file exits 1."""
+    status = load_script().main(
+        argv=['--out', str(tmp_path / 'p.pb'), '--key-file', str(tmp_path)],
+    )
+    assert status == 1
+    assert 'no TfNSW key in' in capsys.readouterr().err

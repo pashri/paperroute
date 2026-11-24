@@ -8,16 +8,19 @@ from collections.abc import Sequence
 from contextlib import closing
 from dataclasses import dataclass, replace
 from datetime import datetime, time, timedelta
+from functools import partial
 from pathlib import Path
 from typing import Final
 
 from paperroute_cambridge.city import CAMBRIDGE
 from paperroute_sydney.city import SYDNEY
+from paperroute_transit.adapters.gtfs_rt import parse_positions
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.app_effects import map_data
 from paperroute_transit.core.city import City
 from paperroute_transit.core.gauge_requests import (
     GaugeData,
+    gauge_feeds,
     gauge_trip_ids,
     route_trips_effect,
 )
@@ -296,6 +299,45 @@ def stop_state(
     return with_route_trips(repo=repo, state=state)
 
 
+def decode_feed(
+    *, data: bytes, state: State, repeat: int,
+) -> tuple[State, Stats]:
+    """
+    Decode a saved positions feed, timing it, into the hero's feeds.
+
+    Parameters
+    ----------
+    data : bytes
+        A serialised vehicle-positions FeedMessage.
+    state : State
+        State on the Stop view.
+    repeat : int
+        Number of timed decodes.
+
+    Returns
+    -------
+    tuple[State, Stats]
+        State holding the decoded vehicles under each feed the gauge
+        polls for the hero, and the decode's median and p90 milliseconds.
+    """
+    decode = partial(
+        parse_positions,
+        data=data,
+        fetched_at=state.now,
+        projection=state.city.projection,
+    )
+    snapshot = decode()
+    millis = []
+    for _ in range(repeat):
+        began = clock_time.perf_counter()
+        decode()
+        millis.append((clock_time.perf_counter() - began) * 1000)
+    feeds = gauge_feeds(state=state, stop_view=live_stop_view(state=state))
+    held = {**state.map.positions, **dict.fromkeys(feeds, snapshot)}
+    state = replace(state, map=replace(state.map, positions=held))
+    return state, stats_of(millis=millis)
+
+
 def without_buses(*, state: State) -> State:
     """
     Empty the gauge's buses: its route trips and the live positions.
@@ -366,6 +408,11 @@ def parser() -> argparse.ArgumentParser:
         '--at', type=datetime.fromisoformat, help='ISO time of the tick',
     )
     result.add_argument('--repeat', type=int, default=DEFAULT_REPEAT)
+    result.add_argument(
+        '--positions',
+        type=Path,
+        help='saved vehicle-positions .pb for the hero feed',
+    )
     result.add_argument('--mode', choices=MODES, default='both')
     result.add_argument(
         '--limit',
@@ -434,6 +481,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not db.is_file():
         print(f'no timetable at {db}', file=sys.stderr)
         return 1
+    if args.positions and not args.positions.is_file():
+        print(f'no positions at {args.positions}', file=sys.stderr)
+        return 1
     start = start_time(at=args.at, city=city)
     with closing(SqliteTimetableRepository(path=db, city=city)) as repo:
         loaded = pin_and_departures(repo=repo, stop=args.stop, start=start)
@@ -442,6 +492,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         state = stop_state(
             repo=repo, city=city, pin=loaded[0], found=loaded[1], at=start,
         )
+    if args.positions:
+        state, decoded = decode_feed(
+            data=args.positions.read_bytes(),
+            state=state,
+            repeat=args.repeat,
+        )
+        print(f'feed decode: median {decoded.median:.1f} ms')
     results = {}
     if args.mode in {'both', GAUGE}:
         results[GAUGE] = timed_ticks(state=state, repeat=args.repeat)

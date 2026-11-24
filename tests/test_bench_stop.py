@@ -131,3 +131,27 @@ def test_bench_stop_missing_timetable_fails(
     argv = [*small_args(db=db), '--db', str(tmp_path / 'a.db')]
     assert load_script().main(argv=argv) == 1
     assert 'no timetable at' in capsys.readouterr().err
+
+
+def test_bench_stop_decodes_a_saved_positions_feed(
+    db: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`--positions` prints the decode time and still times both modes."""
+    feed = Path(__file__).parent / 'fixtures' / 'real'
+    argv = [
+        *small_args(db=db),
+        '--positions', str(feed / 'v1_gtfs_vehiclepos_buses.pb'),
+    ]
+    assert load_script().main(argv=argv) == 0
+    out = capsys.readouterr().out
+    assert re.search(r'^feed decode: median [\d.]+ ms$', out, re.M)
+    assert re.search(LINE.format(name='with gauge'), out, re.M)
+
+
+def test_bench_stop_missing_positions_fails(
+    db: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A missing positions file exits 1."""
+    argv = [*small_args(db=db), '--positions', str(tmp_path / 'x.pb')]
+    assert load_script().main(argv=argv) == 1
+    assert 'no positions at' in capsys.readouterr().err

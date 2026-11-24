@@ -7,7 +7,6 @@ import logging
 import os
 import sqlite3
 import zipfile
-from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import replace
 from datetime import datetime, timedelta
@@ -162,19 +161,6 @@ def test_refresh_reports_a_held_lock(
             )
     assert info.value.code == 1
     assert capsys.readouterr().out == 'refresh already running\n'
-
-
-@pytest.fixture(name='restored_logging')
-def _restored_logging() -> Iterator[None]:
-    """Put the root logger back after a test that configures it."""
-    root = logging.getLogger()
-    handlers, level = list(root.handlers), root.level
-    yield
-    for handler in list(root.handlers):
-        if handler not in handlers:
-            handler.close()
-    root.handlers[:] = handlers
-    root.setLevel(level)
 
 
 def tiles_argv(*, tmp_path: Path, osm: Path) -> list[str]:

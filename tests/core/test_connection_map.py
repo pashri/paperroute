@@ -10,8 +10,6 @@ from paperroute_testkit.core.connection_factories import (
     HOLLIS,
     LEG1,
     LEG2,
-    PARRAMATTA,
-    WESTMEAD,
     WORK,
     WORK_CHANGE,
     at,
@@ -53,13 +51,7 @@ from paperroute_transit.core.map_view import (
     MapView,
 )
 from paperroute_transit.core.messages import DeparturesLoaded, LoadShapes
-from paperroute_transit.core.model import (
-    Change,
-    Departure,
-    Pin,
-    StopPlace,
-    Way,
-)
+from paperroute_transit.core.model import Departure, Pin, StopPlace, Way
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.rides import rides_of
@@ -68,6 +60,7 @@ from paperroute_transit.core.state_views import current_view, live_stop_view
 from paperroute_transit.core.stop_view import empty_text
 from paperroute_transit.core.tiles import ZOOMS, TileVariant
 from paperroute_transit.render.map_base import draw_map_base
+from tests.core.chains.helpers import two_change_pin
 from tests.core.test_connection_screens import started
 from tests.core.test_connection_strip import CHAINS, STOP
 
@@ -414,14 +407,7 @@ def test_banner_keeps_frame_below_it() -> None:
 PLATFORM: Final[StopPlace] = place(
     '2145W', name='Westmead Station Platform 2', point=(820.0, -1900.0),
 )
-TWO: Final[Pin] = Pin(
-    origin=HOLLIS,
-    destination=PARRAMATTA,
-    kind=None,
-    ways=(Way(changes=(
-        WORK_CHANGE, Change(alight=WESTMEAD, board=PLATFORM, allow=4),
-    )),),
-)
+TWO: Final[Pin] = two_change_pin(board=PLATFORM)
 LEG_THREE: Final[Shape] = make_shape(
     shape_id='st1', points=((820.0, -1900.0), (2000.0, -2500.0)),
 )

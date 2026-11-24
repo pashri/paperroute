@@ -539,14 +539,27 @@ def test_plain_map_settles_on_its_first_pattern_then_holds() -> None:
     assert fit.centre is not None and fit.centre[0] == CENTRE[0] - 100.0
 
 
-def test_knob_moves_one_level_from_a_held_coarser_frame() -> None:
-    """Held at 8 m/px where 5 would fit, one detent goes to 5 or 14."""
+def along_four_minutes() -> tuple[State, tuple[Departure, ...]]:
+    """
+    Load buses every ten minutes, then run four minutes.
+
+    Returns
+    -------
+    tuple[State, tuple[Departure, ...]]
+        State, and the departures.
+    """
     state, departures = buses_every_ten()
     state, _ = step(state, along_patterns(departures=departures[:1]))
     state, _ = step(
         state, along_patterns(departures=departures[1:], stations='VAX'),
     )
     state, _ = step(state, Tick(now=START + timedelta(minutes=4)))
+    return state, departures
+
+
+def test_knob_moves_one_level_from_a_held_coarser_frame() -> None:
+    """Held at 8 m/px where 5 would fit, one detent goes to 5 or 14."""
+    state, departures = along_four_minutes()
     assert state.map.frame == ((CENTRE[0] - 400.0, CENTRE[1] + 24.0), 2)
     finer, _ = step(state, turn(steps=1))
     coarser, _ = step(state, turn(steps=-1))

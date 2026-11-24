@@ -1,12 +1,12 @@
 """Tests for the import-boundary check script."""
 
-import importlib.util
-import sys
 from pathlib import Path
 from types import ModuleType
 from typing import Final
 
 import pytest
+
+from tests.helpers import load_module
 
 ROOT: Final[Path] = Path(__file__).parents[1]
 SCRIPT: Final[Path] = ROOT / 'scripts' / 'check_layers.py'
@@ -62,12 +62,7 @@ def _check_layers() -> ModuleType:
     ModuleType
         The script as a module.
     """
-    spec = importlib.util.spec_from_file_location('check_layers', SCRIPT)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_module(name='check_layers', path=SCRIPT)
 
 
 def build(*, root: Path, extra: dict[str, str]) -> Path:

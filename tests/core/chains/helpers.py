@@ -8,6 +8,8 @@ from typing import Final
 
 from hypothesis import strategies as st
 
+from paperroute_device.core.text import clock_text
+from paperroute_sydney.city import SYDNEY_ZONE
 from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN,
     CAMPBELLTOWN_WAY,
@@ -35,7 +37,13 @@ from paperroute_transit.core.chains import (
 )
 from paperroute_transit.core.connection_model import TripKey
 from paperroute_transit.core.live import LiveDeparture
-from paperroute_transit.core.model import Change, Departure, Pin, Way
+from paperroute_transit.core.model import (
+    Change,
+    Departure,
+    Pin,
+    StopPlace,
+    Way,
+)
 
 FIRST: Final[LegKey] = (HOLLIS.stop_id, HAMMERS.stop_id)
 
@@ -388,3 +396,46 @@ def express_plan() -> Chain:
         kept=kept,
     )
     return chain
+
+
+def two_change_pin(*, board: StopPlace) -> Pin:
+    """
+    Make the Hollis to Parramatta pin with a Work change and a Westmead one.
+
+    Parameters
+    ----------
+    board : StopPlace
+        Where the second change boards.
+
+    Returns
+    -------
+    Pin
+        The pin.
+    """
+    return Pin(
+        origin=HOLLIS,
+        destination=PARRAMATTA,
+        kind=None,
+        ways=(Way(changes=(
+            WORK_CHANGE, Change(alight=WESTMEAD, board=board, allow=4),
+        )),),
+    )
+
+
+def arrival_clocks(*, chains: Sequence[Chain]) -> list[str]:
+    """
+    Give each chain's arrival time as clock text.
+
+    Parameters
+    ----------
+    chains : Sequence[Chain]
+        The chains.
+
+    Returns
+    -------
+    list[str]
+        The arrival times.
+    """
+    return [
+        clock_text(moment=chain.arrives, zone=SYDNEY_ZONE) for chain in chains
+    ]

@@ -6,11 +6,6 @@ from pathlib import Path
 from typing import Final
 
 from paperroute_device.adapters.state_file import StateFile
-from paperroute_device.core.device_settings import (
-    DeviceSettings,
-    QuietMode,
-    Window,
-)
 from paperroute_device.core.device_state import KitSaved
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute_testkit.core.connection_factories import TWO_WAY, WORK
@@ -19,17 +14,16 @@ from paperroute_testkit.core.kit_steps import QUIET_PARTS
 from paperroute_transit.core.auto_model import AutoState, Before, running
 from paperroute_transit.core.model import AutoWindow, Pin
 from paperroute_transit.core.saved import (
-    BoardSettings,
     ConnectionMap,
     LiveView,
     Lookahead,
     Quota,
-    Rate,
     Saved,
     Settings,
 )
 from paperroute_transit.transit_app import TransitApp
 from tests.golden.scenes import GOLDEN, baseline_bytes
+from tests.helpers import changed_settings
 
 STATE: Final[Path] = GOLDEN / 'state.json'
 WORK_WAYS: Final[Pin] = replace(WORK, ways=(*WORK.ways, TWO_WAY))
@@ -42,26 +36,17 @@ HOME: Final[Pin] = replace(
     windows=(AutoWindow(frozenset({0, 1, 2, 3, 4}), time(17), time(18)),),
 )
 AUTO_AT: Final[datetime] = datetime(2026, 10, 16, 17, 20, tzinfo=SYDNEY_ZONE)
+CHANGED: Final[Settings] = changed_settings()
 RICH_SAVED: Final[Saved] = Saved(
     pins=(WORK_WAYS, HOME),
     current=1,
     unpinned=None,
     view=LiveView.STRIP,
-    settings=Settings(
-        device=DeviceSettings(
-            quiet_mode=QuietMode.APP,
-            my_hours=Window(start=time(22, 15), end=time(6)),
-            rotate=True,
-            larger_text=True,
-            inverted_lists=True,
-            clean_after=60,
-            swap_knobs=True,
-        ),
-        board=BoardSettings(
-            auto_rebuild=False,
-            peak_rate=Rate.SLOW,
-            offpeak_rate=Rate.STEADY,
-            peak_windows=(Window(start=time(7), end=time(9)),),
+    settings=replace(
+        CHANGED,
+        device=replace(CHANGED.device, clean_after=60, swap_knobs=True),
+        board=replace(
+            CHANGED.board,
             alert_lookahead=Lookahead.THREE_DAYS,
             connection_map=ConnectionMap.WHOLE,
             skip_school_buses=False,

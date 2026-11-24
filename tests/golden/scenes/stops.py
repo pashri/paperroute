@@ -39,12 +39,7 @@ from paperroute_transit.core.reach import (
     RunTail,
     build_reach,
 )
-from paperroute_transit.core.realtime import (
-    EVERY_STOP,
-    RealtimeSnapshot,
-    StopUpdate,
-    TripRealtime,
-)
+from paperroute_transit.core.realtime import EVERY_STOP, RealtimeSnapshot
 from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import LiveView, StopSides, seeded
 from paperroute_transit.core.state_model import RELOAD_BEFORE, State
@@ -60,6 +55,7 @@ from tests.golden.scenes.base import (
     bus_departures,
 )
 from tests.golden.scenes.strips import measured, patterns_loaded
+from tests.helpers import delayed_trip
 
 
 def stop() -> State:
@@ -123,18 +119,10 @@ def estimated(
         The state after its feeds deliver the estimates, heard at START.
     """
     trips = {
-        state.board.departures[index].trip_id: TripRealtime(
+        state.board.departures[index].trip_id: delayed_trip(
             trip_id=state.board.departures[index].trip_id,
-            cancelled=False,
-            updates=(StopUpdate(
-                sequence=EVERY_STOP,
-                stop_id=None,
-                arrival_delay=None,
-                departure_delay=60 * late,
-                arrival_time=None,
-                departure_time=None,
-            ),),
-            start_date=None,
+            sequence=EVERY_STOP,
+            seconds=60 * late,
             estimated=True,
             uncertain=uncertain,
             heard_at=START,

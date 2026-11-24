@@ -22,7 +22,6 @@ from paperroute_testkit.core.factories import (
     vehicle,
 )
 from paperroute_testkit.core.kit_steps import step
-from paperroute_testkit.core.steps import answer_fetches
 from paperroute_testkit.core.strip_factories import on_view
 from paperroute_transit.core.chains import Legs, leg_key
 from paperroute_transit.core.connection_model import way_legs
@@ -30,7 +29,6 @@ from paperroute_transit.core.geo import make_shape
 from paperroute_transit.core.messages import (
     DayLinesLoaded,
     DeparturesLoaded,
-    FetchFeed,
     PositionsFetched,
     ShapesLoaded,
 )
@@ -39,13 +37,7 @@ from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.saved import LiveView, MapFraming
 from paperroute_transit.core.state_model import State
 from tests.core.chains.helpers import TRAINS
-from tests.core.state.helpers import (
-    BUS_POSITIONS,
-    CENTRE,
-    PRESS,
-    fresh,
-    loaded,
-)
+from tests.core.state.helpers import BUS_POSITIONS, CENTRE, map_opened
 from tests.core.test_connection_screens import started
 from tests.golden.scenes.base import (
     APPROACH,
@@ -67,15 +59,7 @@ def map_scene() -> State:
     State
         State at `START`.
     """
-    state, effects = step(
-        loaded(state=fresh(centre=CENTRE), shaped=True), PRESS,
-    )
-    others = tuple(
-        effect
-        for effect in effects
-        if isinstance(effect, FetchFeed) and effect.feed != BUS_POSITIONS
-    )
-    state, _ = answer_fetches(state=state, effects=others)
+    state = map_opened(centre=CENTRE)
     line = make_shape(shape_id='b:0', points=ROUTE)
     state, _ = step(state, ShapesLoaded(shapes={'b:0': line}))
     bus = vehicle(timestamp=int(START.timestamp()), point=ROUTE[1])

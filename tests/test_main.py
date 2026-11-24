@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import logging
 import sys
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -598,19 +598,6 @@ def test_builder_for_rebuilds_only_when_asked(tmp_path: Path) -> None:
     assert isinstance(builder, ChildRebuilder)
     assert builder.command[-1] == str(tmp_path)
     assert builder.env['TMPDIR'] == str(tmp_path / 'work')
-
-
-@pytest.fixture(name='restored_logging')
-def _restored_logging() -> Iterator[None]:
-    """Put the root logger back after a test that configures it."""
-    root = logging.getLogger()
-    handlers, level = list(root.handlers), root.level
-    yield
-    for handler in list(root.handlers):
-        if handler not in handlers:
-            handler.close()
-    root.handlers[:] = handlers
-    root.setLevel(level)
 
 
 def skipped_tk_main(**kwargs: object) -> None:

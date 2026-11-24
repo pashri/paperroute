@@ -10,7 +10,7 @@ from paperroute_device.core.text import PLANE
 from paperroute_device.render.canvas import HEIGHT, INK, WIDTH, Canvas
 from paperroute_transit.core.gauge_ends import route_line
 from paperroute_transit.core.names import JOINING_WORDS, NameRules
-from paperroute_transit.core.patterns import PatternStop, TripPattern
+from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.stop_under import GaugeCall
 from paperroute_transit.render.gauge_draw import (
     ARROW,
@@ -35,6 +35,7 @@ from paperroute_transit.render.gauge_plan import (
 )
 from paperroute_transit.render.names import Naming
 from paperroute_transit.render.strip import RIDE_WIDTH, TRACK_WIDTH
+from tests.helpers import bare_pattern
 from tests.render.test_chrome import Recording
 
 PLAIN_RULES: Final[NameRules] = NameRules()
@@ -50,23 +51,10 @@ def numbered(count: int) -> tuple[GaugeCall, ...]:
 
 def named_trip(*, names: tuple[str, ...]) -> TripPattern:
     """Build a trip calling at each name in turn, with no times."""
-    return TripPattern(
-        trip_id='t',
+    return bare_pattern(
         route='6',
-        source='s',
-        shape_id=None,
-        stops=tuple(
-            PatternStop(
-                arrives=0,
-                departs=0,
-                point=None,
-                station=f'S{index}',
-                name=name,
-                passes=False,
-            )
-            for index, name in enumerate(names)
-        ),
-        days=(),
+        names=names,
+        stations=[f'S{index}' for index in range(len(names))],
     )
 
 

@@ -52,6 +52,7 @@ from tests.core.test_alert_state import (
     loaded_with,
     started,
 )
+from tests.helpers import empty_stop_view
 
 TRAINS = 'v2/gtfs/alerts/sydneytrains'
 
@@ -241,15 +242,10 @@ def stop_view() -> StopView:
     StopView
         The view.
     """
-    return StopView(
+    return empty_stop_view(
         origin='Strathfield Station',
         destination='Town Hall Station',
         clock='12:00',
-        hero=None,
-        rows=(),
-        banner=None,
-        empty=None,
-        scroll=0,
     )
 
 

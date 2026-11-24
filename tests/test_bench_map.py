@@ -1,8 +1,6 @@
 """Tests for the map timing benchmark script."""
 
-import importlib.util
 import re
-import sys
 from datetime import datetime
 from pathlib import Path
 from types import ModuleType
@@ -11,7 +9,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from paperroute_transit.build.tile_store import TileWriter
-from tests.helpers import slice_db
+from tests.helpers import load_module, slice_db
 
 SCRIPT = Path(__file__).parent.parent / 'scripts' / 'bench_map.py'
 STAGES = (
@@ -36,13 +34,7 @@ def load_script() -> ModuleType:
     ModuleType
         The script as a module.
     """
-    spec = importlib.util.spec_from_file_location('bench_map', SCRIPT)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules['bench_map'] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_module(name='bench_map', path=SCRIPT)
 
 
 @pytest.fixture(name='files', scope='module')

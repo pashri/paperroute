@@ -19,7 +19,6 @@ from paperroute_transit.core.map_view import (
     STRIP_MAP_WIDTH,
     MapBase,
     TripMarks,
-    screen_point,
 )
 from paperroute_transit.core.tiles import (
     TILE,
@@ -47,10 +46,13 @@ from tests.render.map_base.helpers import (
     base,
     build,
     centre_row,
+    end_screen,
     grey_drawn,
+    no_centre_base,
     pattern,
     stop_tile,
     street,
+    variants_drawn,
 )
 
 
@@ -97,12 +99,7 @@ def test_bits_variant_is_black_and_white(tmp_path: Path) -> None:
 def test_no_centre_is_paper() -> None:
     """A stop with no location gives a plain paper base."""
     grey = draw_map_base(
-        base=MapBase(
-            centre=None,
-            mpp=MPP,
-            route=(),
-            projection=SYDNEY_PROJECTION,
-        ),
+        base=no_centre_base(),
         tiles=NullTiles(),
         variant=TileVariant.GREY,
     )
@@ -348,16 +345,11 @@ def test_bits_names_over_the_line_are_dithered(tmp_path: Path) -> None:
     """In BITS a redrawn name is dithered like a baked one, not solid."""
     gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     label = street(name='Church Street', x=gx + LABEL_SHIFT, y=gy)
-    drawn = {}
-    for variant in TileVariant:
-        with closing(
-            build(out=tmp_path / f'{variant}.db', labels=[label]),
-        ) as tiles:
-            drawn[variant] = draw_map_base(
-                base=base(route=across(half=5000.0)),
-                tiles=tiles,
-                variant=variant,
-            )
+    drawn = variants_drawn(
+        tmp_path=tmp_path,
+        label=label,
+        map_base=base(route=across(half=5000.0)),
+    )
     text = drawn[TileVariant.GREY] == DARK
     text[MAP_HEIGHT - CREDIT_ROOM - 1 :] = False
     share = np.count_nonzero(drawn[TileVariant.BITS][text] == PAPER) / (
@@ -412,12 +404,7 @@ def test_to_disc_is_12_px(tmp_path: Path) -> None:
         origin=None, second=(), walk=None, change=None, end=end,
     )
     grey = grey_drawn(tmp_path=tmp_path, map_base=replace(base(), trip=trip))
-    x, y = screen_point(
-        centre=CENTRE,
-        mpp=MPP,
-        point=end,
-        projection=SYDNEY_PROJECTION,
-    )
+    x, y = end_screen(end=end)
     column, row = math.floor(x), math.floor(y)
     assert grey[row, column + 11] == INK
     assert grey[row, column - 11] == INK

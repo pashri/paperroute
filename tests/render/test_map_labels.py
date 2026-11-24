@@ -34,6 +34,7 @@ from tests.render.map_base.helpers import (
     base,
     build,
     centre_row,
+    variants_drawn,
 )
 
 
@@ -206,14 +207,7 @@ def test_bits_suburb_name_is_dithered(tmp_path: Path) -> None:
     label = place_label(
         kind=LabelKind.SUBURB, name='Westmead', at=(gx - 120.0, gy - 80.0),
     )
-    drawn = {}
-    for variant in TileVariant:
-        with closing(
-            build(out=tmp_path / f'{variant}.db', labels=[label]),
-        ) as tiles:
-            drawn[variant] = draw_map_base(
-                base=base(), tiles=tiles, variant=variant,
-            )
+    drawn = variants_drawn(tmp_path=tmp_path, label=label, map_base=base())
     text = drawn[TileVariant.GREY] == DARK
     assert np.count_nonzero(text) > 0
     share = np.count_nonzero(drawn[TileVariant.BITS][text] == PAPER) / (

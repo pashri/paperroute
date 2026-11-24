@@ -4,8 +4,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 from typing import Final
 
-from paperroute_device.core.text import clock_text
-from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
+from paperroute_sydney.city import SYDNEY, SydneyFeed
 from paperroute_sydney.sydney_feeds import ALERT_FEEDS
 from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN_WAY,
@@ -45,16 +44,13 @@ from paperroute_transit.core.messages import (
 )
 from paperroute_transit.core.model import Change, Departure, Pin, Way
 from paperroute_transit.core.places import with_place
-from paperroute_transit.core.realtime import (
-    EVERY_STOP,
-    RealtimeSnapshot,
-    StopUpdate,
-    TripRealtime,
-)
+from paperroute_transit.core.realtime import EVERY_STOP, RealtimeSnapshot
 from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import seeded
 from paperroute_transit.core.state_model import Board, State
 from tests.core.alert_factories import alert
+from tests.core.chains.helpers import arrival_clocks
+from tests.helpers import delayed_trip
 
 FERRY_CHANGE: Final[Change] = replace(
     WORK_CHANGE, board=place('10102027', name='Parramatta Wharf'),
@@ -153,10 +149,7 @@ def test_live_chains_from_board() -> None:
     """The loaded legs chain as the real times do."""
     state = loaded()
     chains = live_chains(state=state)
-    assert [clock_text(
-        moment=chain.arrives,
-        zone=SYDNEY_ZONE,
-    ) for chain in chains] == [
+    assert arrival_clocks(chains=chains) == [
         '7:57', '8:12', '8:27', '8:45', '9:04',
     ]
     assert [len(chain_legs(chain=chain)) for chain in chains] == [2] * 5
@@ -348,18 +341,8 @@ def late_legs(*, state: State, lates: Mapping[str, int]) -> State:
         The state after each feed delivers a snapshot fetched now.
     """
     trips = {
-        trip_id: TripRealtime(
-            trip_id=trip_id,
-            cancelled=False,
-            updates=(StopUpdate(
-                sequence=EVERY_STOP,
-                stop_id=None,
-                arrival_delay=None,
-                departure_delay=60 * late,
-                arrival_time=None,
-                departure_time=None,
-            ),),
-            start_date=None,
+        trip_id: delayed_trip(
+            trip_id=trip_id, sequence=EVERY_STOP, seconds=60 * late,
         )
         for trip_id, late in lates.items()
     }
@@ -476,19 +459,7 @@ def test_offers_wait_while_a_feed_never_answers() -> None:
     trains = tuple(replace(item, source=SydneyFeed.TRAIN) for item in LEG2)
     state = loaded(first=LEG1[:1], second=trains)
     buses, rail = sorted(state.feeds)
-    late = TripRealtime(
-        trip_id='a0733',
-        cancelled=False,
-        updates=(StopUpdate(
-            sequence=EVERY_STOP,
-            stop_id=None,
-            arrival_delay=None,
-            departure_delay=6 * 60,
-            arrival_time=None,
-            departure_time=None,
-        ),),
-        start_date=None,
-    )
+    late = delayed_trip(trip_id='a0733', sequence=EVERY_STOP, seconds=6 * 60)
     for snapshot in (
         RealtimeSnapshot(fetched_at=state.now, trips={}),
         RealtimeSnapshot(fetched_at=state.now, trips={'a0733': late}),

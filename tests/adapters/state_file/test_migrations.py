@@ -2,22 +2,18 @@
 
 import json
 from dataclasses import replace
-from datetime import date, time
+from datetime import date
 from pathlib import Path
 
 import pytest
 
-from paperroute_device.core.device_settings import (
-    DeviceSettings,
-    QuietMode,
-    Window,
-)
 from paperroute_sydney.city import PEAK_WINDOWS, SYDNEY, SydneyMode
 from paperroute_transit.adapters.state_migrations import regional_to_coach
-from paperroute_transit.core.saved import BoardSettings, Quota, Rate, Settings
+from paperroute_transit.core.saved import BoardSettings, Quota, Settings
 from tests.adapters.board_states import BoardStates
 from tests.adapters.state_file.helpers import ROTATED, SCHEMA, sample
 from tests.adapters.state_layout import flat_v11
+from tests.helpers import changed_settings
 
 
 def v1_pin(*, kind: str, routes: list[str]) -> dict[str, object]:
@@ -201,21 +197,7 @@ def test_migrates_v4_to_v5_with_defaults(path: Path) -> None:
 
 def test_round_trips_all_settings(path: Path) -> None:
     """Every setting off its default survives a save and a load."""
-    changed = Settings(
-        device=DeviceSettings(
-            quiet_mode=QuietMode.APP,
-            my_hours=Window(start=time(22, 15), end=time(6)),
-            rotate=True,
-            larger_text=True,
-            inverted_lists=True,
-        ),
-        board=BoardSettings(
-            auto_rebuild=False,
-            peak_rate=Rate.SLOW,
-            offpeak_rate=Rate.STEADY,
-            peak_windows=(Window(start=time(7), end=time(9)),),
-        ),
-    )
+    changed = changed_settings()
     repository = BoardStates(path=path, city=SYDNEY)
     repository.save(saved=replace(sample(), settings=changed))
     assert repository.load().saved.settings == changed

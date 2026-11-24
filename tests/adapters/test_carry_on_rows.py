@@ -11,7 +11,7 @@ from typing import Final
 
 import pytest
 
-from paperroute_sydney.city import SYDNEY, SYDNEY_REF, SYDNEY_ZONE
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_testkit.core.factories import START, departure
 from paperroute_transit.adapters.carry_on_rows import (
     CARRY_ONS,
@@ -19,10 +19,8 @@ from paperroute_transit.adapters.carry_on_rows import (
     first_to_arrive,
 )
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
-from paperroute_transit.build.gtfs_files import Source
-from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.core.model import CarryOn, Departure, TripFacts
-from tests.build.network_feed import network_feed
+from tests.build.network_feed import build_network_db
 
 DAY: Final[date] = date(2026, 10, 6)
 CHAIN: Final[tuple[str, ...]] = (
@@ -47,20 +45,7 @@ def _network_db(tmp_path_factory: pytest.TempPathFactory) -> Path:
     Path
         Timetable file.
     """
-    folder = tmp_path_factory.mktemp('network')
-    out = folder / 'timetable.db'
-    build_timetable(
-        city_ref=SYDNEY_REF,
-        sources=[
-            Source(
-                name='sydneytrains',
-                archive=network_feed(path=folder / 'network.zip'),
-            ),
-        ],
-        window=Window(start=date(2026, 10, 5), days=3),
-        out=out,
-    )
-    return out
+    return build_network_db(folder=tmp_path_factory.mktemp('network'))
 
 
 @pytest.fixture(name='chain_db')

@@ -1,8 +1,6 @@
 """Tests for the any-route timing benchmark script."""
 
-import importlib.util
 import re
-import sys
 from datetime import datetime
 from pathlib import Path
 from types import ModuleType
@@ -10,7 +8,7 @@ from types import ModuleType
 import pytest
 
 from paperroute_sydney.city import SYDNEY_ZONE
-from tests.helpers import slice_db
+from tests.helpers import load_module, slice_db
 
 SCRIPT = Path(__file__).parent.parent / 'scripts' / 'bench_open_legs.py'
 LINE = re.compile(
@@ -31,13 +29,7 @@ def load_script() -> ModuleType:
     ModuleType
         The script as a module.
     """
-    spec = importlib.util.spec_from_file_location('bench_open_legs', SCRIPT)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules['bench_open_legs'] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_module(name='bench_open_legs', path=SCRIPT)
 
 
 @pytest.fixture(name='db', scope='module')

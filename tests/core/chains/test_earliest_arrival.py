@@ -20,6 +20,7 @@ from paperroute_transit.core.chains import Chain, chains_of
 from tests.core.chains.helpers import (
     THIRD,
     TRAINS,
+    arrival_clocks,
     ids,
     leg_lists,
     lived,
@@ -33,10 +34,7 @@ def test_chains_match_real_times() -> None:
     assert [chain.legs[1].departure.route for chain in chains] == [
         '665', '664', '665', '665', '665',
     ]
-    assert [clock_text(
-        moment=chain.arrives,
-        zone=SYDNEY_ZONE,
-    ) for chain in chains] == [
+    assert arrival_clocks(chains=chains) == [
         '7:57', '8:12', '8:27', '8:45', '9:04',
     ]
     assert all(chain.way == 0 and chain.changes == 1 for chain in chains)

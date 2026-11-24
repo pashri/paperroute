@@ -8,7 +8,6 @@ from numpy.typing import NDArray
 from paperroute_device.render.canvas import PAPER
 from paperroute_device.render.frame import HEADER
 from paperroute_sydney.city import SYDNEY_PROJECTION
-from paperroute_transit.core.geo import Point, to_metres
 from paperroute_transit.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
@@ -18,16 +17,7 @@ from paperroute_transit.core.map_view import (
     screen_point,
 )
 from paperroute_transit.core.stop_view import Pill, Row, empty_text
-
-MPP = 8
-
-
-CENTRE: Point = to_metres(
-    lon=151.0036,
-    lat=-33.8170,
-    projection=SYDNEY_PROJECTION,
-)
-
+from tests.render.map_base.helpers import CENTRE, MPP
 
 ROW_TOPS = (110, 182, 254, 326, 398)
 

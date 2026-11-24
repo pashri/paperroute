@@ -5,9 +5,8 @@ from http import HTTPStatus
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from aiohttp import web
-from aiohttp.test_utils import TestClient, TestServer
+from aiohttp.test_utils import TestClient
 
-from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.connection_factories import CAMPBELLTOWN_WAY, WORK
 from paperroute_transit.adapters.pin_windows import NO_DAY
 from paperroute_transit.adapters.web_pin_edit import MISFIT
@@ -16,8 +15,6 @@ from paperroute_transit.core.messages import PinSaved
 from paperroute_transit.core.model import pin_ref
 from paperroute_transit.observers import PinsSeen
 from tests.adapters.test_web_connection import unlabelled
-from tests.adapters.test_web_device import sydney_site
-from tests.adapters.transit_web import pin_pages, transit_display
 from tests.adapters.web_pins.helpers import Pins, check_danger_card
 
 Client = TestClient[web.Request, web.Application]
@@ -120,21 +117,14 @@ async def test_refusals(pins: Pins, client: Client) -> None:
     assert pins.posted == []
 
 
-async def test_before_timetable(pins: Pins) -> None:
+async def test_before_timetable(untimed: Client) -> None:
     """Before the timetable is ready the page says so; saves go back."""
-    display = transit_display(
-        device=sydney_site().pages(),
-        board=pin_pages(pins=pins.get, options=None),
-        city=SYDNEY,
-    )
-    client = TestClient(TestServer(display.app()))
-    await client.start_server()
+    client = untimed
     text = await (await client.get(f'/pins/ways?ref={REF}')).text()
     response = await client.post(
         '/pins/ways/save', data=SAVE, allow_redirects=False,
     )
     script = await (await client.get('/ways.js')).text()
-    await client.close()
     assert 'Starting up. Reload in a moment.' in text
     assert response.headers['Location'] == '/pins'
     assert 'export async function nextStep' in script

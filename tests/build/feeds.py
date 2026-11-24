@@ -264,6 +264,52 @@ def build_db(*, tmp_path: Path, sources: list[Source], start: date,
     return db
 
 
+def rail_sources(*, tmp_path: Path) -> list[Source]:
+    """
+    The Sydney Trains feed and the bundle's rail feed.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Directory for the zips.
+
+    Returns
+    -------
+    list[Source]
+        Sydney Trains, then the bundle's rail.
+    """
+    return [
+        Source(
+            name='sydneytrains',
+            archive=sydneytrains_feed(path=tmp_path / 's.zip'),
+        ),
+        Source(
+            name='bundle',
+            archive=bundle_rail_feed(path=tmp_path / 'r.zip'),
+        ),
+    ]
+
+
+def rail_and_bus_sources(*, tmp_path: Path) -> list[Source]:
+    """
+    The Sydney Trains feed and the bundle's rail and bus feeds.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Directory for the zips.
+
+    Returns
+    -------
+    list[Source]
+        Sydney Trains, then the bundle's rail, then its buses.
+    """
+    return [
+        *rail_sources(tmp_path=tmp_path),
+        Source(name='bundle', archive=bus_feed(path=tmp_path / 'b.zip')),
+    ]
+
+
 def regional_sources(*, tmp_path: Path) -> list[Source]:
     """
     An XPT run twice: as NRC in the Sydney Trains feed, as line 31 in the

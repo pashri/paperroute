@@ -17,7 +17,12 @@ from paperroute_transit.core.saved import LiveView
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import live_stop_view
 from paperroute_transit.core.tiles import ZOOMS
-from tests.core.test_map_requests import ALONG, along_patterns, buses_every_ten
+from tests.core.test_map_requests import (
+    ALONG,
+    along_four_minutes,
+    along_patterns,
+    buses_every_ten,
+)
 
 FAR = {**ALONG, 'X': (CENTRE[0] + 1_700.0, CENTRE[1])}
 FARTHER = {**ALONG, 'X': (CENTRE[0] + 4_500.0, CENTRE[1])}
@@ -85,12 +90,7 @@ def held_coarser() -> tuple[State, tuple[Departure, ...]]:
     tuple[State, tuple[Departure, ...]]
         State, and the departures.
     """
-    state, departures = buses_every_ten()
-    state, _ = step(state, along_patterns(departures=departures[:1]))
-    state, _ = step(
-        state, along_patterns(departures=departures[1:], stations='VAX'),
-    )
-    state, _ = step(state, Tick(now=START + timedelta(minutes=4)))
+    state, departures = along_four_minutes()
     assert state.map.step == 0
     assert drawn_zoom(state=state) == 8 > rule_zoom(state=state)
     return state, departures

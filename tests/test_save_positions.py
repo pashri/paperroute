@@ -1,7 +1,5 @@
 """Tests for the positions saving script."""
 
-import importlib.util
-import sys
 import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -9,6 +7,8 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
+
+from tests.helpers import load_module
 
 SCRIPT = Path(__file__).parent.parent / 'scripts' / 'save_positions.py'
 BODY = b'feed-bytes'
@@ -54,13 +54,7 @@ def load_script() -> ModuleType:
     ModuleType
         The script as a module.
     """
-    spec = importlib.util.spec_from_file_location('save_positions', SCRIPT)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules['save_positions'] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_module(name='save_positions', path=SCRIPT)
 
 
 @pytest.mark.parametrize('source', ['tfnsw', 'bods'])

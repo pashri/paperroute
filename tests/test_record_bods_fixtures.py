@@ -1,10 +1,8 @@
 """Tests for the BODS fixture recording script."""
 
 import csv
-import importlib.util
 import io
 import json
-import sys
 import zipfile
 from collections.abc import Callable
 from datetime import date
@@ -23,6 +21,7 @@ from paperroute_transit.core.positions import (
     PositionsSnapshot,
     VehiclePosition,
 )
+from tests.helpers import load_module
 
 SCRIPT = Path(__file__).parent.parent / 'scripts' / 'record_bods_fixtures.py'
 KEY = 'k-secret'
@@ -53,14 +52,7 @@ def load_script() -> ModuleType:
     ModuleType
         The script as a module.
     """
-    spec = importlib.util.spec_from_file_location(
-        'record_bods_fixtures', SCRIPT,
-    )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_module(name='record_bods_fixtures', path=SCRIPT)
 
 
 recorder = load_script()

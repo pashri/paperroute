@@ -10,9 +10,8 @@ import pytest
 
 from paperroute_sydney.build.dedupe import merge_rail
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
-from paperroute_transit.build.gtfs_files import Source
 from tests.adapters.timetable_db.helpers import opened, three_day_db
-from tests.build.feeds import bundle_rail_feed, bus_feed, sydneytrains_feed
+from tests.build.feeds import rail_and_bus_sources
 from tests.build.network_feed import build_network_db
 from tests.helpers import old_schema, slice_db
 
@@ -34,17 +33,7 @@ def _repo(tmp_path: Path) -> Iterator[SqliteTimetableRepository]:
     """
     db = three_day_db(
         tmp_path=tmp_path,
-        sources=[
-            Source(
-                name='sydneytrains',
-                archive=sydneytrains_feed(path=tmp_path / 's.zip'),
-            ),
-            Source(
-                name='bundle',
-                archive=bundle_rail_feed(path=tmp_path / 'r.zip'),
-            ),
-            Source(name='bundle', archive=bus_feed(path=tmp_path / 'b.zip')),
-        ],
+        sources=rail_and_bus_sources(tmp_path=tmp_path),
     )
     with closing(sqlite3.connect(db)) as conn:
         merge_rail(conn=conn)

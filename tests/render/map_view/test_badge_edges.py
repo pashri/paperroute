@@ -30,14 +30,8 @@ from paperroute_transit.render.markers import (
     place,
 )
 from tests.helpers import sole
-from tests.render.map_view.helpers import (
-    CENTRE,
-    MPP,
-    VIEW,
-    live,
-    paper,
-    stop_pixel,
-)
+from tests.render.map_base.helpers import CENTRE, MPP, end_screen
+from tests.render.map_view.helpers import VIEW, live, paper, stop_pixel
 
 
 def test_trip_origin_gets_the_stop() -> None:
@@ -60,12 +54,7 @@ def test_badges_keep_clear_of_the_to() -> None:
         origin=CENTRE, second=(), walk=None, change=None, end=end,
     )
     map_base = replace(VIEW.base, trip=trip)
-    x, y = screen_point(
-        centre=CENTRE,
-        mpp=MPP,
-        point=end,
-        projection=SYDNEY_PROJECTION,
-    )
+    x, y = end_screen(end=end)
     boxes = end_boxes(base=map_base)
     assert (x - END_HALF, y - END_HALF, x + END_HALF, y + END_HALF) in boxes
     placed = sole(items=place(markers=[live(at=(x, y + 6))], reserved=boxes))

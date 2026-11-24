@@ -52,6 +52,7 @@ from tests.app_effects.helpers import (
 )
 from tests.app_factories import AT, MAP_PIN, ports_of, posted_by
 from tests.core.chooser_walks import KERB_LINE, PARENT_KERBS, PARENT_PAIR
+from tests.helpers import version_failures
 
 
 async def test_version_error_does_not_quit(
@@ -70,11 +71,7 @@ async def test_version_error_does_not_quit(
             max_events=15,
         )
     assert kit.running
-    failures = [
-        record
-        for record in caplog.records
-        if record.message == 'reading the timetable version failed'
-    ]
+    failures = version_failures(caplog=caplog)
     assert len(failures) == 1
 
 

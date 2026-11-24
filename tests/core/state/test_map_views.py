@@ -10,7 +10,6 @@ from paperroute_device.core.kit_events import Tick
 from paperroute_sydney.city import SYDNEY, SydneyFeed, SydneyMode
 from paperroute_testkit.core.factories import START, snapshot, vehicle
 from paperroute_testkit.core.kit_steps import step
-from paperroute_testkit.core.steps import answer_fetches
 from paperroute_transit.core.cycle import needed_feeds
 from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.geo import make_shape
@@ -48,6 +47,7 @@ from tests.core.state.helpers import (
     fresh,
     left_for_stop,
     loaded,
+    map_opened,
     map_zoom,
     trip_fetches,
     turned,
@@ -412,15 +412,7 @@ def test_idle_position_feeds_are_dropped_after_ten_minutes() -> None:
 
 def test_loaded_shapes_and_positions_are_drawn() -> None:
     """Shapes draw the route line and positions draw markers."""
-    state, effects = step(
-        loaded(state=fresh(centre=CENTRE), shaped=True), PRESS,
-    )
-    others = tuple(
-        effect
-        for effect in effects
-        if isinstance(effect, FetchFeed) and effect.feed != BUS_POSITIONS
-    )
-    state, _ = answer_fetches(state=state, effects=others)
+    state = map_opened(centre=CENTRE)
     assert state.cycle.waiting == {BUS_POSITIONS}
     line = make_shape(shape_id='b:0', points=[CENTRE, (-16_900.0, 1_000.0)])
     state, effects = step(state, ShapesLoaded(shapes={'b:0': line}))

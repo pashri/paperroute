@@ -10,14 +10,10 @@ from paperroute_device.render.canvas import HEIGHT, INK, PAPER
 from paperroute_device.render.frame import HEADER
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_testkit.core.connection_factories import WORK, at
-from paperroute_testkit.core.factories import STALE_LIMIT
 from paperroute_transit.adapters.tiles_db import NullTiles
 from paperroute_transit.app_render import MapRenderer, drawing
 from paperroute_transit.core.connection_map import build_connection_map
-from paperroute_transit.core.connection_strip import (
-    ConnectionStripMapView,
-    build_connection_strip,
-)
+from paperroute_transit.core.connection_strip import ConnectionStripMapView
 from paperroute_transit.core.connection_view import build_connection_view
 from paperroute_transit.core.map_view import MAP_HEIGHT, STRIP_MAP_WIDTH
 from paperroute_transit.core.saved import ConnectionMap
@@ -25,7 +21,7 @@ from paperroute_transit.render.connection_strip_map import (
     draw_connection_strip_map,
 )
 from tests.core.test_connection_map import SHAPED, inputs_at
-from tests.core.test_connection_strip import CHAINS, PATTERNS, STOP
+from tests.core.test_connection_strip import CHAINS, STOP, strip_of
 
 VIEW: Final[ConnectionStripMapView] = ConnectionStripMapView(
     map=build_connection_map(
@@ -34,17 +30,7 @@ VIEW: Final[ConnectionStripMapView] = ConnectionStripMapView(
         chains=SHAPED,
         mode=ConnectionMap.CHANGES,
     ),
-    pane=build_connection_strip(
-        stop_view=STOP,
-        pin=WORK,
-        chains=CHAINS,
-        selected=0,
-        patterns=PATTERNS,
-        positions={},
-        now=at(7, 30),
-        stale_after=STALE_LIMIT,
-        zone=SYDNEY_ZONE,
-    ),
+    pane=strip_of(),
 )
 BASE: Final[NDArray[np.uint8]] = np.full(
     (MAP_HEIGHT, STRIP_MAP_WIDTH), PAPER, dtype=np.uint8,

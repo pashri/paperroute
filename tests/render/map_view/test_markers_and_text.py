@@ -44,10 +44,9 @@ from paperroute_transit.render.map_view import (
     snap,
 )
 from paperroute_transit.render.tile_codec import GREYS, pack_bits, pack_grey
+from tests.render.map_base.helpers import CENTRE, MPP, no_centre_base
 from tests.render.map_view.helpers import (
-    CENTRE,
     LONG_EMPTY,
-    MPP,
     VIEW,
     live,
     paper,
@@ -127,12 +126,7 @@ def test_no_location_says_so_without_a_stop() -> None:
     """With no centre the empty text shows and no stop is drawn."""
     view = replace(
         VIEW,
-        base=MapBase(
-            centre=None,
-            mpp=MPP,
-            route=(),
-            projection=SYDNEY_PROJECTION,
-        ),
+        base=no_centre_base(),
         empty='No location for this stop',
     )
     frame = draw_map_view(view=view, base=paper())

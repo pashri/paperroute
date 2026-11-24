@@ -14,7 +14,6 @@ from paperroute_transit.core.gauge_buses import GaugeBus
 from paperroute_transit.core.gauge_ends import RouteGauge
 from paperroute_transit.core.map_view import Marker
 from paperroute_transit.core.names import NameRules
-from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.stop_under import GaugeCall
 from paperroute_transit.render.gauge_draw import COUNT_FACES
 from paperroute_transit.render.gauge_plan import (
@@ -37,6 +36,7 @@ from paperroute_transit.render.gauge_route import (
 from paperroute_transit.render.markers import badge_box
 from paperroute_transit.render.names import Naming
 from paperroute_transit.render.strip import DISC_RADIUS
+from tests.helpers import bare_pattern
 
 NAMING: Final[Naming] = Naming(rules=NameRules())
 NONE: Final[NDArray[np.bool_]] = np.zeros((HEIGHT, WIDTH), dtype=bool)
@@ -47,22 +47,10 @@ def gauge_of(
     stops: int, *, end: int | None = None, buses: tuple[GaugeBus, ...] = (),
 ) -> RouteGauge:
     """Build a route gauge over `stops` stops from the first."""
-    pattern = TripPattern(
-        trip_id='t',
+    pattern = bare_pattern(
         route='A',
-        source='s',
-        shape_id=None,
-        stops=tuple(
-            PatternStop(
-                arrives=0,
-                departs=0,
-                point=None,
-                station=f'S{n}',
-                name=f'Stop {n}',
-                passes=False,
-            )
-            for n in range(stops)
-        ),
+        names=[f'Stop {n}' for n in range(stops)],
+        stations=[f'S{n}' for n in range(stops)],
         days=(date(2026, 11, 23),),
     )
     return RouteGauge(

@@ -55,6 +55,7 @@ from paperroute_transit.transit_app import TransitApp
 from tests.app_effects.helpers import VersionFailingTimetable
 from tests.app_factories import REAL
 from tests.core.state.helpers import fresh, loaded
+from tests.helpers import version_failures
 
 APP = TransitApp(city=SYDNEY, parts=QUIET_PARTS)
 CORE_IMPORTS: Final[str] = (
@@ -167,11 +168,7 @@ async def test_failing_version_read_leaves_the_loop_running(
         await tick(app=app, ports=ports, queue=queue)
     posted = [queue.get_nowait() for _ in range(queue.qsize())]
     assert [type(event) for event in posted] == [Tick, Tick]
-    failures = [
-        record
-        for record in caplog.records
-        if record.message == 'reading the timetable version failed'
-    ]
+    failures = version_failures(caplog=caplog)
     assert len(failures) == 1
 
 

@@ -247,3 +247,67 @@ def grey_drawn(*, tmp_path: Path, map_base: MapBase) -> NDArray[np.uint8]:
             tiles=tiles,
             variant=TileVariant.GREY,
         )
+
+
+def end_screen(*, end: Point) -> Point:
+    """
+    Give the screen position of a metre point on the map around CENTRE.
+
+    Parameters
+    ----------
+    end : Point
+        The point, in metres.
+
+    Returns
+    -------
+    Point
+        Its screen position.
+    """
+    return screen_point(
+        centre=CENTRE, mpp=MPP, point=end, projection=SYDNEY_PROJECTION,
+    )
+
+
+def no_centre_base() -> MapBase:
+    """
+    Make a map base with no centre.
+
+    Returns
+    -------
+    MapBase
+        The base.
+    """
+    return MapBase(
+        centre=None, mpp=MPP, route=(), projection=SYDNEY_PROJECTION,
+    )
+
+
+def variants_drawn(
+    *, tmp_path: Path, label: PlacedLabel, map_base: MapBase,
+) -> dict[TileVariant, NDArray[np.uint8]]:
+    """
+    Draw the map base over a tile holding one label in every variant.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Working directory for the tile files.
+    label : PlacedLabel
+        The label baked into the tile.
+    map_base : MapBase
+        The base to draw.
+
+    Returns
+    -------
+    dict[TileVariant, NDArray[np.uint8]]
+        The frame of each variant.
+    """
+    drawn = {}
+    for variant in TileVariant:
+        with closing(
+            build(out=tmp_path / f'{variant}.db', labels=[label]),
+        ) as tiles:
+            drawn[variant] = draw_map_base(
+                base=map_base, tiles=tiles, variant=variant,
+            )
+    return drawn

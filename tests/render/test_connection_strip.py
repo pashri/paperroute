@@ -13,15 +13,11 @@ from paperroute_device.render.canvas import (
     Canvas,
 )
 from paperroute_device.render.frame import HEADER
-from paperroute_sydney.city import SYDNEY_ZONE
-from paperroute_testkit.core.connection_factories import WORK, at
-from paperroute_testkit.core.factories import STALE_LIMIT
 from paperroute_transit.core.connection_strip import (
     ConnectionStripView,
     LegSection,
     LegStop,
     StopMark,
-    build_connection_strip,
 )
 from paperroute_transit.render.connection_strip import (
     END_FACE,
@@ -42,16 +38,10 @@ from paperroute_transit.render.connection_strip import (
     name_room,
     row_step,
 )
-from tests.core.test_connection_strip import CHAINS, PATTERNS, STOP
+from tests.core.test_connection_strip import strip_of
 from tests.render.test_chrome import Recording
 
-VIEW: Final[ConnectionStripView] = build_connection_strip(
-    stop_view=STOP, pin=WORK, chains=CHAINS, selected=0, patterns=PATTERNS,
-    positions={},
-    now=at(7, 30),
-    stale_after=STALE_LIMIT,
-    zone=SYDNEY_ZONE,
-)
+VIEW: Final[ConnectionStripView] = strip_of()
 LONG: Final[str] = 'Constitution Hill Interchange, North West Transitway ' * 2
 
 

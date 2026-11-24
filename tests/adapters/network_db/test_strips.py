@@ -43,36 +43,12 @@ from tests.adapters.network_db.helpers import (
     tails_from,
 )
 from tests.build.network_feed import network_files
-from tests.helpers import old_schema, schema_three
+from tests.helpers import has_runs, old_schema, schema_three
 
 REAL_DB: Final[Path] = Path(__file__).parents[3] / 'data' / 'timetable.db'
 
 
 TOWN_HALL: Final[str] = '200070'
-
-
-def has_runs(*, path: Path) -> bool:
-    """
-    Say whether a timetable file exists with the run and track tables.
-
-    Parameters
-    ----------
-    path : Path
-        Timetable file.
-
-    Returns
-    -------
-    bool
-        True when the runs and track_places tables are there.
-    """
-    if not path.exists():
-        return False
-    with closing(sqlite3.connect(f'file:{path}?mode=ro', uri=True)) as conn:
-        found = conn.execute(
-            "SELECT name FROM sqlite_master"
-            " WHERE name IN ('runs', 'track_places')",
-        ).fetchall()
-    return len(found) == 2
 
 
 def line_input(*, path: Path, station: str, line: str) -> ReachInput:

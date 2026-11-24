@@ -21,11 +21,7 @@ from paperroute_transit.core.messages import (
     LoadShapes,
 )
 from paperroute_transit.core.places import shown
-from paperroute_transit.core.realtime import (
-    RealtimeSnapshot,
-    StopUpdate,
-    TripRealtime,
-)
+from paperroute_transit.core.realtime import RealtimeSnapshot
 from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import LiveView, Saved, default_saved
 from paperroute_transit.core.stop_view import HORIZON, StopView
@@ -43,6 +39,7 @@ from tests.core.state.invariant_events import (
     answered,
     event_lists,
 )
+from tests.helpers import delayed_trip
 
 
 @pytest.mark.parametrize('view', [LiveView.STRIP, LiveView.STOP])
@@ -127,20 +124,8 @@ def test_late_service_timetabled_before_now_appears_after_load() -> None:
     """A service timetabled 2 min ago but 6 min late is still listed."""
     late = departure(departs=START - timedelta(minutes=2))
     timetable = WindowedTimetable(departures=(late,))
-    trip = TripRealtime(
-        trip_id=late.trip_id,
-        cancelled=False,
-        updates=(
-            StopUpdate(
-                sequence=late.origin_seq,
-                stop_id=None,
-                arrival_delay=None,
-                departure_delay=360,
-                arrival_time=None,
-                departure_time=None,
-            ),
-        ),
-        start_date=None,
+    trip = delayed_trip(
+        trip_id=late.trip_id, sequence=late.origin_seq, seconds=360,
     )
     state = run_tick(
         state=fresh(), timetable=timetable, now=START - timedelta(seconds=30),

@@ -1,16 +1,34 @@
 """Shared helpers for timetable files and stepping the reducer in tests."""
 
+import importlib.util
+import logging
 import sqlite3
+import sys
 from collections.abc import Sequence
 from contextlib import closing
-from datetime import date
+from datetime import date, datetime, time
 from pathlib import Path
+from types import ModuleType
 from typing import Final
 
+import pytest
+
+from paperroute_device.core.device_settings import (
+    DeviceSettings,
+    QuietMode,
+    Window,
+)
 from paperroute_sydney.build.dedupe import merge_rail
+from paperroute_sydney.city import SYDNEY
+from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.core.patterns import PatternStop, TripPattern
+from paperroute_transit.core.realtime import StopUpdate, TripRealtime
+from paperroute_transit.core.saved import BoardSettings, Rate, Settings
+from paperroute_transit.core.stop_view import StopView
 
 REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'
+M9B_DB: Final[Path] = Path(__file__).parents[1] / 'data' / 'timetable-m9b.db'
 
 
 def old_schema(*, path: Path) -> None:
@@ -195,3 +213,245 @@ def exactly_two[T](*, items: Sequence[T]) -> tuple[T, T]:
     """
     assert len(items) == 2, items
     return items[0], items[1]
+
+
+def delayed_trip(
+    *,
+    trip_id: str,
+    sequence: int,
+    seconds: int,
+    estimated: bool = False,
+    uncertain: bool = False,
+    heard_at: datetime | None = None,
+) -> TripRealtime:
+    """
+    Make a trip running late from one stop sequence on.
+
+    Parameters
+    ----------
+    trip_id : str
+        Trip ID.
+    sequence : int
+        Stop sequence the delay starts at.
+    seconds : int
+        Departure delay.
+    estimated : bool
+        Whether the times are an estimate from a position.
+    uncertain : bool
+        Whether the estimate is uncertain.
+    heard_at : datetime | None
+        When the position was reported.
+
+    Returns
+    -------
+    TripRealtime
+        The trip.
+    """
+    update = StopUpdate(
+        sequence=sequence,
+        stop_id=None,
+        arrival_delay=None,
+        departure_delay=seconds,
+        arrival_time=None,
+        departure_time=None,
+    )
+    return TripRealtime(
+        trip_id=trip_id,
+        cancelled=False,
+        updates=(update,),
+        start_date=None,
+        estimated=estimated,
+        uncertain=uncertain,
+        heard_at=heard_at,
+    )
+
+
+def empty_stop_view(
+    *,
+    origin: str,
+    destination: str | None,
+    clock: str,
+    banner: str | None = None,
+) -> StopView:
+    """
+    Make a Stop view with no rows.
+
+    Parameters
+    ----------
+    origin : str
+        The pin's From name.
+    destination : str | None
+        The pin's To name.
+    clock : str
+        Time of day shown.
+    banner : str | None
+        Banner text.
+
+    Returns
+    -------
+    StopView
+        The view.
+    """
+    return StopView(
+        origin=origin,
+        destination=destination,
+        clock=clock,
+        hero=None,
+        rows=(),
+        banner=banner,
+        empty=None,
+        scroll=0,
+    )
+
+
+def has_runs(*, path: Path) -> bool:
+    """
+    Say whether a timetable file exists with the run and track tables.
+
+    Parameters
+    ----------
+    path : Path
+        Timetable file.
+
+    Returns
+    -------
+    bool
+        True when the runs and track_places tables are there.
+    """
+    if not path.exists():
+        return False
+    with closing(sqlite3.connect(f'file:{path}?mode=ro', uri=True)) as conn:
+        found = conn.execute(
+            "SELECT name FROM sqlite_master"
+            " WHERE name IN ('runs', 'track_places')",
+        ).fetchall()
+    return len(found) == 2
+
+
+def bare_pattern(
+    *, route: str, names: Sequence[str], stations: Sequence[str],
+    days: tuple[date, ...] = (),
+) -> TripPattern:
+    """
+    Make a trip pattern calling at each stop in turn, with no times.
+
+    Parameters
+    ----------
+    route : str
+        Route short name.
+    names : Sequence[str]
+        Stop names, in calling order.
+    stations : Sequence[str]
+        Station IDs, one for each name.
+    days : tuple[date, ...]
+        Service days.
+
+    Returns
+    -------
+    TripPattern
+        The pattern, as trip 't' of source 's'.
+    """
+    return TripPattern(
+        trip_id='t',
+        route=route,
+        source='s',
+        shape_id=None,
+        stops=tuple(
+            PatternStop(
+                arrives=0,
+                departs=0,
+                point=None,
+                station=station,
+                name=name,
+                passes=False,
+            )
+            for station, name in zip(stations, names, strict=True)
+        ),
+        days=days,
+    )
+
+
+def m9b_opened() -> closing[SqliteTimetableRepository]:
+    """
+    Open the M9B timetable file as Sydney's timetable.
+
+    Returns
+    -------
+    closing[SqliteTimetableRepository]
+        Context manager that closes the repository on exit.
+    """
+    return closing(SqliteTimetableRepository(path=M9B_DB, city=SYDNEY))
+
+
+def version_failures(
+    *, caplog: pytest.LogCaptureFixture,
+) -> list[logging.LogRecord]:
+    """
+    List the logged failures to read the timetable's version.
+
+    Parameters
+    ----------
+    caplog : pytest.LogCaptureFixture
+        The test's captured log.
+
+    Returns
+    -------
+    list[logging.LogRecord]
+        The records of the failure message.
+    """
+    return [
+        record
+        for record in caplog.records
+        if record.message == 'reading the timetable version failed'
+    ]
+
+
+def load_module(*, name: str, path: Path) -> ModuleType:
+    """
+    Import a script file as a module.
+
+    Parameters
+    ----------
+    name : str
+        Module name to register it under.
+    path : Path
+        The script.
+
+    Returns
+    -------
+    ModuleType
+        The script as a module.
+    """
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def changed_settings() -> Settings:
+    """
+    Make settings that differ from the defaults in several fields.
+
+    Returns
+    -------
+    Settings
+        Device settings with quiet mode, hours, rotation and text changed,
+        and board settings with rebuilds, rates and peak windows changed.
+    """
+    return Settings(
+        device=DeviceSettings(
+            quiet_mode=QuietMode.APP,
+            my_hours=Window(start=time(22, 15), end=time(6)),
+            rotate=True,
+            larger_text=True,
+            inverted_lists=True,
+        ),
+        board=BoardSettings(
+            auto_rebuild=False,
+            peak_rate=Rate.SLOW,
+            offpeak_rate=Rate.STEADY,
+            peak_windows=(Window(start=time(7), end=time(9)),),
+        ),
+    )

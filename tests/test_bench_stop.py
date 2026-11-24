@@ -1,14 +1,12 @@
 """Tests for the Stop view tick benchmark script."""
 
-import importlib.util
 import re
-import sys
 from pathlib import Path
 from types import ModuleType
 
 import pytest
 
-from tests.helpers import slice_db
+from tests.helpers import load_module, slice_db
 
 SCRIPT = Path(__file__).parent.parent / 'scripts' / 'bench_stop.py'
 STOP = '2145615'
@@ -24,13 +22,7 @@ def load_script() -> ModuleType:
     ModuleType
         The script as a module.
     """
-    spec = importlib.util.spec_from_file_location('bench_stop', SCRIPT)
-    assert spec is not None
-    assert spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules['bench_stop'] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_module(name='bench_stop', path=SCRIPT)
 
 
 @pytest.fixture(name='db', scope='module')

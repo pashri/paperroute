@@ -1,7 +1,5 @@
 """Tests for the fixture slicing script's shape step."""
 
-import importlib.util
-import sys
 import zipfile
 from pathlib import Path
 from types import ModuleType
@@ -10,6 +8,7 @@ import pytest
 
 from paperroute_testkit.build.feed_zip import write_feed
 from tests.build.feeds import shape_rows
+from tests.helpers import load_module
 
 SCRIPT = Path(__file__).parent.parent / 'scripts' / 'make_test_slice.py'
 POINTS = [(151.0, -33.8), (151.1, -33.9)]
@@ -24,12 +23,7 @@ def load_script() -> ModuleType:
     ModuleType
         The script as a module.
     """
-    spec = importlib.util.spec_from_file_location('make_test_slice', SCRIPT)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_module(name='make_test_slice', path=SCRIPT)
 
 
 def fixture_zip(*, path: Path, shapes: list[str], column: bool = True) -> Path:

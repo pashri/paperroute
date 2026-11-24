@@ -9,7 +9,7 @@ import pytest
 from hypothesis import given
 
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyMode
-from paperroute_testkit.core.factories import STALE_LIMIT
+from paperroute_testkit.core.factories import inputs_of
 from paperroute_testkit.core.reach_factories import (
     STATIONS,
     ids,
@@ -30,17 +30,15 @@ from paperroute_transit.core.reach import (
     cut_to_line,
     every_route,
 )
-from paperroute_transit.core.stop_view import NOT_PINNED
-from paperroute_transit.core.strip_model import StripInputs
 from paperroute_transit.core.strip_view import build_strip_view
 from tests.core.real_reach import (
     BLACKTOWN,
     REAL_DB,
     STRATHFIELD,
     TOWN_HALL,
-    has_runs,
     train_reach,
 )
+from tests.helpers import has_runs
 
 STANMORE: Final[str] = '204810'
 PARRAMATTA: Final[str] = '215020'
@@ -701,21 +699,10 @@ def test_blacktown_strip_opens_on_the_ride_to_parramatta() -> None:
     assert richmond.depth > 0
     assert richmond.above == reach.rows[names.index('Doonside Station')].above
     assert reach.rows[names.index('Seven Hills Station')].parent == home
-    view = build_strip_view(inputs=StripInputs(
+    view = build_strip_view(inputs=inputs_of(
         reach=reach,
-        unavailable=None,
-        departures=(),
-        patterns={},
-        positions={},
         now=datetime(2026, 10, 19, 8, 5, tzinfo=SYDNEY_ZONE),
-        stale_after=STALE_LIMIT,
-        scroll=0,
-        cursor=None,
-        picking=None,
         destination=PARRAMATTA,
-        tag=NOT_PINNED,
-        zone=SYDNEY_ZONE,
-        line_kinds=line_modes(modes=SYDNEY.modes),
     ))
     shown = [row.station for row in view.rows]
     assert BLACKTOWN in shown

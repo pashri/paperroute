@@ -1,7 +1,5 @@
 """Tests for the state backups check script."""
 
-import importlib.util
-import sys
 from dataclasses import replace
 from pathlib import Path
 from types import ModuleType
@@ -10,6 +8,7 @@ from typing import Final
 import pytest
 
 from tests.golden.test_golden_state import HOME, RICH_SAVED
+from tests.helpers import load_module
 
 ROOT: Final[Path] = Path(__file__).parents[1]
 SCRIPT: Final[Path] = ROOT / 'scripts' / 'check_state_backups.py'
@@ -26,14 +25,7 @@ def _check_state_backups() -> ModuleType:
     ModuleType
         The script as a module.
     """
-    spec = importlib.util.spec_from_file_location(
-        'check_state_backups', SCRIPT,
-    )
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    return load_module(name='check_state_backups', path=SCRIPT)
 
 
 def test_golden_state_checks_clean(

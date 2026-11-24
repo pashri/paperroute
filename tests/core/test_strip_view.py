@@ -8,11 +8,10 @@ import pytest
 
 from paperroute_device.core.text import DOT
 from paperroute_device.core.wifi_text import setup_footer
-from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyMode
+from paperroute_sydney.city import SYDNEY, SydneyMode
 from paperroute_testkit.core.factories import (
     EAST,
     POINTS,
-    STALE_LIMIT,
     START,
     TRAIN,
     calls,
@@ -47,7 +46,6 @@ from paperroute_transit.core.reach import (
     build_reach,
 )
 from paperroute_transit.core.reach_layout import LineExit
-from paperroute_transit.core.stop_view import NOT_PINNED
 from paperroute_transit.core.strip_badges import HALF_WIDE
 from paperroute_transit.core.strip_model import (
     HINTS,
@@ -716,21 +714,8 @@ def test_line_reach_has_no_origin_and_from_cursor_tag() -> None:
     assert {row.depth for row in reach.rows} == {0}
     assert reach.stations == 3
     assert not reach.station_of
-    view = build_strip_view(inputs=StripInputs(
-        reach=reach,
-        unavailable=None,
-        departures=(),
-        patterns={},
-        positions={},
-        now=START,
-        stale_after=STALE_LIMIT,
-        scroll=0,
-        cursor=1,
-        picking='FROM',
-        destination=None,
-        tag=NOT_PINNED,
-        zone=SYDNEY_ZONE,
-        line_kinds=line_modes(modes=SYDNEY.modes),
+    view = build_strip_view(inputs=replace(
+        inputs_of(reach=reach, now=START), cursor=1, picking='FROM',
     ))
     assert view.band is None
     assert [row.tag for row in view.rows] == ['', 'FROM?', '']

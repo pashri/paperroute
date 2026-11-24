@@ -39,6 +39,7 @@ from tests.core.test_connection_view import (
     folded_chain,
     hero_of,
 )
+from tests.helpers import empty_stop_view
 from tests.render.test_chrome import Recording
 
 ROW: Final[PairRow] = PairRow(
@@ -48,15 +49,10 @@ ROW: Final[PairRow] = PairRow(
     arrives_at='8:12',
     minutes=24,
 )
-VIEW_STOP: Final[StopView] = StopView(
+VIEW_STOP: Final[StopView] = empty_stop_view(
     origin='Hollis St Opp Constitution Hill Library',
     destination='Westmead Station',
     clock='7:30',
-    hero=None,
-    rows=(),
-    banner=None,
-    empty=None,
-    scroll=0,
 )
 VIEW: Final[ConnectionView] = build_connection_view(
     stop_view=VIEW_STOP,

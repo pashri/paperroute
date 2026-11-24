@@ -44,11 +44,7 @@ from paperroute_transit.core.messages import (
 )
 from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.places import shown
-from paperroute_transit.core.realtime import (
-    RealtimeSnapshot,
-    StopUpdate,
-    TripRealtime,
-)
+from paperroute_transit.core.realtime import RealtimeSnapshot
 from paperroute_transit.core.rhythm import stale_after
 from paperroute_transit.core.saved import seeded
 from paperroute_transit.core.state_model import RELOAD_BEFORE, Cycle, State
@@ -65,6 +61,7 @@ from tests.core.state.helpers import (
 )
 from tests.core.test_quiet import at as quiet_at
 from tests.core.test_quiet import evening
+from tests.helpers import delayed_trip
 
 SYDNEY = ZoneInfo('Australia/Sydney')
 MIDNIGHT: Final[datetime] = START.replace(hour=0, minute=0)
@@ -464,20 +461,8 @@ def test_hold_ends_at_deadline() -> None:
 def _delayed(*, state: State, feed: str) -> FeedFetched:
     """A download delaying the first trip shown by six minutes."""
     first = state.board.departures[0]
-    trip = TripRealtime(
-        trip_id=first.trip_id,
-        cancelled=False,
-        updates=(
-            StopUpdate(
-                sequence=first.origin_seq,
-                stop_id=None,
-                arrival_delay=None,
-                departure_delay=360,
-                arrival_time=None,
-                departure_time=None,
-            ),
-        ),
-        start_date=None,
+    trip = delayed_trip(
+        trip_id=first.trip_id, sequence=first.origin_seq, seconds=360,
     )
     return FeedFetched(
         feed=feed,

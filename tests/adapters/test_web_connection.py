@@ -6,15 +6,12 @@ from typing import Final
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
 from aiohttp import web
-from aiohttp.test_utils import TestClient, TestServer
+from aiohttp.test_utils import TestClient
 
-from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.connection_factories import WORK
 from paperroute_transit.adapters.connection_editor import ALLOW_RANGE
 from paperroute_transit.adapters.web_pin_edit import MISFIT
 from paperroute_transit.core.model import pin_ref
-from tests.adapters.test_web_device import sydney_site
-from tests.adapters.transit_web import pin_pages, transit_display
 from tests.adapters.web_pins.helpers import Pins
 
 Client = TestClient[web.Request, web.Application]
@@ -228,20 +225,13 @@ async def test_save_refuses_misfit(client: Client) -> None:
     assert response.status == HTTPStatus.BAD_REQUEST
 
 
-async def test_starting_without_timetable(pins: Pins) -> None:
+async def test_starting_without_timetable(untimed: Client) -> None:
     """Before the timetable is ready the page says so; saves go back."""
-    display = transit_display(
-        device=sydney_site().pages(),
-        board=pin_pages(pins=pins.get, options=None),
-        city=SYDNEY,
-    )
-    client = TestClient(TestServer(display.app()))
-    await client.start_server()
+    client = untimed
     text = await (await client.get('/pins/connect?stop=G2145615')).text()
     response = await client.post(
         '/pins/connect/save', data=FULL, allow_redirects=False,
     )
-    await client.close()
     assert 'Starting up. Reload in a moment.' in text
     assert response.headers['Location'] == '/pins'
 

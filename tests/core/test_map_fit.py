@@ -48,6 +48,7 @@ from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.saved import MapFraming
 from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.core.tiles import ZOOMS
+from tests.helpers import empty_stop_view
 
 FROM: Point = (0.0, 800.0)
 OTHER: Point = (30.0, 800.0)
@@ -79,15 +80,9 @@ def stop_view(
     StopView
         The view.
     """
-    return StopView(
-        origin='Town Hall',
-        destination=destination,
-        clock='8:00',
-        hero=None,
-        rows=(),
+    return empty_stop_view(
+        origin='Town Hall', destination=destination, clock='8:00',
         banner=banner,
-        empty=None,
-        scroll=0,
     )
 
 

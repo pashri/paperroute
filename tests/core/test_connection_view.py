@@ -5,13 +5,10 @@ from typing import Final
 
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_testkit.core.connection_factories import (
-    HOLLIS,
     LEG1,
     LEG2,
-    PARRAMATTA,
     WESTMEAD,
     WORK,
-    WORK_CHANGE,
     at,
     run,
     work_chains,
@@ -39,7 +36,7 @@ from paperroute_transit.core.connection_view import (
     route_chips,
     via_text,
 )
-from paperroute_transit.core.model import Change, Pin, Way
+from paperroute_transit.core.model import Change, Pin
 from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.rides import Ride
 from paperroute_transit.core.stop_view import StopView, empty_text
@@ -59,30 +56,23 @@ from tests.core.chains.helpers import (
     late_first,
     lived,
     three_then_two,
+    two_change_pin,
 )
 from tests.core.chains.helpers import work_chains as chains_from
+from tests.helpers import empty_stop_view
 
 CHAINS: Final[tuple[Chain, ...]] = work_chains()
-STOP: Final[StopView] = StopView(
-    origin='Hollis St Opp Constitution Hill Library',
-    destination='Westmead Station',
-    clock='7:30',
-    hero=None,
-    rows=(),
-    banner='Lift out of order',
-    empty=None,
-    scroll=0,
+STOP: Final[StopView] = replace(
+    empty_stop_view(
+        origin='Hollis St Opp Constitution Hill Library',
+        destination='Westmead Station',
+        clock='7:30',
+        banner='Lift out of order',
+    ),
     warning=True,
     more=2,
 )
-TWO: Final[Pin] = Pin(
-    origin=HOLLIS,
-    destination=PARRAMATTA,
-    kind=None,
-    ways=(Way(changes=(
-        WORK_CHANGE, Change(alight=WESTMEAD, board=WESTMEAD, allow=4),
-    )),),
-)
+TWO: Final[Pin] = two_change_pin(board=WESTMEAD)
 A0733: Final = run(departs=(7, 33), arrives=(7, 39), route='606',
                    trip_id='a0733')
 B0746: Final = run(departs=(7, 46), arrives=(7, 57), route='665',

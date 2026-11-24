@@ -24,6 +24,7 @@ from paperroute_testkit.core.factories import (
 )
 from paperroute_transit.core.chains import Chain
 from paperroute_transit.core.connection_strip import (
+    ConnectionStripView,
     LegCall,
     StopMark,
     approach_note,
@@ -38,16 +39,12 @@ from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.core.strip_model import LOADING, NO_LEG_STOPS
+from tests.helpers import empty_stop_view
 
-STOP: Final[StopView] = StopView(
+STOP: Final[StopView] = empty_stop_view(
     origin='Hollis St Opp Constitution Hill Library',
     destination='Westmead Station',
     clock='7:30',
-    hero=None,
-    rows=(),
-    banner=None,
-    empty=None,
-    scroll=0,
 )
 CHAINS: Final[tuple[Chain, ...]] = work_chains()
 NAMES: Final[dict[str, str]] = {
@@ -116,15 +113,42 @@ PATTERNS: Final[dict[str, TripPattern | None]] = {
 }
 
 
-def test_sections_for_change_pair() -> None:
-    """A change pair has one section per leg."""
-    view = build_connection_strip(
-        stop_view=STOP, pin=WORK, chains=CHAINS, selected=0, patterns=PATTERNS,
+def strip_of(
+    *,
+    stop_view: StopView = STOP,
+    chains: tuple[Chain, ...] = CHAINS,
+) -> ConnectionStripView:
+    """
+    Build the Connection strip of the Work pin at 7:30.
+
+    Parameters
+    ----------
+    stop_view : StopView
+        The Stop view the strip copies from.
+    chains : tuple[Chain, ...]
+        The chains to show.
+
+    Returns
+    -------
+    ConnectionStripView
+        The strip, with the first chain selected.
+    """
+    return build_connection_strip(
+        stop_view=stop_view,
+        pin=WORK,
+        chains=chains,
+        selected=0,
+        patterns=PATTERNS,
         positions={},
         now=at(7, 30),
         stale_after=STALE_LIMIT,
         zone=SYDNEY_ZONE,
     )
+
+
+def test_sections_for_change_pair() -> None:
+    """A change pair has one section per leg."""
+    view = strip_of()
     first, second = view.sections
     assert first.title == (
         'Hollis St Opp Constitution Hill Library → Hammers Rd Opp Sherwood St'
@@ -149,14 +173,7 @@ def test_leg_times_follow_delay() -> None:
     late = Chain(
         legs=(live(item=LEG1[0], late=3), CHAINS[0].legs[1]), way=0,
     )
-    view = build_connection_strip(
-        stop_view=STOP, pin=WORK, chains=(late,), selected=0,
-        patterns=PATTERNS,
-        positions={},
-        now=at(7, 30),
-        stale_after=STALE_LIMIT,
-        zone=SYDNEY_ZONE,
-    )
+    view = strip_of(chains=(late,))
     first, second = view.sections
     assert [stop.time for stop in first.stops] == ['7:36', '', '7:42']
     assert second.stops[0].time == '7:46'
@@ -168,16 +185,7 @@ def test_leg_arrival_is_the_live_arrival_the_pair_was_made_with() -> None:
     item = replace(
         live(item=first, late=3), arrives=first.arrives + timedelta(minutes=1),
     )
-    view = build_connection_strip(
-        stop_view=STOP, pin=WORK,
-        chains=(Chain(legs=(item, CHAINS[0].legs[1]), way=0),),
-        selected=0,
-        patterns=PATTERNS,
-        positions={},
-        now=at(7, 30),
-        stale_after=STALE_LIMIT,
-        zone=SYDNEY_ZONE,
-    )
+    view = strip_of(chains=(Chain(legs=(item, CHAINS[0].legs[1]), way=0),))
     assert [stop.time for stop in view.sections[0].stops] == [
         '7:36', '', '7:40',
     ]
@@ -561,17 +569,7 @@ RULES: Final[NameRules] = NameRules(centres=('Here',))
 
 def test_build_connection_strip_carries_the_name_rules() -> None:
     """The Connection strip copies the Stop view's name rules."""
-    result = build_connection_strip(
-        stop_view=replace(STOP, name_rules=RULES),
-        pin=WORK,
-        chains=CHAINS,
-        selected=0,
-        patterns=PATTERNS,
-        positions={},
-        now=at(7, 30),
-        stale_after=STALE_LIMIT,
-        zone=SYDNEY_ZONE,
-    )
+    result = strip_of(stop_view=replace(STOP, name_rules=RULES))
     assert result.name_rules == RULES
 
 
@@ -579,11 +577,7 @@ def test_first_leg_rows_carry_its_marks() -> None:
     """Both buses late: only the first ride's rows are marked."""
     onward = live(item=CHAINS[0].legs[1].departure, late=2)
     late = Chain(legs=(live(item=LEG1[0], late=4), onward), way=0)
-    view = build_connection_strip(
-        stop_view=STOP, pin=WORK, chains=(late,), selected=0,
-        patterns=PATTERNS, positions={}, now=at(7, 30),
-        stale_after=STALE_LIMIT, zone=SYDNEY_ZONE,
-    )
+    view = strip_of(chains=(late,))
     first, second = view.sections
     assert [stop.late for stop in first.stops] == ['+4', '', '+4']
     assert [stop.late for stop in second.stops] == ['', '', '']
@@ -595,10 +589,5 @@ def test_first_leg_last_row_marks_the_live_arrival() -> None:
     item = replace(
         live(item=first, late=3), arrives=first.arrives + timedelta(minutes=1),
     )
-    view = build_connection_strip(
-        stop_view=STOP, pin=WORK,
-        chains=(Chain(legs=(item, CHAINS[0].legs[1]), way=0),),
-        selected=0, patterns=PATTERNS, positions={}, now=at(7, 30),
-        stale_after=STALE_LIMIT, zone=SYDNEY_ZONE,
-    )
+    view = strip_of(chains=(Chain(legs=(item, CHAINS[0].legs[1]), way=0),))
     assert [stop.late for stop in view.sections[0].stops] == ['+3', '', '']

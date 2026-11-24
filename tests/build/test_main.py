@@ -1,11 +1,9 @@
 """Tests for Sydney's build entry."""
 
 import json
-import logging
 import sqlite3
 import subprocess
 import sys
-from collections.abc import Iterator
 from contextlib import closing
 from pathlib import Path
 
@@ -13,19 +11,6 @@ import pytest
 
 from paperroute_sydney.build.__main__ import main
 from tests.build.network_feed import network_feed
-
-
-@pytest.fixture(name='restored_logging')
-def _restored_logging() -> Iterator[None]:
-    """Put the root logger back after a test that configures it."""
-    root = logging.getLogger()
-    handlers, level = list(root.handlers), root.level
-    yield
-    for handler in list(root.handlers):
-        if handler not in handlers:
-            handler.close()
-    root.handlers[:] = handlers
-    root.setLevel(level)
 
 
 @pytest.mark.usefixtures('restored_logging')

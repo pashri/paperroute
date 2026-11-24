@@ -28,10 +28,8 @@ from paperroute_transit.render.map_view import (
 )
 from paperroute_transit.render.markers import STOP_HALF, place
 from paperroute_transit.render.stop_view import WIDEST_COUNT
-from tests.render.map_base.helpers import base
+from tests.render.map_base.helpers import CENTRE, MPP, base
 from tests.render.map_view.helpers import (
-    CENTRE,
-    MPP,
     ROW_TOPS,
     VIEW,
     live,

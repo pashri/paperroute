@@ -19,7 +19,8 @@ from tests.build.feeds import (
     STATIONS,
     build_db,
     bundle_rail_feed,
-    bus_feed,
+    rail_and_bus_sources,
+    rail_sources,
     regional_sources,
     stop_times,
     sydneytrains_feed,
@@ -45,17 +46,7 @@ def merged(*, tmp_path: Path) -> tuple[Path, int]:
     tuple[Path, int]
         Database file and trips dropped.
     """
-    sources = [
-        Source(
-            name='sydneytrains',
-            archive=sydneytrains_feed(path=tmp_path / 's.zip'),
-        ),
-        Source(
-            name='bundle',
-            archive=bundle_rail_feed(path=tmp_path / 'r.zip'),
-        ),
-        Source(name='bundle', archive=bus_feed(path=tmp_path / 'b.zip')),
-    ]
+    sources = rail_and_bus_sources(tmp_path=tmp_path)
     db = build_db(tmp_path=tmp_path, start=START, days=2, sources=sources)
     with closing(sqlite3.connect(db)) as conn:
         return db, merge_rail(conn=conn).dropped
@@ -456,16 +447,7 @@ def test_relabel_without_nswtrains_routes_changes_nothing() -> None:
 @pytest.mark.parametrize('trip_id', ['S-0835', 'B-0835'])
 def test_dedupe_ignores_non_service(tmp_path: Path, trip_id: str) -> None:
     """An out-of-service twin is neither dropped nor kept over its copy."""
-    sources = [
-        Source(
-            name='sydneytrains',
-            archive=sydneytrains_feed(path=tmp_path / 's.zip'),
-        ),
-        Source(
-            name='bundle',
-            archive=bundle_rail_feed(path=tmp_path / 'r.zip'),
-        ),
-    ]
+    sources = rail_sources(tmp_path=tmp_path)
     db = build_db(tmp_path=tmp_path, start=START, days=2, sources=sources)
     with closing(sqlite3.connect(db)) as conn:
         conn.execute(

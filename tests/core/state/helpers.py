@@ -22,7 +22,7 @@ from paperroute_testkit.core.factories import (
     place,
 )
 from paperroute_testkit.core.kit_steps import step
-from paperroute_testkit.core.steps import step_answered
+from paperroute_testkit.core.steps import answer_fetches, step_answered
 from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.geo import Point
 from paperroute_transit.core.map_state import area_frame
@@ -168,6 +168,32 @@ def effects_of[T](
         The matching effects, in order.
     """
     return [effect for effect in effects if isinstance(effect, kind)]
+
+
+def map_opened(*, centre: Point) -> State:
+    """
+    Open the Map over shaped departures and answer every non-position fetch.
+
+    Parameters
+    ----------
+    centre : Point
+        Where the pin's origin sits.
+
+    Returns
+    -------
+    State
+        The state awaiting only the bus positions.
+    """
+    state, effects = step(
+        loaded(state=fresh(centre=centre), shaped=True), PRESS,
+    )
+    others = tuple(
+        effect
+        for effect in effects
+        if isinstance(effect, FetchFeed) and effect.feed != BUS_POSITIONS
+    )
+    state, _ = answer_fetches(state=state, effects=others)
+    return state
 
 
 def trip_fetches(*, effects: tuple[Effect, ...]) -> list[FetchFeed]:

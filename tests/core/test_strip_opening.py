@@ -58,9 +58,9 @@ from tests.core.real_reach import (
     REAL_DB,
     STRATHFIELD,
     TOWN_HALL,
-    has_runs,
     train_reach,
 )
+from tests.helpers import has_runs
 
 PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)
 TOP_PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.TOP)

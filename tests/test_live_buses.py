@@ -1,6 +1,5 @@
 """Tests for live bus times from a real trip-updates feed and timetable."""
 
-from contextlib import closing
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Final
@@ -10,14 +9,13 @@ import pytest
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
 from paperroute_testkit.core.factories import STALE_LIMIT
 from paperroute_transit.adapters.gtfs_rt import parse_trip_updates
-from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.core.live import LiveDeparture, resolved
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.realtime import RealtimeSnapshot
+from tests.helpers import M9B_DB, m9b_opened
 
 REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'
 FEED: Final[Path] = REAL / 'v1_gtfs_realtime_buses_606.pb'
-M9B_DB: Final[Path] = Path(__file__).parents[1] / 'data' / 'timetable-m9b.db'
 FETCHED: Final[datetime] = datetime(
     2026, 10, 31, 9, 20, 47, tzinfo=SYDNEY_ZONE,
 )
@@ -56,12 +54,7 @@ def live_from(
     tuple[LiveDeparture, ...]
         The departures, with live times where the feed has them.
     """
-    with closing(
-        SqliteTimetableRepository(
-            path=M9B_DB,
-            city=SYDNEY,
-        ),
-    ) as timetable:
+    with m9b_opened() as timetable:
         pin = Pin(
             origin=timetable.stop(stop_id=origin),
             destination=timetable.stop(stop_id=destination),

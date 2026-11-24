@@ -1,3 +1,5 @@
+"""Tests for the route gauge line."""
+
 from collections.abc import Sequence
 from dataclasses import replace
 from typing import Final
@@ -116,6 +118,27 @@ def bus(*, spot: float) -> GaugeBus:
     return GaugeBus(spot=spot, right=True, live=True, trip_id='t')
 
 
+def cut_line() -> GaugeLine:
+    """
+    Lay P20 out with a left budget too small for stop 0.
+
+    Returns
+    -------
+    GaugeLine
+        The cut line.
+    """
+    return route_line(
+        pattern=P20,
+        start=12,
+        end=None,
+        calls=calls_of(start=12, end=None),
+        buses=(bus(spot=4.5), bus(spot=10.5)),
+        budget=7,
+        room=6,
+        rules=RULES,
+    )
+
+
 def test_laid_fills_short_gaps_and_breaks_long_ones() -> None:
     """A gap of three fills; a gap of four is a break."""
     assert laid(named=(0, 3, 7)) == (
@@ -195,16 +218,7 @@ def test_route_line_orchard_close_reads_first_stop_break_from() -> None:
 
 def test_route_line_cut_moves_the_line_right_for_the_arrow() -> None:
     """An arrow takes slot 0."""
-    line = route_line(
-        pattern=P20,
-        start=12,
-        end=None,
-        calls=calls_of(start=12, end=None),
-        buses=(bus(spot=4.5), bus(spot=10.5)),
-        budget=7,
-        room=6,
-        rules=RULES,
-    )
+    line = cut_line()
     assert line.cut
     assert (line.marks[0].slot, line.stops[0]) == (1, 4)
 
@@ -219,16 +233,7 @@ def test_slot_of_places_a_bus_in_a_break_proportionally() -> None:
 
 def test_slot_of_puts_a_bus_beyond_the_arrow_at_the_arrow() -> None:
     """A bus left of a cut line sits at the arrow."""
-    line = route_line(
-        pattern=P20,
-        start=12,
-        end=None,
-        calls=calls_of(start=12, end=None),
-        buses=(bus(spot=4.5), bus(spot=10.5)),
-        budget=7,
-        room=6,
-        rules=RULES,
-    )
+    line = cut_line()
     assert slot_of(line=line, spot=1.0) == 0.0
     assert slot_of(line=line, spot=19.5) == 12.0
 
@@ -291,3 +296,12 @@ def test_route_line_tiny_room_ends_at_the_last_call_that_fits() -> None:
     assert line.stops[-3:] == (12, 13, 14)
     assert (line.ahead, line.arrow) == (None, True)
     assert line.marks[-1].slot == 3 + 2
+
+
+def test_route_line_tiny_room_keeps_the_destination_in_the_last_slot(
+) -> None:
+    """A Destination that does not fit replaces the last call that fits."""
+    line = line_of(room=2, end=18)
+    assert line.marks[-1].kind is MarkKind.DESTINATION
+    assert (line.stops[-1], line.marks[-1].slot) == (18, 5)
+    assert (line.ride, line.arrow) == ((3, 5), True)

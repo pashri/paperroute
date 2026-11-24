@@ -20,7 +20,6 @@ from paperroute_transit.core.names import NameRules, base_name
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.stop_under import GaugeCall
 
-CALLS_KEPT: Final[int] = 5  # calls the left end leaves room for
 FROM: Final[int] = -1  # call position of the From
 
 
@@ -184,6 +183,31 @@ def right_named(
     if place is None:
         return [*range(FROM, kept), last], False
     return [*range(FROM, min(kept, place)), place], place < last
+
+
+def with_place(*, slots: dict[int, int], place: int | None) -> dict[int, int]:
+    """
+    Give the Destination the slot of the last call shown, if it is missing.
+
+    Parameters
+    ----------
+    slots : dict[int, int]
+        Slot of each call position shown, counted from the From.
+    place : int | None
+        Index of the Destination among the calls.
+
+    Returns
+    -------
+    dict[int, int]
+        The slots, with the Destination in place of the last call.
+    """
+    if place is None or place in slots:
+        return slots
+    last = max(slots)
+    return {
+        **{index: slot for index, slot in slots.items() if index != last},
+        place: slots[last],
+    }
 
 
 def left_marks(
@@ -370,6 +394,7 @@ def right_end(
     place = indices.index(end) if end in indices else None
     shown, arrow = right_named(calls=len(calls), place=place, room=room)
     slots, gaps = laid(named=shown)
+    slots = with_place(slots=slots, place=place)
     origin = line.marks[-1].slot
     marks = right_marks(calls=calls, slots=slots, place=place, offset=origin)
     return replace(

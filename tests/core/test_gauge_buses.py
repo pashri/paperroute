@@ -1,6 +1,7 @@
 """Tests for buses projected onto the hero's line."""
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import date, datetime
 from typing import Final
 
@@ -9,8 +10,10 @@ import pytest
 from paperroute_sydney.city import SYDNEY_ZONE
 from paperroute_testkit.core.factories import pattern, vehicle
 from paperroute_transit.core.gauge_buses import (
+    HERO_STOPS,
     GaugeBus,
     along_index,
+    forget_held,
     gauge_buses,
     same_way,
     timetable_index,
@@ -214,8 +217,15 @@ SPUR: Final[TripPattern] = pattern(
 )
 
 
+@pytest.fixture(name='_fresh', autouse=True)
+def _fresh_fixture() -> None:
+    """Start each test with nothing remembered."""
+    forget_held()
+
+
 def buses_of(
     *,
+    hero: TripPattern = HERO,
     patterns: Mapping[str, TripPattern | None],
     vehicles: Sequence[VehiclePosition] = (),
     trips_running: Sequence[RouteTrip] = (),
@@ -226,6 +236,8 @@ def buses_of(
 
     Parameters
     ----------
+    hero : TripPattern
+        The hero's trip.
     patterns : Mapping[str, TripPattern | None]
         Patterns by trip ID.
     vehicles : Sequence[VehiclePosition]
@@ -241,7 +253,7 @@ def buses_of(
         The buses.
     """
     return gauge_buses(
-        hero=HERO,
+        hero=hero,
         patterns=patterns,
         vehicles=vehicles,
         trips_running=trips_running,
@@ -420,3 +432,43 @@ def test_gauge_buses_drops_a_bus_at_its_last_stop_with_a_position() -> None:
         patterns={'t2': ragged},
         vehicles=(at_point(trip_id='t2', point=S8),),
     ) == ()
+
+
+def test_gauge_buses_maps_each_pattern_once_and_hands_out_tuples() -> None:
+    """A second tick reuses the held mappings and places buses the same."""
+    patterns = {'t2': SAME, 'r1': BACK}
+    trips = (route_trip(trip_id='t2'), route_trip(trip_id='r1'))
+    first = buses_of(patterns=patterns, trips_running=trips)
+    held = len(HERO_STOPS.held)
+    assert buses_of(patterns=patterns, trips_running=trips) == first
+    assert len(HERO_STOPS.held) == held == 2
+    assert all(
+        isinstance(value, tuple) for _, value in HERO_STOPS.held.values()
+    )
+
+
+def test_gauge_buses_reads_a_pattern_reloaded_as_a_new_object() -> None:
+    """A trip's new pattern is mapped afresh, not taken from the old one."""
+    report = (at_point(trip_id='r1', point=midway(S3, S4)),)
+    (before,) = buses_of(patterns={'r1': BACK}, vehicles=report)
+    turned = run(order=range(10), direction=0, trip_id='r1')
+    (after,) = buses_of(patterns={'r1': turned}, vehicles=report)
+    assert (before.right, after.right) == (False, True)
+    assert after.spot == pytest.approx(3.5)
+
+
+def test_gauge_buses_reads_a_hero_reloaded_as_a_new_object() -> None:
+    """A new hero maps the same trip onto its own stops."""
+    report = (at_point(trip_id='t2', point=midway(S3, S4)),)
+    (before,) = buses_of(patterns={'t2': SAME}, vehicles=report)
+    shifted = pattern(
+        trip_id='p',
+        direction=0,
+        stops=tuple(
+            replace(stop, station=f'X{index}')
+            for index, stop in enumerate(HERO.stops)
+        )[2:],
+    )
+    (after,) = buses_of(hero=shifted, patterns={'t2': SAME}, vehicles=report)
+    assert before.spot == pytest.approx(3.5)
+    assert after.spot == pytest.approx(1.5)

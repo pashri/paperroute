@@ -26,6 +26,10 @@ class SameMemo[V]:
         field(default_factory=OrderedDict)
     )
 
+    def clear(self) -> None:
+        """Forget every result."""
+        self.held.clear()
+
     def get(self, *, inputs: tuple[object, ...]) -> V | None:
         """
         Find the result held for these very objects.

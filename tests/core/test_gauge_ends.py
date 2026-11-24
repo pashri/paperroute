@@ -4,13 +4,17 @@ from collections.abc import Sequence
 from dataclasses import replace
 from typing import Final
 
+import pytest
+
 from paperroute_sydney.city import SYDNEY_ZONE
 from paperroute_testkit.core.factories import START, pattern
 from paperroute_transit.core.gauge import gauge_calls
 from paperroute_transit.core.gauge_buses import GaugeBus
 from paperroute_transit.core.gauge_ends import (
     break_of,
+    finished_line,
     laid,
+    left_end,
     left_named,
     route_line,
     slot_of,
@@ -305,3 +309,45 @@ def test_route_line_tiny_room_keeps_the_destination_in_the_last_slot(
     assert line.marks[-1].kind is MarkKind.DESTINATION
     assert (line.stops[-1], line.marks[-1].slot) == (18, 5)
     assert (line.ride, line.arrow) == ((3, 5), True)
+
+
+@pytest.mark.parametrize(
+    ('start', 'end', 'budget', 'room', 'spots'),
+    [
+        (12, None, 10, 6, ()),
+        (12, 17, 7, 6, (4.5, 10.5)),
+        (3, 8, 10, 3, (1.5, 6.5)),
+        (0, None, 2, 12, (14.0,)),
+    ],
+)
+def test_finished_line_from_left_end_matches_route_line(
+    start: int,
+    end: int | None,
+    budget: int,
+    room: int,
+    spots: tuple[float, ...],
+) -> None:
+    """Laying the left end first gives exactly the whole line."""
+    buses = tuple(bus(spot=spot) for spot in spots)
+    calls = calls_of(start=start, end=end)
+    whole = route_line(
+        pattern=P20,
+        start=start,
+        end=end,
+        calls=calls,
+        buses=buses,
+        budget=budget,
+        room=room,
+        rules=RULES,
+    )
+    left = left_end(pattern=P20, start=start, buses=buses, budget=budget)
+    assert finished_line(
+        left=left,
+        pattern=P20,
+        start=start,
+        end=end,
+        calls=calls,
+        buses=buses,
+        room=room,
+        rules=RULES,
+    ) == whole

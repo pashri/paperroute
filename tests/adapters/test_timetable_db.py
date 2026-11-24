@@ -2708,3 +2708,65 @@ def test_route_trips_match_the_feed_source(
     assert not repo.route_trips(
         route='606', source=SydneyFeed.TRAIN, day=date(2026, 10, 16),
     )
+
+
+def metro_files(*, trip: str) -> dict[str, list[dict[str, str]]]:
+    """
+    Metro-like feed: one M1 trip between the fixture stations.
+
+    Parameters
+    ----------
+    trip : str
+        Trip ID.
+
+    Returns
+    -------
+    dict[str, list[dict[str, str]]]
+        Member name to rows.
+    """
+    return {
+        'stops.txt': STATIONS,
+        'routes.txt': [{'route_id': 'SMNW_M1', 'agency_id': 'SMNW',
+                        'route_short_name': 'M1',
+                        'route_long_name': 'Tallawong to Sydenham',
+                        'route_type': '401', 'route_color': '168388',
+                        'route_text_color': 'FFFFFF'}],
+        'calendar.txt': [{'service_id': 'm-daily', **DAILY}],
+        'trips.txt': [{'route_id': 'SMNW_M1', 'service_id': 'm-daily',
+                       'trip_id': trip, 'trip_headsign': 'Sydenham',
+                       'direction_id': '1', 'block_id': ''}],
+        'stop_times.txt': stop_times(
+            trip=trip,
+            times=[('2150411', '08:15:00'), ('2000321', '08:40:00')],
+        ),
+    }
+
+
+def test_route_trips_find_a_metro_line_by_its_feed(tmp_path: Path) -> None:
+    """M1 trips are metro whichever timetable source carries them."""
+    db = build_db(
+        tmp_path=tmp_path,
+        start=date(2026, 10, 15),
+        days=3,
+        sources=[
+            Source(
+                name=name,
+                archive=write_feed(
+                    path=tmp_path / f'{name}.zip',
+                    files=metro_files(trip=trip),
+                ),
+            )
+            for name, trip in (('metro', 'M-0815'), ('bundle', 'B-0815'))
+        ],
+    )
+    with closing(SqliteTimetableRepository(path=db, city=SYDNEY)) as repo:
+        found = {
+            source: repo.route_trips(
+                route='M1', source=source, day=date(2026, 10, 16),
+            )
+            for source in (SydneyFeed.METRO, SydneyFeed.TRAIN)
+        }
+    assert {trip.trip_id for trip in found[SydneyFeed.METRO]} == {
+        'M-0815', 'B-0815',
+    }
+    assert not found[SydneyFeed.TRAIN]

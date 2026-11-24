@@ -3,9 +3,12 @@
 from datetime import date, datetime, timedelta
 from typing import Final
 
+import pytest
+
 from paperroute_sydney.city import SYDNEY_ZONE
+from paperroute_transit.core.gauge_buses import forget_held
 from paperroute_transit.core.model import service_time
-from paperroute_transit.core.route_trips import RouteTrip, running
+from paperroute_transit.core.route_trips import SPANS, RouteTrip, running
 
 ZONE: Final = SYDNEY_ZONE
 TODAY: Final[date] = date(2026, 10, 16)
@@ -83,3 +86,30 @@ def test_running_drops_a_trip_at_its_end_plus_one_second() -> None:
     only = trip('a', starts=EIGHT, ends=EIGHT + 1800)
     assert running(trips=(only,), now=at(EIGHT + 1800), zone=ZONE) == (only,)
     assert not running(trips=(only,), now=at(EIGHT + 1801), zone=ZONE)
+
+
+@pytest.fixture(name='_fresh', autouse=True)
+def _fresh_fixture() -> None:
+    """Start each test with nothing remembered."""
+    forget_held()
+
+
+def test_running_works_spans_out_once_for_the_same_trips() -> None:
+    """Later ticks on the same trips reuse the spans and stay right."""
+    trips = (
+        trip('a', starts=EIGHT, ends=EIGHT + 1800),
+        trip('b', starts=EIGHT + 3600, ends=EIGHT + 5400),
+    )
+    assert running(trips=trips, now=at(EIGHT + 60), zone=ZONE) == trips[:1]
+    assert running(trips=trips, now=at(EIGHT + 3660), zone=ZONE) == trips[1:]
+    assert len(SPANS.held) == 1
+
+
+def test_running_reads_trips_reloaded_as_new_objects() -> None:
+    """Reloaded trips with new times are not answered from the old ones."""
+    first = (trip('a', starts=EIGHT, ends=EIGHT + 1800),)
+    moved = (trip('a', starts=EIGHT + 3600, ends=EIGHT + 5400),)
+    now = at(EIGHT + 60)
+    assert running(trips=first, now=now, zone=ZONE) == first
+    assert not running(trips=moved, now=now, zone=ZONE)
+    assert running(trips=moved, now=at(EIGHT + 3660), zone=ZONE) == moved

@@ -24,6 +24,7 @@ from paperroute_cambridge.city import (
     CAMBRIDGE_REF,
     CAMBRIDGE_ZONE,
     RAIL_SOURCE,
+    CambridgeFeed,
 )
 from paperroute_device.adapters.rate_limit import SyncStartLimiter
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
@@ -1173,3 +1174,24 @@ def test_trains_reach_every_later_station(rail_built: Path) -> None:
         'Royston',
     ]
     assert buses == ()
+
+
+def test_route_trips_sort_rail_and_bods_by_feed_source(
+    rail_built: Path,
+) -> None:
+    """A rail route is a train and a bods route a bus or coach."""
+    with closing(
+        SqliteTimetableRepository(path=rail_built, city=CAMBRIDGE),
+    ) as repo:
+        found = {
+            (route, source): len(repo.route_trips(
+                route=route, source=source, day=RECORDED_DAY,
+            ))
+            for route in ('GA', 'A', '777')
+            for source in CambridgeFeed
+        }
+    assert {key for key, count in found.items() if count} == {
+        ('GA', CambridgeFeed.TRAIN),
+        ('A', CambridgeFeed.BUS),
+        ('777', CambridgeFeed.COACH),
+    }

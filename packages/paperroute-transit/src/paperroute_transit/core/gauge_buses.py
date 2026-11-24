@@ -12,10 +12,10 @@ from paperroute_transit.core.memo import SameMemo
 from paperroute_transit.core.model import service_seconds
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.positions import VehiclePosition
-from paperroute_transit.core.route_trips import RouteTrip
+from paperroute_transit.core.route_trips import SPANS, RouteTrip
 
 MEMO_SIZE: Final[int] = 512
-HERO_STOPS: Final[SameMemo[list[tuple[int, float]]]] = SameMemo(
+HERO_STOPS: Final[SameMemo[tuple[tuple[int, float], ...]]] = SameMemo(
     size=MEMO_SIZE,
 )
 
@@ -41,6 +41,12 @@ class GaugeBus:
     right: bool
     live: bool
     trip_id: str
+
+
+def forget_held() -> None:
+    """Forget every remembered stop mapping and trip span."""
+    HERO_STOPS.clear()
+    SPANS.clear()
 
 
 def mapped(*, pattern: TripPattern) -> list[tuple[int, Point]]:
@@ -227,7 +233,7 @@ def nearest_stop(*, known: HeroIndex, point: Point) -> int:
 
 def hero_stops(
     *, known: HeroIndex, pattern: TripPattern, right: bool
-) -> list[tuple[int, float]]:
+) -> tuple[tuple[int, float], ...]:
     """
     Map a trip's stops onto the hero's stops.
 
@@ -242,7 +248,7 @@ def hero_stops(
 
     Returns
     -------
-    list[tuple[int, float]]
+    tuple[tuple[int, float], ...]
         For each of its stops with a position, its index and the
         hero's stop it maps to. A same-way stop at a station the hero
         calls at maps to it; any other stop maps to the nearest.
@@ -256,7 +262,7 @@ def hero_stops(
             result.append(
                 (index, float(nearest_stop(known=known, point=point)))
             )
-    return result
+    return tuple(result)
 
 
 def hero_spot(

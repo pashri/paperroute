@@ -44,6 +44,8 @@ GROW_Y: Final[float] = 4.0  # pixels each side
 STOP_HALF: Final[float] = 18.0
 END_HALF: Final[float] = 15.0
 CHANGE_HALF: Final[float] = 11.0
+DASH: Final[tuple[float, float]] = (4.0, 3.0)  # px on, px off
+DASH_WIDTH: Final[float] = 2.0  # px
 TAB_DROP: Final[float] = 12.0  # pixels an age tab reaches past a badge
 
 
@@ -546,6 +548,54 @@ def draw_live(
         grey=PAPER,
         anchor='mm',
     )
+
+
+def draw_dashed(
+    canvas: Canvas,
+    *,
+    marker: Marker,
+    centre: Point,
+    wedge: WedgeSize,
+) -> None:
+    """
+    Draw a timetable badge with a dashed outline and a solid wedge.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    marker : Marker
+        The vehicle.
+    centre : Point
+        Badge centre on the canvas.
+    wedge : WedgeSize
+        Size of the heading wedge.
+    """
+    left, top, right, bottom = badge_box(route=marker.route, centre=centre)
+    canvas.rect(box=(left - 1, top - 1, right + 1, bottom + 1), grey=PAPER)
+    inset = DASH_WIDTH / 2
+    canvas.line(
+        points=[
+            (left + inset, top + inset),
+            (right - inset, top + inset),
+            (right - inset, bottom - inset),
+            (left + inset, bottom - inset),
+            (left + inset, top + inset),
+        ],
+        width=DASH_WIDTH,
+        grey=INK,
+        dash=DASH,
+    )
+    canvas.text(
+        at=(centre[0], centre[1] + 1),
+        text=marker.route,
+        face=BADGE_FACE,
+        grey=INK,
+        anchor='mm',
+    )
+    points = badge_wedge(marker=marker, centre=centre, size=wedge)
+    if points is not None:
+        canvas.polygon(points=points, grey=INK)
 
 
 def draw_hollow(

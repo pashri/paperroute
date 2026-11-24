@@ -22,6 +22,7 @@ from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.stop_under import GaugeCall
 
 FROM: Final[int] = -1  # call position of the From
+CALLS_KEPT: Final[int] = 5  # calls the left end leaves room for
 
 
 @dataclass(frozen=True)

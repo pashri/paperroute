@@ -201,6 +201,24 @@ def draw_break(canvas: Canvas, *, plan: GaugePlan, gap: GaugeBreak) -> None:
         box=(math.floor(near), y - reach, math.ceil(far), y + reach),
         grey=PAPER,
     )
+    draw_dots(canvas, plan=plan, gap=gap)
+
+
+def draw_dots(canvas: Canvas, *, plan: GaugePlan, gap: GaugeBreak) -> None:
+    """
+    Draw a break's dots without clearing the line under them.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    plan : GaugePlan
+        The measurements.
+    gap : GaugeBreak
+        The break.
+    """
+    y = plan.line_y
+    near, far = break_span(plan=plan, gap=gap)
     for left in dot_lefts(near=near, far=far):
         canvas.ellipse(
             box=(left, y + 0.5 - DOT / 2, left + DOT, y + 0.5 + DOT / 2),
@@ -208,9 +226,11 @@ def draw_break(canvas: Canvas, *, plan: GaugePlan, gap: GaugeBreak) -> None:
         )
 
 
-def draw_arrow(canvas: Canvas, *, right: float, y: float) -> None:
+def draw_arrow(
+    canvas: Canvas, *, right: float, y: float, back: bool = False,
+) -> None:
     """
-    Draw the arrowhead at the end of the line.
+    Draw the arrowhead at an end of the line.
 
     Parameters
     ----------
@@ -220,17 +240,20 @@ def draw_arrow(canvas: Canvas, *, right: float, y: float) -> None:
         Pixel x where the head starts.
     y : float
         Frame y of the line.
+    back : bool
+        Point the head left instead of right.
     """
     length, half = ARROW
+    tip = right - length if back else right + length
     canvas.polygon(
-        points=[(right, y - half), (right + length, y), (right, y + half)],
+        points=[(right, y - half), (tip, y), (right, y + half)],
         grey=INK,
     )
 
 
 def draw_track(canvas: Canvas, *, plan: GaugePlan) -> None:
     """
-    Draw the thin line, the ride, the arrow and the dotted breaks.
+    Draw the thin line, the ride, the arrows and the dotted breaks.
 
     Parameters
     ----------
@@ -242,9 +265,11 @@ def draw_track(canvas: Canvas, *, plan: GaugePlan) -> None:
     line, y = plan.line, plan.line_y
     first = slot_x(plan=plan, slot=line.marks[0].slot)
     last = slot_x(plan=plan, slot=line.marks[-1].slot)
-    left = first if line.starts else first - TAIL
+    left = first if line.starts and not line.cut else first - TAIL
     right = last + TAIL if line.arrow else last
     band(canvas, left=left, right=right, y=y, height=TRACK_WIDTH)
+    if line.cut:
+        draw_arrow(canvas, right=left, y=y, back=True)
     if line.arrow:
         draw_arrow(canvas, right=right, y=y)
     if line.ride is not None:
@@ -453,6 +478,7 @@ def count_choice(
     far: float,
     count: int,
     avoid: NDArray[np.bool_],
+    short: bool = True,
 ) -> tuple[str, Face, int]:
     """
     Pick the count's wording, size and sideways shift.
@@ -469,6 +495,8 @@ def count_choice(
         Stops hidden.
     avoid : NDArray[np.bool_]
         Ink the count keeps clear of.
+    short : bool
+        Allow the bare ``+n`` when the words do not fit.
 
     Returns
     -------
@@ -476,12 +504,13 @@ def count_choice(
         Text, face and x shift; the last wording unshifted when none
         fits.
     """
-    words = f'+{stops_text(stops=count)}'
     options = (
-        (words, COUNT_FACES[0]),
-        (words, COUNT_FACES[1]),
+        *(
+            (f'+{stops_text(stops=count)}', face)
+            for face in COUNT_FACES
+        ),
         (f'+{count}', COUNT_FACES[0]),
-    )
+    )[: 3 if short else 2]
     left = max(0, int(near) - COUNT_PAD)
     right = min(avoid.shape[1], int(far) + COUNT_PAD)
     top = max(0, line_y - COUNT_RISE)
@@ -508,7 +537,7 @@ def count_choice(
 
 
 def counts_ink(
-    *, plan: GaugePlan, avoid: NDArray[np.bool_],
+    *, plan: GaugePlan, avoid: NDArray[np.bool_], short: bool = True,
 ) -> NDArray[np.bool_]:
     """
     Draw each break's count and return the ink.
@@ -519,6 +548,8 @@ def counts_ink(
         The measurements.
     avoid : NDArray[np.bool_]
         Ink the counts keep clear of.
+    short : bool
+        Allow a bare ``+n`` when the words do not fit.
 
     Returns
     -------
@@ -536,6 +567,7 @@ def counts_ink(
             far=far,
             count=gap.count,
             avoid=avoid,
+            short=short,
         )
         draw_count(
             canvas,

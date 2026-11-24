@@ -29,6 +29,7 @@ from paperroute_transit.render.markers import (
     badge_box,
     badge_half,
     badge_wedge,
+    draw_dashed,
     draw_markers,
     draw_tab,
     marker_box,
@@ -629,3 +630,18 @@ def test_tab_goes_above_a_stale_badge_heading_down() -> None:
     assert badge_wedge(
         marker=replace(stale, bearing=None), centre=SPOT, size=STRIP_WEDGE,
     ) is None
+
+
+def test_draw_dashed_outlines_with_gaps() -> None:
+    """A dashed badge's outline has gaps and its route is in ink."""
+    canvas = Canvas()
+    marker = Marker(
+        route='42', x=100, y=100, bearing=90.0, live=False, pinned=True,
+    )
+    draw_dashed(canvas, marker=marker, centre=(100, 100), wedge=STRIP_WEDGE)
+    grey = canvas.grey()
+    left, top, right, _ = badge_box(route='42', centre=(100, 100))
+    edge = grey[round(top), round(left) + 1 : round(right) - 1]
+    assert (edge < 128).any()
+    assert (edge >= 128).any()
+    assert (grey[96:104, 94:106] < 128).any()

@@ -1,5 +1,6 @@
 """Tests for drawing the gauge."""
 
+from dataclasses import replace
 from typing import Final
 
 import numpy as np
@@ -11,6 +12,7 @@ from paperroute_transit.core.gauge_line import gauge_line
 from paperroute_transit.core.names import JOINING_WORDS, NameRules
 from paperroute_transit.core.stop_under import GaugeCall, StopGauge
 from paperroute_transit.render.gauge_draw import (
+    ARROW,
     COUNT_FACES,
     TAIL,
     break_span,
@@ -111,6 +113,16 @@ def test_draw_track_has_no_tail_before_the_trips_first_stop() -> None:
     """A trip that starts has no tail on the left."""
     starts = plan_of(StopGauge(origin='F', calls=numbered(2), starts=True))
     assert not track_ink(starts)[LINE_FREE, int(FIRST_X) - 4]
+
+
+def test_draw_track_draws_a_left_arrow_on_a_cut_line() -> None:
+    """A line cut on the left ends in an arrow pointing left."""
+    plan = plan_of(StopGauge(origin='F', calls=numbered(2)))
+    cut = replace(plan, line=replace(plan.line, cut=True))
+    left = FIRST_X - TAIL
+    tip = int(left - ARROW[0] + 2)
+    assert track_ink(cut)[LINE_FREE, tip]
+    assert not track_ink(plan)[LINE_FREE, tip]
 
 
 def test_draw_track_dots_a_break_mark_to_mark() -> None:

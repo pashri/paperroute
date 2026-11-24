@@ -85,6 +85,22 @@ class GaugeTimetable(Protocol):
             departure.
         """
 
+    def turned_trips(self, *, trip_ids: Collection[str]) -> dict[str, str]:
+        """
+        Find the trip each trip's vehicle turns back as.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Trip IDs.
+
+        Returns
+        -------
+        dict[str, str]
+            Next trip after a turnaround by trip ID; empty for a file
+            without turnarounds.
+        """
+
 
 class TimetableRepository(DayTimetable, GaugeTimetable, Protocol):
     """Read access to the built timetable."""

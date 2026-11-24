@@ -370,9 +370,10 @@ def carried_trips(
     *,
     heard: Mapping[str, Heard],
     patterns: Mapping[str, TripPattern | None],
+    turns: Mapping[str, str],
 ) -> dict[str, TripRealtime]:
     """
-    Carry each estimate into the trip joined on after it.
+    Carry each estimate into the trip joined on or turned into after it.
 
     Parameters
     ----------
@@ -380,6 +381,8 @@ def carried_trips(
         The estimates from vehicles' own positions, by trip ID.
     patterns : Mapping[str, TripPattern | None]
         Each trip's pattern by trip ID, None when unknown.
+    turns : Mapping[str, str]
+        The next trip after a turnaround, by trip ID.
 
     Returns
     -------
@@ -390,7 +393,8 @@ def carried_trips(
     found: dict[str, TripRealtime] = {}
     for trip_id, one in heard.items():
         pattern = patterns.get(trip_id)
-        joined = patterns.get(pattern.next_trip or '') if pattern else None
+        after = (pattern.next_trip if pattern else None) or turns.get(trip_id)
+        joined = patterns.get(after or '')
         if pattern is None or joined is None:
             continue
         if joined.trip_id in heard and not heard[joined.trip_id].finished:
@@ -409,6 +413,7 @@ def estimated_snapshot(
     trip_ids: frozenset[str],
     limit: timedelta,
     zone: tzinfo,
+    turns: Mapping[str, str],
 ) -> RealtimeSnapshot:
     """
     Turn a positions download into a snapshot of estimated trips.
@@ -427,6 +432,8 @@ def estimated_snapshot(
         The oldest a position may be on the feed's clock.
     zone : tzinfo
         Local time zone.
+    turns : Mapping[str, str]
+        The next trip after a turnaround, by trip ID.
 
     Returns
     -------
@@ -442,7 +449,8 @@ def estimated_snapshot(
         zone=zone,
     )
     own = {k: v.trip for k, v in heard.items() if not v.finished}
-    trips = {**carried_trips(heard=heard, patterns=patterns), **own}
+    onward = carried_trips(heard=heard, patterns=patterns, turns=turns)
+    trips = {**onward, **own}
     return RealtimeSnapshot(
         fetched_at=positions.fetched_at,
         trips={k: v for k, v in trips.items() if k in trip_ids},

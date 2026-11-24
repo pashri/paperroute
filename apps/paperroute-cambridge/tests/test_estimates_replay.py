@@ -449,6 +449,7 @@ def test_recorded_estimates_answer_only_the_asked_trips(
     half = frozenset(sorted(asked)[:12])
     found = estimates_of(
         timetable=timetable,
+        gauge=timetable,
         measures=StopMeasures(),
         positions=first,
         ask=Estimating(feed=ESTIMATES_FEED, trip_ids=asked, stale_after=STALE),
@@ -458,6 +459,7 @@ def test_recorded_estimates_answer_only_the_asked_trips(
     assert not all(trip.uncertain for trip in found.trips.values())
     fewer = estimates_of(
         timetable=timetable,
+        gauge=timetable,
         measures=StopMeasures(),
         positions=first,
         ask=Estimating(feed=ESTIMATES_FEED, trip_ids=half, stale_after=STALE),

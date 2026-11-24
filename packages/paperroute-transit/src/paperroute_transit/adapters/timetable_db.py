@@ -43,6 +43,7 @@ from paperroute_transit.adapters.pattern_rows import (
     LABELS_BY_TRIP,
     PATTERN_STOPS,
     RUNNING_DAYS,
+    TURNED_TRIPS,
     pattern_of,
 )
 from paperroute_transit.adapters.route_trip_rows import ROUTE_TRIPS
@@ -105,7 +106,9 @@ SELECT
   (SELECT COUNT(*) FROM sqlite_master
    WHERE type = 'table' AND name = 'rail_hops'),
   (SELECT COUNT(*) FROM pragma_table_info('stop_times')
-   WHERE name = 'along')
+   WHERE name = 'along'),
+  (SELECT COUNT(*) FROM sqlite_master
+   WHERE type = 'table' AND name = 'trip_turns')
 """
 NEXT_COLUMNS: Final[str] = 'n.route, n.headsign, n.next_trip'
 OLD_NEXT_COLUMNS: Final[str] = 'n.route, n.headsign, NULL'
@@ -187,6 +190,8 @@ class Features:
         Whether the rail_hops table exists.
     stop_along : bool
         Whether stop_times has the along column.
+    turns : bool
+        Whether the trip_turns table exists.
     """
 
     shape_column: bool = False
@@ -197,6 +202,7 @@ class Features:
     joins: bool = False
     hops: bool = False
     stop_along: bool = False
+    turns: bool = False
 
     @property
     def next_columns(self) -> str:
@@ -362,7 +368,7 @@ class SqliteTimetableRepository:
         self.fetch(sql='SELECT 1', params=())
         if known is None or known[0] != self.identity:
             rows = self.fetch(sql=SCHEMA_CHECK, params=())
-            found = rows[0] if rows else (0, 0, 0, 0, 0, 0, 0, 0)
+            found = rows[0] if rows else (0, 0, 0, 0, 0, 0, 0, 0, 0)
             known = (
                 self.identity,
                 Features(
@@ -374,6 +380,7 @@ class SqliteTimetableRepository:
                     joins=bool(found[5]),
                     hops=bool(found[6]),
                     stop_along=bool(found[7]),
+                    turns=bool(found[8]),
                 ),
             )
             self.schema = known
@@ -854,6 +861,28 @@ class SqliteTimetableRepository:
         return {
             str(trip): str(joined)
             for trip, joined in self.fetch_in(sql=sql, ids=trip_ids)
+        }
+
+    def turned_trips(self, *, trip_ids: Collection[str]) -> dict[str, str]:
+        """
+        Find the trip each trip's vehicle turns back as.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Trip IDs.
+
+        Returns
+        -------
+        dict[str, str]
+            Next trip after a turnaround by trip ID; empty for a file
+            without trip_turns.
+        """
+        if not self.features().turns:
+            return {}
+        return {
+            str(trip): str(turned)
+            for trip, turned in self.fetch_in(sql=TURNED_TRIPS, ids=trip_ids)
         }
 
     def route_trips(

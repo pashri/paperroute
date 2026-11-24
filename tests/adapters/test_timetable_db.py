@@ -2770,3 +2770,35 @@ def test_route_trips_find_a_metro_line_by_its_feed(tmp_path: Path) -> None:
         'M-0815', 'B-0815',
     }
     assert not found[SydneyFeed.TRAIN]
+
+
+def test_turned_trips_reads_the_next_trip_after_a_turnaround(
+    network_db: Path, tmp_path: Path,
+) -> None:
+    """A schema-12 file answers the next trip by trip ID."""
+    copy = tmp_path / 'timetable.db'
+    shutil.copy(network_db, copy)
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute('DELETE FROM trip_turns')
+        conn.execute("INSERT INTO trip_turns VALUES ('x1', 'x2')")
+        conn.commit()
+    with closing(
+        SqliteTimetableRepository(path=copy, city=SYDNEY),
+    ) as repo:
+        found = repo.turned_trips(trip_ids=['x1', 'e1'])
+    assert found == {'x1': 'x2'}
+
+
+def test_turned_trips_reads_nothing_from_a_schema_11_file(
+    network_db: Path, tmp_path: Path,
+) -> None:
+    """A file without trip_turns answers no turnarounds, without error."""
+    copy = tmp_path / 'timetable.db'
+    shutil.copy(network_db, copy)
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute('DROP TABLE IF EXISTS trip_turns')
+        conn.commit()
+    with closing(
+        SqliteTimetableRepository(path=copy, city=SYDNEY),
+    ) as repo:
+        assert repo.turned_trips(trip_ids=['x1']) == {}

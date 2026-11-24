@@ -56,6 +56,7 @@ def made(
     patterns: dict[str, TripPattern | None] = BOTH,
     trip_ids: frozenset[str] = frozenset({'t1', 't2'}),
     limit: timedelta = LIMIT,
+    turns: dict[str, str] | None = None,
 ) -> RealtimeSnapshot:
     """Estimate a download fetched some seconds after 8:00."""
     return estimated_snapshot(
@@ -67,6 +68,7 @@ def made(
         trip_ids=trip_ids,
         limit=limit,
         zone=ZONE,
+        turns=turns or {},
     )
 
 
@@ -267,6 +269,7 @@ def test_a_blank_start_date_after_midnight_reads_yesterdays_run() -> None:
         trip_ids=frozenset({'t1'}),
         limit=LIMIT,
         zone=ZONE,
+        turns={},
     )
     trip = found.trips['t1']
     assert delay(trip=trip) == 0
@@ -298,6 +301,7 @@ def test_an_explicit_start_date_is_never_second_guessed() -> None:
         trip_ids=frozenset({'t1'}),
         limit=LIMIT,
         zone=ZONE,
+        turns={},
     )
     assert delay(trip=found.trips['t1']) == -86400
 
@@ -320,7 +324,49 @@ def test_staleness_follows_the_vehicles_timestamp_not_the_fetch(
         trip_ids=frozenset({'t1'}),
         limit=LIMIT,
         zone=ZONE,
+        turns={},
     )
     assert bool(found.trips) is kept
     if kept:
         assert found.trips['t1'].heard_at == START + timedelta(seconds=970)
+
+
+TURNED: Final[dict[str, TripPattern | None]] = {
+    't1': pattern(trip_id='t1'),
+    't2': BACK,
+}
+
+
+def test_carried_trips_carries_through_a_turnaround() -> None:
+    """7 min late into a 5 min layover starts the turned trip 4 min late."""
+    found = made(
+        bus(x=500.0, seconds=720),
+        fetched=720,
+        patterns=TURNED,
+        turns={'t1': 't2'},
+    )
+    carried = found.trips['t2']
+    assert delay(trip=carried) == 240
+    assert carried.uncertain
+
+
+def test_carried_trips_caps_a_turnaround_at_twenty_minutes() -> None:
+    """45 min late into a turnaround starts the next trip 20 min late."""
+    found = made(
+        bus(x=500.0, seconds=2700),
+        fetched=2700,
+        patterns=TURNED,
+        turns={'t1': 't2'},
+    )
+    assert delay(trip=found.trips['t2']) == 1200
+
+
+def test_carried_trips_ignores_a_turnaround_absorbed_by_layover() -> None:
+    """3 min late into a 5 min layover carries nothing."""
+    found = made(
+        bus(x=500.0, seconds=480),
+        fetched=480,
+        patterns=TURNED,
+        turns={'t1': 't2'},
+    )
+    assert 't2' not in found.trips

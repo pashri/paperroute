@@ -120,6 +120,7 @@ async def estimate(
             call=asyncio.to_thread(
                 estimates_of,
                 timetable=ports.timetable,
+                gauge=ports.timetable,
                 measures=ports.measures,
                 positions=positions,
                 ask=ask,

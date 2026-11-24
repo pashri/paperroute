@@ -10,6 +10,9 @@ JOINED_TRIPS: Final[str] = """
 SELECT j.trip_id, j.next_trip FROM trip_joins j
 JOIN trips n ON n.trip_id = j.next_trip
 WHERE j.trip_id IN ({marks})"""
+TURNED_TRIPS: Final[str] = """
+SELECT t.trip_id, t.next_trip FROM trip_turns t
+WHERE t.trip_id IN ({marks})"""
 LABELS_BY_TRIP: Final[str] = """
 SELECT t.trip_id, r.short_name FROM trips t
 JOIN routes r ON r.route_id = t.route_id

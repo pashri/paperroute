@@ -1344,6 +1344,7 @@ class PatternTimetable(EmptyPlacedTimetable):
 
     found: dict[str, TripPattern] = field(default_factory=dict)
     joins: dict[str, str] = field(default_factory=dict)
+    turns: dict[str, str] = field(default_factory=dict)
     asked: list[frozenset[str]] = field(default_factory=list)
 
     def patterns(
@@ -1407,6 +1408,22 @@ class PatternTimetable(EmptyPlacedTimetable):
         """
         return {k: v for k, v in self.joins.items() if k in trip_ids}
 
+    def turned_trips(self, *, trip_ids: Collection[str]) -> dict[str, str]:
+        """
+        Give the known turnarounds of the trips.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Trips asked for.
+
+        Returns
+        -------
+        dict[str, str]
+            Turned trip by trip.
+        """
+        return {k: v for k, v in self.turns.items() if k in trip_ids}
+
 
 def test_estimates_of_answers_only_the_asked_trips() -> None:
     """Only the board's trips are answered; trips that join them are read."""
@@ -1428,6 +1445,7 @@ def test_estimates_of_answers_only_the_asked_trips() -> None:
     )
     found = estimates_of(
         timetable=timetable,
+        gauge=timetable,
         measures=StopMeasures(),
         positions=positions,
         ask=Estimating(
@@ -1552,6 +1570,23 @@ class RecordingGauge:
         self.asked.append((route, source, day))
         return self.trips
 
+    def turned_trips(self, *, trip_ids: Collection[str]) -> dict[str, str]:
+        """
+        Know no turnarounds.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Ignored.
+
+        Returns
+        -------
+        dict[str, str]
+            Nothing.
+        """
+        del trip_ids
+        return {}
+
 
 def test_route_trips_effect_handler_reads_the_repository() -> None:
     """The handler asks the repository and echoes the request back."""
@@ -1564,3 +1599,34 @@ def test_route_trips_effect_handler_reads_the_repository() -> None:
     loaded = loaded_route_trips(gauge=gauge, effect=effect)
     assert loaded == RouteTripsLoaded(request=effect, trips=(trip,))
     assert gauge.asked == [('606', 'bus', day)]
+
+
+def test_estimates_of_answers_the_hero_from_the_previous_trip_s_bus() -> None:
+    """A bus on a trip that turns into the asked trip carries its delay."""
+    timetable = PatternTimetable(
+        found={
+            't1': pattern(trip_id='t1'),
+            't2': pattern(trip_id='t2', stops=LATER_STOPS),
+        },
+        turns={'t1': 't2'},
+    )
+    when = int((START + timedelta(minutes=12)).timestamp())
+    positions = snapshot(
+        fetched_at=START + timedelta(minutes=12),
+        vehicles=(
+            vehicle(timestamp=when, trip_id='t1', point=(500.0, 0.0)),
+        ),
+    )
+    found = estimates_of(
+        timetable=timetable,
+        gauge=timetable,
+        measures=StopMeasures(),
+        positions=positions,
+        ask=Estimating(
+            feed='estimates/bus',
+            trip_ids=frozenset({'t2'}),
+            stale_after=timedelta(minutes=2),
+        ),
+    )
+    assert set(found.trips) == {'t2'}
+    assert found.trips['t2'].updates[0].departure_delay == 240

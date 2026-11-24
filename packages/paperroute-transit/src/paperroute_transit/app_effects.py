@@ -756,6 +756,7 @@ def loaded_patterns(
 def estimates_of(
     *,
     timetable: TimetableRepository,
+    gauge: GaugeTimetable,
     measures: StopMeasures,
     positions: PositionsSnapshot,
     ask: Estimating,
@@ -767,6 +768,8 @@ def estimates_of(
     ----------
     timetable : TimetableRepository
         Timetable.
+    gauge : GaugeTimetable
+        Timetable's turnarounds.
     measures : StopMeasures
         Stop places already worked out, reused per shape and stops.
     positions : PositionsSnapshot
@@ -781,7 +784,10 @@ def estimates_of(
         one of them or a trip that joins into one.
     """
     seen = {v.trip_id for v in positions.vehicles if v.trip_id}
-    joins = timetable.joined_trips(trip_ids=seen)
+    joins = {
+        **timetable.joined_trips(trip_ids=seen),
+        **gauge.turned_trips(trip_ids=seen),
+    }
     matter = {
         trip
         for trip in seen
@@ -805,6 +811,7 @@ def estimates_of(
         trip_ids=ask.trip_ids,
         limit=ask.stale_after,
         zone=timetable.city.zone,
+        turns=gauge.turned_trips(trip_ids=wanted),
     )
 
 

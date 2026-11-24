@@ -479,6 +479,23 @@ class BrokenTimetable:
         del route, source, day
         return ()
 
+    def turned_trips(self, *, trip_ids: Collection[str]) -> dict[str, str]:
+        """
+        Know no turnarounds.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Ignored.
+
+        Returns
+        -------
+        dict[str, str]
+            Nothing.
+        """
+        del trip_ids
+        return {}
+
     def joined_trips(self, *, trip_ids: Collection[str]) -> dict[str, str]:
         """
         Know no joins.

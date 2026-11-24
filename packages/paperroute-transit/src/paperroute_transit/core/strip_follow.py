@@ -1,6 +1,6 @@
 """The rows below a strip's From, laid out along the next trains."""
 
-from collections.abc import Collection, Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime
 from functools import lru_cache
@@ -12,6 +12,11 @@ from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.patterns import PatternStop
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind
 from paperroute_transit.core.stop_view import not_departed
+from paperroute_transit.core.strip_detour_rows import (
+    Shaped,
+    detour_layout,
+    paired_place,
+)
 from paperroute_transit.core.strip_model import CarryNote, TripDay, trip_day
 from paperroute_transit.core.strip_times import (
     TripInputs,
@@ -513,8 +518,8 @@ def with_hooks(*, rows: list[ReachRow], station: str,
     )
 
 
-def path_rows(*, reach: Reach, origin: int, calls: Sequence[Call]
-              ) -> tuple[ReachRow, ...]:
+def path_rows(*, reach: Reach, origin: int, calls: Sequence[Call],
+              layout: Sequence[Shaped]) -> tuple[ReachRow, ...]:
     """
     Lay the followed calls out below the From.
 
@@ -526,12 +531,16 @@ def path_rows(*, reach: Reach, origin: int, calls: Sequence[Call]
         The From row.
     calls : Sequence[Call]
         The followed train's strip stations and calls after the From.
+    layout : Sequence[Shaped]
+        The calls of each row below the From and its detour part (see
+        `detour_layout`).
 
     Returns
     -------
     tuple[ReachRow, ...]
-        The rows down to the From, unchanged, then one line row per call
-        in calling order, each with its exits from the strip below it.
+        The rows down to the From, unchanged, then one line row per
+        laid-out row, each with its exits from the strip below it; a
+        spur row standing for two calls is named for both.
     """
     places = {
         row.place.stop_id: row.place
@@ -545,13 +554,26 @@ def path_rows(*, reach: Reach, origin: int, calls: Sequence[Call]
         rows=rows, station=rows[-1].place.stop_id, hooks=hooks, path=path,
     )
     back = origin
-    for station, stop in calls:
+    for indexes, part in layout:
+        station, stop = calls[indexes[0]]
+        twin = [
+            place_for(station=other, stop=call, places=places)
+            for other, call in (calls[k] for k in indexes[1:])
+        ]
         rows.append(ReachRow(
-            place=place_for(station=station, stop=stop, places=places),
+            place=paired_place(
+                out=place_for(station=station, stop=stop, places=places),
+                back=twin[0] if twin else None,
+            ),
             kind=RowKind.MAIN,
             depth=0,
             above=False,
             parent=back,
+            detour=(
+                replace(part, back=twin[0].stop_id)
+                if part is not None and twin
+                else part
+            ),
         ))
         back = len(rows) - 1
         with_hooks(rows=rows, station=station, hooks=hooks, path=path)
@@ -615,7 +637,12 @@ def laid_reach(*, reach: Reach, trips: TripInputs, target: str | None
     steady = steady_of(reach=reach, trips=trips, target=target)
     if origin is None or steady is None:
         return reach
-    rows = path_rows(reach=reach, origin=origin, calls=steady.rows)
+    rows = path_rows(
+        reach=reach,
+        origin=origin,
+        calls=steady.rows,
+        layout=detour_layout(calls=steady.rows),
+    )
     first = steady.items[0].departure
     laid = Reach(
         rows=rows,
@@ -646,8 +673,9 @@ def line_rows(*, reach: Reach, steady: Steady) -> list[int] | None:
     Returns
     -------
     list[int] | None
-        The line row of each merged stop, or None when the rows were
-        laid out from other stops.
+        The line row of each merged stop, two stops of a spur level
+        sharing one, or None when the rows were laid out from other
+        stops.
     """
     start = (origin_of(reach=reach) or 0) + 1
     rows = [
@@ -655,10 +683,18 @@ def line_rows(*, reach: Reach, steady: Steady) -> list[int] | None:
         for index in range(start, len(reach.rows))
         if reach.rows[index].kind is RowKind.MAIN
     ]
+    layout = detour_layout(calls=steady.rows)
     same = [reach.rows[index].place.stop_id for index in rows] == [
-        station for station, _ in steady.rows
+        steady.rows[indexes[0]][0] for indexes, _ in layout
     ]
-    return rows if same else None
+    if not same:
+        return None
+    found = {
+        call: row
+        for row, (indexes, _) in zip(rows, layout)
+        for call in indexes
+    }
+    return [found[call] for call in range(len(steady.rows))]
 
 
 def picked_item(*, trips: TripInputs, steady: Steady,
@@ -691,8 +727,29 @@ def picked_item(*, trips: TripInputs, steady: Steady,
     )
 
 
+def gathered(*, calls: Iterable[tuple[int, datetime]]
+             ) -> dict[int, tuple[datetime, ...]]:
+    """
+    Collect each row's times.
+
+    Parameters
+    ----------
+    calls : Iterable[tuple[int, datetime]]
+        Row and time of each call, in calling order.
+
+    Returns
+    -------
+    dict[int, tuple[datetime, ...]]
+        Each row's times in calling order.
+    """
+    found: dict[int, tuple[datetime, ...]] = {}
+    for index, moment in calls:
+        found[index] = (*found.get(index, ()), moment)
+    return found
+
+
 def item_calls(*, trips: TripInputs, reach: Reach, steady: Steady,
-               item: LiveDeparture) -> dict[int, datetime]:
+               item: LiveDeparture) -> dict[int, tuple[datetime, ...]]:
     """
     Time a train at the rows below the From.
 
@@ -709,9 +766,10 @@ def item_calls(*, trips: TripInputs, reach: Reach, steady: Steady,
 
     Returns
     -------
-    dict[int, datetime]
-        Arrival by line row where the train stops; one of the trains the
-        rows come from by its own calls, any other by station.
+    dict[int, tuple[datetime, ...]]
+        Arrivals by line row where the train stops, out then back on a
+        spur row; one of the trains the rows come from by its own calls,
+        any other by station.
     """
     rows = line_rows(reach=reach, steady=steady) or []
     train = next(
@@ -723,12 +781,12 @@ def item_calls(*, trips: TripInputs, reach: Reach, steady: Steady,
         None,
     )
     if train is not None:
-        return {
-            index: moment
+        return gathered(calls=(
+            (index, moment)
             for index, timed in zip(rows, steady.times)
             for moment, which in timed
             if which == train
-        }
+        ))
     origin = reach.rows[origin_of(reach=reach) or 0].place.stop_id
     served = dict(reversed([
         (station, moment)
@@ -736,11 +794,11 @@ def item_calls(*, trips: TripInputs, reach: Reach, steady: Steady,
             item=item, trips=trips, origin=origin,
         )
     ]))
-    return {
-        index: served[station]
+    return gathered(calls=(
+        (index, served[station])
         for index, (station, _) in zip(rows, steady.rows)
         if station in served
-    }
+    ))
 
 
 def picked_calls(
@@ -749,7 +807,7 @@ def picked_calls(
     reach: Reach,
     target: str | None,
     selected: TripDay | None,
-) -> tuple[LiveDeparture, dict[int, datetime]] | None:
+) -> tuple[LiveDeparture, dict[int, tuple[datetime, ...]]] | None:
     """
     Find the picked train and its times at the rows below the From.
 
@@ -766,8 +824,8 @@ def picked_calls(
 
     Returns
     -------
-    tuple[LiveDeparture, dict[int, datetime]] | None
-        The train (see `picked_item`) and its arrival by line row; None
+    tuple[LiveDeparture, dict[int, tuple[datetime, ...]]] | None
+        The train (see `picked_item`) and its arrivals by line row; None
         when the rows no longer match the trains.
     """
     steady = steady_of(reach=reach, trips=trips, target=target)

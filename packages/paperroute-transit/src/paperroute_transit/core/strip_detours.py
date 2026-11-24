@@ -15,6 +15,7 @@ MAX_BETWEEN: Final[int] = 6  # stops strictly between the two visits
 MIN_BETWEEN: Final[int] = 2  # stops strictly between for a return to count
 NEAR: Final[float] = 200.0  # metres
 SHORT_HEAD: Final[int] = 2  # characters
+BREAKS: Final[str] = ' ,'  # characters a shared name part may end before
 
 
 class DetourKind(StrEnum):
@@ -42,6 +43,34 @@ class Detour:
     kind: DetourKind
     first: int
     last: int
+
+
+@dataclass(frozen=True)
+class DetourPart:
+    """
+    Where a strip row sits on a loop or spur.
+
+    Attributes
+    ----------
+    kind : DetourKind
+        Ring or spur.
+    group : int
+        The detour's index among those on the reach.
+    slot : int
+        On a loop, the stop's place on the ring in calling order from 0;
+        on a spur, its level, 0 for the junction.
+    size : int
+        On a loop, the stops on the ring; on a spur, its levels.
+    back : str
+        On a spur row standing for two calls, the back call's station
+        ID; else ''.
+    """
+
+    kind: DetourKind
+    group: int
+    slot: int
+    size: int
+    back: str = ''
 
 
 DETOURS: Final[SameMemo[tuple[Detour, ...]]] = SameMemo(size=128)
@@ -258,3 +287,35 @@ def detours_of(*, pattern: TripPattern) -> tuple[Detour, ...]:
         inputs=(pattern,),
         value=find_detours(stops=pattern.stops),
     )
+
+
+def pair_name(*, first: str, second: str) -> str:
+    """
+    Name a row standing for two calls.
+
+    Parameters
+    ----------
+    first : str
+        The out call's name.
+    second : str
+        The back call's name.
+
+    Returns
+    -------
+    str
+        The longest shared start of the two that ends at a word or a
+        comma, trimmed; both joined by ' / ' when they share none.
+    """
+    if first == second:
+        return first
+    shared = 0
+    for one, other in zip(first, second):
+        if one != other:
+            break
+        shared += 1
+    ends = [
+        k for k in range(shared + 1)
+        if all(k == len(name) or name[k] in BREAKS for name in (first, second))
+    ]
+    part = first[:max(ends, default=0)].strip(BREAKS)
+    return part or f'{first} / {second}'

@@ -14,6 +14,7 @@ from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.reach import Reach, RowKind, StripKey
 from paperroute_transit.core.stop_view import PinTag, Row, StopView
+from paperroute_transit.core.strip_detours import DetourPart
 
 STRIP_TOP: Final[int] = 44
 ROW_H: Final[int] = 36
@@ -138,6 +139,8 @@ class StripRow:
         The places an exit row names, in order; empty for any other row.
     paired : bool
         True on a FROM row whose stop has a kerb across the road.
+    detour : DetourPart | None
+        Where the row sits on a loop or spur; None off them.
     """
 
     name: str
@@ -156,6 +159,7 @@ class StripRow:
     note: CarryNote | None = None
     names: tuple[str, ...] = ()
     paired: bool = False
+    detour: DetourPart | None = None
 
 
 @dataclass(frozen=True)

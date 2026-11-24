@@ -12,6 +12,7 @@ from paperroute_transit.core.strip_detours import (
     DetourKind,
     detours_of,
     is_there_and_back,
+    pair_name,
     place_key,
     spur_levels,
 )
@@ -214,3 +215,23 @@ def test_is_there_and_back_skips_the_middle_of_an_odd_loop() -> None:
 def test_spur_levels_is_zero_when_the_ends_are_apart() -> None:
     """A junction whose two visits are far apart does not stack."""
     assert spur_levels(stops=pattern(QVB).stops[1:5]) == 0
+
+
+def test_pair_name_uses_the_shared_part() -> None:
+    """Two calls of one name show it once."""
+    name = 'Hills Rd 6th Form Col'
+    assert pair_name(first=name, second=name) == name
+
+
+def test_pair_name_cuts_at_a_word_boundary() -> None:
+    """Two stands of one place show the place."""
+    assert pair_name(
+        first='Manor Close, Stop A', second='Manor Close, Stand B',
+    ) == 'Manor Close'
+
+
+def test_pair_name_joins_names_that_share_nothing() -> None:
+    """Names with nothing shared show both."""
+    assert pair_name(
+        first='Museum', second='Downing Centre',
+    ) == 'Museum / Downing Centre'

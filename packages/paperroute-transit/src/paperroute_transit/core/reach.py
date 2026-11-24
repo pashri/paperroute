@@ -10,6 +10,7 @@ from typing import Final
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.reach_layout import Entry, LineExit, lay_out
 from paperroute_transit.core.reach_track import FROM_KEY, place_of
+from paperroute_transit.core.strip_detours import DetourPart
 from paperroute_transit.core.train_network import TrainNetwork
 
 
@@ -259,6 +260,8 @@ class ReachRow:
     names : tuple[str, ...]
         Places a train Strip's exit row names, in walk order; empty for
         any other row.
+    detour : DetourPart | None
+        Where a followed row sits on a loop or spur; None off them.
     """
 
     place: StopPlace
@@ -271,6 +274,7 @@ class ReachRow:
     lines: tuple[str, ...] = ()
     inside: bool = True
     names: tuple[str, ...] = ()
+    detour: DetourPart | None = None
 
 
 @dataclass(frozen=True)

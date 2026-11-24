@@ -236,8 +236,10 @@ def followed_times(
         **here,
         **across_times(trips=trips, reach=reach, selected=selected),
         **{
-            index: clock_text(moment=at, zone=trips.zone)
-            for index, at in below.items()
+            index: ' / '.join(
+                clock_text(moment=at, zone=trips.zone) for at in moments
+            )
+            for index, moments in below.items()
         },
         origin: clock_text(moment=stamp.departs, zone=trips.zone),
     }
@@ -393,6 +395,7 @@ def strip_row(
             else None
         ),
         names=row.names,
+        detour=row.detour,
     )
 
 

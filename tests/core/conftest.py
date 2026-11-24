@@ -9,6 +9,7 @@ from paperroute_transit.core.live import RESOLVED_MEMO
 from paperroute_transit.core.map_vehicles import HEARD_MEMO
 from paperroute_transit.core.route_trips import SPANS
 from paperroute_transit.core.state_views import STOP_VIEWS
+from paperroute_transit.core.strip_detour_rows import LAYOUTS
 from paperroute_transit.core.strip_detours import DETOURS
 from paperroute_transit.core.strip_follow import REACHES, STEADY, common_pairs
 
@@ -79,5 +80,7 @@ def _detour_memo() -> Iterator[None]:
         Control to the test.
     """
     DETOURS.clear()
+    LAYOUTS.clear()
     yield
     DETOURS.clear()
+    LAYOUTS.clear()

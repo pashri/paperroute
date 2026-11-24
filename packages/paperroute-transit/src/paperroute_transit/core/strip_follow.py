@@ -382,6 +382,34 @@ def merged_steady(*, reach: Reach, trips: TripInputs, target: str | None
     )
 
 
+def memo_key(
+    *, reach: Reach, trips: TripInputs, target: str | None,
+) -> tuple[tuple[object, ...], tuple[object, ...]]:
+    """
+    Make the memo key of a reach's rows.
+
+    Parameters
+    ----------
+    reach : Reach
+        The reach.
+    trips : TripInputs
+        The strip's departures and live data.
+    target : str | None
+        The Destination's station ID, or None.
+
+    Returns
+    -------
+    tuple[tuple[object, ...], tuple[object, ...]]
+        The objects compared by identity, then the values by equality.
+    """
+    # A city switch replaces the reach and departures, so zone,
+    # station_of and line_kinds need not be in the key.
+    return (
+        (reach, trips.departures, trips.patterns),
+        (trips.now, target, trips.key),
+    )
+
+
 def steady_of(*, reach: Reach, trips: TripInputs, target: str | None
               ) -> Steady | None:
     """
@@ -402,8 +430,7 @@ def steady_of(*, reach: Reach, trips: TripInputs, target: str | None
         The result of `merged_steady`, remembered for the same reach,
         departures and patterns at the same frame time.
     """
-    inputs = (reach, trips.departures, trips.patterns)
-    same = (trips.now, target, trips.key)
+    inputs, same = memo_key(reach=reach, trips=trips, target=target)
     held = STEADY.get(inputs=inputs, same=same)
     if held is not None:
         return held[0]
@@ -554,8 +581,7 @@ def followed_reach(*, reach: Reach, trips: TripInputs,
         (see `steady_of`). The fixed rows while the first train's
         pattern isn't loaded or there is none.
     """
-    inputs = (reach, trips.departures, trips.patterns)
-    same = (trips.now, target, trips.key)
+    inputs, same = memo_key(reach=reach, trips=trips, target=target)
     held = REACHES.get(inputs=inputs, same=same)
     if held is not None:
         return held
@@ -601,11 +627,8 @@ def laid_reach(*, reach: Reach, trips: TripInputs, target: str | None
         day=first.service_day,
         facing=reach.facing,
     )
-    STEADY.put(
-        inputs=(laid, trips.departures, trips.patterns),
-        same=(trips.now, target, trips.key),
-        value=(steady,),
-    )
+    inputs, same = memo_key(reach=laid, trips=trips, target=target)
+    STEADY.put(inputs=inputs, same=same, value=(steady,))
     return laid
 
 

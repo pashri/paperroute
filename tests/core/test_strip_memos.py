@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -21,6 +22,7 @@ from paperroute_transit.core.reach import Reach
 from paperroute_transit.core.saved import LiveView
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.strip_follow import Steady
+from paperroute_transit.core.strip_state import shown_reach
 
 
 @pytest.fixture(name='builds', autouse=True)
@@ -140,15 +142,19 @@ def test_steady_memo_misses_after_a_timetable_reload(
 
 
 def test_steady_memo_misses_after_a_city_switch(builds: list[int]) -> None:
-    """Another city's reach and patterns build different rows."""
+    """The same strip in another city builds again, to different rows."""
     first = tick(state=strip_state())
+    before = shown_reach(state=first)
     other = replace(
-        first,
+        strip_state(reach=example_reach()),
+        city=replace(first.city, zone=ZoneInfo('Europe/London')),
         map=replace(first.map, patterns={
             'train-0': line_pattern(
                 trip_id='train-0', stations=EAST[:2], minutes=5,
             ),
         }),
     )
-    tick(state=other)
+    after = shown_reach(state=tick(state=other))
     assert len(builds) == 2
+    assert before is not None and after is not None
+    assert after.rows != before.rows

@@ -15,6 +15,7 @@ from paperroute_transit.core.gauge_ends import RouteGauge
 from paperroute_transit.core.map_view import Marker
 from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.stop_under import GaugeCall
+from paperroute_transit.render import gauge_route
 from paperroute_transit.render.gauge_draw import COUNT_FACES
 from paperroute_transit.render.gauge_plan import (
     FIRST_X,
@@ -36,6 +37,7 @@ from paperroute_transit.render.gauge_route import (
 from paperroute_transit.render.markers import badge_box
 from paperroute_transit.render.names import Naming
 from paperroute_transit.render.strip import DISC_RADIUS
+from tests.golden.scenes import SCENES, frame_of
 from tests.helpers import bare_pattern
 
 NAMING: Final[Naming] = Naming(rules=NameRules())
@@ -316,3 +318,44 @@ def test_folded_puts_a_count_at_the_mean_of_its_buses() -> None:
     """A count of three sits at the mean x of the three, not a midpoint."""
     shown, _ = folded(markers=(badge(x=100), badge(x=110), badge(x=118)))
     assert shown[0].marker.x == pytest.approx((100 + 110 + 118) / 3)
+
+
+def test_route_plan_is_reused_for_the_same_gauge_and_keep_out() -> None:
+    """A second tick with the same poll's content gets the same plan."""
+    first = route_plan(gauge=SHORT, keep=NONE, naming=NAMING)
+    again = route_plan(
+        gauge=replace(SHORT),
+        keep=NONE.copy(),
+        naming=Naming(rules=NAMING.rules),
+    )
+    assert again is first
+
+
+def test_route_plan_memo_misses_after_a_new_poll() -> None:
+    """A new trip pattern or changed calls make a new plan."""
+    first = route_plan(gauge=SHORT, keep=NONE, naming=NAMING)
+    polled = replace(SHORT, pattern=gauge_of(SHORT_TOP + 1).pattern)
+    assert route_plan(gauge=polled, keep=NONE, naming=NAMING) is not first
+    fewer = replace(SHORT, calls=SHORT.calls[:-1])
+    assert route_plan(gauge=fewer, keep=NONE, naming=NAMING) is not first
+
+
+def test_route_plan_is_reused_across_two_ticks_of_the_stop_screen(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real Stop render path lays the gauge out once per poll."""
+    planned: list[object] = []
+    measure = gauge_route.route_plan_at
+
+    def counted(**inputs: object) -> object:
+        """Count a layout and run it."""
+        planned.append(inputs)
+        return measure(**inputs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(gauge_route, 'route_plan_at', counted)
+    state = SCENES['stop_gauge_busy']()
+    frame_of(state=state)
+    first = len(planned)
+    frame_of(state=state)
+    assert first > 0
+    assert len(planned) == first

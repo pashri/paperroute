@@ -1,5 +1,6 @@
 """Drawing the route gauge: the line, every bus on it, names and counts."""
 
+import hashlib
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
@@ -17,6 +18,7 @@ from paperroute_transit.core.gauge_ends import (
 )
 from paperroute_transit.core.gauge_line import BREAK_SLOTS, BusSlot
 from paperroute_transit.core.map_view import Marker
+from paperroute_transit.core.memo import SameMemo
 from paperroute_transit.core.names import base_name
 from paperroute_transit.render.gauge_draw import (
     ARROW,
@@ -179,6 +181,9 @@ def route_plan_at(
     )
 
 
+PLANS: Final[SameMemo[GaugePlan]] = SameMemo(size=2)
+
+
 def route_plan(
     *, gauge: RouteGauge, keep: NDArray[np.bool_], naming: Naming,
 ) -> GaugePlan:
@@ -187,6 +192,47 @@ def route_plan(
 
     A line without a break spreads to fill its room, up to
     ``SPREAD_MOST`` times ``PITCH``.
+
+    Parameters
+    ----------
+    gauge : RouteGauge
+        The gauge's content.
+    keep : NDArray[np.bool_]
+        The keep-out.
+    naming : Naming
+        The shortening rules.
+
+    Returns
+    -------
+    GaugePlan
+        The measurements, remembered for the same trip pattern and
+        shortening rules with equal content and keep-out.
+    """
+    inputs = (gauge.pattern, naming.rules)
+    same = (
+        gauge.start,
+        gauge.end,
+        gauge.calls,
+        gauge.buses,
+        gauge.words,
+        naming.siblings,
+        hashlib.blake2b(keep.tobytes(), digest_size=16).digest(),
+    )
+    held = PLANS.get(inputs=inputs, same=same)
+    if held is None:
+        held = PLANS.put(
+            inputs=inputs,
+            value=measured_route(gauge=gauge, keep=keep, naming=naming),
+            same=same,
+        )
+    return held
+
+
+def measured_route(
+    *, gauge: RouteGauge, keep: NDArray[np.bool_], naming: Naming,
+) -> GaugePlan:
+    """
+    Measure the route gauge without remembering it.
 
     Parameters
     ----------

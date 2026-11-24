@@ -208,7 +208,9 @@ def test_the_next_trips_own_position_replaces_the_carry_over() -> None:
 
 
 def test_a_finished_bus_carries_its_lateness_through_the_layover() -> None:
-    """At the last stop at 8:15, 5 min late, the next trip starts 2 min late."""
+    """
+    At the last stop at 8:15, 5 min late, the next trip starts 2 min late.
+    """
     found = made(bus(x=990.0, seconds=900), fetched=900)
     assert 't1' not in found.trips
     carried = found.trips['t2']

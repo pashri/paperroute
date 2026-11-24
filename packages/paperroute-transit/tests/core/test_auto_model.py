@@ -67,7 +67,11 @@ def test_weekday_window_runs() -> None:
     pin = windowed(
         pin=PIN_A, window=AutoWindow(WEEKDAYS, time(7, 30), time(9)),
     )
-    assert running(pins=(pin,), now=at(day=16, hour=8), zone=ZONE) == Occurrence(
+    assert running(
+        pins=(pin,),
+        now=at(day=16, hour=8),
+        zone=ZONE,
+    ) == Occurrence(
         ref=pin_ref(pin=pin),
         start=at(day=16, hour=7, minute=30),
         end=at(day=16, hour=9),

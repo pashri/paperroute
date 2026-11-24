@@ -30,7 +30,10 @@ def test_rows_where_leaves_out_rows_without_the_column(
 def test_write_tables_skips_empty_tables(tmp_path: Path) -> None:
     """Write tables writes a member for each table that has rows."""
     out = tmp_path / 'slice.zip'
-    write_tables(out=out, tables={'stops.txt': [{'stop_id': 'a'}], 'x.txt': []})
+    write_tables(
+        out=out,
+        tables={'stops.txt': [{'stop_id': 'a'}], 'x.txt': []},
+    )
     assert list(read_rows(archive=out, member='stops.txt')) == [
         {'stop_id': 'a'},
     ]

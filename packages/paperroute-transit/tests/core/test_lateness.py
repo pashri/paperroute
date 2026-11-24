@@ -86,7 +86,10 @@ def test_line_of_runs_straight_without_a_shape() -> None:
 
 def test_line_of_needs_every_stop_placed() -> None:
     """A stop with no point leaves the trip without a line."""
-    stops = (DIAGONAL[0], PatternStop(arrives=EIGHT, departs=EIGHT, point=None))
+    stops = (
+        DIAGONAL[0],
+        PatternStop(arrives=EIGHT, departs=EIGHT, point=None),
+    )
     assert line_of(pattern=pattern(stops=stops), shape=None) is None
 
 
@@ -102,7 +105,10 @@ def test_timetable_at_reads_between_the_stops(
     assert found == pytest.approx(seconds)
 
 
-@pytest.mark.parametrize(('seconds', 'late'), [(420, 120), (300, 0), (180, -120)])
+@pytest.mark.parametrize(
+    ('seconds', 'late'),
+    [(420, 120), (300, 0), (180, -120)],
+)
 def test_placed_reads_late_on_time_and_early(seconds: int, late: int) -> None:
     """Halfway along at 8:07, 8:05 and 8:03 is late, on time and early."""
     found = place_on(EAST, straight(), point=(500.0, 0.0), seconds=seconds)
@@ -118,7 +124,9 @@ def test_placed_leaves_a_position_off_the_line() -> None:
 
 
 def test_placed_leaves_a_bus_waiting_at_its_first_stop() -> None:
-    """Near the first stop before 8:00 there is no estimate; after, there is."""
+    """
+    Near the first stop before 8:00 there is no estimate; after, there is.
+    """
     line = straight()
     assert place_on(EAST, line, point=(20.0, 0.0), seconds=-120) is None
     found = place_on(EAST, line, point=(20.0, 0.0), seconds=60)

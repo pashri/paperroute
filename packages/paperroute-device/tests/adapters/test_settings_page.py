@@ -311,6 +311,10 @@ def test_line_filled_replaces_the_marks_whole_line(
     lines: str, expected: str,
 ) -> None:
     """The mark's line goes; empty lines leave no blank line."""
-    assert line_filled(page='a\n    {{m}}\nc\n', mark='{{m}}', lines=lines) == (
+    assert line_filled(
+        page='a\n    {{m}}\nc\n',
+        mark='{{m}}',
+        lines=lines,
+    ) == (
         expected
     )

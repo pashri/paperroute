@@ -150,8 +150,12 @@ def test_group_passes_on_past_a_failing_observer(
 def test_panel_refreshes_are_kept_by_kind() -> None:
     """Full and partial times are kept apart; a failure only marks it."""
     timings = KitTimings()
-    timings.panel_refreshed(refresh=PanelRefresh(full=False, seconds=0.5, ok=True))
-    timings.panel_refreshed(refresh=PanelRefresh(full=True, seconds=9.0, ok=False))
+    timings.panel_refreshed(
+        refresh=PanelRefresh(full=False, seconds=0.5, ok=True),
+    )
+    timings.panel_refreshed(
+        refresh=PanelRefresh(full=True, seconds=9.0, ok=False),
+    )
     assert timings.panel is not None
     assert (timings.panel.partial_s, timings.panel.full_s) == (0.5, None)
     assert timings.panel.ok is False

@@ -167,7 +167,10 @@ async def test_setup_page_says_joining(client: Client) -> None:
     ) in page
 
 
-async def test_setup_post_posts_join(setup: DeviceSite, client: Client) -> None:
+async def test_setup_post_posts_join(
+    setup: DeviceSite,
+    client: Client,
+) -> None:
     """A chosen network and password are sent to be joined."""
     response = await _post(
         client=client, data={'network': 'Home', 'password': 'pw12345678'},

@@ -1,4 +1,6 @@
-"""A small Settings plug for the kit's tests: a chime, a colour and an alarm."""
+"""
+A small Settings plug for the kit's tests: a chime, a colour and an alarm.
+"""
 
 from collections.abc import Mapping
 from dataclasses import dataclass

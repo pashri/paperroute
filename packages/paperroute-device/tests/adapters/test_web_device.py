@@ -379,7 +379,10 @@ async def test_device_page_without_data_has_no_section(
     text = await (await client.get('/device')).text()
     assert 'id="data"' not in text
     assert '{{' not in text
-    assert '</section>\n    <section class="card setting" aria-labelledby="system">' in text
+    assert (
+        '</section>\n'
+        '    <section class="card setting" aria-labelledby="system">'
+    ) in text
 
 
 async def test_data_section_is_app_markup(device: DeviceSite) -> None:

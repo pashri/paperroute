@@ -103,7 +103,9 @@ async def worked(*, ports: DevicePorts) -> tuple[list[object], object]:
 async def test_probe_effect_posts_facts() -> None:
     """A probe posts the facts it found, with the app's part."""
     posted, fallback = await worked(ports=DevicePorts(probe=FakeProbe()))
-    assert posted == [DeviceProbed(facts=replace(device_facts(), app='probed'))]
+    assert posted == [
+        DeviceProbed(facts=replace(device_facts(), app='probed')),
+    ]
     assert fallback == DeviceProbeFailed()
 
 

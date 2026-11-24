@@ -537,7 +537,11 @@ async def test_run_refuses_a_repeated_migration_step(
     """A step number the kit and the app share stops the run at start-up."""
     app = ClashingApp()
     display = FrameRecorder()
-    ports = ports_of(path=tmp_path / 'state.json', app=FakeApp(), display=display)
+    ports = ports_of(
+        path=tmp_path / 'state.json',
+        app=FakeApp(),
+        display=display,
+    )
     monkeypatch.setattr(loop, 'KIT_MIGRATIONS', {1: keep})
     with pytest.raises(ValueError, match='step 1 is registered twice'):
         await run(app=app, ports=ports, zone=ZONE, max_events=1)

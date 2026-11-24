@@ -328,7 +328,10 @@ def test_check_arguments_runs_before_anything_opens(
         )
     app = CheckingApp()
     with pytest.raises(SystemExit, match='bad arguments'):
-        cli.main(app=app, argv=['run', '--display', 'web', '--panel', '--knobs'])
+        cli.main(
+            app=app,
+            argv=['run', '--display', 'web', '--panel', '--knobs'],
+        )
     assert app.checked == ['run']
     assert not opened
     assert cli.parse_args(app=app, argv=['zone']).command == 'zone'

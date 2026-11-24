@@ -27,7 +27,7 @@ from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.route_trips import RouteTrip
 from paperroute_transit.core.saved import LiveView
 from paperroute_transit.core.state_views import live_stop_view
-from paperroute_transit.core.stop_hero import with_detail
+from paperroute_transit.core.stop_hero import route_vehicles, with_detail
 from paperroute_transit.core.stop_under import GaugeCall, UnderNumber
 from paperroute_transit.core.stop_view import StopView
 
@@ -251,6 +251,17 @@ def test_a_vehicle_heard_under_an_alias_is_the_heros() -> None:
     ).under
     assert under is not None
     assert under.place == '1 stop away'
+
+
+def test_route_vehicles_none_without_a_route_id() -> None:
+    """A hero trip with no route ID matches no reported vehicle."""
+    nameless = replace(RUN, route_id=None)
+    assert not route_vehicles(
+        pattern=nameless,
+        positions=seen_at(x=-75.0),
+        now=START,
+        limit=timedelta(minutes=2),
+    )
 
 
 def test_a_stale_position_gives_no_place() -> None:

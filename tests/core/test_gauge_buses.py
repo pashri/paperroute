@@ -404,6 +404,18 @@ def test_bus_slots_leave_out_a_bus_of_unknown_way() -> None:
     assert not buses
 
 
+def test_bus_slots_keep_timetabled_trips_without_a_route_id() -> None:
+    """A hero with no route ID still shows its route's timetabled trips."""
+    nameless = replace(HERO, route_id=None)
+    buses = buses_of(
+        hero=nameless,
+        patterns={'t2': SAME},
+        trips_running=(route_trip(trip_id='t2'),),
+        now=at(seconds=EIGHT + 3 * STEP),
+    )
+    assert [bus.live for bus in buses] == [False]
+
+
 def test_along_index_finds_the_nearest_segment() -> None:
     """A point near a segment gives the fraction along it."""
     assert along_index(

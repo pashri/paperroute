@@ -177,7 +177,7 @@ from tests.app_factories import (
     strip_map_view,
 )
 from tests.golden.scenes import GOLDEN
-from tests.test_app_effects import kit_ports, rendered, sydney_app
+from tests.app_effects.helpers import kit_ports, rendered, sydney_app
 
 type PostHook = Callable[[Callable[[object], None]], None]
 

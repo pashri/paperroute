@@ -36,7 +36,7 @@ from paperroute_transit.core.model import Departure, Pin
 from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import LiveView, Saved, default_settings
 from paperroute_transit.core.state_model import Board, State
-from paperroute_transit.core.state_views import live_stop_view
+from paperroute_transit.core.state_views import STOP_VIEWS, live_stop_view
 from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.measures import StopMeasures
 from paperroute_transit.render.stop_view import draw_stop_view
@@ -142,11 +142,15 @@ def tick(*, state: State) -> None:
     """
     Build and draw the Stop view as a tick does.
 
+    Each tick has a new frame time, so the held Stop view is dropped
+    first.
+
     Parameters
     ----------
     state : State
         State on the Stop view.
     """
+    STOP_VIEWS.clear()
     draw_stop_view(view=live_stop_view(state=state))
 
 

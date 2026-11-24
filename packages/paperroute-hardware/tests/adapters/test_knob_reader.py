@@ -57,6 +57,7 @@ def _reader(
 ])
 @pytest.mark.parametrize(('high', 'steps'), [(True, 1), (False, -1)])
 def test_step_clk_fall_reads_dt_for_direction(
+    *,
     clk: int, dt: int, knob: Knob, high: bool, steps: int,
 ) -> None:
     """CLK falling with DT high is a turn right; DT low, left."""
@@ -84,6 +85,7 @@ def _detents(*, clk: int, dt: int, right: bool, count: int) -> list[LineEdge]:
 ])
 @pytest.mark.parametrize(('right', 'steps'), [(True, 1), (False, -1)])
 def test_step_fast_spin_uses_dt_at_each_clk_fall(
+    *,
     clk: int, dt: int, knob: Knob, right: bool, steps: int,
 ) -> None:
     """Detents read in one batch each take DT from their own CLK fall."""

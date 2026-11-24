@@ -136,6 +136,7 @@ def raiser(error: Exception) -> Callable[[], FakePanelBus]:
     ],
 )
 def test_show_image_returns_1_when_panel_unusable(
+    *,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

@@ -1173,6 +1173,7 @@ def test_busy_panel_skips_the_splash(
     ids=['timeout', 'bug'],
 )
 def test_failed_splash_is_not_retried(
+    *,
     rig: Rig,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

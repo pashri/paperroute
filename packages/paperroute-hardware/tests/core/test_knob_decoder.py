@@ -30,6 +30,7 @@ def _decoder(*, swap: bool = False) -> KnobDecoder:
 ])
 @pytest.mark.parametrize(('clockwise', 'steps'), [(True, 1), (False, -1)])
 def test_turned_right_and_left(
+    *,
     encoder: Encoder, knob: Knob, clockwise: bool, steps: int,
 ) -> None:
     """A detent is one step: clockwise is right, anticlockwise left."""

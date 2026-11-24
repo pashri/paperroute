@@ -1,6 +1,5 @@
 """Tests for choosing the panel times."""
 
-import pytest
 
 from paperroute_hardware.adapters.panel_display import PanelDisplay
 from paperroute_hardware.panel_open import panel_times_for

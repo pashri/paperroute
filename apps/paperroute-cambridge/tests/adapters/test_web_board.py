@@ -24,7 +24,7 @@ from paperroute_transit.adapters.pin_options import SqlitePinOptions
 from paperroute_transit.core.messages import Event, PinSaved
 from paperroute_transit.core.model import Pin, StopPlace, pin_ref
 from paperroute_transit.observers import PinsSeen
-from tests.build.test_rail_build import built
+from tests.build.rail_build.helpers import built
 from tests.conftest import RECORDED_DAY
 
 Client = TestClient[web.Request, web.Application]

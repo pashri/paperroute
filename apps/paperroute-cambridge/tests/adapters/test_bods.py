@@ -387,7 +387,7 @@ async def test_fetch_errors_and_logs_never_hold_the_key(
         assert raised is None
         assert 'no coach names' in caplog.text
     else:
-        assert type(raised) is expected
+        assert raised.__class__ is expected
         assert message in str(raised)
         assert raised.__cause__ is None
         assert raised.__context__ is None
@@ -461,7 +461,7 @@ async def test_fetch_returns_the_positions_for_any_coach_body(
     assert len(warnings) == 1
 
 
-async def test_request_repr_hides_the_key(stub: BodsStub) -> None:
+async def test_request_repr_hides_the_key() -> None:
     """A request's repr does not hold the key."""
     async with aiohttp.ClientSession() as session:
         request = BodsRequest(session=session, key=KEY, box=CAMBRIDGE_BBOX)

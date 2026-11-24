@@ -230,7 +230,7 @@ def parents(conn: sqlite3.Connection) -> dict[str, str | None]:
         Parent station id by stop id.
     """
     rows = conn.execute('SELECT stop_id, parent_station FROM stops')
-    return {stop_id: parent for stop_id, parent in rows}
+    return dict(rows)
 
 
 def stop_row(
@@ -291,7 +291,7 @@ def route_rows(conn: sqlite3.Connection) -> list[tuple[str, int, str]]:
         One row per route.
     """
     rows = conn.execute('SELECT short_name, type, agency_id FROM routes')
-    return [(short, kind, agency) for short, kind, agency in rows]
+    return list(rows)
 
 
 def trips_of(

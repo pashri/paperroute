@@ -18,9 +18,9 @@ def files_under(directory: Path) -> list[str]:
     )
 
 
-def swapped(text: str) -> str:
-    """Name Cambridge where text names Sydney."""
-    return text.replace('sydney', 'cambridge')
+def swapped(name: str) -> str:
+    """Name Cambridge where a name has Sydney."""
+    return name.replace('sydney', 'cambridge')
 
 
 def text(name: str) -> str:

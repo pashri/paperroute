@@ -9,6 +9,7 @@ from paperroute_transit.core.live import RESOLVED_MEMO
 from paperroute_transit.core.map_vehicles import HEARD_MEMO
 from paperroute_transit.core.route_trips import SPANS
 from paperroute_transit.core.state_views import STOP_VIEWS
+from paperroute_transit.core.strip_detours import DETOURS
 from paperroute_transit.core.strip_follow import REACHES, STEADY, common_pairs
 
 
@@ -65,3 +66,18 @@ def _gauge_memory() -> Iterator[None]:
     yield
     HERO_STOPS.clear()
     SPANS.clear()
+
+
+@pytest.fixture(name='detour_memo', autouse=True)
+def _detour_memo() -> Iterator[None]:
+    """
+    Empty the remembered loops and spurs around each test.
+
+    Yields
+    ------
+    None
+        Control to the test.
+    """
+    DETOURS.clear()
+    yield
+    DETOURS.clear()

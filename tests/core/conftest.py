@@ -6,6 +6,7 @@ import pytest
 
 from paperroute_transit.core.live import RESOLVED_MEMO
 from paperroute_transit.core.map_vehicles import HEARD_MEMO
+from paperroute_transit.core.state_views import STOP_VIEWS
 from paperroute_transit.core.strip_follow import REACHES, STEADY, common_pairs
 
 
@@ -38,8 +39,10 @@ def _per_poll_memos() -> Iterator[None]:
     RESOLVED_MEMO.clear()
     STEADY.clear()
     REACHES.clear()
+    STOP_VIEWS.clear()
     yield
     HEARD_MEMO.clear()
     RESOLVED_MEMO.clear()
     STEADY.clear()
     REACHES.clear()
+    STOP_VIEWS.clear()

@@ -26,6 +26,7 @@ from paperroute_transit.core.map_requests import (
     polled_positions,
 )
 from paperroute_transit.core.map_view import STRIP_MAP_WIDTH
+from paperroute_transit.core.memo import SameMemo
 from paperroute_transit.core.messages import Effect, ScreenView
 from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.places import shown, shown_index
@@ -57,6 +58,7 @@ from paperroute_transit.core.strip_view import (
     build_strip_view,
 )
 
+STOP_VIEWS: Final[SameMemo[StopView]] = SameMemo(size=2)
 LOADING_WAIT: Final[timedelta] = timedelta(seconds=5)
 
 
@@ -306,11 +308,42 @@ def banner_live_view(*, state: State, banner: Banner | None) -> StopView:
     -------
     StopView
         The scrolled Stop view on the Stop view; unscrolled on the other
-        views, whose sidebar always starts at the next departure.
+        views, whose sidebar always starts at the next departure. Held
+        for the same state fields, frame time and banner, so settling
+        and drawing one tick build it once.
     """
     if state.view is not LiveView.STOP:
         state = replace(state, scroll=0)
-    return banner_stop_view(state=state, banner=banner)
+    inputs = (
+        state.places,
+        state.city,
+        state.board,
+        state.feeds,
+        state.snapshots,
+        state.map,
+        state.settings.board,
+        state.alerts,
+        state.auto,
+        state.quota,
+        state.calendar,
+        state.cycle,
+    )
+    same = (
+        state.view,
+        state.scroll,
+        state.now,
+        banner,
+        state.settings.device.larger_text,
+        state.settings.device.inverted_lists,
+    )
+    held = STOP_VIEWS.get(inputs=inputs, same=same)
+    if held is not None:
+        return held
+    return STOP_VIEWS.put(
+        inputs=inputs,
+        same=same,
+        value=banner_stop_view(state=state, banner=banner),
+    )
 
 
 def shown_strip(*, state: State, stop_view: StopView) -> StripInputs:

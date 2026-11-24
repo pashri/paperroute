@@ -3,8 +3,14 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime, tzinfo
+from typing import Final
 
+from paperroute_transit.core.memo import SameMemo
 from paperroute_transit.core.model import service_time
+
+type Spans = tuple[tuple[datetime, datetime, RouteTrip], ...]
+
+SPANS: Final[SameMemo[Spans]] = SameMemo(size=4)
 
 
 @dataclass(frozen=True)
@@ -56,10 +62,36 @@ def running(
     tuple[RouteTrip, ...]
         The trips under way, in the order given.
     """
+    spans = SPANS.get(inputs=(trips, zone))
+    if spans is None:
+        spans = SPANS.put(
+            inputs=(trips, zone), value=trip_spans(trips=trips, zone=zone),
+        )
+    return tuple(trip for first, last, trip in spans if first <= now <= last)
+
+
+def trip_spans(*, trips: Sequence[RouteTrip], zone: tzinfo) -> Spans:
+    """
+    Give each trip's first departure and last arrival as moments.
+
+    Parameters
+    ----------
+    trips : Sequence[RouteTrip]
+        The trips.
+    zone : tzinfo
+        Local time zone of the service days.
+
+    Returns
+    -------
+    Spans
+        Each trip's first and last moment, then the trip, in the order
+        given.
+    """
     return tuple(
-        trip
+        (
+            service_time(day=trip.day, seconds=trip.starts, zone=zone),
+            service_time(day=trip.day, seconds=trip.ends, zone=zone),
+            trip,
+        )
         for trip in trips
-        if service_time(day=trip.day, seconds=trip.starts, zone=zone)
-        <= now
-        <= service_time(day=trip.day, seconds=trip.ends, zone=zone)
     )

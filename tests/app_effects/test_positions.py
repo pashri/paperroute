@@ -1,3 +1,4 @@
+# pylint: disable=unused-argument
 """Tests for app effects: positions."""
 
 import logging
@@ -131,7 +132,6 @@ def unnamed_positions(
     PositionsSnapshot
         The vehicles in `VEHICLES`.
     """
-    del data
     return PositionsSnapshot(
         fetched_at=fetched_at,
         header_time=0,
@@ -225,7 +225,6 @@ class PatternTimetable(EmptyPlacedTimetable):
         dict[str, TripPattern]
             The known ones.
         """
-        del around
         self.asked.append(frozenset(trip_ids))
         return {k: v for k, v in self.found.items() if k in trip_ids}
 
@@ -249,7 +248,6 @@ class PatternTimetable(EmptyPlacedTimetable):
         tuple[RouteTrip, ...]
             Nothing.
         """
-        del route, source, day
         return ()
 
     def joined_trips(self, *, trip_ids: Collection[str]) -> dict[str, str]:
@@ -444,7 +442,6 @@ class RecordingGauge:
         dict[str, str]
             Nothing.
         """
-        del trip_ids
         return {}
 
 

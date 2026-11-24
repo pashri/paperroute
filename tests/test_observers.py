@@ -1,3 +1,4 @@
+# pylint: disable=unused-argument
 """Tests for the observers."""
 
 import json
@@ -53,17 +54,14 @@ class _DeviceRecorder:
 
     def frame_drawn(self, *, render_ms: float) -> None:
         """Record a frame."""
-        del render_ms
         self.events.append(f'{self.prefix}frame_drawn')
 
     def work_done(self, *, name: str, ms: float) -> None:
         """Record some work."""
-        del name, ms
         self.events.append(f'{self.prefix}work_done')
 
     def app_seen(self, *, status: Mapping[str, object]) -> None:
         """Record an app status."""
-        del status
         self.events.append(f'{self.prefix}app_seen')
 
     def ticked(self) -> None:
@@ -72,17 +70,14 @@ class _DeviceRecorder:
 
     def status_seen(self, *, status: DeviceStatus) -> None:
         """Record a status."""
-        del status
         self.events.append(f'{self.prefix}status_seen')
 
     def device_settings_seen(self, *, settings: DeviceSettings) -> None:
         """Record the device settings."""
-        del settings
         self.events.append(f'{self.prefix}device_settings_seen')
 
     def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
         """Record a refresh."""
-        del refresh
         self.events.append(f'{self.prefix}panel_refreshed')
 
 
@@ -94,17 +89,14 @@ class _Recorder(_DeviceRecorder):
         self, *, feed: str, fetch_ms: float, parse_ms: float, trips: int
     ) -> None:
         """Record a feed."""
-        del feed, fetch_ms, parse_ms, trips
         self.events.append(f'{self.prefix}feed_parsed')
 
     def settings_seen(self, *, settings: Settings) -> None:
         """Record the settings."""
-        del settings
         self.events.append(f'{self.prefix}settings_seen')
 
     def pins_seen(self, *, pins: tuple[Pin, ...], shown: int | None) -> None:
         """Record the pins."""
-        del pins, shown
         self.events.append(f'{self.prefix}pins_seen')
 
 

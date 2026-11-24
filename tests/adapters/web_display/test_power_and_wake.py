@@ -1,3 +1,4 @@
+# pylint: disable=unused-argument
 """Tests for web display: power and wake."""
 
 import re
@@ -183,7 +184,6 @@ class Board:
         list[web.RouteDef]
             No routes.
         """
-        del send, reported
         return []
 
     async def close(self) -> None:

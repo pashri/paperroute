@@ -107,6 +107,9 @@ known-first-party = [
     "paperroute_testkit",
 ]
 
+[tool.pylint.basic]
+good-names = ["i", "j", "k", "ex", "Run", "_", "do_GET", "do_HEAD"]
+
 [tool.pylint.format]
 max-line-length = 79
 

@@ -1,3 +1,4 @@
+# pylint: disable=unused-argument
 """Tests for app effects: alerts."""
 
 import sqlite3
@@ -119,7 +120,6 @@ class RecordingPlan(SydneyFeeds):
         FeedParsers
             The recorder's readers.
         """
-        del feed
         return FeedParsers(
             trips=self.recorder.trips,
             positions=self.recorder.positions,

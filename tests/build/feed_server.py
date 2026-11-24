@@ -104,11 +104,11 @@ class FeedHandler(BaseHTTPRequestHandler):
             Unused.
         """
 
-    def do_HEAD(self) -> None:  # pylint: disable=invalid-name
+    def do_HEAD(self) -> None:
         """Answer with headers only."""
         self.answer(send_body=False)
 
-    def do_GET(self) -> None:  # pylint: disable=invalid-name
+    def do_GET(self) -> None:
         """Answer with headers and body."""
         self.answer(send_body=True)
 

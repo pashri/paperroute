@@ -1,3 +1,4 @@
+# pylint: disable=unused-argument
 """Shared helpers for the rail build tests."""
 
 import shutil
@@ -92,7 +93,6 @@ class Shelf:
         SourceError
             For a source that is gone.
         """
-        del timeout_s, limiter
         if spec.name in self.gone:
             raise SourceError(f'{spec.name}: 404')
         etag = f'"{file_sha256(path=self.files[spec.name])}"'
@@ -130,7 +130,6 @@ class Shelf:
         SourceError
             For a source that is gone.
         """
-        del timeout_s, limiter
         if spec.name in self.gone:
             raise SourceError(f'{spec.name}: 404')
         shutil.copyfile(self.files[spec.name], out)

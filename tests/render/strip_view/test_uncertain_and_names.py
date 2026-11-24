@@ -1,3 +1,4 @@
+# pylint: disable=unused-argument
 """Tests for strip view: uncertain and names."""
 
 from dataclasses import replace
@@ -321,7 +322,6 @@ def test_continuing_middle_limits_the_pair_to_the_name_room(
 
     def record(canvas: Canvas, **kwargs: Any) -> float:
         """Note the room the pair was given."""
-        del canvas
         rooms.append(kwargs['room'])
         return 0.0
 

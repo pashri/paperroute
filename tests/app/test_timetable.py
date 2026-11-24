@@ -1,3 +1,4 @@
+# pylint: disable=unused-argument
 """Tests for app: timetable."""
 
 import asyncio
@@ -349,7 +350,6 @@ class ArrivingDisplay(ActingDisplay):
         frame : NDArray[np.uint8]
             The frame just kept.
         """
-        del frame
         if self.source is not None and self.target is not None:
             shutil.copyfile(self.source, self.target)
             self.source = None
@@ -500,7 +500,6 @@ class JoinFailingTimetable(BrokenTimetable):
         sqlite3.OperationalError
             Always.
         """
-        del trip_ids
         raise sqlite3.OperationalError('disk I/O error')
 
 

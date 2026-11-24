@@ -1,3 +1,4 @@
+# pylint: disable=unused-argument
 """Shared helpers for the app tests."""
 
 import asyncio
@@ -335,7 +336,6 @@ class CallRecorder:
         trips : int
             Ignored.
         """
-        del feed, fetch_ms, parse_ms, trips
         self.feeds += 1
 
     def work_done(self, *, name: str, ms: float) -> None:
@@ -621,7 +621,6 @@ class CountingTiles:
         NDArray[np.uint8] | None
             A LIGHT tile.
         """
-        del zoom, col, row
         self.reads += 1
         self.variants.add(variant)
         return np.full((TILE, TILE), LIGHT, dtype=np.uint8)
@@ -650,7 +649,6 @@ class CountingTiles:
         list[StreetLabel]
             Nothing.
         """
-        del zoom, box, kind
         return []
 
     def version(self) -> str | None:

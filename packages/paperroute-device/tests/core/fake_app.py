@@ -1,3 +1,4 @@
+# pylint: disable=unused-argument
 """A small app that records what the kit hands it, for the kit's tests."""
 
 from collections.abc import Callable
@@ -107,7 +108,6 @@ class FlagHooks:
         tuple[Banner, ...]
             The lines.
         """
-        del device
         return state.banners
 
     def in_menu(self, *, state: FakeState) -> bool:
@@ -160,7 +160,6 @@ class FlagHooks:
         bool
             The state's flag.
         """
-        del now
         return state.sleepy
 
     def is_quiet(self, *, state: FakeState, now: datetime) -> bool:
@@ -179,7 +178,6 @@ class FlagHooks:
         bool
             The state's flag.
         """
-        del now
         return state.quiet
 
     def wakes(self, *, state: FakeState) -> bool:
@@ -308,7 +306,6 @@ class FakeApp(FlagHooks, App[FakeState]):
         event : object
             The event.
         """
-        del before, after
         self.observed.append(event)
 
     def start(
@@ -331,7 +328,6 @@ class FakeApp(FlagHooks, App[FakeState]):
         FakeState
             A fresh state.
         """
-        del section, stored, device
         return FakeState()
 
     def render(
@@ -358,7 +354,6 @@ class FakeApp(FlagHooks, App[FakeState]):
         object | None
             ``view:<view>`` and the banner's text; None while blank.
         """
-        del device
         if state.blank:
             return None
         text = f'view:{state.view}' + ('*' if state.marked else '')
@@ -380,7 +375,6 @@ class FakeApp(FlagHooks, App[FakeState]):
         Frame
             Paper.
         """
-        del view
         return np.full((HEIGHT, WIDTH), PAPER, dtype=np.uint8)
 
     def on_knob(
@@ -406,7 +400,6 @@ class FakeApp(FlagHooks, App[FakeState]):
             State with the event recorded; a hold shows ``held`` when
             `begin` marked the state, else ``unmarked``.
         """
-        del device
         view = state.view
         if isinstance(event, KnobTurned) and event.knob is Knob.BOTTOM:
             view = f'{view}+{event.steps}'
@@ -436,7 +429,6 @@ class FakeApp(FlagHooks, App[FakeState]):
         Step[FakeState]
             State with the press counted, and a ``'work'`` effect.
         """
-        del device, row
         return replace(state, rows=state.rows + 1), ('work',)
 
     def on_event(
@@ -460,7 +452,6 @@ class FakeApp(FlagHooks, App[FakeState]):
         Step[FakeState]
             State showing the view, and ``'held'`` and ``'kept'``.
         """
-        del device
         if event == ASK:
             return state, ('work',)
         if not isinstance(event, str):
@@ -487,7 +478,6 @@ class FakeApp(FlagHooks, App[FakeState]):
         FakeState
             State marked for a knob hold; unchanged otherwise.
         """
-        del device
         if not isinstance(event, KnobHeld):
             return state
         return replace(state, marked=True)
@@ -524,7 +514,6 @@ class FakeApp(FlagHooks, App[FakeState]):
             State counted and unmarked, and the effects without
             ``'held'``.
         """
-        del before, event
         after = replace(
             after,
             settled=after.settled + 1,

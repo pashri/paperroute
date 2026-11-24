@@ -1,3 +1,4 @@
+# pylint: disable=unused-argument
 """Golden scene constants and the helpers that draw a frame."""
 
 import os
@@ -141,7 +142,6 @@ class GoldenTiles:
             White or light grey by the tile's parity, with a dark line
             whose place follows the address.
         """
-        del variant
         pixels = np.full((TILE, TILE), (255, 170)[(col + row) % 2], np.uint8)
         pixels[(zoom + col * 7 + row * 13) % TILE, :] = 85
         pixels[:, (zoom * 3 + col * 11 + row) % TILE] = 85
@@ -171,7 +171,6 @@ class GoldenTiles:
         list[StreetLabel]
             One label for street names; none for other kinds.
         """
-        del zoom
         if kind is not LabelKind.STREET:
             return []
         x, y = (box[0] + box[2]) / 2, (box[1] + box[3]) / 2

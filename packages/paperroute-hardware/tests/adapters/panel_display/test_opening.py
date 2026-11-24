@@ -1,3 +1,4 @@
+# pylint: disable=unused-argument
 """Tests for panel display: opening."""
 
 from paperroute_device_testkit.hardware_fakes import FrameRecorder
@@ -28,7 +29,6 @@ class Unsettled(FrameRecorder):
         bool
             Always False.
         """
-        del timeout
         return False
 
 

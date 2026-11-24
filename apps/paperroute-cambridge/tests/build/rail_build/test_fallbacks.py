@@ -1,3 +1,4 @@
+# pylint: disable=unused-argument
 """Tests for rail build: fallbacks."""
 
 import json
@@ -338,7 +339,6 @@ def run_here(path: str, argv: list[str]) -> NoReturn:
     SystemExit
         With the program's exit status.
     """
-    del path
     tail = read_handoff(path=Path(argv[-1])).tail
     assert tail is not None
     spare = os.dup(tail.lock_fd)

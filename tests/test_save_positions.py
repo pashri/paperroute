@@ -19,7 +19,7 @@ ACCEPT = 'application/x-google-protobuf'
 class Handler(BaseHTTPRequestHandler):
     """Serves a body only to a request carrying the key."""
 
-    def answer_get(self) -> None:
+    def do_GET(self) -> None:
         """
         Answer a GET with the body, 403 without the key, or 406 like BODS.
 
@@ -41,8 +41,6 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         """Stay quiet."""
 
-
-setattr(Handler, 'do_GET', Handler.answer_get)
 
 
 def load_script() -> ModuleType:

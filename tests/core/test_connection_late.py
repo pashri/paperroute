@@ -22,7 +22,7 @@ from paperroute_transit.core.connection_late import (
 )
 from paperroute_transit.core.connection_model import TIGHT_SPARE, spare_seconds
 from paperroute_transit.core.rides import rides_of
-from tests.core.test_chains import TWO_PIN
+from tests.core.chains.helpers import TWO_PIN
 from tests.core.test_connection_view import A0733, B0746, B0801A
 
 

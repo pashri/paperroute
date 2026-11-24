@@ -43,24 +43,8 @@ from paperroute_transit.core.model import Change, Pin, Way
 from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.rides import Ride
 from paperroute_transit.core.stop_view import StopView, empty_text
-from tests.core.test_chains import (
-    C0750,
-    CAMP_PIN,
-    FIRST,
-    FROM_CAMPBELLTOWN,
-    NO_665,
-    SECOND,
-    THIRD,
-    THREE_OR_TWO,
-    TRAINS,
-    TWO_PIN,
-    camp_offers,
-    express_plan,
-    late_first,
-    lived,
-    three_then_two,
-)
-from tests.core.test_chains import work_chains as chains_from
+from tests.core.chains.helpers import C0750, CAMP_PIN, FIRST, FROM_CAMPBELLTOWN, NO_665, SECOND, THIRD, THREE_OR_TWO, TRAINS, TWO_PIN, camp_offers, express_plan, late_first, lived, three_then_two
+from tests.core.chains.helpers import work_chains as chains_from
 
 CHAINS: Final[tuple[Chain, ...]] = work_chains()
 STOP: Final[StopView] = StopView(

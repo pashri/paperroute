@@ -621,7 +621,11 @@ def scrolled(*, state: State, stop_view: StopView, draw: bool) -> State:
 
 
 def settled(
-    *, state: State, effects: tuple[Effect, ...] = (), draw: bool = True
+    *,
+    state: State,
+    effects: tuple[Effect, ...] = (),
+    draw: bool = True,
+    strips: bool = True,
 ) -> tuple[State, tuple[Effect, ...]]:
     """
     Ask for the reaches, map data and feeds needed.
@@ -640,6 +644,9 @@ def settled(
         Effects so far.
     draw : bool
         False to leave the view for the next frame to draw.
+    strips : bool
+        False to skip opening folds, clamping the scroll and asking for
+        strips; map, feed and pattern requests still go out.
 
     Returns
     -------
@@ -649,16 +656,19 @@ def settled(
     state = with_offers(state=alerts_left(state=state))
     stop_view = live_stop_view(state=state)
     banner = stop_view.banner is not None
-    state = kept_selection(
-        state=with_folds(state=state, banner=banner), stop_view=stop_view,
-    )
-    state, strips = request_strips(
-        state=clamped(state=state, banner=banner),
-    )
+    strip_effects: tuple[Effect, ...] = ()
+    if strips:
+        state = kept_selection(
+            state=with_folds(state=state, banner=banner),
+            stop_view=stop_view,
+        )
+        state, strip_effects = request_strips(
+            state=clamped(state=state, banner=banner),
+        )
     state, requests, ask = map_effects(state=state, stop_view=stop_view)
     state, fetches = cycle_effects(state=state, stop_view=stop_view)
     state, loads = pattern_effects(state=state, ask=ask)
     state = scrolled(state=state, stop_view=stop_view, draw=draw)
     if not draw:
         state = replace(state, held=True)
-    return state, (*effects, *strips, *requests, *fetches, *loads)
+    return state, (*effects, *strip_effects, *requests, *fetches, *loads)

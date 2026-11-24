@@ -9,6 +9,7 @@ from paperroute_transit.core.messages import (
     ChooserEvent,
     DayLinesLoaded,
     Effect,
+    LoadPatterns,
     MapDataFailed,
     MapEvent,
     ModesLoaded,
@@ -87,8 +88,18 @@ def on_map_event(
             )
         case MapDataFailed():
             map_state = failed(map_state=map_state, event=event, now=state.now)
-            return replace(state, map=map_state), ()
-    return settled(state=replace(state, map=map_state), draw=draw)
+            if not (
+                isinstance(event.request, LoadPatterns)
+                and not map_state.pending_patterns
+            ):
+                return replace(state, map=map_state), ()
+    return settled(
+        state=replace(state, map=map_state),
+        draw=draw,
+        strips=not (
+            isinstance(event, PatternsLoaded) and map_state.pending_patterns
+        ),
+    )
 
 
 def on_chooser_event(

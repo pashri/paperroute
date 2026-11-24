@@ -1,5 +1,6 @@
 """Tests for drawing the route gauge."""
 
+import math
 from dataclasses import replace
 from datetime import date
 from typing import Final
@@ -24,8 +25,11 @@ from paperroute_transit.render.gauge_plan import (
     slot_x,
 )
 from paperroute_transit.render.gauge_route import (
+    bus_marker,
+    draw_badge,
     draw_route_gauge,
     folded,
+    line_end,
     route_plan,
 )
 from paperroute_transit.render.markers import badge_box
@@ -98,7 +102,7 @@ def drawn(gauge: RouteGauge) -> tuple[NDArray[np.bool_], NDArray[np.bool_]]:
 def test_route_plan_spreads_a_short_gauge_without_a_break() -> None:
     """A short gauge spreads out to fill the line."""
     plan = route_plan(gauge=SHORT, keep=NONE, naming=NAMING)
-    room = (EDGE - 30 - FIRST_X) / SHORT_TOP
+    room = (line_end(gauge=SHORT) - FIRST_X) / SHORT_TOP
     assert plan.pitch == pytest.approx(min(room, 2 * PITCH))
 
 
@@ -114,25 +118,6 @@ def test_route_plan_does_not_spread_a_gauge_with_a_break() -> None:
     assert plan.pitch in (PITCH, WIDE_PITCH)
 
 
-def test_folded_turns_overlapping_same_way_badges_into_badge_and_count(
-) -> None:
-    """Overlapping badges one way become the first and a count."""
-    shown, ticks = folded(
-        markers=(badge(x=100), badge(x=110), badge(x=118)),
-    )
-    assert [marker.route for marker in shown] == ['A', '+2']
-    assert ticks == [110, 118]
-
-
-def test_folded_leaves_opposite_badges_unfolded() -> None:
-    """Badges facing opposite ways stay apart."""
-    shown, ticks = folded(
-        markers=(badge(x=100), badge(x=110, bearing=270.0)),
-    )
-    assert [marker.route for marker in shown] == ['A', 'A']
-    assert not ticks
-
-
 def test_draw_route_gauge_draws_badges_on_the_line_without_a_stem(
 ) -> None:
     """No ink hangs below a badge on the line."""
@@ -142,17 +127,6 @@ def test_draw_route_gauge_draws_badges_on_the_line_without_a_stem(
     bottom = int(badge_box(route='A', centre=(x, plan.line_y))[3])
     assert ink[bottom - 4, int(x)]
     assert not ink[bottom + 2 : plan.line_y + 12, int(x)].any()
-
-
-def test_draw_route_gauge_draws_rings_over_badges() -> None:
-    """A ring under a badge looks as it does on a bare gauge."""
-    bare, _ = drawn(SHORT)
-    busy, _ = drawn(replace(SHORT, buses=(bus(3.0),)))
-    plan = route_plan(gauge=SHORT, keep=NONE, naming=NAMING)
-    x, y = slot_x(plan=plan, slot=3), plan.line_y
-    rows, cols = np.ogrid[:HEIGHT, :WIDTH]
-    inside = (cols - x) ** 2 + (rows - y) ** 2 <= RING_RADIUS ** 2
-    assert (bare[inside] == busy[inside]).all()
 
 
 def test_draw_route_gauge_break_count_reads_stops_beside_a_badge(
@@ -191,13 +165,89 @@ def test_draw_route_gauge_shows_a_folded_bus_tick_below_the_badge(
     assert ink[bottom + 1 : bottom + 3, round(x)].all()
 
 
-def test_folded_shifts_a_badge_the_count_would_cover() -> None:
-    """A badge after a count moves clear of it."""
-    shown, _ = folded(markers=(
-        badge(x=100), badge(x=110), badge(x=140, bearing=270.0),
-    ))
-    count, after = shown[1], shown[2]
-    assert (
-        badge_box(route=after.route, centre=(after.x, 0))[0]
-        >= badge_box(route=count.route, centre=(count.x, 0))[2] + 2
+def alone(marker: Marker, *, y: int) -> NDArray[np.bool_]:
+    """Draw one badge on blank paper at the line's height."""
+    canvas = Canvas(smooth=True)
+    draw_badge(canvas, marker=replace(marker, y=float(y)))
+    return canvas.grey() < 128
+
+
+def inside(marker: Marker, *, y: int) -> tuple[slice, slice]:
+    """The rows and columns inside a badge's outline."""
+    left, top, right, bottom = badge_box(
+        route=marker.route, centre=(marker.x, y),
     )
+    return (
+        slice(math.ceil(top) + 1, math.floor(bottom) - 1),
+        slice(math.ceil(left) + 1, math.floor(right) - 1),
+    )
+
+
+@pytest.mark.parametrize('spot', [0.0, 3.0])
+def test_draw_route_gauge_keeps_badge_text_clear_of_rings_and_the_disc(
+    spot: float,
+) -> None:
+    """A badge on the From disc or a ring reads as it does alone."""
+    gauge = replace(SHORT, buses=(bus(spot),))
+    ink, _ = drawn(gauge)
+    plan = route_plan(gauge=gauge, keep=NONE, naming=NAMING)
+    marker = bus_marker(plan=plan, bus=plan.line.buses[0], route='A')
+    rows, cols = inside(marker, y=plan.line_y)
+    assert (
+        ink[rows, cols] == alone(marker, y=plan.line_y)[rows, cols]
+    ).all()
+
+
+def test_draw_route_gauge_keeps_count_boxes_free_of_dot_ink() -> None:
+    """A count in a break hides the dots behind it."""
+    gauge = replace(WITH_BREAK, buses=(bus(20.0), bus(21.0), bus(22.0)))
+    ink, _ = drawn(gauge)
+    plan = route_plan(gauge=gauge, keep=NONE, naming=NAMING)
+    count = next(slot for slot in plan.line.buses if slot.count)
+    marker = bus_marker(plan=plan, bus=count, route='A')
+    rows, cols = inside(marker, y=plan.line_y)
+    assert (
+        ink[rows, cols] == alone(marker, y=plan.line_y)[rows, cols]
+    ).all()
+
+
+def test_folded_merges_overlapping_badges_into_one_count() -> None:
+    """Overlapping badges either way become one count with no wedge."""
+    shown, ticks = folded(markers=(
+        badge(x=100), badge(x=110, bearing=270.0), badge(x=118),
+    ))
+    assert [(marker.route, marker.bearing) for marker in shown] == [
+        ('+3', None),
+    ]
+    assert ticks == [100, 110, 118]
+
+
+def test_folded_keeps_a_shared_heading_on_a_count() -> None:
+    """A count of badges facing one way keeps their heading."""
+    shown, _ = folded(markers=(badge(x=100), badge(x=110)))
+    assert [(marker.route, marker.bearing) for marker in shown] == [
+        ('+2', 90.0),
+    ]
+
+
+def test_folded_leaves_no_badges_overlapping() -> None:
+    """No two badges drawn overlap."""
+    shown, _ = folded(markers=tuple(
+        badge(x=60 + 13 * n, bearing=90.0 if n % 3 else 270.0)
+        for n in range(20)
+    ))
+    boxes = sorted(
+        badge_box(route=marker.route, centre=(marker.x, 0))
+        for marker in shown
+    )
+    assert all(
+        after[0] >= before[2] + 2
+        for before, after in zip(boxes, boxes[1:])
+    )
+
+
+def test_folded_leaves_badges_apart_unfolded() -> None:
+    """Badges clear of each other stay as they are."""
+    shown, ticks = folded(markers=(badge(x=100), badge(x=200)))
+    assert [marker.route for marker in shown] == ['A', 'A']
+    assert not ticks

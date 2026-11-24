@@ -848,11 +848,11 @@ def stop_gauge() -> State:
 
 
 BUSY_RIGHT: Final[tuple[float, ...]] = (
-    -250.0, -120.0, 40.0, 200.0, 380.0, 520.0, 700.0, 1660.0, 1720.0,
+    -250.0, -120.0, 40.0, 200.0, 380.0, -60.0, 420.0, 1660.0, 1720.0,
     1810.0, 2900.0, 2960.0,
 )  # metres east of the From, buses running the hero's way
 BUSY_LEFT: Final[tuple[float, ...]] = (
-    -200.0, 100.0, 300.0, 450.0, 560.0, 640.0, 720.0, 2950.0,
+    -200.0, 100.0, 300.0, 440.0, -280.0, 260.0, 160.0, 2950.0,
 )  # metres east of the From, buses running the other way
 
 

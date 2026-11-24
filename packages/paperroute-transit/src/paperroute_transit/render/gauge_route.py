@@ -8,16 +8,16 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute_device.render.canvas import INK, Canvas
+from paperroute_device.render.canvas import INK, Canvas, text_width
 from paperroute_transit.core.gauge_ends import (
     CALLS_KEPT,
     RouteGauge,
     left_end,
     route_line,
 )
-from paperroute_transit.core.gauge_line import BusSlot
+from paperroute_transit.core.gauge_line import BREAK_SLOTS, BusSlot
 from paperroute_transit.core.map_view import Marker
-from paperroute_transit.core.strip_badges import as_count
+from paperroute_transit.core.names import base_name
 from paperroute_transit.render.gauge_draw import (
     counts_ink,
     draw_brackets,
@@ -27,6 +27,9 @@ from paperroute_transit.render.gauge_draw import (
     names_ink,
 )
 from paperroute_transit.render.gauge_plan import (
+    BOLD_FACE,
+    COS,
+    DEST_LONGEST,
     EDGE,
     FIRST_X,
     LINE_FREE,
@@ -34,6 +37,7 @@ from paperroute_transit.render.gauge_plan import (
     PITCH,
     WIDE_PITCH,
     GaugePlan,
+    cap_height,
     keep_out,
     mark_lines,
     needs_two,
@@ -54,24 +58,55 @@ FOLD_GAP: Final[float] = 2.0  # px between same-way badges before they fold
 TICK: Final[int] = 4  # px a folded bus's tick shows below its badge
 TICK_WIDTH: Final[int] = 2  # px
 RIGHT_END: Final[float] = EDGE - 30  # px the last slot may reach
+END_CLEAR: Final[float] = 2.0  # px the end name keeps from EDGE
 
 
-def slot_budget(*, pitch: float) -> tuple[int, int]:
+def slot_budget(*, pitch: float, right_end: float) -> tuple[int, int]:
     """
     Give the slots the left end may take and the whole line's reach.
+
+    The left end always has room for a break.
 
     Parameters
     ----------
     pitch : float
         Pixels between marks.
+    right_end : float
+        Pixel x the last slot may reach.
 
     Returns
     -------
     tuple[int, int]
         Last slot left of the From, and the last slot of the line.
     """
-    reach = math.floor((RIGHT_END - FIRST_X) / pitch)
-    return reach - CALLS_KEPT - 4, reach
+    reach = math.floor((right_end - FIRST_X) / pitch)
+    return max(reach - CALLS_KEPT - 4, BREAK_SLOTS + 1), reach
+
+
+def line_end(*, gauge: RouteGauge) -> float:
+    """
+    Give the pixel x the last slot may reach, leaving the end name room.
+
+    Parameters
+    ----------
+    gauge : RouteGauge
+        The gauge's content.
+
+    Returns
+    -------
+    float
+        Pixel x, short enough that the last name rises whole before
+        ``EDGE``.
+    """
+    if gauge.end is not None:
+        name = base_name(name=gauge.pattern.stops[gauge.end].name)
+    elif gauge.calls:
+        name = gauge.calls[-1].name
+    else:
+        return RIGHT_END
+    width = min(text_width(text=name, face=BOLD_FACE), DEST_LONGEST)
+    rise = width * COS + cap_height(face=BOLD_FACE) + END_CLEAR
+    return min(RIGHT_END, EDGE - rise)
 
 
 def route_plan_at(
@@ -94,7 +129,7 @@ def route_plan_at(
     GaugePlan
         The measurements, with names on one line.
     """
-    budget, reach = slot_budget(pitch=pitch)
+    budget, reach = slot_budget(pitch=pitch, right_end=line_end(gauge=gauge))
     origin = left_end(
         pattern=gauge.pattern,
         start=gauge.start,
@@ -154,15 +189,84 @@ def route_plan(
     top = line.marks[-1].slot
     if line.back is not None or line.ahead is not None or top == 0:
         return plan
-    spread = min((RIGHT_END - FIRST_X) / top, SPREAD_MOST * PITCH)
+    spread = min(
+        (line_end(gauge=gauge) - FIRST_X) / top, SPREAD_MOST * PITCH,
+    )
     return replace(plan, pitch=max(plan.pitch, spread))
+
+
+def buses_in(*, marker: Marker) -> int:
+    """
+    Count the buses a badge stands for.
+
+    Parameters
+    ----------
+    marker : Marker
+        A badge, or a hollow ``+n`` count.
+
+    Returns
+    -------
+    int
+        ``n`` for a count, 1 for a badge.
+    """
+    return int(marker.route[1:]) if marker.route.startswith('+') else 1
+
+
+def merged(*, first: Marker, second: Marker) -> Marker:
+    """
+    Fold two badges into one count midway between them.
+
+    Parameters
+    ----------
+    first : Marker
+        The left badge or count.
+    second : Marker
+        The right badge or count.
+
+    Returns
+    -------
+    Marker
+        A count of both, keeping a heading and liveness they share.
+    """
+    count = buses_in(marker=first) + buses_in(marker=second)
+    return replace(
+        first,
+        route=f'+{count}',
+        x=(first.x + second.x) / 2,
+        bearing=first.bearing if first.bearing == second.bearing else None,
+        live=first.live and second.live,
+        age=None,
+    )
+
+
+def overlap(*, first: Marker, second: Marker) -> bool:
+    """
+    Tell whether two badges come closer than ``FOLD_GAP``.
+
+    Parameters
+    ----------
+    first : Marker
+        The left badge.
+    second : Marker
+        The right badge.
+
+    Returns
+    -------
+    bool
+        True when they overlap or nearly touch.
+    """
+    right = badge_box(route=first.route, centre=(first.x, 0))[2]
+    left = badge_box(route=second.route, centre=(second.x, 0))[0]
+    return left < right + FOLD_GAP
 
 
 def folded(
     *, markers: Sequence[Marker],
 ) -> tuple[list[Marker], list[float]]:
     """
-    Fold overlapping badges facing one way into a badge and a count.
+    Fold overlapping badges, whichever way they face, into counts.
+
+    Folding repeats until no two badges overlap.
 
     Parameters
     ----------
@@ -172,62 +276,25 @@ def folded(
     Returns
     -------
     tuple[list[Marker], list[float]]
-        Badges to draw, and the x of every folded bus.
+        Badges to draw, and the x of every bus folded into a count.
     """
-    heads: dict[float, tuple[int, float]] = {}
-    shown: list[Marker] = []
-    counts: dict[int, int] = {}
-    ticks: list[float] = []
-    for marker in markers:
-        left, _, right, _ = badge_box(route=marker.route, centre=(marker.x, 0))
-        bearing = marker.bearing
-        head = None if bearing is None else heads.get(bearing)
-        if bearing is not None and head is not None and (
-            left < head[1] + FOLD_GAP
-        ):
-            counts[head[0]] = counts.get(head[0], 0) + 1
-            ticks.append(marker.x)
-            heads[bearing] = (head[0], max(head[1], right))
+    shown = list(markers)
+    ticks: set[float] = set()
+    index = 1
+    while index < len(shown):
+        first, second = shown[index - 1], shown[index]
+        if not overlap(first=first, second=second):
+            index += 1
             continue
-        if bearing is not None:
-            heads[bearing] = (len(shown), right)
-        shown.append(marker)
-    return beside(shown=shown, counts=counts), ticks
-
-
-def beside(*, shown: Sequence[Marker], counts: dict[int, int]) -> list[Marker]:
-    """
-    Add each fold's count right of its first badge.
-
-    A badge the count would cover moves right to clear it.
-
-    Parameters
-    ----------
-    shown : Sequence[Marker]
-        Badges kept.
-    counts : dict[int, int]
-        Buses folded into each kept badge, by its index.
-
-    Returns
-    -------
-    list[Marker]
-        The badges with their counts after them.
-    """
-    out: list[Marker] = []
-    edge = -math.inf
-    for index, marker in enumerate(shown):
-        left = badge_box(route=marker.route, centre=(marker.x, 0))[0]
-        if index - 1 in counts and left < edge + FOLD_GAP:
-            marker = replace(marker, x=marker.x + edge + FOLD_GAP - left)
-        out.append(marker)
-        if index not in counts:
-            continue
-        count = as_count(marker=marker, count=counts[index])
-        right = badge_box(route=marker.route, centre=(marker.x, 0))[2]
-        half = badge_box(route=count.route, centre=(0, 0))[2]
-        out.append(replace(count, x=right + FOLD_GAP + half))
-        edge = right + FOLD_GAP + 2 * half
-    return out
+        ticks.update(
+            marker.x for marker in (first, second)
+            if buses_in(marker=marker) == 1
+        )
+        shown[index - 1 : index + 1] = [
+            merged(first=first, second=second),
+        ]
+        index = max(1, index - 1)
+    return shown, sorted(ticks)
 
 
 def bus_marker(*, plan: GaugePlan, bus: BusSlot, route: str) -> Marker:
@@ -246,9 +313,10 @@ def bus_marker(*, plan: GaugePlan, bus: BusSlot, route: str) -> Marker:
     Returns
     -------
     Marker
-        A badge on the line; a count has no heading.
+        A badge on the line; a count has a heading only when its buses
+        share one.
     """
-    bearing = None if bus.count or bus.right is None else (
+    bearing = None if bus.right is None else (
         90.0 if bus.right else 270.0
     )
     return Marker(
@@ -275,6 +343,10 @@ def draw_badge(canvas: Canvas, *, marker: Marker) -> None:
     centre = (marker.x, marker.y)
     if marker.bearing is None:
         draw_hollow(canvas, marker=marker, centre=centre)
+    elif buses_in(marker=marker) > 1:
+        draw_hollow(
+            canvas, marker=marker, centre=centre, wedge=STRIP_WEDGE,
+        )
     elif marker.live:
         draw_live(canvas, marker=marker, centre=centre, wedge=STRIP_WEDGE)
     else:
@@ -334,11 +406,11 @@ def draw_route_gauge(
     keep = keep_out(ink=canvas.grey() < 128)
     plan = route_plan(gauge=gauge, keep=keep, naming=naming)
     draw_track(canvas, plan=plan)
-    draw_buses(canvas, plan=plan, route=route)
-    draw_marks(canvas, plan=plan)
     for gap in (plan.line.back, plan.line.ahead):
         if gap is not None:
             draw_dots(canvas, plan=plan, gap=gap)
+    draw_marks(canvas, plan=plan)
+    draw_buses(canvas, plan=plan, route=route)
     draw_brackets(canvas, plan=plan, naming=naming)
     names = names_ink(
         plan=plan, lines=mark_lines(plan=plan, keep=keep, naming=naming),

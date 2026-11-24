@@ -27,9 +27,11 @@ from paperroute_transit.core.connection_strip import (
     ConnectionStripView,
 )
 from paperroute_transit.core.connection_view import ConnectionView
+from paperroute_transit.core.gauge_ends import RouteGauge
 from paperroute_transit.core.kerb_menu import MENU_HINT
 from paperroute_transit.core.map_view import MapView, Marker
 from paperroute_transit.core.messages import ScreenView
+from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.reach import RowKind
 from paperroute_transit.core.stop_under import UnderNumber
 from paperroute_transit.core.stop_view import StopView
@@ -40,6 +42,14 @@ from paperroute_transit.core.strip_model import (
     StripRow,
     StripView,
 )
+from paperroute_transit.render import gauge_route
+from paperroute_transit.render.gauge_plan import (
+    GaugePlan,
+    keep_out,
+    mark_lines,
+    slot_x,
+)
+from paperroute_transit.render.names import Naming
 from tests.golden.scenes import (
     GOLDEN,
     SCENES,
@@ -295,6 +305,113 @@ def test_a_busy_route_puts_every_bus_on_the_gauge() -> None:
     assert len(gauge.buses) == 20
     assert {bus.right for bus in gauge.buses} == {True, False}
     assert sum(7 < bus.spot < gauge.end for bus in gauge.buses) == 3
+
+
+def drawn_gauge(
+    *, scene: str, monkeypatch: pytest.MonkeyPatch,
+) -> tuple[list[Marker], list[tuple[str, ...]], list[GaugePlan]]:
+    """
+    Draw a scene's frame, keeping the gauge's badges, name lines and plan.
+
+    Parameters
+    ----------
+    scene : str
+        Scene name.
+    monkeypatch : pytest.MonkeyPatch
+        Patches the drawers to record what they draw.
+
+    Returns
+    -------
+    tuple[list[Marker], list[tuple[str, ...]], list[GaugePlan]]
+        The badges drawn, each mark's name lines and the plan.
+    """
+    badges: list[Marker] = []
+    lines: list[tuple[str, ...]] = []
+    plans: list[GaugePlan] = []
+    draw_badge = gauge_route.draw_badge
+    route_plan = gauge_route.route_plan
+
+    def kept_badge(canvas: skia.Canvas, *, marker: Marker) -> None:
+        """Record a badge and draw it."""
+        badges.append(marker)
+        draw_badge(canvas, marker=marker)
+
+    def kept_lines(**inputs: object) -> tuple[tuple[str, ...], ...]:
+        """Record the name lines and return them."""
+        found = mark_lines(**inputs)  # type: ignore[arg-type]
+        lines.extend(found)
+        return found
+
+    def kept_plan(**inputs: object) -> GaugePlan:
+        """Record the plan and return it."""
+        plan = route_plan(**inputs)  # type: ignore[arg-type]
+        plans.append(plan)
+        return plan
+
+    monkeypatch.setattr(gauge_route, 'route_plan', kept_plan)
+    monkeypatch.setattr(gauge_route, 'draw_badge', kept_badge)
+    monkeypatch.setattr(gauge_route, 'mark_lines', kept_lines)
+    frame_of(state=SCENES[scene]())
+    return badges, lines, plans
+
+
+def test_the_busy_break_counts_the_three_buses_in_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The count inside the ahead break is the scene's three buses."""
+    badges, _, plans = drawn_gauge(
+        scene='stop_gauge_busy', monkeypatch=monkeypatch,
+    )
+    plan = plans[0]
+    gap = plan.line.ahead
+    assert gap is not None
+    held = [
+        badge.route
+        for badge in badges
+        if slot_x(plan=plan, slot=gap.first)
+        < badge.x
+        < slot_x(plan=plan, slot=gap.last)
+    ]
+    assert held == ['+3']
+    assert sum(gauge_route.buses_in(marker=badge) for badge in badges) == 20
+
+
+def test_the_gauge_names_its_destination_in_full(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The end name is drawn whole, not shortened."""
+    _, lines, _ = drawn_gauge(scene='stop_gauge', monkeypatch=monkeypatch)
+    assert ' '.join(lines[-1]) == 'Pitt St At Barlow St'
+
+
+def view_gauge(*, scene: str) -> RouteGauge:
+    """
+    Give a Stop scene's gauge.
+
+    Parameters
+    ----------
+    scene : str
+        Scene name.
+
+    Returns
+    -------
+    RouteGauge
+        The gauge of the scene's Stop view.
+    """
+    view = view_of(state=SCENES[scene]())
+    assert isinstance(view, StopView) and view.gauge is not None
+    return view.gauge
+
+
+def test_a_gauge_with_no_bus_behind_starts_at_the_first_stop() -> None:
+    """With no bus behind, the line starts at the trip's first stop."""
+    plan = gauge_route.route_plan(
+        gauge=view_gauge(scene='stop_gauge'),
+        keep=keep_out(ink=np.zeros((480, 800), dtype=bool)),
+        naming=Naming(rules=NameRules()),
+    )
+    assert plan.line.starts and not plan.line.cut
+    assert plan.line.marks[0].name == 'Johnston St'
 
 
 def test_both_sides_scenes_build_their_views() -> None:

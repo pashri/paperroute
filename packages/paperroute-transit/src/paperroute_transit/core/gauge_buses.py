@@ -155,38 +155,79 @@ def timetable_index(*, pattern: TripPattern, seconds: int) -> float | None:
     return float(len(stops) - 1)
 
 
-def nearest_stop(*, hero: TripPattern, point: Point) -> int:
+@dataclass(frozen=True)
+class HeroIndex:
     """
-    Find the hero's stop nearest a point.
+    The hero's stops that have a position.
+
+    Attributes
+    ----------
+    order : dict[str, int]
+        Index of the first such stop at each station.
+    stops : list[tuple[int, Point]]
+        Each such stop's index and position, in running order.
+    """
+
+    order: dict[str, int]
+    stops: list[tuple[int, Point]]
+
+
+def index_hero(*, hero: TripPattern) -> HeroIndex:
+    """
+    Index the hero's stops that have a position.
 
     Parameters
     ----------
     hero : TripPattern
         The hero's trip.
+
+    Returns
+    -------
+    HeroIndex
+        The index.
+    """
+    stops = mapped(pattern=hero)
+    order: dict[str, int] = {}
+    for index, _ in stops:
+        order.setdefault(hero.stops[index].station, index)
+    return HeroIndex(order=order, stops=stops)
+
+
+def nearest_stop(*, known: HeroIndex, point: Point) -> int:
+    """
+    Find the hero's stop nearest a point.
+
+    Parameters
+    ----------
+    known : HeroIndex
+        The hero's stops that have a position.
     point : Point
         Position in metres.
 
     Returns
     -------
     int
-        Index of the nearest stop that has a position.
+        Index of the nearest stop that has a position; zero when none
+        has.
     """
+    if not known.stops:
+        return 0
     return min(
-        mapped(pattern=hero),
+        known.stops,
         key=lambda stop: math.dist(stop[1], point),
     )[0]
 
 
 def hero_stops(
-    *, hero: TripPattern, pattern: TripPattern, right: bool
+    *, known: HeroIndex, pattern: TripPattern, right: bool
 ) -> list[tuple[int, float]]:
     """
     Map a trip's stops onto the hero's stops.
 
     Parameters
     ----------
-    hero : TripPattern
-        The hero's trip.
+    known : HeroIndex
+        The hero's stops that have a position.
     pattern : TripPattern
         The other trip.
     right : bool
@@ -199,17 +240,15 @@ def hero_stops(
         hero's stop it maps to. A same-way stop at a station the hero
         calls at maps to it; any other stop maps to the nearest.
     """
-    order: dict[str, int] = {}
-    for index, stop in enumerate(hero.stops):
-        if stop.point is not None:
-            order.setdefault(stop.station, index)
     result: list[tuple[int, float]] = []
     for index, point in mapped(pattern=pattern):
         station = pattern.stops[index].station
-        if right and station in order:
-            result.append((index, float(order[station])))
+        if right and station in known.order:
+            result.append((index, float(known.order[station])))
         else:
-            result.append((index, float(nearest_stop(hero=hero, point=point))))
+            result.append(
+                (index, float(nearest_stop(known=known, point=point)))
+            )
     return result
 
 
@@ -219,6 +258,7 @@ def hero_spot(
     pattern: TripPattern,
     index: float,
     right: bool,
+    known: HeroIndex | None = None,
 ) -> float:
     """
     Turn a trip's own stop index into a spot on the hero's stops.
@@ -233,14 +273,18 @@ def hero_spot(
         Fractional index into the other trip's stops.
     right : bool
         True when it runs the hero's way.
+    known : HeroIndex | None
+        The hero's index when already made.
 
     Returns
     -------
     float
         The spot, interpolated between the hero stops its two
-        neighbouring stops map to.
+        neighbouring stops map to; zero when the hero has no stop with a
+        position.
     """
-    stops = hero_stops(hero=hero, pattern=pattern, right=right)
+    known = known or index_hero(hero=hero)
+    stops = hero_stops(known=known, pattern=pattern, right=right)
     if not stops:
         return 0.0
     if index <= stops[0][0]:
@@ -251,11 +295,30 @@ def hero_spot(
     return stops[-1][1]
 
 
+def last_index(*, pattern: TripPattern) -> int:
+    """
+    Find the last stop of a trip that has a position.
+
+    Parameters
+    ----------
+    pattern : TripPattern
+        The trip.
+
+    Returns
+    -------
+    int
+        Its index; zero when no stop has a position.
+    """
+    stops = mapped(pattern=pattern)
+    return stops[-1][0] if stops else 0
+
+
 def live_bus(
     *,
     hero: TripPattern,
     pattern: TripPattern,
     vehicle: VehiclePosition,
+    known: HeroIndex,
 ) -> GaugeBus | None:
     """
     Place a reported vehicle on the hero's line.
@@ -268,6 +331,8 @@ def live_bus(
         The vehicle's trip.
     vehicle : VehiclePosition
         The report.
+    known : HeroIndex
+        The hero's stops that have a position.
 
     Returns
     -------
@@ -275,10 +340,12 @@ def live_bus(
         The bus, or None once it has reached its last stop.
     """
     index = along_index(pattern=pattern, point=vehicle.point)
-    if index >= len(pattern.stops) - 1:
+    if index >= last_index(pattern=pattern):
         return None
     right = same_way(hero=hero, pattern=pattern)
-    spot = hero_spot(hero=hero, pattern=pattern, index=index, right=right)
+    spot = hero_spot(
+        hero=hero, pattern=pattern, index=index, right=right, known=known,
+    )
     return GaugeBus(
         spot=spot, right=right, live=True, trip_id=vehicle.trip_id,
     )
@@ -291,6 +358,7 @@ def timetable_bus(
     trip: RouteTrip,
     now: datetime,
     zone: tzinfo,
+    known: HeroIndex,
 ) -> GaugeBus | None:
     """
     Place a timetabled trip on the hero's line.
@@ -307,6 +375,8 @@ def timetable_bus(
         The moment.
     zone : tzinfo
         Local time zone of the service day.
+    known : HeroIndex
+        The hero's stops that have a position.
 
     Returns
     -------
@@ -319,7 +389,9 @@ def timetable_bus(
     if index is None or index >= len(pattern.stops) - 1:
         return None
     right = same_way(hero=hero, pattern=pattern)
-    spot = hero_spot(hero=hero, pattern=pattern, index=index, right=right)
+    spot = hero_spot(
+        hero=hero, pattern=pattern, index=index, right=right, known=known,
+    )
     return GaugeBus(
         spot=spot, right=right, live=False, trip_id=trip.trip_id,
     )
@@ -358,15 +430,23 @@ def gauge_buses(
     tuple[GaugeBus, ...]
         The buses, by spot.
     """
+    known = index_hero(hero=hero)
     buses: list[GaugeBus | None] = [
-        live_bus(hero=hero, pattern=pattern, vehicle=vehicle)
+        live_bus(
+            hero=hero, pattern=pattern, vehicle=vehicle, known=known,
+        )
         for vehicle in vehicles
         if (pattern := patterns.get(vehicle.trip_id)) is not None
     ]
     reported = {vehicle.trip_id for vehicle in vehicles}
     buses.extend(
         timetable_bus(
-            hero=hero, pattern=pattern, trip=trip, now=now, zone=zone,
+            hero=hero,
+            pattern=pattern,
+            trip=trip,
+            now=now,
+            zone=zone,
+            known=known,
         )
         for trip in trips_running
         if trip.trip_id not in reported

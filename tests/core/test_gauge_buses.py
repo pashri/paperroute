@@ -380,3 +380,43 @@ def test_timetable_index_is_none_before_the_first_departure() -> None:
     """Before it leaves and after it arrives, there is no place."""
     assert timetable_index(pattern=HERO, seconds=EIGHT - 1) is None
     assert timetable_index(pattern=HERO, seconds=EIGHT + 9 * STEP + 1) is None
+
+
+def test_gauge_buses_places_a_bus_when_the_hero_has_no_positions() -> None:
+    """A hero without positions puts every bus at its first stop."""
+    blind = pattern(
+        stops=tuple(
+            PatternStop(
+                arrives=EIGHT, departs=EIGHT, point=None, station=name,
+            )
+            for name in STATIONS
+        ),
+        direction=0,
+    )
+    (bus,) = gauge_buses(
+        hero=blind,
+        patterns={'r1': BACK},
+        vehicles=(at_point(trip_id='r1', point=S6),),
+        trips_running=(),
+        now=NOW,
+        zone=ZONE,
+    )
+    assert (bus.spot, bus.right) == (0.0, False)
+
+
+def test_gauge_buses_drops_a_bus_at_its_last_stop_with_a_position() -> None:
+    """A trip whose final stop has no position ends at the one before."""
+    stops = (
+        *run(order=range(10), trip_id='t2').stops[:9],
+        PatternStop(
+            arrives=EIGHT + 600,
+            departs=EIGHT + 600,
+            point=None,
+            station='S9',
+        ),
+    )
+    ragged = pattern(trip_id='t2', stops=stops, direction=0)
+    assert buses_of(
+        patterns={'t2': ragged},
+        vehicles=(at_point(trip_id='t2', point=S8),),
+    ) == ()

@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, tzinfo
 from enum import StrEnum
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from paperroute_device.core.device_state import Banner
 from paperroute_device.core.text import DOT, clock_text
@@ -14,7 +14,10 @@ from paperroute_transit.core.headsigns import tidy_headsign
 from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.model import CarryOn, Departure
 from paperroute_transit.core.names import NameRules
-from paperroute_transit.core.stop_under import EachWay, StopGauge, UnderNumber
+from paperroute_transit.core.stop_under import EachWay, UnderNumber
+
+if TYPE_CHECKING:
+    from paperroute_transit.core.gauge_ends import RouteGauge
 
 VISIBLE_ROWS: Final[int] = 8
 ROWS_UNDER_BANNER: Final[int] = 7
@@ -299,7 +302,7 @@ class StopView:
     delay : int
         Seconds the hero runs late, negative when early; 0 without a
         hero.
-    gauge : StopGauge | None
+    gauge : RouteGauge | None
         The stops ahead of the hero's From, or None when not known.
     name_rules : NameRules
         The word lists that shorten this city's stop names.
@@ -326,7 +329,7 @@ class StopView:
     planned: bool = False
     under: UnderNumber | None = None
     delay: int = 0
-    gauge: StopGauge | None = None
+    gauge: RouteGauge | None = None
     name_rules: NameRules = NameRules()
     each_way: EachWay[Row] | None = None
 

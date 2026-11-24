@@ -6,7 +6,6 @@ from enum import StrEnum
 from typing import Final
 
 from paperroute_transit.core.names import NameRules
-from paperroute_transit.core.stop_under import StopGauge
 from paperroute_transit.core.streets import cross_street, street_of
 
 BREAK_SLOTS: Final[int] = 2  # empty slots a break takes
@@ -122,8 +121,6 @@ class GaugeLine:
     ----------
     marks : tuple[GaugeMark, ...]
         Marks in slot order.
-    bus : float | None
-        The badge's spot in slots, or None.
     back : GaugeBreak | None
         Break left of the From.
     ahead : GaugeBreak | None
@@ -145,7 +142,6 @@ class GaugeLine:
     """
 
     marks: tuple[GaugeMark, ...]
-    bus: float | None = None
     back: GaugeBreak | None = None
     ahead: GaugeBreak | None = None
     ride: tuple[int, int] | None = None
@@ -155,38 +151,6 @@ class GaugeLine:
     stops: tuple[int, ...] = ()
     buses: tuple[BusSlot, ...] = ()
     cut: bool = False
-
-
-def behind_marks(
-    *, gauge: StopGauge,
-) -> tuple[tuple[GaugeMark, ...], GaugeBreak | None]:
-    """
-    Place the previous stops and the From.
-
-    Parameters
-    ----------
-    gauge : StopGauge
-        The gauge's content.
-
-    Returns
-    -------
-    tuple[tuple[GaugeMark, ...], GaugeBreak | None]
-        The marks and the break between the last previous stop and the
-        From, if stops are hidden.
-    """
-    marks = [
-        GaugeMark(slot=slot, kind=MarkKind.BEHIND, name=name)
-        for slot, name in enumerate(gauge.behind)
-    ]
-    slot = len(marks)
-    gap = None
-    if gauge.hidden and marks:
-        slot += BREAK_SLOTS
-        gap = GaugeBreak(
-            first=slot - BREAK_SLOTS - 1, last=slot, count=gauge.hidden,
-        )
-    marks.append(GaugeMark(slot=slot, kind=MarkKind.FROM, name=gauge.origin))
-    return tuple(marks), gap
 
 
 def mark_kind(*, index: int, end: int | None) -> MarkKind:
@@ -208,56 +172,6 @@ def mark_kind(*, index: int, end: int | None) -> MarkKind:
     if end is None or index < end:
         return MarkKind.CALL
     return MarkKind.DESTINATION if index == end else MarkKind.AFTER
-
-
-def ahead_marks(
-    *, gauge: StopGauge, after: int, reach: int, dest_reach: int,
-) -> tuple[tuple[GaugeMark, ...], GaugeBreak | None, int]:
-    """
-    Place the calls after the From.
-
-    Parameters
-    ----------
-    gauge : StopGauge
-        The gauge's content.
-    after : int
-        Slot of the From.
-    reach : int
-        Last slot a call may take.
-    dest_reach : int
-        Last slot the Destination may take.
-
-    Returns
-    -------
-    tuple[tuple[GaugeMark, ...], GaugeBreak | None, int]
-        The marks, the break before the Destination if any, and the
-        calls placed or hidden.
-    """
-    end = gauge.end
-    kept = len(gauge.calls)
-    if end is not None and after + 1 + end > dest_reach:
-        kept = max(0, min(end, dest_reach - after - 1 - BREAK_SLOTS))
-    gap = None
-    shift = 0
-    if end is not None and kept < end:
-        shift = BREAK_SLOTS - (end - kept)
-        gap = GaugeBreak(
-            first=after + kept,
-            last=after + kept + 1 + BREAK_SLOTS,
-            count=end - kept,
-        )
-    marks = []
-    for index, call in enumerate(gauge.calls):
-        if end is not None and gap is not None and kept <= index < end:
-            continue
-        slot = after + 1 + index + (shift if index >= kept else 0)
-        kind = mark_kind(index=index, end=end)
-        if kind != MarkKind.DESTINATION and slot > reach:
-            continue
-        marks.append(GaugeMark(
-            slot=slot, kind=kind, name=call.name, minutes=call.minutes,
-        ))
-    return tuple(marks), gap, len(marks) + (gap.count if gap else 0)
 
 
 def adjacent(*, marks: Sequence[GaugeMark]) -> list[list[GaugeMark]]:
@@ -364,45 +278,3 @@ def same_street(
         else:
             parts.append([mark])
     return [part for part in parts if part]
-
-
-def gauge_line(
-    *, gauge: StopGauge, reach: int, dest_reach: int, rules: NameRules,
-) -> GaugeLine:
-    """
-    Lay a gauge out in slots.
-
-    Parameters
-    ----------
-    gauge : StopGauge
-        The gauge's content.
-    reach : int
-        Last slot a call may take.
-    dest_reach : int
-        Last slot the Destination may take.
-    rules : NameRules
-        The rules.
-
-    Returns
-    -------
-    GaugeLine
-        The marks, breaks, runs and flags.
-    """
-    behind, back = behind_marks(gauge=gauge)
-    after = behind[-1].slot
-    dest_reach = min(dest_reach, reach + 1)
-    ahead, gap, used = ahead_marks(
-        gauge=gauge, after=after, reach=reach, dest_reach=dest_reach,
-    )
-    marks, runs = street_runs(marks=(*behind, *ahead), rules=rules)
-    dest = [m.slot for m in marks if m.kind == MarkKind.DESTINATION]
-    return GaugeLine(
-        marks=marks,
-        bus=gauge.bus,
-        back=back,
-        ahead=gap,
-        ride=(after, dest[0]) if dest else None,
-        runs=runs,
-        starts=gauge.starts,
-        arrow=used < len(gauge.calls),
-    )

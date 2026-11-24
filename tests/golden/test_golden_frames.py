@@ -272,7 +272,7 @@ def test_a_pin_with_no_destination_shows_what_is_known_under_the_number(
     )
     assert view.delay == 120
     assert view.gauge is not None
-    assert view.gauge.behind == ('Mays Hill',)
+    assert [bus.trip_id for bus in view.gauge.buses] == ['trip-0803']
     assert [row.leaves_at for row in view.rows] == ['8:06', '8:09']
 
 
@@ -282,8 +282,19 @@ def test_a_destination_pin_draws_its_gauge() -> None:
     assert isinstance(view, StopView)
     gauge = view.gauge
     assert gauge is not None and gauge.end is not None
-    assert gauge.calls[gauge.end].name == 'Pitt St At Barlow St'
-    assert (gauge.behind, gauge.bus, gauge.words) == ((), None, '')
+    assert gauge.pattern.stops[gauge.end].name == 'Pitt St At Barlow St'
+    assert (gauge.buses, gauge.words) == ((), '')
+
+
+def test_a_busy_route_puts_every_bus_on_the_gauge() -> None:
+    """Twenty buses both ways reach the gauge, three inside its break."""
+    view = view_of(state=SCENES['stop_gauge_busy']())
+    assert isinstance(view, StopView)
+    gauge = view.gauge
+    assert gauge is not None and gauge.end is not None
+    assert len(gauge.buses) == 20
+    assert {bus.right for bus in gauge.buses} == {True, False}
+    assert sum(7 < bus.spot < gauge.end for bus in gauge.buses) == 3
 
 
 def test_both_sides_scenes_build_their_views() -> None:

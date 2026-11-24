@@ -14,15 +14,8 @@ from paperroute_device.render.canvas import (
     font,
     text_width,
 )
-from paperroute_transit.core.gauge_line import (
-    BOLD_KINDS,
-    GaugeLine,
-    GaugeMark,
-    gauge_line,
-)
+from paperroute_transit.core.gauge_line import BOLD_KINDS, GaugeLine, GaugeMark
 from paperroute_transit.core.names import name_forms
-from paperroute_transit.core.stop_under import StopGauge
-from paperroute_transit.render.markers import badge_half
 from paperroute_transit.render.names import Naming, fit_name
 
 ANGLE: Final[float] = 60.0  # degrees names rise
@@ -44,7 +37,6 @@ RUN_RISE: Final[int] = 7  # px
 BRACKET_Y: Final[int] = 458  # px
 BRACKET_PAD: Final[float] = 6.0  # px a bracket runs past its end marks
 MINUTE_DROP: Final[int] = 22  # px, minutes baseline below the line
-STEM: Final[float] = 22.0  # px from the line to a hung badge's centre
 WEDGE: Final[float] = 10.0  # px the heading wedge reaches past a badge
 BADGE_CLEAR: Final[float] = 6.0  # px a badge keeps from a minute
 NAME_FACE: Final[Face] = Face(weight=400, px=15)
@@ -263,210 +255,6 @@ def name_room(
     return float(ROOM_MOST)
 
 
-def badge_reach(*, route: str) -> tuple[float, float]:
-    """
-    Give how far a badge reaches left and right of its centre.
-
-    Parameters
-    ----------
-    route : str
-        Route label.
-
-    Returns
-    -------
-    tuple[float, float]
-        Left and right reach in pixels.
-    """
-    half = badge_half(route=route)[0]
-    return half + 1, half + WEDGE
-
-
-def reaches(
-    *, gauge: StopGauge, first: float, pitch: float, naming: Naming,
-) -> tuple[int, int]:
-    """
-    Give the last slots a call and the Destination may take.
-
-    Parameters
-    ----------
-    gauge : StopGauge
-        The gauge's content.
-    first : float
-        Pixel x of slot 0.
-    pitch : float
-        Pixels between marks.
-    naming : Naming
-        The shortening rules.
-
-    Returns
-    -------
-    tuple[int, int]
-        Last slot for a call and for the Destination.
-    """
-    cap = cap_height(face=NAME_FACE)
-    reach = math.floor((EDGE - SHORTEST * COS - cap - first) / pitch)
-    if gauge.end is None:
-        return reach, reach
-    forms = name_forms(
-        name=gauge.calls[gauge.end].name,
-        rules=naming.rules,
-        siblings=naming.siblings,
-    )
-    width = min(text_width(text=forms[-1], face=BOLD_FACE), DEST_LONGEST)
-    bold_cap = cap_height(face=BOLD_FACE)
-    dest = math.floor((EDGE - width * COS - bold_cap - 2 - first) / pitch)
-    return reach, min(dest, reach + 1)
-
-
-def badge_hang(*, line: GaugeLine, pitch: float, route: str) -> float:
-    """
-    Give how far the badge hangs left to clear the next minute.
-
-    Parameters
-    ----------
-    line : GaugeLine
-        The marks in slots.
-    pitch : float
-        Pixels between marks.
-    route : str
-        Route label.
-
-    Returns
-    -------
-    float
-        Pixels, 0 without a badge.
-    """
-    if line.bus is None:
-        return 0.0
-    bus = line.bus
-    ahead = next(
-        (m for m in line.marks if m.slot > bus and m.minutes), None,
-    )
-    if ahead is None:
-        return 0.0
-    right = badge_reach(route=route)[1]
-    half = text_width(text=ahead.minutes, face=MINUTE_FACE) / 2
-    gap = bus * pitch + right + BADGE_CLEAR - (ahead.slot * pitch - half)
-    return max(0.0, gap)
-
-
-def first_x(
-    *, line: GaugeLine, pitch: float, hang: float, route: str,
-) -> float:
-    """
-    Give the pixel x of slot 0, moved right to keep the badge on paper.
-
-    Parameters
-    ----------
-    line : GaugeLine
-        The marks in slots.
-    pitch : float
-        Pixels between marks.
-    hang : float
-        Pixels the badge hangs left.
-    route : str
-        Route label.
-
-    Returns
-    -------
-    float
-        Pixel x.
-    """
-    if line.bus is None:
-        return FIRST_X
-    left = badge_reach(route=route)[0]
-    return max(FIRST_X, LEFT_MARGIN + left + hang - line.bus * pitch)
-
-
-def line_level(
-    *,
-    line: GaugeLine,
-    first: float,
-    pitch: float,
-    hang: float,
-    route: str,
-) -> int:
-    """
-    Pick the frame y of the gauge line.
-
-    Parameters
-    ----------
-    line : GaugeLine
-        The marks in slots.
-    first : float
-        Pixel x of slot 0.
-    pitch : float
-        Pixels between marks.
-    hang : float
-        Pixels the badge hangs left.
-    route : str
-        Route label.
-
-    Returns
-    -------
-    int
-        Frame y, raised for runs and again when a badge hangs over one.
-    """
-    if not line.runs:
-        return LINE_FREE
-    if line.bus is None:
-        return LINE_RUNS
-    left, right = badge_reach(route=route)
-    centre = first + line.bus * pitch - hang
-    clash = any(
-        first + run.first * pitch - BRACKET_PAD <= centre + right
-        and centre - left <= first + run.last * pitch + BRACKET_PAD
-        for run in line.runs
-    )
-    return LINE_RUNS - RUN_RISE if clash else LINE_RUNS
-
-
-def plan_at(
-    *, gauge: StopGauge, route: str, naming: Naming, pitch: float,
-) -> GaugePlan:
-    """
-    Measure a gauge at one pitch.
-
-    Parameters
-    ----------
-    gauge : StopGauge
-        The gauge's content.
-    route : str
-        Route label.
-    naming : Naming
-        The shortening rules.
-    pitch : float
-        Pixels between marks.
-
-    Returns
-    -------
-    GaugePlan
-        The measurements, with names on one line.
-    """
-    reach, dest = reaches(
-        gauge=gauge, first=FIRST_X, pitch=pitch, naming=naming,
-    )
-    line = gauge_line(
-        gauge=gauge, reach=reach, dest_reach=dest, rules=naming.rules,
-    )
-    hang = badge_hang(line=line, pitch=pitch, route=route)
-    first = first_x(line=line, pitch=pitch, hang=hang, route=route)
-    if first != FIRST_X:
-        reach, dest = reaches(
-            gauge=gauge, first=first, pitch=pitch, naming=naming,
-        )
-        line = gauge_line(
-            gauge=gauge, reach=reach, dest_reach=dest, rules=naming.rules,
-        )
-    level = line_level(
-        line=line, first=first, pitch=pitch, hang=hang, route=route,
-    )
-    return GaugePlan(
-        line=line, pitch=pitch, first=first, line_y=level, hang=hang,
-        wrap=False,
-    )
-
-
 def sibling_naming(*, plan: GaugePlan, naming: Naming) -> Naming:
     """
     Add every mark's name to the naming as siblings.
@@ -522,41 +310,6 @@ def needs_two(
         if text_width(text=forms[-1], face=face) > room:
             return True
     return False
-
-
-def gauge_plan(
-    *,
-    gauge: StopGauge,
-    route: str,
-    keep: NDArray[np.bool_],
-    naming: Naming,
-) -> GaugePlan:
-    """
-    Measure a gauge, widening the pitch when names must wrap.
-
-    Parameters
-    ----------
-    gauge : StopGauge
-        The gauge's content.
-    route : str
-        Route label.
-    keep : NDArray[np.bool_]
-        The keep-out.
-    naming : Naming
-        The shortening rules.
-
-    Returns
-    -------
-    GaugePlan
-        The measurements.
-    """
-    plan = plan_at(gauge=gauge, route=route, naming=naming, pitch=PITCH)
-    if not needs_two(plan=plan, keep=keep, naming=naming):
-        return plan
-    wide = plan_at(
-        gauge=gauge, route=route, naming=naming, pitch=WIDE_PITCH,
-    )
-    return replace(wide, wrap=True)
 
 
 def mark_lines(

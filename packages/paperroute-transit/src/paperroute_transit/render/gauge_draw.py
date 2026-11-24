@@ -1,4 +1,4 @@
-"""Drawing the gauge's track, marks, bus, brackets, names and counts."""
+"""Drawing the gauge's track, marks, brackets, names and counts."""
 
 import math
 from collections.abc import Sequence
@@ -9,8 +9,6 @@ from numpy.typing import NDArray
 
 from paperroute_device.render.canvas import INK, PAPER, Canvas, Face, font
 from paperroute_transit.core.gauge_line import BOLD_KINDS, GaugeBreak, MarkKind
-from paperroute_transit.core.map_view import Marker
-from paperroute_transit.core.stop_under import StopGauge
 from paperroute_transit.core.stop_view import stops_text
 from paperroute_transit.render.gauge_plan import (
     ANGLE,
@@ -21,18 +19,13 @@ from paperroute_transit.render.gauge_plan import (
     LINE_DX,
     MINUTE_DROP,
     MINUTE_FACE,
-    STEM,
     GaugePlan,
     cap_height,
     face_of,
-    gauge_plan,
     grown,
-    keep_out,
-    mark_lines,
     name_start,
     slot_x,
 )
-from paperroute_transit.render.markers import draw_live
 from paperroute_transit.render.names import Naming, fit_name
 from paperroute_transit.render.strip import (
     DISC_RADIUS,
@@ -46,7 +39,6 @@ TAIL: Final[float] = 14.0  # px of line past an end mark
 ARROW: Final[tuple[float, float]] = (8.0, 6.0)  # px long, px half high
 DOT: Final[int] = 5  # px
 DOT_GAP: Final[float] = 3.0  # px
-STEM_EDGE: Final[float] = 2.0  # px from a badge's stem to the first dot
 COUNT_LIFT: Final[float] = 2.0  # px a count's descender keeps over the line
 COUNT_SLIDE: Final[tuple[int, ...]] = tuple(
     sorted(range(-12, 13), key=abs),
@@ -59,7 +51,6 @@ COUNT_FACES: Final[tuple[Face, ...]] = (
 LABEL_FACE: Final[Face] = Face(weight=700, px=12)
 TICK: Final[int] = 3  # px a bracket's ends rise
 LABEL_GAP: Final[float] = 8.0  # px between bracket labels
-STEM_WIDTH: Final[int] = 2  # px
 COUNT_PAD: Final[int] = 60  # px of crop around a count's span
 COUNT_RISE: Final[int] = 30  # px of crop above the line
 
@@ -145,13 +136,9 @@ def break_span(
     tuple[float, float]
         Near and far pixel x.
     """
-    bus = plan.line.bus
-    if bus is not None and plan.line.back == gap and bus > gap.first:
-        near = slot_x(plan=plan, slot=bus) + STEM_EDGE
-    else:
-        near = slot_x(plan=plan, slot=gap.first) + mark_edge(
-            kind=kind_at(plan=plan, slot=gap.first),
-        )
+    near = slot_x(plan=plan, slot=gap.first) + mark_edge(
+        kind=kind_at(plan=plan, slot=gap.first),
+    )
     far = slot_x(plan=plan, slot=gap.last) - mark_edge(
         kind=kind_at(plan=plan, slot=gap.last),
     )
@@ -318,38 +305,6 @@ def draw_marks(canvas: Canvas, *, plan: GaugePlan) -> None:
                 grey=INK,
                 anchor='ms',
             )
-
-
-def draw_bus(canvas: Canvas, *, plan: GaugePlan, route: str) -> None:
-    """
-    Draw the bus's stem and its hung badge.
-
-    Parameters
-    ----------
-    canvas : Canvas
-        Target.
-    plan : GaugePlan
-        The measurements.
-    route : str
-        Route label.
-    """
-    if plan.line.bus is None:
-        return
-    x = slot_x(plan=plan, slot=plan.line.bus)
-    y = plan.line_y
-    canvas.rect(
-        box=(x - STEM_WIDTH / 2, y, x + STEM_WIDTH / 2, y + STEM),
-        grey=INK,
-    )
-    marker = Marker(
-        route=route,
-        x=x - plan.hang,
-        y=y + STEM,
-        bearing=90.0,
-        live=True,
-        pinned=True,
-    )
-    draw_live(canvas, marker=marker, centre=(x - plan.hang, y + STEM))
 
 
 def draw_brackets(
@@ -575,39 +530,3 @@ def counts_ink(
             baseline=count_baseline(line_y=plan.line_y, face=face),
         )
     return canvas.grey() < 128
-
-
-def draw_gauge(
-    canvas: Canvas, *, gauge: StopGauge, route: str, naming: Naming,
-) -> NDArray[np.bool_]:
-    """
-    Plan the gauge and draw what the board canvas holds of it.
-
-    Parameters
-    ----------
-    canvas : Canvas
-        The board canvas, holding the hero already.
-    gauge : StopGauge
-        The gauge's content.
-    route : str
-        Route label.
-    naming : Naming
-        The shortening rules.
-
-    Returns
-    -------
-    NDArray[np.bool_]
-        Ink of the names and counts, drawn separately.
-    """
-    keep = keep_out(ink=canvas.grey() < 128)
-    plan = gauge_plan(gauge=gauge, route=route, keep=keep, naming=naming)
-    draw_track(canvas, plan=plan)
-    draw_bus(canvas, plan=plan, route=route)
-    draw_marks(canvas, plan=plan)
-    draw_brackets(canvas, plan=plan, naming=naming)
-    names = names_ink(
-        plan=plan, lines=mark_lines(plan=plan, keep=keep, naming=naming),
-    )
-    return names | counts_ink(
-        plan=plan, avoid=names | (canvas.grey() < 128),
-    )

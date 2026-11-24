@@ -267,7 +267,7 @@ def banner_stop_view(*, state: State, banner: Banner | None) -> StopView:
             else state.board.destination_station or pin.destination.stop_id
         ),
         patterns=state.map.patterns,
-        positions=state.map.positions,
+        gauge=replace(state.map.gauge, positions=state.map.positions),
         now=frame_time(state=state),
         limit=stale_after(state=state),
         zone=state.city.zone,

@@ -19,10 +19,12 @@ from paperroute_testkit.core.factories import (
 from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.strip_factories import on_view
 from paperroute_testkit.render.factories import stop_row
+from paperroute_transit.core.gauge_requests import GaugeData
 from paperroute_transit.core.messages import PatternsLoaded
 from paperroute_transit.core.model import Departure, Pin
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.positions import PositionsSnapshot
+from paperroute_transit.core.route_trips import RouteTrip
 from paperroute_transit.core.saved import LiveView
 from paperroute_transit.core.state_views import live_stop_view
 from paperroute_transit.core.stop_hero import with_detail
@@ -75,6 +77,7 @@ def stop(
 
 RUN: Final[TripPattern] = pattern(
     trip_id='trip-0803',
+    route_id='r_606',
     stops=(
         stop(at=-540, x=-450.0, station='A', name='Westmead'),
         stop(at=-420, x=-300.0, station='P', name='Junction', passes=True),
@@ -153,10 +156,41 @@ def seen_at(
     dict[str, PositionsSnapshot]
         The download by feed.
     """
-    report = vehicle(
-        timestamp=int(heard.timestamp()), trip_id=trip_id, point=(x, 0.0),
+    return seen(at={trip_id: x}, heard=heard, fetched=fetched)
+
+
+def seen(
+    *,
+    at: dict[str, float],
+    heard: datetime = START,
+    fetched: datetime = START,
+) -> dict[str, PositionsSnapshot]:
+    """
+    One positions download holding a vehicle per trip.
+
+    Parameters
+    ----------
+    at : dict[str, float]
+        Metres east of the origin by trip ID.
+    heard : datetime
+        When the vehicles reported.
+    fetched : datetime
+        When the feed was downloaded.
+
+    Returns
+    -------
+    dict[str, PositionsSnapshot]
+        The download by feed.
+    """
+    reports = tuple(
+        vehicle(
+            timestamp=int(heard.timestamp()),
+            trip_id=trip_id,
+            point=(x, 0.0),
+        )
+        for trip_id, x in at.items()
     )
-    return {'buses': snapshot(fetched_at=fetched, vehicles=(report,))}
+    return {'buses': snapshot(fetched_at=fetched, vehicles=reports)}
 
 
 def detail(**changes: object) -> StopView:
@@ -166,18 +200,20 @@ def detail(**changes: object) -> StopView:
     Parameters
     ----------
     **changes : object
-        Inputs of `with_detail` to replace.
+        Inputs of `with_detail` to replace; `positions` fills the
+        gauge's positions.
 
     Returns
     -------
     StopView
         The result.
     """
+    positions = changes.pop('positions', seen_at(x=-75.0))
     inputs: dict[str, object] = {
         'view': open_view(),
         'station': FROM,
         'patterns': {'trip-0803': RUN},
-        'positions': seen_at(x=-75.0),
+        'gauge': GaugeData(positions=positions),  # type: ignore[arg-type]
         'now': START,
         'limit': timedelta(minutes=2),
         'zone': SYDNEY_ZONE,
@@ -192,7 +228,7 @@ def test_detail_fills_the_gauge_and_the_words() -> None:
     assert view.under is not None
     assert view.under.place == '1 stop away'
     assert view.gauge is not None
-    assert view.gauge.behind == ('Mays Hill',)
+    assert view.gauge.words == '1 stop away'
     assert view.gauge.calls == CALLS
 
 
@@ -202,7 +238,7 @@ def test_a_vehicle_on_the_trip_before_gives_no_place() -> None:
     assert view.under is not None
     assert view.under.place == ''
     assert view.gauge is not None
-    assert view.gauge.bus is None
+    assert view.gauge.buses == ()
     assert view.gauge.calls == CALLS
 
 
@@ -224,7 +260,7 @@ def test_a_stale_position_gives_no_place() -> None:
     assert view.under is not None
     assert view.under.place == ''
     assert view.gauge is not None
-    assert view.gauge.bus is None
+    assert view.gauge.buses == ()
     assert view.gauge.calls == CALLS
 
 
@@ -245,9 +281,7 @@ def test_a_view_with_a_destination_gains_a_gauge_with_its_end() -> None:
     )
     gauge = detail(view=view).gauge
     assert gauge is not None
-    assert (gauge.end, gauge.behind, gauge.words) == (
-        1, ('Mays Hill',), '1 stop away',
-    )
+    assert (gauge.end, gauge.words) == (6, '1 stop away')
 
 
 def test_a_destination_gauge_carries_the_live_bus() -> None:
@@ -258,7 +292,7 @@ def test_a_destination_gauge_carries_the_live_bus() -> None:
     )
     gauge = detail(view=view, positions=seen_at(x=-450.0)).gauge
     assert gauge is not None
-    assert gauge.bus is not None
+    assert [bus.trip_id for bus in gauge.buses] == ['trip-0803']
 
 
 def test_the_stand_alone_finds_no_call() -> None:
@@ -353,3 +387,56 @@ def test_a_destination_under_a_station_ends_the_gauge_at_its_call() -> None:
     late = end_with(station='G')
     assert late is not None
     assert end_with(station=None) != late
+
+
+def test_with_detail_puts_every_route_bus_on_the_gauge() -> None:
+    """Live buses and a timetabled trip of the route all reach the gauge."""
+    timetabled = RouteTrip(
+        trip_id='trip-0748', day=START.date(), starts=EIGHT - 720,
+        ends=EIGHT + 600, direction=0,
+    )
+    gauge = detail(
+        patterns={
+            'trip-0803': RUN,
+            'trip-0748': replace(RUN, trip_id='trip-0748'),
+            'trip-0818': replace(RUN, trip_id='trip-0818'),
+        },
+        gauge=GaugeData(
+            positions=seen(at={'trip-0803': -75.0, 'trip-0818': -400.0}),
+            trips=(timetabled,),
+        ),
+    ).gauge
+    assert gauge is not None
+    assert sorted(bus.trip_id for bus in gauge.buses) == [
+        'trip-0748', 'trip-0803', 'trip-0818',
+    ]
+    assert sorted(bus.live for bus in gauge.buses) == [False, True, True]
+
+
+def test_with_detail_keeps_the_hero_words() -> None:
+    """Other buses on the route leave the hero's words as they were."""
+    view = detail(
+        patterns={
+            'trip-0803': RUN,
+            'trip-0818': replace(RUN, trip_id='trip-0818'),
+        },
+        positions=seen(at={'trip-0803': -75.0, 'trip-0818': -400.0}),
+    )
+    assert view.under is not None
+    assert view.under.place == '1 stop away'
+    assert view.gauge is not None
+    assert view.gauge.words == '1 stop away'
+
+
+def test_with_detail_keeps_a_bus_that_passed_the_from() -> None:
+    """A bus of the trip before, past the From, stays on the gauge."""
+    gauge = detail(
+        patterns={
+            'trip-0803': RUN,
+            'trip-0748': replace(RUN, trip_id='trip-0748'),
+        },
+        positions=seen(at={'trip-0748': 250.0}),
+    ).gauge
+    assert gauge is not None
+    assert [bus.trip_id for bus in gauge.buses] == ['trip-0748']
+    assert gauge.buses[0].spot > gauge.start

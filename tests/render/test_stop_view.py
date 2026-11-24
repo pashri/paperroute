@@ -18,13 +18,12 @@ from paperroute_device.render.canvas import (
 from paperroute_device.render.frame import HEADER, finish
 from paperroute_testkit.render.factories import STOP_VIEW as BASE
 from paperroute_testkit.render.factories import stop_row as row
+from paperroute_transit.core.gauge_buses import GaugeBus
+from paperroute_transit.core.gauge_ends import RouteGauge
 from paperroute_transit.core.model import CarryOn
 from paperroute_transit.core.names import NameRules
-from paperroute_transit.core.stop_under import (
-    GaugeCall,
-    StopGauge,
-    UnderNumber,
-)
+from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.stop_under import GaugeCall, UnderNumber
 from paperroute_transit.core.stop_view import (
     HORIZON_TEXT,
     UNCERTAIN,
@@ -73,6 +72,7 @@ from paperroute_transit.render.stop_view import (
     small_text,
 )
 from tests.render.test_chrome import Recording
+from tests.render.test_gauge_draw import named_trip
 
 
 def test_frame_is_one_bit_800_by_480() -> None:
@@ -874,12 +874,18 @@ def test_headsign_arrival_joins_the_headsign_and_the_arrival() -> None:
     assert headsign_arrival(row=row(destination='')) == 'arr 8:45'
 
 
-GAUGE: Final[StopGauge] = StopGauge(
-    origin='Hollis St', behind=('Mays Hill',), bus=0.5,
+RUN: Final[TripPattern] = named_trip(
+    names=('Mays Hill', 'Hollis St', 'Harris Park', 'Rosehill'),
+)
+GAUGE: Final[RouteGauge] = RouteGauge(
+    pattern=RUN,
+    start=1,
+    end=None,
     calls=(
         GaugeCall(name='Harris Park', minutes=':08'),
         GaugeCall(name='Rosehill', minutes=':11'),
     ),
+    buses=(GaugeBus(spot=0.5, right=True, live=True, trip_id='trip-0803'),),
     words='1 stop away',
 )
 
@@ -918,9 +924,19 @@ def test_a_destination_view_draws_its_gauge_under_the_due_line() -> None:
     assert (frame[HEADER + 300:, 0:SPLIT] == INK).any()
 
 
+def test_draw_stop_view_draws_the_route_gauge() -> None:
+    """The route's buses add ink to the gauge the line already draws."""
+    empty = draw_stop_view(view=replace(OPEN, gauge=replace(GAUGE, buses=())))
+    busy = draw_stop_view(view=replace(OPEN, gauge=GAUGE))
+    assert (empty[HEADER + 250:, 0:SPLIT] == INK).any()
+    assert (busy != empty).any()
+
+
 def test_a_gauge_with_only_the_from_is_not_drawn() -> None:
     """A gauge with no calls and nothing behind leaves the frame alone."""
-    lone = StopGauge(origin='Hollis St')
+    lone = RouteGauge(
+        pattern=RUN, start=0, end=None, calls=(), buses=(),
+    )
     assert (
         draw_stop_view(view=replace(OPEN, gauge=lone))
         == draw_stop_view(view=OPEN)

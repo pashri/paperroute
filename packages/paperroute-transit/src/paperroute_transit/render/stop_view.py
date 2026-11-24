@@ -44,7 +44,7 @@ from paperroute_transit.render.chrome import (
     view_banner,
     view_header,
 )
-from paperroute_transit.render.gauge_draw import draw_gauge
+from paperroute_transit.render.gauge_route import draw_route_gauge
 from paperroute_transit.render.late_marks import mark_room, marked_countdown
 from paperroute_transit.render.names import Naming, fit_headsign
 
@@ -799,8 +799,8 @@ def draw_stop_view(*, view: StopView) -> NDArray[np.uint8]:
             place=gauge.words if gauge else '',
         )
     gauge_ink = np.zeros((HEIGHT, WIDTH), dtype=bool)
-    if view.hero and gauge and (gauge.calls or gauge.behind):
-        gauge_ink = draw_gauge(
+    if view.hero and gauge and (gauge.calls or gauge.start > 0):
+        gauge_ink = draw_route_gauge(
             canvas, gauge=gauge, route=view.hero.route,
             naming=Naming(rules=view.name_rules),
         )

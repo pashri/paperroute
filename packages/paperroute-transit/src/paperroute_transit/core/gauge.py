@@ -13,13 +13,12 @@ from paperroute_transit.core.model import (
 from paperroute_transit.core.names import base_name
 from paperroute_transit.core.patterns import TripPattern, hop_near
 from paperroute_transit.core.positions import VehiclePosition
-from paperroute_transit.core.stop_under import GaugeCall, StopGauge
+from paperroute_transit.core.stop_under import GaugeCall
 from paperroute_transit.core.stop_view import stops_text
 
 AT_STOP: Final[str] = 'at the stop now'
 WAITING: Final[str] = 'waiting here'
 NOT_LEFT: Final[str] = 'not left yet'
-BACK_MOST: Final[int] = 3  # previous stops named before a break
 
 
 @dataclass(frozen=True)
@@ -236,90 +235,3 @@ def gauge_calls(
         if index == end:
             place = len(calls) - 1
     return tuple(calls), place
-
-
-def gauge_behind(
-    *, pattern: TripPattern, start: int, bus: BusSeen,
-) -> tuple[tuple[str, ...], int]:
-    """
-    Name the stops the vehicle has passed before the From.
-
-    Parameters
-    ----------
-    pattern : TripPattern
-        The trip.
-    start : int
-        Pattern index of the From.
-    bus : BusSeen
-        Where the vehicle is.
-
-    Returns
-    -------
-    tuple[tuple[str, ...], int]
-        The names and the number of stops a back break stands for.
-    """
-    names = tuple(
-        base_name(name=stop.name)
-        for stop in pattern.stops[bus.left : start]
-        if not stop.passes
-    )
-    if bus.away > BACK_MOST:
-        return names[:1], bus.away - 1
-    return names, 0
-
-
-def stop_gauge(
-    *,
-    pattern: TripPattern,
-    start: int,
-    end: int | None,
-    bus: BusSeen | None,
-    day: date,
-    delay: int,
-    zone: tzinfo,
-) -> StopGauge:
-    """
-    Work out everything the Stop view's gauge shows.
-
-    Parameters
-    ----------
-    pattern : TripPattern
-        The trip.
-    start : int
-        Pattern index of the From.
-    end : int | None
-        Pattern index of the Destination.
-    bus : BusSeen | None
-        Where the vehicle is, or None when not reported.
-    day : date
-        Service date.
-    delay : int
-        Seconds late.
-    zone : tzinfo
-        Local time zone.
-
-    Returns
-    -------
-    StopGauge
-        The gauge's content.
-    """
-    calls, place = gauge_calls(
-        pattern=pattern, start=start, end=end, day=day, delay=delay,
-        zone=zone,
-    )
-    origin = base_name(name=pattern.stops[start].name)
-    if bus is None:
-        return StopGauge(
-            origin=origin, calls=calls, end=place, starts=start == 0,
-        )
-    behind, hidden = gauge_behind(pattern=pattern, start=start, bus=bus)
-    return StopGauge(
-        origin=origin,
-        behind=behind,
-        hidden=hidden,
-        bus=0.0 if bus.waiting or bus.away == 0 else 0.5,
-        calls=calls,
-        end=place,
-        starts=bus.left == 0 or (not behind and start == 0),
-        words=bus_words(bus=bus),
-    )

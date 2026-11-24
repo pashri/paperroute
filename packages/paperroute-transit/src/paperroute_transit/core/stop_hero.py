@@ -5,14 +5,23 @@ from dataclasses import replace
 from datetime import datetime, timedelta, tzinfo
 
 from paperroute_transit.core.connection_strip import leg_vehicle
-from paperroute_transit.core.gauge import arrival_call, bus_seen, stop_gauge
+from paperroute_transit.core.gauge import (
+    arrival_call,
+    bus_seen,
+    bus_words,
+    gauge_calls,
+)
+from paperroute_transit.core.gauge_buses import gauge_buses
+from paperroute_transit.core.gauge_ends import RouteGauge
+from paperroute_transit.core.gauge_requests import GaugeData
+from paperroute_transit.core.map_view import is_fresh, position_age
 from paperroute_transit.core.model import Departure, service_time
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.positions import (
     PositionsSnapshot,
     VehiclePosition,
 )
-from paperroute_transit.core.stop_under import StopGauge
+from paperroute_transit.core.route_trips import running
 from paperroute_transit.core.stop_view import StopView, hero_departure
 from paperroute_transit.core.strip_times import from_call
 
@@ -27,7 +36,7 @@ def hero_gauge(
     now: datetime,
     zone: tzinfo,
     destination: str | None = None,
-) -> StopGauge:
+) -> RouteGauge:
     """
     Work out the gauge for the hero's trip.
 
@@ -52,8 +61,9 @@ def hero_gauge(
 
     Returns
     -------
-    StopGauge
-        The gauge, ending at the Destination when the view has one.
+    RouteGauge
+        The gauge with no buses, ending at the Destination when the
+        view has one.
     """
     day = departure.service_day
     departed = now >= service_time(
@@ -69,14 +79,60 @@ def hero_gauge(
         station=destination,
         zone=zone,
     )
-    return stop_gauge(
+    calls, _ = gauge_calls(
         pattern=pattern,
         start=start,
         end=end,
-        bus=bus,
         day=day,
         delay=view.delay,
         zone=zone,
+    )
+    return RouteGauge(
+        pattern=pattern,
+        start=start,
+        end=end,
+        calls=calls,
+        buses=(),
+        words='' if bus is None else bus_words(bus=bus),
+    )
+
+
+def route_vehicles(
+    *,
+    pattern: TripPattern,
+    positions: Mapping[str, PositionsSnapshot],
+    now: datetime,
+    limit: timedelta,
+) -> tuple[VehiclePosition, ...]:
+    """
+    List the fresh reports of vehicles on a trip's route.
+
+    Parameters
+    ----------
+    pattern : TripPattern
+        The trip.
+    positions : Mapping[str, PositionsSnapshot]
+        The latest download of each positions feed.
+    now : datetime
+        The frame time.
+    limit : timedelta
+        How old a position may be.
+
+    Returns
+    -------
+    tuple[VehiclePosition, ...]
+        The vehicles; none when the trip's route is not known.
+    """
+    return tuple(
+        item
+        for feed in positions.values()
+        for item in feed.vehicles
+        if pattern.route_id is not None
+        and item.route_id == pattern.route_id
+        and is_fresh(
+            age=position_age(vehicle=item, snapshot=feed, now=now),
+            limit=limit,
+        )
     )
 
 
@@ -85,7 +141,7 @@ def with_detail(
     view: StopView,
     station: str,
     patterns: Mapping[str, TripPattern | None],
-    positions: Mapping[str, PositionsSnapshot],
+    gauge: GaugeData,
     now: datetime,
     limit: timedelta,
     zone: tzinfo,
@@ -102,8 +158,8 @@ def with_detail(
         The From's station: its parent station, or the From itself.
     patterns : Mapping[str, TripPattern | None]
         Loaded trip patterns by trip ID.
-    positions : Mapping[str, PositionsSnapshot]
-        The latest download of each positions feed.
+    gauge : GaugeData
+        The positions and route trips the gauge reads.
     now : datetime
         The frame time.
     limit : timedelta
@@ -133,20 +189,38 @@ def with_detail(
     )
     if start is None:
         return view
-    vehicle = leg_vehicle(
-        departure=departure, positions=positions, now=now, limit=limit,
-    )
-    gauge = hero_gauge(
+    built = hero_gauge(
         view=view,
         departure=departure,
         pattern=pattern,
         start=start,
-        vehicle=vehicle,
+        vehicle=leg_vehicle(
+            departure=departure,
+            positions=gauge.positions,
+            now=now,
+            limit=limit,
+        ),
         now=now,
         zone=zone,
         destination=destination,
     )
+    built = replace(
+        built,
+        buses=gauge_buses(
+            hero=pattern,
+            patterns=patterns,
+            vehicles=route_vehicles(
+                pattern=pattern,
+                positions=gauge.positions,
+                now=now,
+                limit=limit,
+            ),
+            trips_running=running(trips=gauge.trips, now=now, zone=zone),
+            now=now,
+            zone=zone,
+        ),
+    )
     under = view.under
     if under is not None:
-        under = replace(under, place=gauge.words)
-    return replace(view, under=under, gauge=gauge)
+        under = replace(under, place=built.words)
+    return replace(view, under=under, gauge=built)

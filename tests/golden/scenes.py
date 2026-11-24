@@ -771,14 +771,46 @@ GAUGE_AHEAD: Final[tuple[tuple[str, str], ...]] = (
 )
 
 
-def stop_gauge() -> State:
+def gauge_run() -> TripPattern:
+    """
+    The long ride of the gauge scenes, two stops before the From.
+
+    Returns
+    -------
+    TripPattern
+        The hero's trip.
+    """
+    calls_ahead = tuple(
+        call_at(
+            at=180 + 120 * number,
+            x=150.0 * number,
+            station=station,
+            name=name,
+        )
+        for number, (station, name) in enumerate(GAUGE_AHEAD, start=1)
+    )
+    return pattern(
+        trip_id='trip-0803',
+        route_id='r_606',
+        stops=(
+            call_at(at=-60, x=-300.0, station='A', name='Johnston St'),
+            call_at(at=60, x=-150.0, station='B', name='Norton Plaza'),
+            call_at(
+                at=180, x=0.0, station=FROM, name='Leichhardt PS, Norton St',
+            ),
+            *calls_ahead,
+        ),
+    )
+
+
+def gauge_pin() -> State:
     """
     Show the Stop view of a Destination pin with a long ride ahead.
 
     Returns
     -------
     State
-        State at `START`.
+        State at `START`, before the hero's trip loads.
     """
     state, _ = on_view(
         view=LiveView.STOP,
@@ -798,27 +830,69 @@ def stop_gauge() -> State:
         ),
         station=FROM,
     )
-    calls_ahead = tuple(
-        call_at(
-            at=180 + 120 * number,
-            x=150.0 * number,
-            station=station,
-            name=name,
+    return state
+
+
+def stop_gauge() -> State:
+    """
+    Show the Stop view of a Destination pin with a long ride ahead.
+
+    Returns
+    -------
+    State
+        State at `START`.
+    """
+    return patterns_loaded(
+        state=gauge_pin(), patterns={'trip-0803': gauge_run()},
+    )
+
+
+BUSY_RIGHT: Final[tuple[float, ...]] = (
+    -250.0, -120.0, 40.0, 200.0, 380.0, 520.0, 700.0, 1660.0, 1720.0,
+    1810.0, 2900.0, 2960.0,
+)  # metres east of the From, buses running the hero's way
+BUSY_LEFT: Final[tuple[float, ...]] = (
+    -200.0, 100.0, 300.0, 450.0, 560.0, 640.0, 720.0, 2950.0,
+)  # metres east of the From, buses running the other way
+
+
+def stop_gauge_busy() -> State:
+    """
+    Show the long ride with buses both ways, three in its break.
+
+    Returns
+    -------
+    State
+        State at `START`.
+    """
+    run = gauge_run()
+    back = replace(run, stops=tuple(reversed(run.stops)))
+    trips = {
+        **{
+            f'right-{number}': replace(run, trip_id=f'right-{number}')
+            for number in range(len(BUSY_RIGHT))
+        },
+        **{
+            f'left-{number}': replace(back, trip_id=f'left-{number}')
+            for number in range(len(BUSY_LEFT))
+        },
+    }
+    reports = tuple(
+        vehicle(
+            timestamp=int(START.timestamp()),
+            trip_id=f'{way}-{number}',
+            point=(x, 0.0),
         )
-        for number, (station, name) in enumerate(GAUGE_AHEAD, start=1)
+        for way, spots in (('right', BUSY_RIGHT), ('left', BUSY_LEFT))
+        for number, x in enumerate(spots)
     )
-    run = pattern(
-        trip_id='trip-0803',
-        stops=(
-            call_at(at=-60, x=-300.0, station='A', name='Johnston St'),
-            call_at(at=60, x=-150.0, station='B', name='Norton Plaza'),
-            call_at(
-                at=180, x=0.0, station=FROM, name='Leichhardt PS, Norton St',
-            ),
-            *calls_ahead,
-        ),
+    state, _ = step(gauge_pin(), PositionsFetched(
+        feed=BUS_POSITIONS,
+        snapshot=snapshot(fetched_at=START, vehicles=reports),
+    ))
+    return patterns_loaded(
+        state=state, patterns={'trip-0803': run, **trips},
     )
-    return patterns_loaded(state=state, patterns={'trip-0803': run})
 
 
 def map_scene() -> State:
@@ -1339,6 +1413,7 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     'stop_both_sides': lambda: both_sides_scene(sides=StopSides.TIME_ORDER),
     'stop_each_way': lambda: both_sides_scene(sides=StopSides.EACH_WAY),
     'stop_gauge': stop_gauge,
+    'stop_gauge_busy': stop_gauge_busy,
     'stop_estimates': lambda: estimated(
         state=stop(), lates={0: (-2, False), 1: (2, False)},
     ),

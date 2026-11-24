@@ -1630,3 +1630,35 @@ def test_estimates_of_answers_the_hero_from_the_previous_trip_s_bus() -> None:
     )
     assert set(found.trips) == {'t2'}
     assert found.trips['t2'].updates[0].departure_delay == 240
+
+
+def test_estimates_of_prefers_a_join_over_a_turnaround() -> None:
+    """A trip with both a join and a turnaround carries into the join."""
+    timetable = PatternTimetable(
+        found={
+            't1': replace(pattern(trip_id='t1'), next_trip='t2'),
+            't2': pattern(trip_id='t2', stops=LATER_STOPS),
+            't3': pattern(trip_id='t3', stops=LATER_STOPS),
+        },
+        joins={'t1': 't2'},
+        turns={'t1': 't3'},
+    )
+    when = int((START + timedelta(minutes=12)).timestamp())
+    positions = snapshot(
+        fetched_at=START + timedelta(minutes=12),
+        vehicles=(
+            vehicle(timestamp=when, trip_id='t1', point=(500.0, 0.0)),
+        ),
+    )
+    found = estimates_of(
+        timetable=timetable,
+        gauge=timetable,
+        measures=StopMeasures(),
+        positions=positions,
+        ask=Estimating(
+            feed='estimates/bus',
+            trip_ids=frozenset({'t2', 't3'}),
+            stale_after=timedelta(minutes=2),
+        ),
+    )
+    assert set(found.trips) == {'t2'}

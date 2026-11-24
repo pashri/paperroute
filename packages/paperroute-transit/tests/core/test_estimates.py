@@ -370,3 +370,16 @@ def test_carried_trips_ignores_a_turnaround_absorbed_by_layover() -> None:
         turns={'t1': 't2'},
     )
     assert 't2' not in found.trips
+
+
+def test_carried_trips_carries_ten_minutes_late_as_seven() -> None:
+    """10 min late into a 5 min layover starts the turned trip 7 min late."""
+    found = made(
+        bus(x=500.0, seconds=900),
+        fetched=900,
+        patterns=TURNED,
+        turns={'t1': 't2'},
+    )
+    carried = found.trips['t2']
+    assert delay(trip=carried) == 7 * 60
+    assert carried.uncertain

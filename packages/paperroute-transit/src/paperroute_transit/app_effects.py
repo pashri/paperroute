@@ -784,10 +784,8 @@ def estimates_of(
         one of them or a trip that joins into one.
     """
     seen = {v.trip_id for v in positions.vehicles if v.trip_id}
-    joins = {
-        **timetable.joined_trips(trip_ids=seen),
-        **gauge.turned_trips(trip_ids=seen),
-    }
+    turned = gauge.turned_trips(trip_ids=seen)
+    joins = {**turned, **timetable.joined_trips(trip_ids=seen)}
     matter = {
         trip
         for trip in seen
@@ -811,7 +809,7 @@ def estimates_of(
         trip_ids=ask.trip_ids,
         limit=ask.stale_after,
         zone=timetable.city.zone,
-        turns=gauge.turned_trips(trip_ids=wanted),
+        turns=turned,
     )
 
 

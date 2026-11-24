@@ -12,8 +12,8 @@ from paperroute_device.render.canvas import INK, Canvas, text_width
 from paperroute_transit.core.gauge_ends import (
     CALLS_KEPT,
     RouteGauge,
+    finished_line,
     left_end,
-    route_line,
 )
 from paperroute_transit.core.gauge_line import BREAK_SLOTS, BusSlot
 from paperroute_transit.core.map_view import Marker
@@ -153,20 +153,20 @@ def route_plan_at(
         The measurements, with names on one line.
     """
     budget, reach = slot_budget(pitch=pitch, right_end=line_end(gauge=gauge))
-    origin = left_end(
+    left = left_end(
         pattern=gauge.pattern,
         start=gauge.start,
         buses=gauge.buses,
         budget=budget,
-    ).marks[-1].slot
-    line = route_line(
+    )
+    line = finished_line(
+        left=left,
         pattern=gauge.pattern,
         start=gauge.start,
         end=gauge.end,
         calls=gauge.calls,
         buses=gauge.buses,
-        budget=budget,
-        room=reach - origin,
+        room=reach - left.marks[-1].slot,
         rules=naming.rules,
     )
     return GaugePlan(

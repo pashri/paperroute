@@ -450,13 +450,63 @@ def route_line(
     GaugeLine
         The marks, breaks, runs and flags.
     """
-    line = right_end(
-        line=left_end(
+    return finished_line(
+        left=left_end(
             pattern=pattern,
             start=start,
             buses=buses,
             budget=budget,
         ),
+        pattern=pattern,
+        start=start,
+        end=end,
+        calls=calls,
+        buses=buses,
+        room=room,
+        rules=rules,
+    )
+
+
+def finished_line(
+    *,
+    left: GaugeLine,
+    pattern: TripPattern,
+    start: int,
+    end: int | None,
+    calls: tuple[GaugeCall, ...],
+    buses: Sequence[GaugeBus],
+    room: int,
+    rules: NameRules,
+) -> GaugeLine:
+    """
+    Lay the route gauge out in slots from its left end.
+
+    Parameters
+    ----------
+    left : GaugeLine
+        The line up to and including the From, as `left_end` lays it.
+    pattern : TripPattern
+        The hero trip.
+    start : int
+        Pattern index of the From.
+    end : int | None
+        Pattern index of the Destination.
+    calls : tuple[GaugeCall, ...]
+        Marks after the From, as `gauge_calls` gives them.
+    buses : Sequence[GaugeBus]
+        Buses on the route.
+    room : int
+        Slots right of the From.
+    rules : NameRules
+        Street-name rules.
+
+    Returns
+    -------
+    GaugeLine
+        The marks, breaks, runs and flags.
+    """
+    line = right_end(
+        line=left,
         pattern=pattern,
         start=start,
         end=end,

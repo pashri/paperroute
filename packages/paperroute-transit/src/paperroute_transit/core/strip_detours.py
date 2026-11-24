@@ -64,6 +64,8 @@ class DetourPart:
     back : str
         On a spur row standing for two calls, the back call's station
         ID; else ''.
+    covered : bool
+        True on a From on a ring whose disc a bus badge stands in for.
     """
 
     kind: DetourKind
@@ -71,6 +73,7 @@ class DetourPart:
     slot: int
     size: int
     back: str = ''
+    covered: bool = False
 
 
 DETOURS: Final[SameMemo[tuple[Detour, ...]]] = SameMemo(size=128)

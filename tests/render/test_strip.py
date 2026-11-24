@@ -10,6 +10,7 @@ from paperroute_device.render.canvas import INK, PAPER, Canvas, Face
 from paperroute_transit.core.map_view import Marker
 from paperroute_transit.core.names import JOINING_WORDS, NameRules
 from paperroute_transit.core.reach import RowKind
+from paperroute_transit.core.strip_detours import DetourKind, DetourPart
 from paperroute_transit.core.strip_model import (
     HOOK_GAP,
     HOOK_LENGTH,
@@ -246,6 +247,15 @@ def test_from_and_to_are_discs_and_others_rings() -> None:
     assert frame[int(FROM_Y), TRACK_X + 8] == INK
     assert frame[int(FROM_Y + ROW_H), TRACK_X + 8] == PAPER
     assert frame[int(FROM_Y + ROW_H), TRACK_X - 3] == PAPER
+
+
+def test_from_covered_by_a_badge_draws_no_disc() -> None:
+    """A From whose disc a bus badge stands in for leaves paper there."""
+    part = DetourPart(
+        kind=DetourKind.LOOP, group=0, slot=1, size=5, covered=True,
+    )
+    frame = drawn(rows=(replace(strip_row(y=FROM_Y, bold=True), detour=part),))
+    assert frame[int(FROM_Y), TRACK_X + 8] == PAPER
 
 
 def test_fold_row_is_a_double_ring() -> None:

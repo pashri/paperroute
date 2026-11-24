@@ -76,6 +76,7 @@ from paperroute_transit.core.strip_times import (
     trip_text,
 )
 from paperroute_transit.core.strip_vehicles import vehicle_markers
+from paperroute_transit.core.strip_ways import Ways, covered_from, ways_of
 from paperroute_transit.core.train_times import (
     is_train,
     train_note,
@@ -556,7 +557,8 @@ def spot_of(*, row: StripRow, track_x: int) -> Spot:
 
 
 def strip_markers(*, inputs: StripInputs, rows: Sequence[StripRow],
-                  track_x: int, reach: Reach | None) -> tuple[Marker, ...]:
+                  track_x: int, reach: Reach | None,
+                  ways: Ways | None = None) -> tuple[Marker, ...]:
     """
     Place the strip's vehicles on its rows.
 
@@ -570,6 +572,8 @@ def strip_markers(*, inputs: StripInputs, rows: Sequence[StripRow],
         Track x at depth 0.
     reach : Reach | None
         The reach drawn, or None.
+    ways : Ways | None
+        The rows' rings and spurs, or None.
 
     Returns
     -------
@@ -590,6 +594,7 @@ def strip_markers(*, inputs: StripInputs, rows: Sequence[StripRow],
             top=min((row.y for row in rows), default=0.0) - ROW_H / 2,
         ),
         approach=approach_of(reach=reach, key=inputs.key),
+        ways=ways,
     )
 
 
@@ -651,14 +656,21 @@ def with_vehicles(*, inputs: StripInputs, rows: Sequence[StripRow],
     Returns
     -------
     tuple[tuple[StripRow, ...], tuple[Marker, ...]]
-        The rows, names past any badges beside their discs, and the
+        The rows, names past any badges beside their discs and a From
+        on a ring under a badge covered (see `covered_from`), and the
         badges.
     """
-    markers = strip_markers(
-        inputs=inputs, rows=rows, track_x=track_x, reach=reach,
+    ways = ways_of(
+        rows=rows,
+        spots=[spot_of(row=row, track_x=track_x) for row in rows],
+        track_x=track_x,
     )
+    markers = strip_markers(
+        inputs=inputs, rows=rows, track_x=track_x, reach=reach, ways=ways,
+    )
+    shown = covered_from(rows=rows, markers=markers, ways=ways)
     return (
-        names_clear(rows=rows, markers=markers, track_x=track_x),
+        names_clear(rows=shown, markers=markers, track_x=track_x),
         markers,
     )
 

@@ -94,6 +94,16 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     'strip_loop': lambda: detour_scene(
         view=LiveView.STRIP, trip=LOOP_441, origin=3, route='441',
     ),
+    'strip_loop_bus': lambda: detour_scene(
+        view=LiveView.STRIP, trip=LOOP_441, origin=3, route='441', lead=-4,
+    ),
+    'strip_map_loop_bus': lambda: detour_scene(
+        view=LiveView.STRIP_MAP, trip=LOOP_441[3:], origin=0, route='441',
+        lead=-4,
+    ),
+    'strip_spur_bus': lambda: detour_scene(
+        view=LiveView.STRIP, trip=SPUR_18, origin=3, route='18', lead=-15,
+    ),
     'strip_map_loop': lambda: detour_scene(
         view=LiveView.STRIP_MAP, trip=LOOP_441[3:], origin=0, route='441',
     ),

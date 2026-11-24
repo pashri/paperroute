@@ -273,7 +273,8 @@ def draw_station(canvas: Canvas, *, row: StripRow, x: float) -> None:
     """
     Draw a row's station mark.
 
-    The From and Destination get a disc, a closed fold two rings, and
+    The From and Destination get a disc, unless a badge covers the
+    From on a ring, a closed fold two rings, and
     an exit, a passed station and a dashed row nothing. Any other
     station gets a ring.
 
@@ -287,11 +288,12 @@ def draw_station(canvas: Canvas, *, row: StripRow, x: float) -> None:
         Track x at the row's depth.
     """
     if row.bold:
-        canvas.ellipse(
-            box=(x - DISC_RADIUS, row.y - DISC_RADIUS,
-                 x + DISC_RADIUS, row.y + DISC_RADIUS),
-            grey=INK,
-        )
+        if row.detour is None or not row.detour.covered:
+            canvas.ellipse(
+                box=(x - DISC_RADIUS, row.y - DISC_RADIUS,
+                     x + DISC_RADIUS, row.y + DISC_RADIUS),
+                grey=INK,
+            )
         return
     if row.kind is RowKind.FOLD:
         draw_fold(canvas, y=row.y, x=x)

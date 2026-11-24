@@ -307,10 +307,11 @@ SPUR_506: Final[tuple[Call, ...]] = (
 )  # Sydney 506 towards East Ryde, its From Badajoz Rd Opp Callaghan St;
 # its two Ryde East Public School kerbs share their parent station
 DETOUR_TRIP: Final[str] = 'detour'
+NEXT_BUS: Final[int] = 20  # minutes between a detour scene's two buses
 
 
 def detour_scene(*, view: LiveView, trip: Sequence[Call], origin: int,
-                 route: str) -> State:
+                 route: str, lead: int = 2) -> State:
     """
     Show one bus along real timetable calls on a Strip view.
 
@@ -325,11 +326,16 @@ def detour_scene(*, view: LiveView, trip: Sequence[Call], origin: int,
         Index of the From among them.
     route : str
         The route's short name.
+    lead : int
+        Minutes after `START` the bus leaves the From; negative once it
+        has left.
 
     Returns
     -------
     State
-        State at `START`, the bus leaving the From two minutes later.
+        State at `START`, the bus leaving the From `lead` minutes later;
+        once it has left, a second bus follows `NEXT_BUS` minutes on so
+        the rows below the From still follow the trip.
     """
     places = {
         station: place(station, name=name, point=point)
@@ -338,12 +344,15 @@ def detour_scene(*, view: LiveView, trip: Sequence[Call], origin: int,
     pin = replace(PIN, origin=places[trip[origin][0]], destination=None)
     key = replace(KEY, station=trip[origin][0])
     stations = [station for station, _, _, _ in trip]
-    shift = EIGHT + 120 - trip[origin][3]
-    bus = replace(
-        train(minutes=2, trip_id=DETOUR_TRIP), route=route,
+    leads = {DETOUR_TRIP: lead}
+    if lead < 0:
+        leads[f'{DETOUR_TRIP}-next'] = lead + NEXT_BUS
+    buses = tuple(
+        replace(train(minutes=minutes, trip_id=trip_id), route=route)
+        for trip_id, minutes in leads.items()
     )
     state, _ = on_view(
-        view=view, pin=pin, departures=(bus,), station=trip[origin][0],
+        view=view, pin=pin, departures=buses, station=trip[origin][0],
     )
     state, _ = step(state, StripLoaded(key=key, reach=build_reach(
         data=ReachInput(
@@ -357,16 +366,20 @@ def detour_scene(*, view: LiveView, trip: Sequence[Call], origin: int,
             station_of={station: station for station in stations},
         ),
     )))
-    stops = tuple(
-        PatternStop(
-            arrives=seconds + shift,
-            departs=seconds + shift,
-            point=point,
-            station=station,
-            name=name,
-        )
-        for station, name, point, seconds in trip
-    )
     return patterns_loaded(state=state, patterns={
-        DETOUR_TRIP: pattern(trip_id=DETOUR_TRIP, route=route, stops=stops),
+        trip_id: pattern(
+            trip_id=trip_id,
+            route=route,
+            stops=tuple(
+                PatternStop(
+                    arrives=seconds + EIGHT + 60 * minutes - trip[origin][3],
+                    departs=seconds + EIGHT + 60 * minutes - trip[origin][3],
+                    point=point,
+                    station=station,
+                    name=name,
+                )
+                for station, name, point, seconds in trip
+            ),
+        )
+        for trip_id, minutes in leads.items()
     })

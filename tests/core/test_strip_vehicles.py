@@ -17,17 +17,35 @@ from paperroute_testkit.core.factories import (
 )
 from paperroute_testkit.core.strip_factories import row_named
 from paperroute_transit.core.map_view import Marker
+from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.positions import VehiclePosition
+from paperroute_transit.core.reach import RowKind
 from paperroute_transit.core.strip_badges import Spot
+from paperroute_transit.core.strip_detours import DetourKind, DetourPart
 from paperroute_transit.core.strip_model import (
     INDENT,
     ROW_H,
+    STRIP_TOP,
     TRACK_X,
     StripRow,
     hook_straight,
 )
+from paperroute_transit.core.strip_rings import (
+    LEAVE,
+    SWEEP,
+    ring_point,
+    ring_stop,
+)
 from paperroute_transit.core.strip_vehicles import hop_marker
 from paperroute_transit.core.strip_view import build_strip_view
+from paperroute_transit.core.strip_ways import (
+    Ways,
+    covered_from,
+    hop_ends,
+    hop_way,
+    ring_angle,
+    ways_of,
+)
 
 
 def badge_at(
@@ -298,3 +316,185 @@ def test_hop_marker_without_a_next_stop_has_no_wedge() -> None:
     )
     assert ended is not None and level is not None
     assert (ended.marker.bearing, level.marker.bearing) == (None, None)
+
+
+def strip_row(*, station: str, y: float, part: DetourPart | None = None,
+              bold: bool = False) -> StripRow:
+    """
+    Make a strip row on the trunk.
+
+    Parameters
+    ----------
+    station : str
+        Its station.
+    y : float
+        Row centre.
+    part : DetourPart | None
+        Its place on a loop or spur.
+    bold : bool
+        True for the From.
+
+    Returns
+    -------
+    StripRow
+        The row.
+    """
+    return StripRow(
+        name=station, depth=0, kind=RowKind.MAIN, y=y,
+        parent_y=y - ROW_H, parent_depth=0, tag='', time='8:00',
+        ride=False, cursor=False, bold=bold, station=station, detour=part,
+    )
+
+
+def trip_of(*, stations: str) -> TripPattern:
+    """
+    Make a trip calling at one station per letter.
+
+    Parameters
+    ----------
+    stations : str
+        Station IDs, one letter each, in calling order.
+
+    Returns
+    -------
+    TripPattern
+        The trip, a minute a hop.
+    """
+    return pattern(stops=tuple(
+        PatternStop(
+            arrives=EIGHT + 60 * index, departs=EIGHT + 60 * index,
+            point=(0.0, 0.0), station=station, name=station,
+        )
+        for index, station in enumerate(stations)
+    ))
+
+
+def loop_ways(*, bold: str = '') -> Ways:
+    """
+    Lay out S, a stand Q, a five-stop ring T H G P N, Q again, then R.
+
+    Parameters
+    ----------
+    bold : str
+        The station drawn as the From, if any.
+
+    Returns
+    -------
+    Ways
+        The rows and their ring.
+    """
+    top = STRIP_TOP + ROW_H / 2
+    rows = [
+        strip_row(
+            station=station, y=top + ROW_H * place,
+            bold=station == bold,
+            part=None if slot is None else DetourPart(
+                kind=DetourKind.LOOP, group=0, slot=slot, size=5,
+            ),
+        )
+        for place, (station, slot) in enumerate((
+            ('S', None), ('Q', None), ('N', 4), ('P', 3), ('G', 2),
+            ('H', 1), ('T', 0), ('Q', None), ('R', None),
+        ))
+    ]
+    return ways_of(
+        rows=rows,
+        spots=[Spot(x=TRACK_X, y=row.y) for row in rows],
+        track_x=TRACK_X,
+    )
+
+
+def test_hop_marker_rides_the_ring_with_its_heading() -> None:
+    """Half way from Hyde Park to G the badge is on the ring, heading on."""
+    ways = loop_ways()
+    way = hop_way(
+        pattern=trip_of(stations='SQTHGPNQR'), index=3, station_of={},
+        ways=ways,
+    )
+    badge = hop_marker(
+        route='441', ends=(Spot(x=0, y=0), Spot(x=0, y=0)), fraction=0.5,
+        age=None, live=True, way=way,
+    )
+    ring = ways.rings[0]
+    rows = {row.station: row for row in ways.rows if row.detour}
+    angle = (
+        ring_angle(ring=ring, row=rows['H'])
+        + ring_angle(ring=ring, row=rows['G'])
+    ) / 2
+    (x, y), bearing = ring_point(ring=ring, share=(LEAVE - angle) / SWEEP)
+    assert badge is not None
+    assert (badge.marker.x, badge.marker.y) == pytest.approx((x, y))
+    assert badge.marker.bearing == pytest.approx(bearing)
+
+
+def test_hop_marker_picks_the_second_visit_after_the_ring() -> None:
+    """Past the ring, Q to R runs from the lower Q row, not the upper."""
+    ways = loop_ways()
+    trip = trip_of(stations='SQTHGPNQR')
+    badge = hop_marker(
+        route='441',
+        ends=hop_ends(pattern=trip, index=7, station_of={}, ways=ways),
+        fraction=0.5, age=None, live=True,
+        way=hop_way(pattern=trip, index=7, station_of={}, ways=ways),
+    )
+    lower, last = ways.rows[7].y, ways.rows[8].y
+    assert badge is not None
+    assert badge.marker.y == pytest.approx((lower + last) / 2)
+
+
+def test_hop_marker_rides_the_spur_out_and_back() -> None:
+    """At one level, the badge heads out one way and back the other."""
+    top = STRIP_TOP + ROW_H / 2
+    rows = [
+        strip_row(station='X', y=top),
+        *(
+            strip_row(
+                station=station, y=top + ROW_H * (level + 1),
+                part=DetourPart(
+                    kind=DetourKind.SPUR, group=0, slot=level, size=2,
+                    back=back,
+                ),
+            )
+            for level, (station, back) in enumerate(
+                (('J', 'K'), ('A', 'B'), ('F', '')),
+            )
+        ),
+        strip_row(station='Y', y=top + ROW_H * 4),
+    ]
+    ways = ways_of(
+        rows=rows,
+        spots=[Spot(x=TRACK_X, y=row.y) for row in rows],
+        track_x=TRACK_X,
+    )
+    trip = trip_of(stations='XJAFBKY')
+    out, back = (
+        hop_marker(
+            route='18', ends=(), fraction=0.5, age=None, live=True,
+            way=hop_way(pattern=trip, index=index, station_of={}, ways=ways),
+        )
+        for index in (1, 4)
+    )
+    assert out is not None and back is not None
+    assert out.marker.y == pytest.approx(back.marker.y)
+    assert out.marker.bearing is not None and back.marker.bearing is not None
+    assert (out.marker.bearing - back.marker.bearing) % 360 == (
+        pytest.approx(180.0)
+    )
+
+
+def test_from_on_a_ring_is_replaced_by_the_bus_badge() -> None:
+    """A badge on the From's ring stop hides its disc, not its name."""
+    ways = loop_ways(bold='H')
+    place = ways.rows.index(next(r for r in ways.rows if r.station == 'H'))
+    x, y = ring_stop(ring=ways.rings[0], row=ways.rows[place])
+    bus = Marker(
+        route='441', x=x, y=y, bearing=0.0, live=True, pinned=True, age=None,
+    )
+    away = replace(bus, y=y + ROW_H)
+    covered = covered_from(rows=ways.rows, markers=[bus], ways=ways)
+    bare = covered_from(rows=ways.rows, markers=[away], ways=ways)
+    hidden, shown = covered[place].detour, bare[place].detour
+    assert hidden is not None and shown is not None
+    assert hidden.covered and not shown.covered
+    assert (covered[place].bold, covered[place].time) == (True, '8:00')
+    assert covered[:place] == ways.rows[:place]

@@ -26,6 +26,7 @@ from paperroute_transit.core.tiles import (
     to_pixels,
 )
 from paperroute_transit.render.map_base import draw_map_base, window_of
+from tests.helpers import exactly_two
 from tests.render.map_base.helpers import (
     CENTRE,
     MPP,
@@ -84,7 +85,7 @@ def test_route_stays_whole_through_a_station_name(tmp_path: Path) -> None:
                 tiles=tiles,
                 variant=TileVariant.GREY,
             ))
-    named, plain = drawn
+    named, plain = exactly_two(items=drawn)
     row = centre_row()
     x = math.floor(MAP_WIDTH / 2 + 120.0)
     stroke = (slice(row - 5, row + 5), slice(x - 40, x + 41))
@@ -115,7 +116,7 @@ def test_route_stays_whole_through_the_to_station_name(
                 tiles=tiles,
                 variant=TileVariant.GREY,
             ))
-    named, plain = drawn
+    named, plain = exactly_two(items=drawn)
     row = centre_row()
     x = math.floor(MAP_WIDTH / 2 + 120.0)
     stroke = (slice(row - 4, row + 4), slice(x - 40, x + 41))

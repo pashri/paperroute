@@ -1,3 +1,5 @@
+"""Tests for late marks."""
+
 from dataclasses import replace
 from typing import Final
 

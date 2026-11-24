@@ -31,6 +31,7 @@ from paperroute_transit.render.strip_view import (
     paint_strip_view,
 )
 from paperroute_transit.render.strip_view import panel_row as paint_panel_row
+from tests.helpers import exactly_two
 from tests.render.strip_view.helpers import (
     MIDDLE,
     NAMING,
@@ -307,5 +308,5 @@ def test_hint_separator_is_heavier() -> None:
         canvas = Canvas()
         canvas.text(at=(100, 100), text=mark, face=HINT_FACE, grey=INK)
         inks.append(int((canvas.grey() == INK).sum()))
-    bullet, dot = inks
+    bullet, dot = exactly_two(items=inks)
     assert bullet >= 2 * dot > 0

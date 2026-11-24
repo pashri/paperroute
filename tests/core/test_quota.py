@@ -172,7 +172,7 @@ def test_quit_saves_quota_at_once() -> None:
 
 
 
-def skipped(*, at: datetime, sent: bool = False) -> FeedFailed:
+def skipped(*, when: datetime, sent: bool = False) -> FeedFailed:
     """
     Make a failed fetch.
 
@@ -188,7 +188,7 @@ def skipped(*, at: datetime, sent: bool = False) -> FeedFailed:
     FeedFailed
         The event.
     """
-    return FeedFailed(feed=BUSES, at=at, reason='backing off', sent=sent)
+    return FeedFailed(feed=BUSES, at=when, reason='backing off', sent=sent)
 
 
 def test_fetch_skipped_in_backoff_is_not_counted() -> None:
@@ -197,7 +197,7 @@ def test_fetch_skipped_in_backoff_is_not_counted() -> None:
     state = replace(
         loaded(state=fresh(now=now)), quota=Quota(day=DAY, calls=5),
     )
-    state, _ = step(state, skipped(at=now))
+    state, _ = step(state, skipped(when=now))
     assert state.quota == Quota(day=DAY, calls=4)
 
 
@@ -217,7 +217,7 @@ def test_sent_failure_is_still_counted() -> None:
     state = replace(
         loaded(state=fresh(now=now)), quota=Quota(day=DAY, calls=5),
     )
-    state, _ = step(state, skipped(at=now, sent=True))
+    state, _ = step(state, skipped(when=now, sent=True))
     assert state.quota == Quota(day=DAY, calls=5)
 
 
@@ -227,5 +227,5 @@ def test_skip_after_midnight_leaves_the_new_day_alone() -> None:
     state = replace(
         loaded(state=fresh(now=early)), quota=Quota(day=DAY, calls=5),
     )
-    state, _ = step(state, skipped(at=early))
+    state, _ = step(state, skipped(when=early))
     assert state.quota == Quota(day=DAY, calls=5)

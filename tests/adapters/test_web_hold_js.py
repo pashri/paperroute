@@ -1,18 +1,15 @@
 """Run the page script's hold logic in node against stub browser globals."""
 
+import json
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
 
 from paperroute_device.adapters.web_frame import SHELL_WEB
+from tests.adapters.node_harness import LIVE_PREAMBLE, run_in_node
 
-HARNESS = r"""
-import { pathToFileURL } from 'node:url';
-const sent = [];
-const listeners = {};
-const timers = [];
+HARNESS = LIVE_PREAMBLE + r"""
 const stub = () => ({ addEventListener() {}, textContent: '' });
 globalThis.fetch = async (url, init) => {
   if (init) sent.push(init.body.get('action'));
@@ -124,20 +121,16 @@ def test_page_hold_timer_in_node(tmp_path: Path) -> None:
     Keys and Press: click presses, double or long holds, none stranded;
     a turn while held sends a held turn and no hold.
     """
-    script = tmp_path / 'live.mjs'
-    script.write_text(
-        (SHELL_WEB / 'live.js').read_text(encoding='utf-8'),
-        encoding='utf-8',
-    )
-    harness = tmp_path / 'harness.mjs'
-    harness.write_text(HARNESS, encoding='utf-8')
-    done = subprocess.run(
-        ['node', str(harness), str(script)],
-        capture_output=True,
-        check=True,
-        text=True,
-    )
-    assert done.stdout.strip() == (
+    assert json.dumps(
+        run_in_node(
+            tmp_path=tmp_path,
+            source=SHELL_WEB / 'live.js',
+            name='live.mjs',
+            harness=HARNESS,
+        ),
+        separators=(',', ':'),
+        ensure_ascii=False,
+    ) == (
         '{"tap":["press"],"hold":["hold"],'
         '"modifier":["press"],"blur":[],'
         '"rightClick":[],"buttonTap":[],"buttonTapTimed":["press"],'

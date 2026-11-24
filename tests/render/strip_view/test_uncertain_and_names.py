@@ -57,7 +57,7 @@ from tests.render.test_chrome import Recording
 LONG_STOP: Final[str] = (
     'Macquarie University Station, Herring Road Interchange'
 )
-
+from tests.helpers import exactly_two
 
 UNSURE: Final[Estimate] = Estimate(due='8:05', late=1, uncertain=True)
 
@@ -231,7 +231,7 @@ def test_panel_heading_wraps_a_title_without_a_destination() -> None:
         canvas, panel=replace(PANEL, title=LONG_STOP, destination=None),
         drop=0, rules=NameRules(),
     )
-    first, second = canvas.drawn[-2:]
+    first, second = exactly_two(items=canvas.drawn[-2:])
     assert f'{first} {second}' == LONG_STOP
 
 
@@ -321,6 +321,7 @@ def test_continuing_middle_limits_the_pair_to_the_name_room(
 
     def record(canvas: Canvas, **kwargs: Any) -> float:
         """Note the room the pair was given."""
+        del canvas
         rooms.append(kwargs['room'])
         return 0.0
 

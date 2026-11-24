@@ -138,8 +138,9 @@ def test_plan_answers_as_core_feeds_did() -> None:
 
 def test_sydney_city_carries_the_plan() -> None:
     """Sydney's city reads its feeds from a plan in its projection."""
-    assert isinstance(SYDNEY.feeds, SydneyFeeds)
-    assert SYDNEY.feeds.projection is SYDNEY_PROJECTION
+    feeds = SYDNEY.feeds
+    assert isinstance(feeds, SydneyFeeds)
+    assert getattr(feeds, 'projection') is SYDNEY_PROJECTION
 
 
 def test_position_feeds_are_sorted_and_unique() -> None:

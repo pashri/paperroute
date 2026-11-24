@@ -36,6 +36,7 @@ from paperroute_transit.render.map_base import (
 )
 from paperroute_transit.render.map_corners import BOX_FACE
 from paperroute_transit.render.tile_codec import diffuse
+from tests.helpers import exactly_two
 from tests.render.map_base.helpers import (
     CENTRE,
     LABEL_SHIFT,
@@ -142,9 +143,9 @@ def test_no_tiles_says_map_not_installed_in_the_credit_corner() -> None:
 
 def test_scale_bar_and_credit_are_drawn(tmp_path: Path) -> None:
     """The scale box at the bottom left and the credit box at the right."""
-    grey = grey_drawn(tmp_path=tmp_path, base=base())
-    bar = grey[MAP_HEIGHT - 16 : MAP_HEIGHT - 12, 12 : 12 + 125]
-    assert np.all(bar == INK)
+    grey = grey_drawn(tmp_path=tmp_path, map_base=base())
+    scale = grey[MAP_HEIGHT - 16 : MAP_HEIGHT - 12, 12 : 12 + 125]
+    assert np.all(scale == INK)
     credit = grey[MAP_HEIGHT - 30 :, MAP_WIDTH - 120 :]
     assert np.count_nonzero(credit == DARK) > 0
     assert np.count_nonzero(credit == INK) > 0
@@ -176,7 +177,10 @@ def test_base_is_width_wide() -> None:
 
 def test_credit_sits_at_the_narrow_edge(tmp_path: Path) -> None:
     """At 480 px the credit box is 8 px in from 480, not from 520."""
-    grey = grey_drawn(tmp_path=tmp_path, base=replace(base(), width=STRIP_MAP_WIDTH))
+    grey = grey_drawn(
+        tmp_path=tmp_path,
+        map_base=replace(base(), width=STRIP_MAP_WIDTH),
+    )
     credit = grey[MAP_HEIGHT - 30 :]
     right = np.flatnonzero(np.any(credit == DARK, axis=0)).max()
     assert right == STRIP_MAP_WIDTH - 8
@@ -335,7 +339,7 @@ def test_names_reaching_in_from_above_are_redrawn(tmp_path: Path) -> None:
                     variant=TileVariant.GREY,
                 ),
             )
-    named, plain = drawn
+    named, plain = exactly_two(items=drawn)
     assert np.count_nonzero(named[:40] == DARK) > 0
     assert np.count_nonzero(plain[:40] == DARK) == 0
 
@@ -394,9 +398,9 @@ def test_redraw_name_off_the_map_changes_nothing() -> None:
 
 def test_scale_bar_is_2_km_at_14_m_per_px(tmp_path: Path) -> None:
     """At 14 m/px the 2 km bar is 143 px long, 4 px in from its box."""
-    grey = grey_drawn(tmp_path=tmp_path, base=base(mpp=14))
-    bar = grey[MAP_HEIGHT - 16 : MAP_HEIGHT - 12, : 12 + 145]
-    ink = np.flatnonzero(np.all(bar == INK, axis=0))
+    grey = grey_drawn(tmp_path=tmp_path, map_base=base(mpp=14))
+    scale = grey[MAP_HEIGHT - 16 : MAP_HEIGHT - 12, : 12 + 145]
+    ink = np.flatnonzero(np.all(scale == INK, axis=0))
     assert ink.min() == 12
     assert 12 + 142 <= ink.max() + 1 <= 12 + 143
 
@@ -407,7 +411,7 @@ def test_to_disc_is_12_px(tmp_path: Path) -> None:
     trip = TripMarks(
         origin=None, second=(), walk=None, change=None, end=end,
     )
-    grey = grey_drawn(tmp_path=tmp_path, base=replace(base(), trip=trip))
+    grey = grey_drawn(tmp_path=tmp_path, map_base=replace(base(), trip=trip))
     x, y = screen_point(
         centre=CENTRE,
         mpp=MPP,
@@ -422,7 +426,10 @@ def test_to_disc_is_12_px(tmp_path: Path) -> None:
 
 def test_from_marker_is_16_px(tmp_path: Path) -> None:
     """The From is a 16 px paper disc, a 4 px ring at 12 and a 5 px dot."""
-    grey = grey_drawn(tmp_path=tmp_path, base=base(route=across(half=5000.0)))
+    grey = grey_drawn(
+        tmp_path=tmp_path,
+        map_base=base(route=across(half=5000.0)),
+    )
     x, y = MAP_WIDTH // 2, centre_row()
     assert pattern(values=grey[y, x - 20 : x + 21]) == (
         '####..####.....##########.....####..#####'

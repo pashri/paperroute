@@ -1,13 +1,12 @@
 """Run the Pins page script in node against stub browser globals."""
 
-import json
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
 
 from paperroute_transit.adapters.board_web import BOARD_WEB
+from tests.adapters.node_harness import run_in_node
 
 HARNESS = r"""
 import { pathToFileURL } from 'node:url';
@@ -205,20 +204,12 @@ console.log(JSON.stringify(results));
 @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
 def test_pins_script_in_node(tmp_path: Path) -> None:
     """Drag, submit-on-change, delete dialog and window rows behave."""
-    script = tmp_path / 'pins.mjs'
-    script.write_text(
-        (BOARD_WEB / 'pins.js').read_text(encoding='utf-8'),
-        encoding='utf-8',
-    )
-    harness = tmp_path / 'harness.mjs'
-    harness.write_text(HARNESS, encoding='utf-8')
-    done = subprocess.run(
-        ['node', str(harness), str(script)],
-        capture_output=True,
-        check=True,
-        text=True,
-    )
-    assert json.loads(done.stdout) == {
+    assert run_in_node(
+        tmp_path=tmp_path,
+        source=BOARD_WEB / 'pins.js',
+        name='pins.mjs',
+        harness=HARNESS,
+    ) == {
         'moved': [['c', 'a', 'b'], ['a', 'b', 'c']],
         'grabbed': 'true',
         'drag': ['c,a,b', 1, None],

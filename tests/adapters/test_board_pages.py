@@ -46,6 +46,7 @@ class PluggedCard:
         str
             The mark.
         """
+        del query
         return PLUGGED
 
     def routes(self) -> list[web.RouteDef]:
@@ -84,6 +85,7 @@ class RecordingPlug:
         PagePlug
             The card.
         """
+        del ways, skip_school
         return PluggedCard()
 
     async def close(self) -> None:

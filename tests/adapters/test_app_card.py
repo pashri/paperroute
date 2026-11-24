@@ -95,13 +95,16 @@ def test_card_without_about_has_no_leading_dot() -> None:
 def test_built_at_reads_the_files_build_time(tmp_path: Path) -> None:
     """The file's `built_at` is read as a time in the city's zone."""
     timetable = tmp_path / 'timetable.db'
-    with closing(sqlite3.connect(timetable)) as conn, conn:
-        conn.execute('CREATE TABLE stops (stop_id TEXT PRIMARY KEY)')
-        conn.execute('CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)')
-        conn.execute(
-            'INSERT INTO meta VALUES (?, ?)',
-            ('built_at', '2026-11-04T03:31:00+11:00'),
-        )
+    with closing(sqlite3.connect(timetable)) as conn:
+        with conn:
+            conn.execute('CREATE TABLE stops (stop_id TEXT PRIMARY KEY)')
+            conn.execute(
+                'CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)',
+            )
+            conn.execute(
+                'INSERT INTO meta VALUES (?, ?)',
+                ('built_at', '2026-11-04T03:31:00+11:00'),
+            )
     city = city_under_test()
     found = built_at(city=city, timetable=timetable)
     assert found == datetime.fromisoformat('2026-11-04T03:31:00+11:00')
@@ -122,6 +125,7 @@ def test_built_at_is_none_without_a_readable_file(
 def test_built_at_is_none_when_the_read_fails(tmp_path: Path) -> None:
     """A timetable with no `meta` table gives no build time."""
     timetable = tmp_path / 'timetable.db'
-    with closing(sqlite3.connect(timetable)) as conn, conn:
-        conn.execute('CREATE TABLE stops (stop_id TEXT PRIMARY KEY)')
+    with closing(sqlite3.connect(timetable)) as conn:
+        with conn:
+            conn.execute('CREATE TABLE stops (stop_id TEXT PRIMARY KEY)')
     assert built_at(city=city_under_test(), timetable=timetable) is None

@@ -626,13 +626,13 @@ def test_plain_lines_rides_from_each_kerb() -> None:
 def test_kerb_station_falls_back_to_the_from_for_a_kerb_under_it() -> None:
     """A kerb the pattern does not call at boards at the From's station."""
     there = across(replace(bus(route='370', shape='back'), trip_id='back'))
-    pattern = back_pattern(trip_id='back')
+    built = back_pattern(trip_id='back')
     under = place('X2', name='Opposite', point=(1100.0, 30.0))
     assert kerb_station(
         choice=replace(CHOICE, across=under), departure=there,
-        pattern=pattern,
+        pattern=built,
     ) == 'P'
     assert kerb_station(
         choice=replace(CHOICE, across=ACROSS_KERB), departure=there,
-        pattern=pattern,
+        pattern=built,
     ) == 'X'

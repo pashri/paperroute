@@ -6,15 +6,12 @@ from http import HTTPStatus
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute_sydney.adapters.web_board import SuggestPlug
 from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.page_markup import inside, parse_page, parse_tree
-from paperroute_transit.adapters.board_head import BoardHead
-from paperroute_transit.adapters.board_pages import PinPages
 from paperroute_transit.adapters.web_pins import SEEN_POLL_S, SEEN_WAIT_S
 from paperroute_transit.core.messages import PinDeleted
 from paperroute_transit.core.model import pin_ref
-from tests.adapters.transit_web import transit_display
+from tests.adapters.transit_web import pin_pages, transit_display
 from tests.adapters.web_pins.helpers import HOME, WORK, Client, Pins
 
 
@@ -174,13 +171,7 @@ async def test_nav_has_pins_on_every_page(client: Client) -> None:
 async def test_pins_routes_refuse_other_peers(pins: Pins) -> None:
     """A peer outside the local network is refused."""
     display = transit_display(
-        board=PinPages(
-            head=BoardHead(),
-            pins=pins.get,
-            options=None,
-            modes=SYDNEY.modes,
-            plug=SuggestPlug(planner=None),
-        ),
+        board=pin_pages(pins=pins.get, options=None),
         remote_of=lambda request: '8.8.8.8',
         city=SYDNEY,
     )

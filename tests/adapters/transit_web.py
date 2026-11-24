@@ -8,6 +8,7 @@ from paperroute_device.adapters.web_display import StatusLine, WebDisplay
 from paperroute_device.adapters.web_frame import KIT_NAV, NavItem
 from paperroute_device.adapters.web_guard import RemoteOf, peer_address
 from paperroute_device.adapters.web_live import KNOB_HINT
+from paperroute_sydney.adapters.web_board import SuggestPlug
 from paperroute_sydney.city import SYDNEY
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages
@@ -15,7 +16,41 @@ from paperroute_transit.adapters.board_routes import BoardRoutes
 from paperroute_transit.adapters.board_settings import BoardSettingsPlug
 from paperroute_transit.core.city import City
 from paperroute_transit.core.saved import default_settings
+from paperroute_transit.observers import PinsSeen
+from paperroute_transit.ports import PinOptions
 from paperroute_transit.transit_app import QUIET_LABEL
+
+
+def pin_pages(
+    *,
+    pins: Callable[[], PinsSeen | None],
+    options: PinOptions | None,
+    head: BoardHead | None = None,
+) -> PinPages:
+    """
+    Build the pin pages for Sydney with a Trip Planner plug that plans nothing.
+
+    Parameters
+    ----------
+    pins : Callable[[], PinsSeen | None]
+        Gives the pins on screen.
+    options : PinOptions | None
+        The timetable's options, or None before it is ready.
+    head : BoardHead | None
+        The page head; a plain one by default.
+
+    Returns
+    -------
+    PinPages
+        The pages.
+    """
+    return PinPages(
+        head=head or BoardHead(),
+        pins=pins,
+        options=options,
+        modes=SYDNEY.modes,
+        plug=SuggestPlug(planner=None),
+    )
 
 
 # pylint: disable-next=too-many-arguments

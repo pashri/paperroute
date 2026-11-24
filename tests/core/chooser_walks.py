@@ -657,18 +657,20 @@ def walk_column(*, path: ChooserPath) -> Column | None:
     }
     if path in fixed:
         return fixed[path]
-    if path[-1:] == ((Level.ROUTE, 'rep:1T1'),) and (
-        path[:-1] == replacement_lines
-    ):
-        return TOWARDS
-    if path[:2] == BUS_606[:2] and levels[2:] == (Level.ROUTE,):
+    towards = (
+        (
+            path[-1:] == ((Level.ROUTE, 'rep:1T1'),)
+            and path[:-1] == replacement_lines
+        )
+        or (path[:2] == BUS_606[:2] and levels[2:] == (Level.ROUTE,))
+        or path == (*metro, (Level.LINE, 'm1'))
+    )
+    if towards:
         return TOWARDS
     if path[:1] == TRAIN and levels[1:] == (Level.LINE,):
         return T1_STATIONS
     if path[:1] == TRAIN and levels[1:] == (Level.LINE, Level.STATION):
         return T1_TO_END if path[-1][1] == 'E1' else T1_TO
-    if path == (*metro, (Level.LINE, 'm1')):
-        return TOWARDS
     return None
 
 

@@ -1,7 +1,9 @@
 """Tests for fitting a map to the points it should hold."""
 
+from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime, timedelta
+from types import MappingProxyType
 from typing import Any, Final
 
 import pytest
@@ -259,7 +261,7 @@ def test_fitted_keeps_from_below_the_banner() -> None:
 
 
 CALLS: Final[str] = 'UVWZAXY'
-THROUGH: Final[dict[str, Point]] = {
+THROUGH: Final[Mapping[str, Point]] = MappingProxyType({
     'U': (-1_600.0, 800.0),
     'V': (-1_200.0, 800.0),
     'W': (-800.0, 800.0),
@@ -267,7 +269,7 @@ THROUGH: Final[dict[str, Point]] = {
     'A': FROM,
     'X': (400.0, 800.0),
     'Y': (800.0, 800.0),
-}
+})
 BACK: Final[dict[str, Point]] = {
     name: (-x, y) for name, (x, y) in THROUGH.items()
 }
@@ -278,7 +280,7 @@ def through(
     trip_id: str,
     minutes: int = 0,
     first: str = 'U',
-    line: dict[str, Point] = THROUGH,
+    line: Mapping[str, Point] = THROUGH,
     apart: int = 3,
 ) -> tuple[Departure, TripPattern]:
     """

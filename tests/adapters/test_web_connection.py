@@ -1,27 +1,20 @@
 """Tests for the hand way editor page."""
 
 import re
-from collections.abc import AsyncIterator
 from http import HTTPStatus
 from typing import Final
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
-import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute_sydney.adapters.web_board import SuggestPlug
 from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.connection_factories import WORK
-from paperroute_transit.adapters.board_head import BoardHead
-from paperroute_transit.adapters.board_pages import PinPages
 from paperroute_transit.adapters.connection_editor import ALLOW_RANGE
 from paperroute_transit.adapters.web_pin_edit import MISFIT
 from paperroute_transit.core.model import pin_ref
-from paperroute_transit.observers import PinsSeen
-from tests.adapters.test_connection_editor import OPTIONS
 from tests.adapters.test_web_device import sydney_site
-from tests.adapters.transit_web import transit_display
+from tests.adapters.transit_web import pin_pages, transit_display
 from tests.adapters.web_pins.helpers import Pins
 
 Client = TestClient[web.Request, web.Application]
@@ -37,37 +30,6 @@ TWO: Final[list[tuple[str, str]]] = [
     *FULL[:5], ('changes', '2'), ('off2', '214510'), ('on2', '2145648'),
     ('allow2', '3'), ('allow2_for', '2145648'), ('to', '214510'),
 ]
-
-
-@pytest.fixture(name='pins')
-def _pins() -> Pins:
-    """The Work connection, on screen."""
-    pins = Pins(pins=())
-    pins.seen = PinsSeen(pins=(WORK,), shown=0, revision=3)
-    return pins
-
-
-@pytest.fixture(name='client')
-async def _client(pins: Pins) -> AsyncIterator[Client]:
-    """A client of a display with the fake timetable."""
-    board = PinPages(
-        head=BoardHead(),
-        pins=pins.get,
-        options=OPTIONS,
-        modes=SYDNEY.modes,
-        plug=SuggestPlug(planner=None),
-    )
-    board.pins_sleep = pins.sleep
-    display = transit_display(
-        device=sydney_site().pages(),
-        board=board,
-        city=SYDNEY,
-    )
-    display.bind(post=pins.posted.append)
-    client = TestClient(TestServer(display.app()))
-    await client.start_server()
-    yield client
-    await client.close()
 
 
 def unlabelled(*, text: str) -> list[str]:
@@ -270,13 +232,7 @@ async def test_starting_without_timetable(pins: Pins) -> None:
     """Before the timetable is ready the page says so; saves go back."""
     display = transit_display(
         device=sydney_site().pages(),
-        board=PinPages(
-            head=BoardHead(),
-            pins=pins.get,
-            options=None,
-            modes=SYDNEY.modes,
-            plug=SuggestPlug(planner=None),
-        ),
+        board=pin_pages(pins=pins.get, options=None),
         city=SYDNEY,
     )
     client = TestClient(TestServer(display.app()))

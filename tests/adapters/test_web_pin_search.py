@@ -7,15 +7,12 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute_sydney.adapters.web_board import SuggestPlug
 from paperroute_sydney.city import SYDNEY, SydneyMode
 from paperroute_testkit.fake_pins import FakePinOptions
-from paperroute_transit.adapters.board_head import BoardHead
-from paperroute_transit.adapters.board_pages import PinPages
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.pin_choices import StopMatch
 from tests.adapters.test_web_device import sydney_site
-from tests.adapters.transit_web import transit_display
+from tests.adapters.transit_web import pin_pages, transit_display
 
 Client = TestClient[web.Request, web.Application]
 PARRAMATTA = StopPlace(
@@ -40,12 +37,9 @@ async def _client() -> AsyncIterator[Client]:
     """
     display = transit_display(
         device=sydney_site().pages(),
-        board=PinPages(
-            head=BoardHead(),
+        board=pin_pages(
             pins=lambda: None,
             options=FakePinOptions(found=(MATCH,)),
-            modes=SYDNEY.modes,
-            plug=SuggestPlug(planner=None),
         ),
         city=SYDNEY,
     )
@@ -86,13 +80,7 @@ async def test_stops_json_before_timetable() -> None:
     """Without a timetable the list is empty."""
     display = transit_display(
         device=sydney_site().pages(),
-        board=PinPages(
-            head=BoardHead(),
-            pins=lambda: None,
-            options=None,
-            modes=SYDNEY.modes,
-            plug=SuggestPlug(planner=None),
-        ),
+        board=pin_pages(pins=lambda: None, options=None),
         city=SYDNEY,
     )
     client = TestClient(TestServer(display.app()))
@@ -117,13 +105,7 @@ async def test_search_follows_school_switch() -> None:
     reported: dict[str, object] = {}
     display = transit_display(
         status=lambda: reported,
-        board=PinPages(
-            head=BoardHead(),
-            pins=lambda: None,
-            options=options,
-            modes=SYDNEY.modes,
-            plug=SuggestPlug(planner=None),
-        ),
+        board=pin_pages(pins=lambda: None, options=options),
         city=SYDNEY,
     )
     client = TestClient(TestServer(display.app()))

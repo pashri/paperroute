@@ -29,6 +29,7 @@ from tests.core.chooser_walks import (
 
 
 def test_view_shows_last_three_columns_with_preview() -> None:
+    """View shows last three columns with preview."""
     many = Column(level=Level.ROUTE, items=tuple(
         Choice(key=f'r{number}', label='Somewhere', badge=str(number))
         for number in range(600, 630)
@@ -56,6 +57,7 @@ def test_view_shows_last_three_columns_with_preview() -> None:
 
 
 def test_trail_and_titles() -> None:
+    """Trail and titles."""
     lists = at_towards()
     view = build_chooser_view(chooser=lists)
     assert (view.title, view.trail) == ('Choose a route', 'Bus · 600s · 606')
@@ -68,6 +70,7 @@ def test_trail_and_titles() -> None:
 
 
 def test_empty_text_while_loading_and_failed() -> None:
+    """Empty text while loading and failed."""
     chooser, request = opened(shown=Pin(origin=place('X')), modes=SYDNEY.modes)
     assert build_chooser_view(chooser=chooser).empty == 'Loading…'
     chooser, _ = fed(chooser, request, None)
@@ -77,6 +80,7 @@ def test_empty_text_while_loading_and_failed() -> None:
 
 
 def test_failed_preview_blanks_only_that_column() -> None:
+    """Failed preview blanks only that column."""
     chooser, asked = opened(shown=Pin(origin=place('X')), modes=SYDNEY.modes)
     chooser, _ = fed(chooser, asked, KINDS)
     chooser = previews_failed(chooser=chooser, path=())
@@ -88,6 +92,7 @@ def test_failed_preview_blanks_only_that_column() -> None:
 
 
 def test_empty_preview_shows_a_note() -> None:
+    """Empty preview shows a note."""
     chooser = opened_at_kind(catalogue=Catalogue(columns={
         BUS: Column(level=Level.GROUP, items=()),
     }))

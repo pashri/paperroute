@@ -1,19 +1,14 @@
 """Run the page script's two-knob chord in node against stub globals."""
 
-import json
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
 
 from paperroute_device.adapters.web_frame import SHELL_WEB
+from tests.adapters.node_harness import LIVE_PREAMBLE, run_in_node
 
-HARNESS = r"""
-import { pathToFileURL } from 'node:url';
-const sent = [];
-const listeners = {};
-const timers = [];
+HARNESS = LIVE_PREAMBLE + r"""
 globalThis.fetch = async (url, init) => {
   if (init) sent.push([init.body.get('knob'), init.body.get('action')]);
   return { ok: true, json: async () => ({}) };
@@ -76,21 +71,13 @@ console.log(JSON.stringify(results));
 @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
 def test_page_chord_in_node(tmp_path: Path) -> None:
     """Both knobs held send one `both` hold and nothing of their own."""
-    script = tmp_path / 'live.mjs'
-    script.write_text(
-        (SHELL_WEB / 'live.js').read_text(encoding='utf-8'),
-        encoding='utf-8',
-    )
-    harness = tmp_path / 'harness.mjs'
-    harness.write_text(HARNESS, encoding='utf-8')
-    done = subprocess.run(
-        ['node', str(harness), str(script)],
-        capture_output=True,
-        check=True,
-        text=True,
-    )
     both = [['both', 'hold']]
-    assert json.loads(done.stdout) == {
+    assert run_in_node(
+        tmp_path=tmp_path,
+        source=SHELL_WEB / 'live.js',
+        name='live.mjs',
+        harness=HARNESS,
+    ) == {
         'bothKeys': both,
         'bothEarly': [],
         'kHeldThenS': both,

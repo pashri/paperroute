@@ -364,11 +364,11 @@ def test_reached_row_not_drawn_gives_way_to_its_partners_row() -> None:
     approach = approach_of(reach=inputs.reach, key=inputs.key)
     assert approach is not None
     departure = inputs.departures[0].departure
-    pattern = inputs.patterns['y']
-    assert pattern is not None
+    built = inputs.patterns['y']
+    assert built is not None
     spot = Spot(x=TRACK_X, y=50.0)
     assert facing_spot(
-        departure=departure, pattern=pattern, at=1,
+        departure=departure, pattern=built, at=1,
         trips=trips_of(inputs=inputs),
         approach=approach,
         spots={'A1': spot},

@@ -150,6 +150,7 @@ def penrith_departures() -> ChooserDeparturesLoaded:
 
 
 def test_station_cursor_skips_headings() -> None:
+    """Station cursor skips headings."""
     chooser = at_stations()
     assert focused(chooser=chooser).key == 'R1'
     chooser, _ = turned(chooser=chooser, steps=1, reach=None)
@@ -161,6 +162,7 @@ def test_station_cursor_skips_headings() -> None:
 
 
 def test_to_cursor_starts_on_from_and_skips_dim() -> None:
+    """To cursor starts on from and skips dim."""
     chooser = at_to_column()
     assert chooser.columns[chooser.focus] == T1_TO
     assert focused(chooser=chooser).key == 'E2'
@@ -172,6 +174,7 @@ def test_to_cursor_starts_on_from_and_skips_dim() -> None:
 
 
 def test_to_cursor_with_no_pickable_rows_stays_on_from() -> None:
+    """To cursor with no pickable rows stays on from."""
     chooser = at_to_column(steps=2)
     assert focused(chooser=chooser).key == 'E1'
     for steps in (-1, 1, -9, 9):
@@ -180,6 +183,7 @@ def test_to_cursor_with_no_pickable_rows_stays_on_from() -> None:
 
 
 def test_station_press_preloads_departures_and_asks_to_column() -> None:
+    """Station press preloads departures and asks to column."""
     state, _ = run_events(state=started(), events=TO_COLUMN[:-2])
     state, effects = step(state, NEXT)
     assert state.chooser is not None
@@ -194,6 +198,7 @@ def test_station_press_preloads_departures_and_asks_to_column() -> None:
 
 
 def test_to_press_on_all_makes_place_without_destination() -> None:
+    """To press on all makes place without destination."""
     state, _ = run_events(state=started(), events=TO_COLUMN)
     state, _ = step(state, NEXT)
     assert state.chooser is None
@@ -203,6 +208,7 @@ def test_to_press_on_all_makes_place_without_destination() -> None:
 
 
 def test_to_press_on_station_makes_place_with_destination() -> None:
+    """To press on station makes place with destination."""
     state, _ = run_events(
         state=started(),
         events=[*TO_COLUMN, KnobTurned(knob=Knob.BOTTOM, steps=-1), NEXT],
@@ -218,6 +224,7 @@ def test_to_press_on_station_makes_place_with_destination() -> None:
 
 
 def test_back_from_to_returns_to_station_on_from() -> None:
+    """Back from to returns to station on from."""
     chooser = knob_backed(chooser=at_to_column())
     assert chooser is not None
     assert chooser.columns[chooser.focus] == T1_STATIONS
@@ -234,6 +241,7 @@ def test_back_from_to_returns_to_station_on_from() -> None:
 
 
 def test_station_departures_land_in_to_column() -> None:
+    """Station departures land in to column."""
     state, _ = run_events(
         state=started(), events=[*TO_COLUMN, penrith_departures()],
     )
@@ -245,6 +253,7 @@ def test_station_departures_land_in_to_column() -> None:
 
 
 def test_departures_landing_before_to_column_are_kept() -> None:
+    """Departures landing before to column are kept."""
     state, _ = run_events(
         state=started(), events=[*TO_COLUMN[:-1], penrith_departures()],
     )
@@ -254,6 +263,7 @@ def test_departures_landing_before_to_column_are_kept() -> None:
 
 
 def test_to_column_polls_its_departures_feeds() -> None:
+    """To column polls its departures feeds."""
     state, _ = run_events(
         state=started(), events=[*TO_COLUMN, penrith_departures()],
     )
@@ -263,6 +273,7 @@ def test_to_column_polls_its_departures_feeds() -> None:
 
 
 def test_to_column_departures_reload_when_short() -> None:
+    """To column departures reload when short."""
     state, _ = run_events(
         state=started(), events=[*TO_COLUMN, penrith_departures()],
     )
@@ -277,6 +288,7 @@ def test_to_column_departures_reload_when_short() -> None:
 
 
 def test_retimed_to_column_asks_departures_again() -> None:
+    """Retimed to column asks departures again."""
     state, _ = run_events(
         state=started(), events=[*TO_COLUMN, penrith_departures()],
     )
@@ -288,6 +300,7 @@ def test_retimed_to_column_asks_departures_again() -> None:
 
 
 def test_back_from_station_forgets_the_from() -> None:
+    """Back from station forgets the from."""
     chooser, _ = knob_pressed(chooser=at_stations(), reach=None)
     assert chooser.origin is not None
     back = knob_backed(chooser=chooser)
@@ -311,6 +324,7 @@ def test_back_from_station_forgets_the_from() -> None:
 
 
 def test_other_line_reply_at_same_station_is_ignored() -> None:
+    """Other line reply at same station is ignored."""
     state, _ = run_events(
         state=started(),
         events=[
@@ -341,6 +355,7 @@ def test_other_line_reply_at_same_station_is_ignored() -> None:
     ],
 )
 def test_missing_station_column_note(event: Event, note: str) -> None:
+    """Missing station column note."""
     state, _ = run_events(
         state=started(), events=[*TO_COLUMN[:5], event],
     )
@@ -378,6 +393,7 @@ def test_station_press_answered_without_to_rows_fails(
 
 
 def test_station_turn_asks_no_preview() -> None:
+    """Station turn asks no preview."""
     chooser = at_stations()
     for steps in (1, 2, -1):
         chooser, request = turned(chooser=chooser, steps=steps, reach=None)
@@ -386,6 +402,7 @@ def test_station_turn_asks_no_preview() -> None:
 
 
 def test_station_turn_after_press_forgets_the_from() -> None:
+    """Station turn after press forgets the from."""
     chooser, _ = knob_pressed(chooser=at_stations(), reach=None)
     assert chooser.origin == T1_PLACES['R1']
     chooser, _ = turned(chooser=chooser, steps=1, reach=None)
@@ -393,6 +410,7 @@ def test_station_turn_after_press_forgets_the_from() -> None:
 
 
 def test_presses_that_pick_nothing_change_nothing() -> None:
+    """Presses that pick nothing change nothing."""
     chooser, request = knob_pressed(chooser=at_stations(), reach=None)
     assert isinstance(request, ColumnRequest)
     assert knob_pressed(chooser=chooser, reach=None) == (chooser, None)
@@ -411,6 +429,7 @@ def test_presses_that_pick_nothing_change_nothing() -> None:
 
 
 def test_to_view_has_hint() -> None:
+    """To view has hint."""
     to_view = build_chooser_view(chooser=at_to_column())
     assert (to_view.title, to_view.hint) == (
         'Choose a destination',

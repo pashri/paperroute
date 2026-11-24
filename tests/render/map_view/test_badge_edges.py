@@ -29,6 +29,7 @@ from paperroute_transit.render.markers import (
     overlaps,
     place,
 )
+from tests.helpers import sole
 from tests.render.map_view.helpers import (
     CENTRE,
     MPP,
@@ -67,7 +68,7 @@ def test_badges_keep_clear_of_the_to() -> None:
     )
     boxes = end_boxes(base=map_base)
     assert (x - END_HALF, y - END_HALF, x + END_HALF, y + END_HALF) in boxes
-    (placed,) = place(markers=[live(at=(x, y + 6))], reserved=boxes)
+    placed = sole(items=place(markers=[live(at=(x, y + 6))], reserved=boxes))
     assert placed.centre != (x, y + 6)
 
 
@@ -131,14 +132,14 @@ def test_badge_near_the_right_edge_slides_inward() -> None:
     """A badge with only a sideways spot free never slides off the map."""
     x, y = MAP_WIDTH - 24.0, MAP_HEIGHT / 2
     blocked = [(x - 5, y - 60, x + 5, y - 5), (x - 5, y + 5, x + 5, y + 60)]
-    (placed,) = place(
+    placed = sole(items=place(
         markers=[live(at=(x, y))],
         reserved=[
             (x - 5, y - 5, x + 5, y + 5),
             *blocked,
             *edge_boxes(width=MAP_WIDTH, banner=False),
         ],
-    )
+    ))
     assert placed.centre == (x - 40, y)
 
 

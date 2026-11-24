@@ -104,7 +104,6 @@ def fixture_calls(network: sqlite3.Connection) -> list[TripCalls]:
 
 def hand_trip(*, trip_id: str, route: str, stations: str, first_dep: int,
               last_arr: int, block: str | None = 'b',
-              headsign: str | None = None,
               passes: tuple[int, ...] = (),
               one_way: tuple[tuple[int, ...], tuple[int, ...]] = ((), ()),
               ) -> TripCalls:
@@ -125,8 +124,6 @@ def hand_trip(*, trip_id: str, route: str, stations: str, first_dep: int,
         Last arrival, seconds.
     block : str | None
         Block ID.
-    headsign : str | None
-        Headsign; None for 'to <last station>'.
     passes : tuple[int, ...]
         Positions passed through without stopping.
     one_way : tuple[tuple[int, ...], tuple[int, ...]]
@@ -142,7 +139,7 @@ def hand_trip(*, trip_id: str, route: str, stations: str, first_dep: int,
     return TripCalls(
         trip_id=trip_id, route_id=f'r{route}',
         kind=SydneyMode.TRAIN if rail else SydneyMode.BUS, route=route,
-        headsign=headsign or f'to {calls[-1]}', block=block, service='daily',
+        headsign=f'to {calls[-1]}', block=block, service='daily',
         first_dep=first_dep, last_arr=last_arr, stations=calls, rail=rail,
         passes=passes, no_board=tuple(sorted({*passes, *one_way[0]})),
         no_alight=tuple(sorted({*passes, *one_way[1]})),
@@ -300,8 +297,13 @@ def test_next_on_block_stops_at_a_hidden_trip() -> None:
     """An Empty Train between two revenue trips breaks the chain."""
     x1 = hand_trip(trip_id='x1', route='T1', stations='A B C',
                    first_dep=0, last_arr=100)
-    empty = hand_trip(trip_id='e1', route='T1', stations='C D',
-                      first_dep=150, last_arr=200, headsign='Empty Train')
+    empty = dataclasses.replace(
+        hand_trip(
+            trip_id='e1', route='T1', stations='C D',
+            first_dep=150, last_arr=200,
+        ),
+        headsign='Empty Train',
+    )
     x3 = hand_trip(trip_id='x3', route='T9', stations='C B A',
                    first_dep=300, last_arr=400)
     trips = [x1, empty, x3]

@@ -110,7 +110,7 @@ def test_tiles_and_route_share_one_transform(tmp_path: Path) -> None:
 
 def test_stop_marker_sits_on_the_map_centre(tmp_path: Path) -> None:
     """The stop's dot, ring and paper disc are centred within 1 px."""
-    grey = grey_drawn(tmp_path=tmp_path, base=base())
+    grey = grey_drawn(tmp_path=tmp_path, map_base=base())
     x, y = MAP_WIDTH // 2, MAP_HEIGHT // 2
     assert grey[y, x] == INK
     assert grey[y, x + 12] == INK
@@ -123,7 +123,10 @@ def test_stop_marker_sits_on_the_map_centre(tmp_path: Path) -> None:
 
 def test_route_line_is_ink_through_the_centre(tmp_path: Path) -> None:
     """An east-west route is an ink stroke across the map, bar the stop."""
-    grey = grey_drawn(tmp_path=tmp_path, base=base(route=across(half=5000.0)))
+    grey = grey_drawn(
+        tmp_path=tmp_path,
+        map_base=base(route=across(half=5000.0)),
+    )
     row = centre_row()
     band = grey[row - 3 : row + 4]
     assert np.all(np.any(band[:, 20:240] == INK, axis=0))

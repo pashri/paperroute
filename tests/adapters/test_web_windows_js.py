@@ -1,13 +1,12 @@
 """Run the window preview script in node against stub browser globals."""
 
-import json
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
 
 from paperroute_transit.adapters.board_web import BOARD_WEB
+from tests.adapters.node_harness import run_in_node
 
 HARNESS = r"""
 import { pathToFileURL } from 'node:url';
@@ -65,20 +64,12 @@ console.log(JSON.stringify(results));
 @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
 def test_windows_script_in_node(tmp_path: Path) -> None:
     """Summaries read well, and the preview follows typing."""
-    script = tmp_path / 'windows.mjs'
-    script.write_text(
-        (BOARD_WEB / 'windows.js').read_text(encoding='utf-8'),
-        encoding='utf-8',
-    )
-    harness = tmp_path / 'harness.mjs'
-    harness.write_text(HARNESS, encoding='utf-8')
-    done = subprocess.run(
-        ['node', str(harness), str(script)],
-        capture_output=True,
-        check=True,
-        text=True,
-    )
-    assert json.loads(done.stdout) == {
+    assert run_in_node(
+        tmp_path=tmp_path,
+        source=BOARD_WEB / 'windows.js',
+        name='windows.mjs',
+        harness=HARNESS,
+    ) == {
         'weekdays': 'Shows Weekdays, 07:00 to 09:00',
         'overnight': 'Shows Sat, 22:00 to 02:00 (ends next day)',
         'every': 'Shows Every day, 07:00 to 09:00',

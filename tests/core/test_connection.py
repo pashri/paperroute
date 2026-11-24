@@ -382,18 +382,21 @@ def first_trips(state: State) -> list[str]:
 
 
 def test_offers_wait_for_the_feeds_to_answer() -> None:
+    """Offers wait for the feeds to answer."""
     assert loaded().board.offers.kept == {}
     offers = answered().board.offers
     assert offers.pin == WORK and len(offers.kept) == 5
 
 
 def test_a_remembered_change_is_held_below_its_allowance() -> None:
+    """A remembered change is held below its allowance."""
     state = late_legs(state=answered(), lates={'a0733': 4})
     assert first_trips(state) == ['a0733', 'b0746']
     assert live_chains(state=state)[0].missed is None
 
 
 def test_a_remembered_change_is_missed_when_the_bus_runs_later() -> None:
+    """A remembered change is missed when the bus runs later."""
     state = late_legs(state=answered(), lates={'a0733': 6})
     assert first_trips(state) == ['a0733', 'b0801a']
     assert live_chains(state=state)[0].missed == Missed(
@@ -409,6 +412,7 @@ def test_a_board_that_first_hears_late_offers_what_works() -> None:
 
 
 def test_offers_survive_a_reload() -> None:
+    """Offers survive a reload."""
     state = late_legs(state=answered(), lates={'a0733': 4})
     state, _ = step(state, DeparturesLoaded(
         pin=WORK, departures=(), until=at(10, 30), legs=work_legs(),
@@ -434,12 +438,14 @@ def test_offers_are_forgotten_when_the_timetable_is_rebuilt() -> None:
 
 
 def test_offers_forget_a_bus_that_has_left() -> None:
+    """Offers forget a bus that has left."""
     state = with_offers(state=replace(answered(), now=at(7, 34)))
     assert ('a0733', LEG1[0].service_day) not in state.board.offers.kept
     assert len(state.board.offers.kept) == 4
 
 
 def test_offers_start_again_for_a_new_place() -> None:
+    """Offers start again for a new place."""
     assert with_place(state=answered(), pin=None).board.offers == Offers()
 
 

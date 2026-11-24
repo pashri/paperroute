@@ -71,6 +71,7 @@ from paperroute_transit.render.stop_view import (
     small_parts,
     small_text,
 )
+from tests.helpers import exactly_two
 from tests.render.test_chrome import Recording
 from tests.render.test_gauge_draw import named_trip
 
@@ -778,7 +779,7 @@ def test_hero_headline_wraps_a_long_headsign_whole() -> None:
     long = 'Cottenham Rampton Road via Histon Impington Village College'
     canvas = Recording()
     hero_headline(canvas, row=row(destination=long), top=100, naming=PLAIN)
-    first, second = canvas.drawn[-2:]
+    first, second = exactly_two(items=canvas.drawn[-2:])
     assert f'{first} {second}' == long
 
 

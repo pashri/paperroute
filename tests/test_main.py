@@ -14,8 +14,8 @@ import numpy as np
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
-import paperroute_device.adapters.tk_monitor as tk_monitor
 from paperroute_device import cli
+from paperroute_device.adapters import tk_monitor
 from paperroute_device.adapters.clocks import ReplayClock
 from paperroute_device.adapters.power import NullPower, SystemctlPower
 from paperroute_device.adapters.resets import FileResets, NullResets
@@ -948,8 +948,8 @@ async def test_device_for_probes_and_resets_every_key(
     assert device.probe is not None
     assert (await device.probe.probe()).missing_keys == ('B',)
     assert isinstance(device.resets, FileResets)
-    assert device.resets.keys == (first, second)
-    assert device.resets.erased == (args.timetable,)
+    assert getattr(device.resets, 'keys') == (first, second)
+    assert getattr(device.resets, 'erased') == (args.timetable,)
     keyless = cli.device_for(
         args=args,
         app=TransitApp(city=SYDNEY, parts=parts_with(keys=())),

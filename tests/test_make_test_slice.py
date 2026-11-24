@@ -86,7 +86,8 @@ def test_add_shapes_appends_only_named_shapes(tmp_path: Path) -> None:
     """Named shapes are added and every other member is untouched."""
     script = load_script()
     fixture = fixture_zip(path=tmp_path / 'f.zip', shapes=['S1', 'S3', ''])
-    before = zipfile.ZipFile(fixture).read('trips.txt')
+    with zipfile.ZipFile(fixture) as original:
+        before = original.read('trips.txt')
     count = script.add_shapes(
         source=source_zip(path=tmp_path / 's.zip'), fixture=fixture
     )

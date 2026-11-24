@@ -6,6 +6,7 @@ from contextlib import closing
 from dataclasses import replace
 from datetime import date, datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import Final, cast
 
 import pytest
@@ -95,10 +96,10 @@ def _timetable(built: Path) -> Iterator[SqliteTimetableRepository]:
         yield timetable
 
 
-CARRY_PIN: Final[dict[str, str]] = {
+CARRY_PIN: Final[Mapping[str, str]] = MappingProxyType({
     'origin': '2145615', 'alight': '2150119', 'board': '215020',
     'destination': '200070',
-}
+})
 M9B_CARRY: Final[dict[str, str]] = {
     'origin': 'G215254', 'alight': '215020', 'board': '215020',
     'destination': '200070',

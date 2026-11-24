@@ -336,6 +336,7 @@ class LoggedBuilder(NullBuilder):
     """A builder that notes when it is stopped."""
 
     def __init__(self, *, log: list[str]) -> None:
+        super().__init__()
         self.log = log
 
     async def stop(self) -> None:

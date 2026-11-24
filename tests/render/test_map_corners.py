@@ -53,7 +53,7 @@ def test_scale_box_inset_8_px_with_dark_edge() -> None:
     canvas = ground(width=MAP_WIDTH)
     draw_boxed_scale(canvas, mpp=8)
     grey = canvas.grey()
-    left, top, right, bottom = scale_box(mpp=8)
+    left, top, _, bottom = scale_box(mpp=8)
     assert (left, bottom) == (8, MAP_HEIGHT - 8)
     middle = int(top + bottom) // 2
     assert grey[middle, 7] == DARK

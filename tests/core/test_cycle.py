@@ -94,10 +94,12 @@ def test_boundary_aligns_to_clock(
     every: timedelta,
     expected: datetime,
 ) -> None:
+    """Boundary aligns to clock."""
     assert boundary(now=now, every=every) == expected
 
 
 def test_boundary_on_fall_back_night() -> None:
+    """Boundary on fall back night."""
     every = timedelta(seconds=60)
     start = datetime(2026, 4, 5, 1, 58, tzinfo=SYDNEY)
     found = [
@@ -122,12 +124,14 @@ def test_boundary_on_fall_back_night() -> None:
 
 
 def test_cycle_due_after_clock_steps_back() -> None:
+    """Cycle due after clock steps back."""
     now = _at(10, 0, 5)
     cycle = Cycle(started=now + timedelta(hours=1))
     assert cycle_due(cycle=cycle, now=now, every=timedelta(seconds=30))
 
 
 def test_cycle_due_when_none_started() -> None:
+    """Cycle due when none started."""
     assert cycle_due(
         cycle=Cycle(),
         now=_at(10, 0, 5),
@@ -136,6 +140,7 @@ def test_cycle_due_when_none_started() -> None:
 
 
 def test_cycle_due_only_after_boundary() -> None:
+    """Cycle due only after boundary."""
     every = timedelta(seconds=30)
     cycle = Cycle(started=_at(10, 0, 31))
     assert not cycle_due(cycle=cycle, now=_at(10, 0, 59), every=every)
@@ -143,6 +148,7 @@ def test_cycle_due_only_after_boundary() -> None:
 
 
 def test_alerts_due_only_on_five_minute_boundary() -> None:
+    """Alerts due only on five minute boundary."""
     cycle = Cycle(alerts_at=_at(10, 0, 3))
     assert ALERT_EVERY == timedelta(minutes=5)
     assert not alerts_due(cycle=cycle, now=_at(10, 4, 59))
@@ -151,6 +157,7 @@ def test_alerts_due_only_on_five_minute_boundary() -> None:
 
 
 def test_cycle_fires_once_per_boundary_on_fall_back_night() -> None:
+    """Cycle fires once per boundary on fall back night."""
     every = timedelta(seconds=60)
     start = datetime(2026, 4, 5, 1, 58, tzinfo=SYDNEY)
     cycle = Cycle()

@@ -42,7 +42,7 @@ def row(
     route: str = '606',
     onto: str | None = None,
     pill: Pill | None = None,
-    live: bool = True,
+    realtime: bool = True,
     countdown: str = '9',
 ) -> Row:
     """
@@ -75,7 +75,7 @@ def row(
         leaves_at='8:09',
         arrives_at='8:45',
         ride_minutes=36,
-        live=live,
+        live=realtime,
         pill=pill,
         onto=onto,
     )

@@ -60,8 +60,6 @@ def strip_row(
     *,
     y: float,
     parent_y: float | None = None,
-    depth: int = 0,
-    parent_depth: int = 0,
     tag: str = '',
     ride: bool = False,
     cursor: bool = False,
@@ -78,10 +76,6 @@ def strip_row(
         Row centre.
     parent_y : float | None
         Parent row centre, or None.
-    depth : int
-        Indent depth.
-    parent_depth : int
-        Parent's depth.
     tag : str
         Tag text.
     ride : bool
@@ -102,17 +96,40 @@ def strip_row(
     """
     return StripRow(
         name=name,
-        depth=depth,
-        kind=RowKind.MAIN if depth == 0 else RowKind.BRANCH,
+        depth=0,
+        kind=RowKind.MAIN,
         y=y,
         parent_y=parent_y,
-        parent_depth=parent_depth,
+        parent_depth=0,
         tag=tag,
         time=time,
         ride=ride,
         cursor=cursor,
         bold=bold,
         station=name,
+    )
+
+
+def spur_row(*, y: float, parent_y: float | None = None) -> StripRow:
+    """
+    Make a depth-1 strip row for drawing.
+
+    Parameters
+    ----------
+    y : float
+        Row centre.
+    parent_y : float | None
+        Parent row centre, or None.
+
+    Returns
+    -------
+    StripRow
+        The row.
+    """
+    return replace(
+        strip_row(y=y, parent_y=parent_y),
+        depth=1,
+        kind=RowKind.BRANCH,
     )
 
 
@@ -192,7 +209,7 @@ def test_track_is_thick_on_ride() -> None:
 def test_spur_rows_indent_by_16() -> None:
     """A depth-1 row's ring and name sit 16 px right of a depth-0 row's."""
     main = drawn(rows=(strip_row(y=FROM_Y),))
-    spur = drawn(rows=(strip_row(y=FROM_Y, depth=1),))
+    spur = drawn(rows=(spur_row(y=FROM_Y),))
     main_ring = ink_columns(frame=main, y=FROM_Y, left=0, right=45)
     spur_ring = ink_columns(frame=spur, y=FROM_Y, left=0, right=61)
     assert [x + INDENT for x in main_ring] == spur_ring
@@ -206,7 +223,7 @@ def test_elbow_joins_a_spur_to_its_parent() -> None:
     """A spur's track leaves the parent's x and arrives at its own."""
     rows = (
         strip_row(y=FROM_Y, bold=True),
-        strip_row(y=FROM_Y + ROW_H, parent_y=FROM_Y, depth=1),
+        spur_row(y=FROM_Y + ROW_H, parent_y=FROM_Y),
     )
     frame = drawn(rows=rows)
     near_parent = ink_columns(
@@ -385,8 +402,8 @@ def test_cursor_row_is_inverted() -> None:
     """The cursor row is ink from the name to the edge, with a paper TO?."""
     frame = drawn(rows=(strip_row(y=FROM_Y, tag='TO?', cursor=True),))
     top, bottom = int(FROM_Y) - 14, int(FROM_Y) + 14
-    bar = frame[top:bottom, NAME_X - 6:RIGHT - 6]
-    assert bar.mean() < 128
+    band = frame[top:bottom, NAME_X - 6:RIGHT - 6]
+    assert band.mean() < 128
     assert (frame[top:bottom, NAME_X:NAME_X + 60] == PAPER).any()
     box = frame[int(FROM_Y) - 8:int(FROM_Y) + 8, TIME_RIGHT - 40:TIME_RIGHT]
     assert box.mean() > 128

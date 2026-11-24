@@ -1,8 +1,9 @@
 """Tests for the positions feeds the Map and Strip poll."""
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from datetime import datetime, timedelta
+from types import MappingProxyType
 from typing import Final
 
 from paperroute_device.core.kit_events import Tick
@@ -385,12 +386,12 @@ def test_coarser_detent_moves_after_the_fit_gets_finer() -> None:
     assert state.map.frame[1] == 1
 
 
-ALONG: Final[dict[str, Point]] = {
+ALONG: Final[Mapping[str, Point]] = MappingProxyType({
     'W': (CENTRE[0] - 1_600.0, CENTRE[1]),
     'V': (CENTRE[0] - 800.0, CENTRE[1]),
     'A': CENTRE,
     'X': (CENTRE[0] + 800.0, CENTRE[1]),
-}
+})
 
 
 def buses_every_ten() -> tuple[State, tuple[Departure, ...]]:
@@ -421,7 +422,7 @@ def along_patterns(
     *,
     departures: tuple[Departure, ...],
     stations: str = 'WVAX',
-    line: dict[str, Point] = ALONG,
+    line: Mapping[str, Point] = ALONG,
 ) -> PatternsLoaded:
     """
     Load patterns calling along a line, 3 minutes apart.

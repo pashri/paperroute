@@ -1,6 +1,7 @@
 """Shared helpers for timetable files and stepping the reducer in tests."""
 
 import sqlite3
+from collections.abc import Sequence
 from contextlib import closing
 from datetime import date
 from pathlib import Path
@@ -158,3 +159,39 @@ def schema_ten(*, path: Path) -> None:
             "UPDATE meta SET value = '10' WHERE key = 'schema_version'",
         )
         conn.commit()
+
+
+def sole[T](*, items: Sequence[T]) -> T:
+    """
+    Give the only item of a sequence.
+
+    Parameters
+    ----------
+    items : Sequence[T]
+        Sequence that must hold exactly one item.
+
+    Returns
+    -------
+    T
+        The item.
+    """
+    assert len(items) == 1, items
+    return items[0]
+
+
+def exactly_two[T](*, items: Sequence[T]) -> tuple[T, T]:
+    """
+    Give the two items of a sequence.
+
+    Parameters
+    ----------
+    items : Sequence[T]
+        Sequence that must hold exactly two items.
+
+    Returns
+    -------
+    tuple[T, T]
+        The first and second items.
+    """
+    assert len(items) == 2, items
+    return items[0], items[1]

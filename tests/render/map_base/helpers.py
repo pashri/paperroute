@@ -225,7 +225,7 @@ def pattern(*, values: NDArray[np.uint8]) -> str:
     return ''.join('#' if value == INK else '.' for value in values)
 
 
-def grey_drawn(*, tmp_path: Path, base: MapBase) -> NDArray[np.uint8]:
+def grey_drawn(*, tmp_path: Path, map_base: MapBase) -> NDArray[np.uint8]:
     """
     Draw a map base over the built tiles in the grey variant.
 
@@ -243,7 +243,7 @@ def grey_drawn(*, tmp_path: Path, base: MapBase) -> NDArray[np.uint8]:
     """
     with closing(build(out=tmp_path / 'tiles.db')) as tiles:
         return draw_map_base(
-            base=base,
+            base=map_base,
             tiles=tiles,
             variant=TileVariant.GREY,
         )

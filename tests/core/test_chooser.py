@@ -70,6 +70,7 @@ from tests.core.chooser_walks import (
 
 
 def test_opened_asks_for_kind_column() -> None:
+    """Opened asks for kind column."""
     chooser, request = opened(
         shown=Pin(origin=place('X'), kind=SydneyMode.TRAIN),
         modes=SYDNEY.modes,
@@ -82,6 +83,7 @@ def test_opened_asks_for_kind_column() -> None:
 
 
 def test_kind_cursor_starts_on_current_kind() -> None:
+    """Kind cursor starts on current kind."""
     chooser, asked = opened(
         shown=Pin(origin=place('X'), kind=SydneyMode.TRAIN),
         modes=SYDNEY.modes,
@@ -208,6 +210,7 @@ def test_previews_landing_off_the_focus_are_stored_quietly() -> None:
 
 
 def test_stale_column_is_ignored() -> None:
+    """Stale column is ignored."""
     chooser = opened_at_kind()
     chooser, _ = turned(chooser=chooser, steps=1, reach=None)
     after, request = with_column(
@@ -217,6 +220,7 @@ def test_stale_column_is_ignored() -> None:
 
 
 def test_press_before_preview_loaded_does_nothing() -> None:
+    """Press before preview loaded does nothing."""
     chooser, asked = opened(shown=Pin(origin=place('X')), modes=SYDNEY.modes)
     chooser, _ = fed(chooser, asked, KINDS)
     after, request = pressed(chooser=chooser, reach=None)
@@ -230,6 +234,7 @@ def test_press_before_preview_loaded_does_nothing() -> None:
         chosen_pin(chooser=loading, destination=None)
 
 def test_single_line_column_collapses() -> None:
+    """Single line column collapses."""
     chooser, request = turned(
         chooser=opened_at_kind(), steps=2, reach=None,
     )
@@ -250,6 +255,7 @@ def test_single_line_column_collapses() -> None:
     assert view.trail == 'Metro · M1 · Parramatta'
 
 def test_towards_press_asks_for_line() -> None:
+    """Towards press asks for line."""
     chooser, request = pressed(chooser=at_towards(), reach=None)
     assert request == LineRequest(towards=11)
     assert chooser.stage is Stage.FROM
@@ -262,6 +268,7 @@ def test_towards_press_asks_for_line() -> None:
 
 
 def test_from_press_asks_for_strip_with_chosen_routes() -> None:
+    """From press asks for strip with chosen routes."""
     chooser, _ = turned(chooser=at_from(), steps=9, reach=None)
     assert chooser.line_cursor == 2
     chooser, _ = turned(chooser=chooser, steps=-1, reach=None)
@@ -275,6 +282,7 @@ def test_from_press_asks_for_strip_with_chosen_routes() -> None:
 
 
 def test_to_press_on_from_commits_no_destination() -> None:
+    """To press on from commits no destination."""
     chooser = at_to()
     assert pressed(chooser=chooser, reach=None) == (chooser, None)
     _, pin = pressed(chooser=chooser, reach=REACH)
@@ -285,6 +293,7 @@ def test_to_press_on_from_commits_no_destination() -> None:
 
 
 def test_to_press_commits_destination() -> None:
+    """To press commits destination."""
     chooser, request = turned(chooser=at_to(), steps=2, reach=REACH)
     assert request is None
     _, pin = pressed(chooser=chooser, reach=REACH)
@@ -293,6 +302,7 @@ def test_to_press_commits_destination() -> None:
 
 
 def test_to_cursor_skips_approach_rows() -> None:
+    """To cursor skips approach rows."""
     chooser, _ = turned(chooser=at_to(), steps=-1, reach=REACH)
     assert chooser.to_cursor == 0
     chooser, _ = turned(chooser=chooser, steps=9, reach=REACH)
@@ -314,6 +324,7 @@ def test_exit_row_is_never_picked() -> None:
 
 
 def test_back_walks_stages_then_closes() -> None:
+    """Back walks stages then closes."""
     chooser = backed(chooser=at_to())
     assert chooser is not None
     assert chooser.stage is Stage.FROM
@@ -332,6 +343,7 @@ def test_back_walks_stages_then_closes() -> None:
 
 
 def test_station_first_walk_commits_line_kind() -> None:
+    """Station first walk commits line kind."""
     chooser = at_stations()
     assert chooser.columns[chooser.focus] == T1_STATIONS
     chooser, preview = turned(chooser=chooser, steps=3, reach=None)
@@ -405,6 +417,7 @@ def test_a_knob_train_pin_without_a_destination_stores_the_from() -> None:
 
 
 def test_replacement_route_commits_replacement_kind() -> None:
+    """Replacement route commits replacement kind."""
     chooser, _ = pressed(chooser=at_replacement_towards(), reach=None)
     chooser = with_line(chooser=chooser, towards=11, line=LINE)
     chooser, _ = turned(chooser=chooser, steps=1, reach=None)
@@ -416,6 +429,7 @@ def test_replacement_route_commits_replacement_kind() -> None:
 
 
 def test_path_to_uses_choice_level() -> None:
+    """Path to uses choice level."""
     chooser = at_stations()
     assert path_to(chooser=chooser, index=chooser.focus)[-1] == (
         Level.STATION, 'R1',
@@ -435,6 +449,7 @@ def test_path_to_uses_choice_level() -> None:
 
 
 def test_empty_column_is_never_focused() -> None:
+    """Empty column is never focused."""
     chooser, _ = opened(shown=Pin(origin=place('X')), modes=SYDNEY.modes)
     empty = Column(level=Level.KIND, items=())
     chooser, request = with_column(chooser=chooser, path=(), column=empty)
@@ -449,6 +464,7 @@ def test_empty_column_is_never_focused() -> None:
 
 
 def test_replacement_place_starts_on_bus() -> None:
+    """Replacement place starts on bus."""
     chooser, request = opened(
         shown=Pin(origin=place('X'), kind=SydneyMode.REPLACEMENT),
         modes=SYDNEY.modes,
@@ -459,6 +475,7 @@ def test_replacement_place_starts_on_bus() -> None:
 
 
 def test_to_press_off_the_strip_commits_no_destination() -> None:
+    """To press off the strip commits no destination."""
     chooser, _ = turned(chooser=at_to(), steps=2, reach=REACH)
     shrunk = replace(REACH, rows=REACH.rows[:3])
     _, pin = pressed(chooser=chooser, reach=shrunk)

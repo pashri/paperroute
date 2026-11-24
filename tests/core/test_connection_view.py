@@ -435,6 +435,7 @@ def folded_chain() -> Chain:
 
 
 def test_easy_hero_marks_both_buses() -> None:
+    """Easy hero marks both buses."""
     hero = hero_of(Chain(
         legs=(live(item=A0733, late=4), live(item=B0746, late=2)), way=0,
     ))
@@ -448,6 +449,7 @@ def test_easy_hero_marks_both_buses() -> None:
 
 
 def test_tight_hero_names_the_change_in_bold() -> None:
+    """Tight hero names the change in bold."""
     hero = hero_of(Chain(
         legs=(live(item=A0733, late=4), live(item=B0746)), way=0,
     ))
@@ -460,6 +462,7 @@ def test_tight_hero_names_the_change_in_bold() -> None:
 
 
 def test_missed_hero_names_the_next_bus() -> None:
+    """Missed hero names the next bus."""
     hero = hero_of(Chain(
         legs=(live(item=A0733, late=6), live(item=B0801A)), way=0,
         missed=Missed(leg=1, arrives=at(7, 57), later=True),
@@ -473,6 +476,7 @@ def test_missed_hero_names_the_next_bus() -> None:
 
 
 def test_stranded_hero_says_change_missed_and_no_arrival() -> None:
+    """Stranded hero says change missed and no arrival."""
     hero = hero_of(Chain(
         legs=(live(item=A0733, late=6), live(item=B0746)), way=0,
         missed=Missed(leg=1, arrives=at(7, 57), later=False),
@@ -485,6 +489,7 @@ def test_stranded_hero_says_change_missed_and_no_arrival() -> None:
 
 
 def test_missed_stay_on_hero_says_so_in_bold() -> None:
+    """Missed stay on hero says so in bold."""
     hero = hero_of(folded_chain())
     assert [line.text for line in hero.lines][-1] == 'change missed · stay on'
     assert hero.lines[-1].bold
@@ -492,6 +497,7 @@ def test_missed_stay_on_hero_says_so_in_bold() -> None:
 
 
 def test_rows_carry_the_mark_the_word_and_the_struck_arrival() -> None:
+    """Rows carry the mark the word and the struck arrival."""
     def row(chain: Chain) -> PairRow:
         return chain_row(
             chain=chain, pin=WORK, now=at(7, 30), zone=SYDNEY_ZONE,
@@ -518,6 +524,7 @@ def test_rows_carry_the_mark_the_word_and_the_struck_arrival() -> None:
 
 
 def test_missed_stay_on_row_keeps_stay_on_and_strikes_old_arrival() -> None:
+    """Missed stay on row keeps stay on and strikes old arrival."""
     row = chain_row(
         chain=folded_chain(), pin=WORK, now=at(7, 30), zone=SYDNEY_ZONE,
     )
@@ -525,6 +532,7 @@ def test_missed_stay_on_row_keeps_stay_on_and_strikes_old_arrival() -> None:
 
 
 def test_row_has_no_struck_arrival_when_the_first_trip_is_unlisted() -> None:
+    """Row has no struck arrival when the first trip is unlisted."""
     row = chain_row(
         chain=Chain(
             legs=(live(item=A0733, late=6), live(item=B0801A)), way=0,
@@ -536,6 +544,7 @@ def test_row_has_no_struck_arrival_when_the_first_trip_is_unlisted() -> None:
 
 
 def test_hero_of_a_shorter_fresh_plan_names_its_first_new_bus() -> None:
+    """Hero of a shorter fresh plan names its first new bus."""
     hero = chain_hero(
         chain=three_then_two(),
         pin=THREE_OR_TWO,
@@ -551,6 +560,7 @@ def test_hero_of_a_shorter_fresh_plan_names_its_first_new_bus() -> None:
 
 
 def test_hero_of_a_fresh_plan_on_another_way_names_its_first_new_bus() -> None:
+    """Hero of a fresh plan on another way names its first new bus."""
     chains = chains_of(
         pin=CAMP_PIN,
         lists={
@@ -583,6 +593,7 @@ MISSED_DIRECT: Final[Chain] = replace(
 
 
 def test_missed_direct_hero_says_so_in_bold() -> None:
+    """Missed direct hero says so in bold."""
     hero = hero_of(MISSED_DIRECT)
     assert hero.lines[1:] == (
         HeroLine(
@@ -592,6 +603,7 @@ def test_missed_direct_hero_says_so_in_bold() -> None:
 
 
 def test_missed_direct_row_keeps_direct_and_strikes_the_old_arrival() -> None:
+    """Missed direct row keeps direct and strikes the old arrival."""
     row = chain_row(
         chain=MISSED_DIRECT, pin=WORK, now=at(7, 30), zone=SYDNEY_ZONE,
     )
@@ -601,6 +613,7 @@ def test_missed_direct_row_keeps_direct_and_strikes_the_old_arrival() -> None:
 
 
 def test_direct_trip_without_a_miss_is_unchanged() -> None:
+    """Direct trip without a miss is unchanged."""
     assert hero_of(DIRECT) == ChainHero(
         countdown='10',
         leaves_at='7:40',
@@ -657,6 +670,7 @@ def stay_on_second_change_chain() -> Chain:
 
 
 def test_missed_second_change_folded_into_a_stay_on_says_so() -> None:
+    """Missed second change folded into a stay on says so."""
     chain = stay_on_second_change_chain()
     assert chain.missed == Missed(leg=2, arrives=at(8, 8), later=True)
     hero = chain_hero(

@@ -42,6 +42,7 @@ from tests.render.map_view.helpers import (
 from tests.render.test_chrome import Recording
 
 UNSURE: Estimate = Estimate(due='8:09', late=1, uncertain=True)
+from tests.helpers import sole
 
 
 def test_uncertain_sidebar_row_says_so_under_its_time() -> None:
@@ -225,7 +226,7 @@ def test_badges_keep_clear_of_a_both_sides_capsule() -> None:
         (x - STOP_HALF, low - STOP_HALF, x + STOP_HALF, y + STOP_HALF),
     ]
     middle = (x, (y + low) / 2)
-    (placed,) = place(markers=[live(at=middle)], reserved=boxes)
+    placed = sole(items=place(markers=[live(at=middle)], reserved=boxes))
     assert placed.centre != middle
 
 

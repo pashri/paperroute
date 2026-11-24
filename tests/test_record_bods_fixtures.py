@@ -641,7 +641,7 @@ def test_main_records_the_files_and_prints_only_sizes(
 ) -> None:
     """Main records the files and prints only sizes."""
     source = source_zip(path=keyed / 'source.zip')
-    monkeypatch.setattr(recorder, 'fetched', lambda *, key: live())
+    monkeypatch.setattr(recorder, 'fetched', lambda **_: live())
     out = keyed / 'out'
     assert recorder.main(['--gtfs', str(source), '--out', str(out)]) == 0
     assert sorted(path.name for path in out.iterdir()) == [
@@ -667,13 +667,13 @@ def test_main_check_writes_nothing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Main check writes nothing."""
-    monkeypatch.setattr(recorder, 'fetched', lambda *, key: live())
+    monkeypatch.setattr(recorder, 'fetched', lambda **_: live())
     assert recorder.main(['--check']) == 0
     assert [path.name for path in keyed.iterdir()] == ['secrets']
 
 
+@pytest.mark.usefixtures('keyed')
 def test_main_stops_when_a_vehicle_lies_outside_the_box(
-    keyed: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:

@@ -20,6 +20,7 @@ from paperroute_device.render.frame import HEADER
 from paperroute_sydney.city import SYDNEY_PROJECTION
 from paperroute_transit.adapters.tiles_db import SqliteTileRepository
 from paperroute_transit.build.tile_store import TileWriter
+from paperroute_transit.core.geo import Point
 from paperroute_transit.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
@@ -148,9 +149,24 @@ def test_snap_thresholds_outside_the_map() -> None:
     assert np.all(out[HEADER:, :SIDEBAR_LEFT] == GREYS[1])
 
 
-def test_markers_and_tiles_share_one_transform(tmp_path: Path) -> None:
-    """A tile pixel and a dot marker at one metre point coincide."""
-    point = (CENTRE[0] + 4000.0, CENTRE[1] - 3000.0)
+def dot_tile_base(
+    *, tmp_path: Path, point: Point,
+) -> tuple[MapBase, NDArray[np.uint8]]:
+    """
+    Draw a base from a tile holding one ink pixel at a metre point.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Working directory for the tile file.
+    point : Point
+        Metre point of the ink pixel.
+
+    Returns
+    -------
+    tuple[MapBase, NDArray[np.uint8]]
+        The map base and the grey frame drawn from the tile.
+    """
     gx, gy = to_pixels(point=point, mpp=CITY, projection=SYDNEY_PROJECTION)
     col, tile_row = tile_of(pixel=(gx, gy))
     dot = np.full((TILE, TILE), PAPER, dtype=np.uint8)
@@ -172,6 +188,13 @@ def test_markers_and_tiles_share_one_transform(tmp_path: Path) -> None:
     )
     with closing(SqliteTileRepository(path=tmp_path / 'tiles.db')) as tiles:
         base = draw_map_base(base=city, tiles=tiles, variant=TileVariant.GREY)
+    return city, base
+
+
+def test_markers_and_tiles_share_one_transform(tmp_path: Path) -> None:
+    """A tile pixel and a dot marker at one metre point coincide."""
+    point = (CENTRE[0] + 4000.0, CENTRE[1] - 3000.0)
+    city, base = dot_tile_base(tmp_path=tmp_path, point=point)
     view = replace(VIEW, base=city, zoom=ZOOMS.index(CITY))
     tiled = draw_map_view(view=view, base=base)
     sx, sy = screen_point(

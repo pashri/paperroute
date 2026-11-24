@@ -190,24 +190,24 @@ def _to_c(chain_db: Path) -> Iterator[list[Departure]]:
 
 def test_carry_on_departure_listed(to_c: list[Departure]) -> None:
     """E2 to C stays on c1 as c2: c1's departure, c2's arrival."""
-    departure, = to_c
-    assert departure.trip_id == 'c1'
-    assert departure.route == 'T1'
-    assert departure.facts.onto == CarryOn(
+    dep, = to_c
+    assert dep.trip_id == 'c1'
+    assert dep.route == 'T1'
+    assert dep.facts.onto == CarryOn(
         route='T2', headsign='C', trip_id='c2',
     )
-    assert departure.facts.then is None
-    assert departure.destination_stop == 'E1_1'
-    assert departure.destination_seq == 2
-    assert departure.arrives == datetime(
+    assert dep.facts.then is None
+    assert dep.destination_stop == 'E1_1'
+    assert dep.destination_seq == 2
+    assert dep.arrives == datetime(
         2026, 10, 6, 3, 15, tzinfo=SYDNEY_ZONE,
     )
 
 
 def test_direct_trip_not_listed_twice(chain_db: Path) -> None:
     """E2 to E1 is c1 itself, listed once without onto."""
-    departure, = chain_departures(db=chain_db, dest='E1')
-    assert (departure.trip_id, departure.facts.onto) == ('c1', None)
+    dep, = chain_departures(db=chain_db, dest='E1')
+    assert (dep.trip_id, dep.facts.onto) == ('c1', None)
 
 
 def test_carry_on_respects_one_way(chain_db: Path) -> None:
@@ -234,10 +234,10 @@ def test_carry_on_skips_next_trip_not_running(
 
 def test_carry_on_two_hops(chain_db: Path) -> None:
     """J is on c3, the third trip of the chain."""
-    departure, = chain_departures(db=chain_db, dest='J')
-    assert departure.facts.onto is not None
-    assert departure.facts.onto.trip_id == 'c3'
-    assert departure.arrives == datetime(
+    dep, = chain_departures(db=chain_db, dest='J')
+    assert dep.facts.onto is not None
+    assert dep.facts.onto.trip_id == 'c3'
+    assert dep.arrives == datetime(
         2026, 10, 6, 3, 25, tzinfo=SYDNEY_ZONE,
     )
 
@@ -245,9 +245,9 @@ def test_carry_on_two_hops(chain_db: Path) -> None:
 def test_carry_on_stops_at_max_hops(chain_db: Path) -> None:
     """R2 on c7 is MAX_HOPS joins on; R3 on c8 is one too many."""
     assert MAX_HOPS == 6
-    departure, = chain_departures(db=chain_db, dest='R2')
-    assert departure.facts.onto is not None
-    assert departure.facts.onto.trip_id == 'c7'
+    dep, = chain_departures(db=chain_db, dest='R2')
+    assert dep.facts.onto is not None
+    assert dep.facts.onto.trip_id == 'c7'
     assert not chain_departures(db=chain_db, dest='R3')
 
 
@@ -274,9 +274,9 @@ def test_carry_on_arrival_must_follow_the_boarded_departure(
 
 def test_carry_on_arrives_on_the_service_day(chain_db: Path) -> None:
     """The arrival counts from the boarded trip's service day."""
-    departure, = chain_departures(db=chain_db, dest='C')
-    assert departure.service_day == DAY
-    assert departure.departs == departure.arrives - timedelta(minutes=15)
+    dep, = chain_departures(db=chain_db, dest='C')
+    assert dep.service_day == DAY
+    assert dep.departs == dep.arrives - timedelta(minutes=15)
 
 
 def test_first_to_arrive_drops_beaten_carry_ons() -> None:
@@ -327,14 +327,14 @@ def test_carry_on_counts_stops_once_at_the_join(
     to_c: list[Departure],
 ) -> None:
     """E2 to C on c1 then c2 stops at E1 and C: E1 is not counted twice."""
-    departure, = to_c
-    assert departure.stops == 2
+    dep, = to_c
+    assert dep.stops == 2
 
 
 def test_carry_on_counts_stops_over_many_hops(chain_db: Path) -> None:
     """E2 to W2 stays on through four joins and stops five times."""
-    departure, = chain_departures(db=chain_db, dest='W2')
-    assert departure.stops == 5
+    dep, = chain_departures(db=chain_db, dest='W2')
+    assert dep.stops == 5
 
 
 def test_direct_row_uses_first_destination_call(chain_db: Path) -> None:
@@ -374,11 +374,11 @@ def test_carry_on_uses_first_destination_call(chain_db: Path) -> None:
         DELETE FROM trip_joins;
         INSERT INTO trip_joins VALUES ('c1', 'cloop');
     """)
-    departure, = chain_departures(db=chain_db, dest='C')
-    assert departure.facts.onto is not None
-    assert departure.facts.onto.trip_id == 'cloop'
-    assert departure.stops == 2
-    assert departure.arrives == datetime(
+    dep, = chain_departures(db=chain_db, dest='C')
+    assert dep.facts.onto is not None
+    assert dep.facts.onto.trip_id == 'cloop'
+    assert dep.stops == 2
+    assert dep.arrives == datetime(
         2026, 10, 6, 3, 10, tzinfo=SYDNEY_ZONE,
     )
 

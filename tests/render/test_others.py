@@ -29,6 +29,7 @@ from paperroute_transit.render.others import (
     place_numbers,
     signed,
 )
+from tests.helpers import sole
 
 SPOT = (100.0, 100.0)
 
@@ -161,20 +162,20 @@ def test_numbers_only_at_14_m_per_px_and_closer() -> None:
 
 def test_number_sits_right_of_the_mark() -> None:
     """A free number starts 6 px right of the mark, 4 px below it."""
-    (number,) = place_numbers(
+    number = sole(items=place_numbers(
         markers=[other()], taken=[], keep_out=NO_KEEP_OUT,
-    )
+    ))
     assert number == Number(route='401', at=(106.0, 104.0), anchor='ls')
 
 
 def test_number_moves_left_of_a_place_name() -> None:
     """A place name on the right sends the number left."""
     name = (110.0, 90.0, 160.0, 110.0)
-    (number,) = place_numbers(
+    number = sole(items=place_numbers(
         markers=[other()],
         taken=[],
         keep_out=KeepOut(places=(name,), streets=()),
-    )
+    ))
     assert number == Number(route='401', at=(94.0, 104.0), anchor='rs')
 
 
@@ -202,16 +203,16 @@ def test_street_name_yields_only_when_no_side_is_free() -> None:
     """A street name moves a number left, and yields when both are."""
     right = (110.0, 90.0, 160.0, 110.0)
     left = (40.0, 90.0, 90.0, 110.0)
-    (moved,) = place_numbers(
+    moved = sole(items=place_numbers(
         markers=[other()],
         taken=[],
         keep_out=KeepOut(places=(), streets=(right,)),
-    )
-    (over,) = place_numbers(
+    ))
+    over = sole(items=place_numbers(
         markers=[other()],
         taken=[],
         keep_out=KeepOut(places=(), streets=(right, left)),
-    )
+    ))
     assert moved.anchor == 'rs'
     assert over == Number(route='401', at=(106.0, 104.0), anchor='ls')
 

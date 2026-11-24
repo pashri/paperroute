@@ -212,8 +212,7 @@ def findable(*, called: str, name: str) -> bool:
             board_path(name=name)
         except FileNotFoundError:
             return False
-        else:
-            return True
+        return True
     return READERS[called].joinpath(*name.split('/')).is_file()
 
 

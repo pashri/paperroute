@@ -85,8 +85,8 @@ def off_peak(*, state: State) -> State:
     State
         State with no peak windows and no quiet hours.
     """
-    board = replace(state.settings.board, peak_windows=())
-    settings = replace(state.settings, board=board)
+    peakless_board = replace(state.settings.board, peak_windows=())
+    settings = replace(state.settings, board=peakless_board)
     return wakeful(state=replace(state, settings=settings))
 
 

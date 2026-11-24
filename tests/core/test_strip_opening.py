@@ -336,8 +336,8 @@ def test_town_hall_and_blacktown_fold_only_quiet_far_ends() -> None:
         reach, _ = train_reach(station=station)
         shown = folded(reach=reach)
         assert sum(row.folded or 1 for row in shown.rows) == len(reach.rows)
-        names = {row.place.name for row in shown.rows}
-        assert set(kept) <= names
+        labels = {row.place.name for row in shown.rows}
+        assert set(kept) <= labels
         assert all(
             row.folded >= FOLD_MIN
             for row in shown.rows

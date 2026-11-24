@@ -111,7 +111,7 @@ def timed() -> State:
 
 def test_saving_a_plain_pin_asks_to_match_the_places() -> None:
     """A new pin with no Destination, ways or opposite is matched at once."""
-    state, effects = step(timed(), PinSaved(ref=None, pin=D))
+    _, effects = step(timed(), PinSaved(ref=None, pin=D))
     [ask] = effects_of(effects=effects, kind=MatchPlaces)
     assert D.origin in ask.places
 
@@ -242,10 +242,10 @@ WINDOW = AutoWindow(days=frozenset({0}), start=time(7), end=time(9))
 
 def test_delete_drops_windows() -> None:
     """Deleting a pin deletes its windows too."""
-    timed = replace(B, windows=(WINDOW,))
+    clocked = replace(B, windows=(WINDOW,))
     other = replace(A, windows=(WINDOW,))
-    state = state_with(pins=(other, timed, C), current=1)
-    state, _ = step(state, PinDeleted(ref=ref(timed)))
+    state = state_with(pins=(other, clocked, C), current=1)
+    state, _ = step(state, PinDeleted(ref=ref(clocked)))
     assert state.places.unpinned is not None
     assert state.places.unpinned.windows == ()
     state, _ = step(state, PinDeleted(ref=ref(other)))
@@ -254,9 +254,9 @@ def test_delete_drops_windows() -> None:
 
 def test_unpin_keeps_windows() -> None:
     """Unpinning a pin keeps its windows on the unpinned place."""
-    timed = replace(B, windows=(WINDOW,))
-    state = toggled(state=state_with(pins=(A, timed, C), current=1))
-    assert state.places.unpinned == timed
+    clocked = replace(B, windows=(WINDOW,))
+    state = toggled(state=state_with(pins=(A, clocked, C), current=1))
+    assert state.places.unpinned == clocked
 
 
 def test_move_up_and_clamp() -> None:

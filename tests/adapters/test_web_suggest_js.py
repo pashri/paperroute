@@ -1,20 +1,14 @@
 """Run the suggestion script in node against stub browser globals."""
 
-import json
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
 
 from paperroute_transit.adapters.board_web import BOARD_WEB
+from tests.adapters.node_harness import FORMS_PREAMBLE, run_in_node
 
-HARNESS = r"""
-import { pathToFileURL } from 'node:url';
-globalThis.FormData = class {
-  constructor(form) { this.entries = form.fields; }
-  [Symbol.iterator]() { return this.entries[Symbol.iterator](); }
-};
+HARNESS = FORMS_PREAMBLE + r"""
 const results = {};
 const forms = [];
 globalThis.document = {
@@ -71,20 +65,12 @@ def test_load_suggestions_in_node(tmp_path: Path) -> None:
     A list with no suggestion address fetches nothing and shows the
     failure text.
     """
-    script = tmp_path / 'suggest.mjs'
-    script.write_text(
-        (BOARD_WEB / 'suggest.js').read_text(encoding='utf-8'),
-        encoding='utf-8',
-    )
-    harness = tmp_path / 'harness.mjs'
-    harness.write_text(HARNESS, encoding='utf-8')
-    done = subprocess.run(
-        ['node', str(harness), str(script)],
-        capture_output=True,
-        check=True,
-        text=True,
-    )
-    assert json.loads(done.stdout) == {
+    assert run_in_node(
+        tmp_path=tmp_path,
+        source=BOARD_WEB / 'suggest.js',
+        name='suggest.mjs',
+        harness=HARNESS,
+    ) == {
         'selector': '[data-suggestions]',
         'listens': 'click',
         'url': (

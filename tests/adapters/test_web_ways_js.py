@@ -1,20 +1,14 @@
 """Run the hand way editor's step script in node."""
 
-import json
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
 
 from paperroute_transit.adapters.board_web import BOARD_WEB
+from tests.adapters.node_harness import FORMS_PREAMBLE, run_in_node
 
-HARNESS = r"""
-import { pathToFileURL } from 'node:url';
-globalThis.FormData = class {
-  constructor(form) { this.entries = form.fields; }
-  [Symbol.iterator]() { return this.entries[Symbol.iterator](); }
-};
+HARNESS = FORMS_PREAMBLE + r"""
 const forms = [];
 globalThis.document = {
   querySelectorAll: (selector) => { results.selector = selector; return forms; },
@@ -46,19 +40,12 @@ console.log(JSON.stringify(results));
 @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
 def test_next_step_swaps_fieldset(tmp_path: Path) -> None:
     """The steps fieldset is fetched with `part=steps` and replaced."""
-    script = tmp_path / 'ways.mjs'
-    script.write_text(
-        (BOARD_WEB / 'ways.js').read_text(encoding='utf-8'), encoding='utf-8',
-    )
-    harness = tmp_path / 'harness.mjs'
-    harness.write_text(HARNESS, encoding='utf-8')
-    done = subprocess.run(
-        ['node', str(harness), str(script)],
-        capture_output=True,
-        check=True,
-        text=True,
-    )
-    assert json.loads(done.stdout) == {
+    assert run_in_node(
+        tmp_path=tmp_path,
+        source=BOARD_WEB / 'ways.js',
+        name='ways.mjs',
+        harness=HARNESS,
+    ) == {
         'selector': 'form[data-steps]',
         'url': '/pins/connect?stop=G1&off=H+2&part=steps',
         'found': 'fieldset.steps',

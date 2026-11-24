@@ -317,9 +317,9 @@ def test_draw_route_gauge_keeps_buses_past_the_arrow_off_the_last_disc(
         y = plan.line_y
         size = int(DISC_RADIUS)
         rows, cols = np.ogrid[-size : size + 1, -size : size + 1]
-        inside = cols ** 2 + rows ** 2 <= size ** 2
+        within = cols ** 2 + rows ** 2 <= size ** 2
         ink = drawn(shown)[0][y - size : y + size + 1, x - size : x + size + 1]
-        return np.asarray(ink[inside], dtype=bool)
+        return np.asarray(ink[within], dtype=bool)
 
     assert (disc(busy) == disc(gauge)).all()
 

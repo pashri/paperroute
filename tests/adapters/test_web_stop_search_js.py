@@ -1,13 +1,12 @@
 """Run the stop search script in node against stub browser globals."""
 
-import json
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
 
 from paperroute_transit.adapters.board_web import BOARD_WEB
+from tests.adapters.node_harness import run_in_node
 
 HARNESS = r"""
 import { pathToFileURL } from 'node:url';
@@ -63,20 +62,12 @@ console.log(JSON.stringify(results));
 @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
 def test_stop_search_script_in_node(tmp_path: Path) -> None:
     """Options map, rows escape, results replace old ones, all wrapped."""
-    script = tmp_path / 'stop-search.mjs'
-    script.write_text(
-        (BOARD_WEB / 'stop-search.js').read_text(encoding='utf-8'),
-        encoding='utf-8',
-    )
-    harness = tmp_path / 'harness.mjs'
-    harness.write_text(HARNESS, encoding='utf-8')
-    done = subprocess.run(
-        ['node', str(harness), str(script)],
-        capture_output=True,
-        check=True,
-        text=True,
-    )
-    assert json.loads(done.stdout) == {
+    assert run_in_node(
+        tmp_path=tmp_path,
+        source=BOARD_WEB / 'stop-search.js',
+        name='stop-search.mjs',
+        harness=HARNESS,
+    ) == {
         'selector': 'select[data-stop-search]',
         'option': {
             'value': 'P', 'text': 'Parramatta', 'routes': ['T1', '606'],

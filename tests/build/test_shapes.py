@@ -8,7 +8,7 @@ from array import array
 from contextlib import closing
 from datetime import date
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 import numpy as np
 import pytest
@@ -365,8 +365,20 @@ def test_shape_runs_without_shapes_member_yields_nothing(
     assert not list(shape_runs(archive=archive, wanted={'S1'}))
 
 
-def test_build_stores_shapes_with_mode_and_bounds(tmp_path: Path) -> None:
-    """A bus shape is stored simplified, with its mode and bounds."""
+def built_shape_rows(*, tmp_path: Path) -> list[tuple[Any, ...]]:
+    """
+    Build a timetable from a shaped bus feed and read its shapes table.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Working directory.
+
+    Returns
+    -------
+    list[tuple[Any, ...]]
+        The rows of the shapes table.
+    """
     out = tmp_path / 'timetable.db'
     build_timetable(
         city_ref=SYDNEY_REF,
@@ -378,7 +390,12 @@ def test_build_stores_shapes_with_mode_and_bounds(tmp_path: Path) -> None:
         out=out,
     )
     with closing(sqlite3.connect(out)) as conn:
-        rows = conn.execute('SELECT * FROM shapes').fetchall()
+        return conn.execute('SELECT * FROM shapes').fetchall()
+
+
+def test_build_stores_shapes_with_mode_and_bounds(tmp_path: Path) -> None:
+    """A bus shape is stored simplified, with its mode and bounds."""
+    rows = built_shape_rows(tmp_path=tmp_path)
     assert len(rows) == 1
     shape_id, mode, west, south, east, north, blob = rows[0]
     assert (shape_id, mode) == ('bundle:S1', 'bus')

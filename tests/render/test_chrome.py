@@ -52,6 +52,7 @@ from paperroute_transit.render.chrome import (
 )
 from paperroute_transit.render.pair_list import CHIP_PX
 from paperroute_transit.render.stop_view import LIST_PAIR_ROOM, NOTE_PX
+from tests.helpers import exactly_two
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 LONG_LABELS: Final[tuple[str, ...]] = ('SH100', '283S2', '772V8')
@@ -233,24 +234,28 @@ def test_picking_from_title() -> None:
 
 
 def blank() -> Canvas:
+    """Give a canvas with an ink header band."""
     canvas = Canvas()
     canvas.rect(box=(0, 0, WIDTH, HEADER), grey=INK)
     return canvas
 
 
 def paper_columns(*, canvas: Canvas, top: int, bottom: int) -> list[int]:
+    """List the columns with any paper pixel between two rows."""
     band = canvas.grey()[top:bottom]
     return [int(x) for x in np.flatnonzero((band == PAPER).any(axis=0))]
 
 
 @pytest.mark.parametrize('clock', ['1:05', '9:59', '20:00', '23:11'])
 def test_header_tabs_left_edge_ignores_the_time(clock: str) -> None:
+    """Header tabs left edge ignores the time."""
     moved = header_tabs(blank(), clock=clock, active='Stop')
     fixed = header_tabs(blank(), clock='20:00', active='Stop')
     assert moved == fixed
 
 
 def test_header_tabs_time_ends_at_788() -> None:
+    """Header tabs time ends at 788."""
     canvas = blank()
     header_tabs(canvas, clock='1:05', active='Stop')
     ink = paper_columns(canvas=canvas, top=8, bottom=32)
@@ -301,7 +306,7 @@ def test_two_titles_keep_the_to_whole() -> None:
         limit=400,
         rules=NameRules(),
     )
-    first, second = canvas.drawn
+    first, second = exactly_two(items=canvas.drawn)
     assert first.endswith('…')
     assert first.startswith('Bogalara Rd Opp')
     assert LONG_FROM.startswith(first.removesuffix('…'))
@@ -331,7 +336,7 @@ def test_header_cuts_the_from_without_dropping_words(
         ),
         active='Stop',
     )
-    first, second = canvas.drawn[-2:]
+    first, second = exactly_two(items=canvas.drawn[-2:])
     assert first == origin or (
         first.endswith('…') and origin.startswith(first.removesuffix('…'))
     )
@@ -362,7 +367,7 @@ def test_long_to_leaves_the_from_its_floor() -> None:
         limit=400,
         rules=NameRules(),
     )
-    first, second = canvas.drawn
+    first, second = exactly_two(items=canvas.drawn)
     assert first.startswith('Boga')
     assert first.endswith('\u2026')
     slack = text_width(text='W', face=TITLE_FACE)

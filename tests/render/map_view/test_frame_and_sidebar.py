@@ -135,7 +135,7 @@ def test_faster_row_has_a_pill() -> None:
 
 def test_scheduled_row_shows_its_clock_time() -> None:
     """A row that isn't live shows when it leaves, not a countdown."""
-    scheduled = replace(VIEW, sidebar=(row(live=False),))
+    scheduled = replace(VIEW, sidebar=(row(realtime=False),))
     clock = replace(VIEW, sidebar=(row(countdown='8:09'),))
     assert np.array_equal(
         draw_map_view(view=scheduled, base=paper()),

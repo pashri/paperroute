@@ -100,9 +100,8 @@ def test_sidebar_widest_count_clears_a_long_pair() -> None:
     assert not np.any(frames[1][top - 14 : top + 13, 785:] == INK)
 
 
-def test_sidebar_arrival_with_stops_stays_clear_of_the_pill() -> None:
-    """'arr 8:45 · 12 stops' is drawn whole and ends before FASTER."""
-    top = ROW_TOPS[0]
+def test_sidebar_arrival_leaves_out_the_stop_count() -> None:
+    """A row with stops draws the same as one without, clear of FASTER."""
     frames = [
         draw_map_view(
             view=replace(
@@ -115,13 +114,7 @@ def test_sidebar_arrival_with_stops_stays_clear_of_the_pill() -> None:
         )
         for stops in (None, 12)
     ]
-    band = (slice(top + 14, top + 28), slice(SIDEBAR_TEXT, 706))
-    ends = [
-        np.flatnonzero((frame[band] == INK).any(axis=0))[-1]
-        for frame in frames
-    ]
-    assert ends[1] > ends[0] + 40
-    assert ends[1] + SIDEBAR_TEXT < 700
+    assert np.array_equal(frames[0], frames[1])
 
 
 PAIR_ROW = PairRow(

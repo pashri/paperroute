@@ -6,6 +6,7 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
+from paperroute_device.core.text import DOT
 from paperroute_device.render.canvas import (
     HEIGHT,
     INK,
@@ -25,12 +26,7 @@ from paperroute_transit.core.map_view import (
     MapView,
     screen_point,
 )
-from paperroute_transit.core.stop_view import (
-    UNCERTAIN,
-    Pill,
-    Row,
-    arrival_line,
-)
+from paperroute_transit.core.stop_view import Pill, Row
 from paperroute_transit.render.chrome import (
     BANNER,
     FASTER,
@@ -40,7 +36,6 @@ from paperroute_transit.render.chrome import (
     note_room,
     pill,
     route_pair,
-    uncertain_row,
     view_banner,
     view_header,
 )
@@ -61,13 +56,9 @@ from paperroute_transit.render.markers import (
     nearest_first,
     square,
 )
-from paperroute_transit.render.names import Naming, fit_name
+from paperroute_transit.render.names import Naming, fit_headsign, fit_name
 from paperroute_transit.render.pair_list import draw_pair_list
-from paperroute_transit.render.stop_view import (
-    headline,
-    headsign_arrival,
-    note_text,
-)
+from paperroute_transit.render.stop_view import headline, note_text
 from paperroute_transit.render.tile_codec import THRESHOLD, quantise4
 from paperroute_transit.render.trip_marks import draw_trip_points
 
@@ -426,38 +417,6 @@ def row_time(canvas: Canvas, *, row: Row, y: int) -> None:
     )
 
 
-def arrival_note(canvas: Canvas, *, row: Row, y: int) -> None:
-    """
-    Draw the arrival line, and 'uncertain' at its right when flagged.
-
-    Parameters
-    ----------
-    canvas : Canvas
-        Target.
-    row : Row
-        Departure.
-    y : int
-        The badge's vertical centre.
-    """
-    right = SIDEBAR_RIGHT
-    if row.pill is Pill.FASTER:
-        right = FASTER_LEFT - NOTE_GAP
-    text = arrival_line(row=row)
-    if uncertain_row(row=row):
-        room = note_room(face=SIDEBAR_NOTE_FACE)
-        text = canvas.fit(
-            text=text, face=ARRIVES_FACE, width=right - room - SIDEBAR_TEXT,
-        )
-        canvas.text(
-            at=(right, y + ARRIVES_DROP), text=UNCERTAIN,
-            face=SIDEBAR_NOTE_FACE, grey=INK, anchor='rs',
-        )
-    canvas.text(
-        at=(SIDEBAR_TEXT, y + ARRIVES_DROP), text=text, face=ARRIVES_FACE,
-        grey=INK,
-    )
-
-
 def note_slot(canvas: Canvas, *, row: Row, y: int) -> float:
     """
     Draw the row's note at the right of the small line.
@@ -494,7 +453,10 @@ def headsign_note(
     canvas: Canvas, *, row: Row, y: int, naming: Naming
 ) -> None:
     """
-    Draw the headsign, with its arrival when both fit, and the note.
+    Draw the headsign, its arrival and the note.
+
+    A long headsign is shortened so the arrival always fits. A run-on
+    row draws the headsign and run-on tag instead of the arrival.
 
     Parameters
     ----------
@@ -509,19 +471,29 @@ def headsign_note(
     """
     right = note_slot(canvas, row=row, y=y)
     at = (SIDEBAR_TEXT, y + ARRIVES_DROP)
-    text = headsign_arrival(row=row)
     width = right - SIDEBAR_TEXT
-    if row.then is None and text_width(text=text, face=ARRIVES_FACE) <= width:
-        canvas.text(at=at, text=text, face=ARRIVES_FACE, grey=INK)
+    if row.then is not None:
+        headline(
+            canvas, row=row, at=at, text=row.destination, face=ARRIVES_FACE,
+            width=width, naming=naming,
+        )
         return
-    headline(
-        canvas, row=row, at=at, text=row.destination, face=ARRIVES_FACE,
-        width=width, naming=naming,
-    )
+    arrival = f'arr {row.arrives_at}'
+    if not row.destination:
+        canvas.text(at=at, text=arrival, face=ARRIVES_FACE, grey=INK)
+        return
+    tail = DOT + arrival
+    fitted = fit_headsign(
+        text=row.destination,
+        face=ARRIVES_FACE,
+        width=width - text_width(text=tail, face=ARRIVES_FACE),
+        naming=naming,
+    )[0]
+    canvas.text(at=at, text=fitted + tail, face=ARRIVES_FACE, grey=INK)
 
 
 def sidebar_row(
-    canvas: Canvas, *, row: Row, y: int, naming: Naming | None = None
+    canvas: Canvas, *, row: Row, y: int, naming: Naming
 ) -> None:
     """
     Draw one sidebar departure.
@@ -534,8 +506,8 @@ def sidebar_row(
         Departure.
     y : int
         The badge's vertical centre.
-    naming : Naming | None
-        None draws the arrival line; naming rules draw the headsign line.
+    naming : Naming
+        The rules and sibling headsigns for fitting names.
     """
     route_pair(
         canvas,
@@ -547,10 +519,7 @@ def sidebar_row(
         room=SIDEBAR_PAIR_ROOM - mark_room(row=row, face=MARK_FACE),
     )
     row_time(canvas, row=row, y=y)
-    if naming is None:
-        arrival_note(canvas, row=row, y=y)
-    else:
-        headsign_note(canvas, row=row, y=y, naming=naming)
+    headsign_note(canvas, row=row, y=y, naming=naming)
     if row.pill is Pill.FASTER:
         pill(
             canvas,
@@ -639,12 +608,10 @@ def draw_sidebar(canvas: Canvas, *, view: MapView) -> None:
             face=DESTINATION_FACE,
             grey=INK,
         )
-    naming = None
-    if view.destination is None:
-        naming = Naming(
-            rules=view.name_rules,
-            siblings=tuple(row.destination for row in view.sidebar),
-        )
+    naming = Naming(
+        rules=view.name_rules,
+        siblings=tuple(row.destination for row in view.sidebar),
+    )
     for index, row in enumerate(view.sidebar):
         sidebar_row(
             canvas, row=row, y=ROWS_TOP + drop + index * ROW_STEP,

@@ -44,7 +44,10 @@ from tests.helpers import sole
 
 
 def test_uncertain_sidebar_row_says_so_under_its_time() -> None:
-    """'uncertain' sits on the arrival line, right-aligned to the edge."""
+    """'uncertain' sits on the arrival line, right-aligned to the edge.
+
+    The headsign before it may be shortened to make room.
+    """
     top = ROW_TOPS[0]
     for pill, limit in ((None, SIDEBAR_RIGHT), (Pill.FASTER, FASTER_LEFT)):
         plain = row(pill=pill)
@@ -59,7 +62,7 @@ def test_uncertain_sidebar_row_says_so_under_its_time() -> None:
         assert found.size
         assert found[:, 0].min() >= top + ARRIVES_DROP - 12
         assert found[:, 0].max() <= top + ARRIVES_DROP + 3
-        assert found[:, 1].min() >= limit - 60
+        assert (found[:, 1] >= limit - 60).any()
         assert found[:, 1].max() < limit
 
 
@@ -148,11 +151,11 @@ def test_headsign_note_puts_the_headsign_before_its_arrival() -> None:
     assert f'Parramatta{DOT}arr 8:45' in sidebar_texts(row())
 
 
-def test_headsign_note_drops_the_arrival_for_a_long_headsign() -> None:
-    """A headsign that fills the line keeps it to itself."""
+def test_headsign_note_shortens_a_long_headsign_to_keep_its_arrival() -> None:
+    """A headsign that fills the line is cut so ' · arr 8:45' still fits."""
     drawn = sidebar_texts(replace(row(), destination=LONG))
-    assert not any('arr ' in text for text in drawn)
-    assert any(text.startswith('Oakington') for text in drawn)
+    (line,) = [text for text in drawn if text.startswith('Oakington')]
+    assert line.endswith(f'{ELLIPSIS}{DOT}arr 8:45')
 
 
 def test_headsign_note_keeps_the_carry_on_tag() -> None:
@@ -198,11 +201,34 @@ def test_headsign_note_with_no_headsign_reads_its_arrival() -> None:
     assert 'arr 8:45' in sidebar_texts(replace(row(), destination=''))
 
 
-def test_sidebar_row_with_a_destination_keeps_the_arrival_line() -> None:
-    """A pin with a destination draws today's line, without the platform."""
-    drawn = sidebar_texts(replace(row(), note='platform 3'), view=VIEW)
-    assert 'arr 8:45' in drawn
-    assert 'platform 3' not in drawn
+def test_sidebar_row_with_a_destination_reads_its_headsign() -> None:
+    """A pin with a destination shows the headsign and arrival, no stops."""
+    drawn = sidebar_texts(replace(row(), stops=24), view=VIEW)
+    assert f'Parramatta{DOT}arr 8:45' in drawn
+    assert not any('stops' in text for text in drawn)
+    assert any(text.startswith('to Parramatta') for text in drawn)
+
+
+def test_sidebar_row_with_a_destination_shows_the_platform() -> None:
+    """A train's platform shows whether or not the pin has a destination."""
+    assert 'platform 3' in sidebar_texts(
+        replace(row(), note='platform 3'), view=VIEW,
+    )
+
+
+def test_sidebar_row_with_a_destination_keeps_a_long_arrival() -> None:
+    """The 895 to Campbelltown keeps its arrival on every row."""
+    rows = tuple(
+        replace(
+            row(route='895'),
+            destination='Campbelltown Station via Narellan and Gregory Hills',
+            arrives_at=arrives,
+        )
+        for arrives in ('8:46', '9:16', '9:46', '10:16', '10:46')
+    )
+    drawn = sidebar_texts(*rows, view=VIEW)
+    for arrives in ('8:46', '9:16', '9:46', '10:16', '10:46'):
+        assert any(text.endswith(f'{DOT}arr {arrives}') for text in drawn)
 
 
 def test_badges_keep_clear_of_a_both_sides_capsule() -> None:

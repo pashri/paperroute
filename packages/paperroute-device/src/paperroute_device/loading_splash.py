@@ -87,7 +87,7 @@ class LoadingHold:
         self._holding = False
         self._last: Held | None = None
 
-    def show(  # pylint: disable=too-many-arguments
+    def show(
         self,
         *,
         frame: NDArray[np.uint8],

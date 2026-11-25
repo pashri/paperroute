@@ -28,7 +28,7 @@ class Shown:
         default_factory=list,
     )
 
-    def show(  # pylint: disable=too-many-arguments
+    def show(
         self,
         *,
         frame: NDArray[np.uint8],

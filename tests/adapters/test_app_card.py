@@ -11,8 +11,14 @@ import pytest
 
 from paperroute_device.core.device_model import AppCard
 from paperroute_device.core.text import DOT
+from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.city_setting import city_under_test
+from paperroute_testkit.core.kit_steps import QUIET_PARTS
+from paperroute_testkit.fakes import EmptyPlacedTimetable
 from paperroute_transit.adapters.app_card import built_at, transit_card
+from paperroute_transit.app_effects import VersionWatch
+from paperroute_transit.core.messages import TimetableSeen
+from paperroute_transit.transit_app import TransitApp
 
 ZONE: Final[ZoneInfo] = ZoneInfo('Australia/Sydney')
 NOW: Final[datetime] = datetime(2026, 11, 16, 9, 0, tzinfo=ZONE)
@@ -129,3 +135,60 @@ def test_built_at_is_none_when_the_read_fails(tmp_path: Path) -> None:
         with conn:
             conn.execute('CREATE TABLE stops (stop_id TEXT PRIMARY KEY)')
     assert built_at(city=city_under_test(), timetable=timetable) is None
+
+
+def write_timetable(*, path: Path, stamp: str) -> None:
+    """
+    Write a timetable file that records a build time.
+
+    Parameters
+    ----------
+    path : Path
+        The file.
+    stamp : str
+        The build time.
+    """
+    with closing(sqlite3.connect(path)) as connection:
+        connection.executescript(
+            'CREATE TABLE stops (id TEXT);'
+            'CREATE TABLE meta (key TEXT, value TEXT);'
+        )
+        connection.execute(
+            'INSERT INTO meta VALUES (?, ?)', ('built_at', stamp),
+        )
+        connection.commit()
+
+
+def test_app_entry_for_the_showing_city_uses_the_board_stamp(
+    tmp_path: Path,
+) -> None:
+    """The running board's stamp dates the card, not a file left behind."""
+    write_timetable(
+        path=tmp_path / 'timetable.db', stamp='2026-11-15T03:31:00+11:00',
+    )
+    app = TransitApp(city=SYDNEY, parts=QUIET_PARTS)
+    app.watch = VersionWatch(timetable=EmptyPlacedTimetable())
+    app.watch.seen = TimetableSeen(version='2026-11-16T03:31:00+11:00')
+    given = app.card(data_dir=tmp_path, now=NOW)
+    assert given.status.endswith('timetable built 16 Nov 3:31')
+
+
+def test_card_falls_back_to_the_file_when_no_board_watches(tmp_path: Path) -> None:
+    """With no board watching, the card reads the file beside the state."""
+    write_timetable(
+        path=tmp_path / 'timetable.db', stamp='2026-11-15T03:31:00+11:00',
+    )
+    app = TransitApp(city=SYDNEY, parts=QUIET_PARTS)
+    given = app.card(data_dir=tmp_path, now=NOW)
+    assert given.status.endswith('timetable built yesterday')
+
+
+def test_card_for_a_board_that_saw_no_timetable_says_so(
+    tmp_path: Path,
+) -> None:
+    """A watching board that saw no timetable gives the no-timetable card."""
+    app = TransitApp(city=SYDNEY, parts=QUIET_PARTS)
+    app.watch = VersionWatch(timetable=EmptyPlacedTimetable())
+    app.watch.seen = TimetableSeen(version=None)
+    given = app.card(data_dir=tmp_path, now=NOW)
+    assert given.status.endswith('no timetable yet')

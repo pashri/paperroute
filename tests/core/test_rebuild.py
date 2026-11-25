@@ -287,6 +287,34 @@ def test_current_schema_clears_outdated() -> None:
     assert not state.rebuild.outdated
 
 
+def test_seen_schema_clears_failed_on_a_newer_version() -> None:
+    """A failure is forgotten once the timetable on disk is a new build."""
+    state, _ = run_events(
+        state=pinned(),
+        events=[
+            TimetableSeen(version='v', schema='13'),
+            TimetableRebuilt(ok=False),
+        ],
+    )
+    assert state.rebuild.failed
+    state, _ = step(state, TimetableSeen(version='w', schema='13'))
+    assert not state.rebuild.failed
+    assert state.rebuild.failures == 1
+
+
+def test_seen_schema_keeps_failed_for_the_same_version() -> None:
+    """A repeat sighting of the same build leaves the failure showing."""
+    state, _ = run_events(
+        state=pinned(),
+        events=[
+            TimetableSeen(version='v', schema='13'),
+            TimetableRebuilt(ok=False),
+            TimetableSeen(version='v', schema='13'),
+        ],
+    )
+    assert state.rebuild.failed
+
+
 def test_chooser_works_while_outdated() -> None:
     """With the timetable outdated, picking Train loads its column."""
     walk: list[Event] = [

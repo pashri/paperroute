@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Final
 
 from paperroute_device.core.device_model import AppCard
-from paperroute_device.core.text import DOT, clock_text, local_time
+from paperroute_device.core.text import DOT, clock_text, day_text, local_time
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.core.city import City
 
@@ -44,7 +44,9 @@ def built_at(*, city: City, timetable: Path) -> datetime | None:
     return local_time(stamp=stamp, zone=city.zone)
 
 
-def built_text(*, built: datetime | None, now: datetime) -> str:
+def built_text(
+    *, built: datetime | None, now: datetime, live: bool = False,
+) -> str:
     """
     Say when the timetable was built, in whole local days.
 
@@ -54,15 +56,22 @@ def built_text(*, built: datetime | None, now: datetime) -> str:
         When the timetable was built, or None.
     now : datetime
         The time, in the local zone.
+    live : bool
+        True for the timetable the board is showing, dated as the Data
+        section does.
 
     Returns
     -------
     str
-        For example 'timetable built yesterday'.
+        For example 'timetable built yesterday'; for a live one
+        'timetable built 19 Oct 03:31'.
     """
     if built is None:
         return 'no timetable yet'
     zone = now.tzinfo or UTC
+    if live:
+        at = clock_text(moment=built, zone=zone)
+        return f'timetable built {day_text(moment=built)} {at}'
     days = (now.astimezone(zone).date() - built.astimezone(zone).date()).days
     if days < 1:
         at = clock_text(moment=built, zone=zone)
@@ -109,6 +118,7 @@ def transit_card(
     minutes: int,
     built: datetime | None,
     now: datetime,
+    live: bool = False,
 ) -> AppCard:
     """
     Make a transit app's card from its timetable's build time.
@@ -125,6 +135,8 @@ def transit_card(
         When the timetable was built, or None.
     now : datetime
         The time.
+    live : bool
+        True when `built` is the stamp of the timetable the board shows.
 
     Returns
     -------
@@ -132,7 +144,9 @@ def transit_card(
         The name, the status line and the wait.
     """
     status = DOT.join(
-        part for part in (about, built_text(built=built, now=now)) if part
+        part
+        for part in (about, built_text(built=built, now=now, live=live))
+        if part
     )
     return AppCard(
         name=name,

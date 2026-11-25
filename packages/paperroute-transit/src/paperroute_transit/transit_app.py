@@ -13,6 +13,7 @@ from paperroute_device.core.device_state import Banner, DeviceState
 from paperroute_device.core.kit_events import Tick
 from paperroute_device.core.kit_state import Step
 from paperroute_device.core.panel_views import InfoRow
+from paperroute_device.core.text import local_time
 from paperroute_device.ports import Frame
 from paperroute_hardware.core.knob_events import KnobEvent
 from paperroute_transit.adapters.app_card import built_at, transit_card
@@ -224,16 +225,25 @@ class TransitApp(TransitRun, App[State]):
         Returns
         -------
         AppCard
-            The card `transit_card` makes from the timetable's build time.
+            The card `transit_card` makes from the build time the running
+            board saw, else the file's.
         """
+        seen = None if self.watch is None else self.watch.seen
+        live = seen is not None
+        built = (
+            local_time(stamp=seen.version, zone=self.city.zone)
+            if seen is not None
+            else built_at(
+                city=self.city, timetable=data_dir / 'timetable.db',
+            )
+        )
         return transit_card(
             name=self.city.name,
             about=self.parts.about,
             minutes=self.parts.rebuild_minutes,
-            built=built_at(
-                city=self.city, timetable=data_dir / 'timetable.db',
-            ),
+            built=built,
             now=now,
+            live=live,
         )
 
     async def before_tick(self) -> object | None:

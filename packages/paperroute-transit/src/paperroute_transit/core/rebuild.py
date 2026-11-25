@@ -211,7 +211,8 @@ def seen_schema(*, state: State, seen: TimetableSeen) -> State:
     -------
     State
         State with the schema, origin and last day noted and
-        `rebuild.outdated` and `rebuild.missing` set from it.
+        `rebuild.outdated` and `rebuild.missing` set from it; a failure
+        is forgotten once the file is a different build.
     """
     rebuild = replace(
         state.rebuild,
@@ -224,6 +225,8 @@ def seen_schema(*, state: State, seen: TimetableSeen) -> State:
         origin=seen.origin,
         missing=seen.version is None,
         last_day=seen.last_day,
+        failed=state.rebuild.failed
+        and seen.version == state.saving.timetable,
     )
     return replace(state, rebuild=rebuild)
 

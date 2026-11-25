@@ -40,7 +40,7 @@ if ! ssh -- "$host" sudo -n -l "$INSTALL" >/dev/null 2>&1; then
     exit 1
 fi
 ssh -- "$host" rm -rf "$STAGE/$sha"
-git ls-files -z packages "apps/paperroute-$app" pyproject.toml uv.lock deploy/CONTRACT \
+git ls-files -z packages "apps/paperroute-$app" pyproject.toml uv.lock deploy/CONTRACT deploy/screens \
     | rsync -a --from0 --files-from=- ./ "$host:$STAGE/$sha/"
 if [[ -f apps/paperroute-$app/$HOOK ]]; then
     bash "apps/paperroute-$app/$HOOK" "$host" || exit

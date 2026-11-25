@@ -962,7 +962,9 @@ async def test_switch_raising_lets_the_next_board_frame_draw(
     np.full((480, 800), 85, dtype=np.uint8).tofile(
         tmp_path / 'loading-sydney.raw',
     )
-    hold = LoadingHold(display=shown, folder=tmp_path, turned=lambda: False)
+    hold = LoadingHold(
+        display=shown, folders=(tmp_path,), turned=lambda: False,
+    )
     apps = (
         InstalledApp(
             key='paperroute-sydney',

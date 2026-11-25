@@ -381,11 +381,11 @@ def test_deploy_stages_only_the_named_app() -> None:
 
 
 def test_deploy_stages_the_contract() -> None:
-    """The release carries the kit's units contract, and no other kit file."""
+    """The release carries the units contract and the screens only."""
     found = commands(path=DEPLOY_SCRIPT, word='git ls-files')
     assert found == [
         'git ls-files -z packages "apps/paperroute-$app" pyproject.toml'
-        ' uv.lock deploy/CONTRACT'
+        ' uv.lock deploy/CONTRACT deploy/screens'
         ' | rsync -a --from0 --files-from=- ./ "$host:$STAGE/$sha/"',
     ]
     simulated = commands(
@@ -393,7 +393,7 @@ def test_deploy_stages_the_contract() -> None:
         word='git ls-files',
     )
     assert len(simulated) == 1
-    assert ' uv.lock deploy/CONTRACT ' in simulated[0]
+    assert ' uv.lock deploy/CONTRACT deploy/screens ' in simulated[0]
 
 
 def test_shipped_fonts_conf_is_minimal() -> None:

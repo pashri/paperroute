@@ -30,7 +30,7 @@ from paperroute_device.boot_splash import (
 )
 from paperroute_device.core.app import App
 from paperroute_device.core.kit_events import QuitRequested
-from paperroute_device.loading_splash import LoadingHold
+from paperroute_device.loading_splash import RELEASE_SCREENS, LoadingHold
 from paperroute_device.logs import LastError, configure_logging
 from paperroute_device.ports import (
     AppSwitch,
@@ -707,7 +707,7 @@ def web_main(
     )
     hold = None if panel is None else LoadingHold(
         display=panel,
-        folder=args.splash.parent,
+        folders=(RELEASE_SCREENS, args.splash.parent),
         turned=lambda: read_rotate(path=args.state),
     )
     timings.panel = panel_times_for(wanted=args.panel, panel=panel)

@@ -373,7 +373,38 @@ def approach_marker(
     )
 
 
-# pylint: disable-next=too-many-locals
+def leg_look(*, legs: Sequence[Leg], leg: Leg, trips: TripInputs) -> Marker:
+    """
+    Make the unplaced marker for a trip's current leg.
+
+    Parameters
+    ----------
+    legs : Sequence[Leg]
+        The trip's legs.
+    leg : Leg
+        The current leg.
+    trips : TripInputs
+        The strip's departures and live data.
+
+    Returns
+    -------
+    Marker
+        A marker for the leg's route at the origin, live when any leg's
+        position is fresh, else aged to the minute.
+    """
+    ages = [each.found[1] for each in legs if each.found is not None]
+    live = bool(ages) and is_fresh(age=min(ages), limit=trips.stale_after)
+    return Marker(
+        route=leg.pattern.route,
+        x=0.0,
+        y=0.0,
+        bearing=None,
+        live=live,
+        pinned=True,
+        age=None if live or not ages else min(ages) // 60 * 60,
+    )
+
+
 def trip_marker(
     *,
     departure: Departure,
@@ -423,17 +454,7 @@ def trip_marker(
     if current is None:
         return None
     leg, (index, fraction) = current
-    ages = [each.found[1] for each in legs if each.found is not None]
-    live = bool(ages) and is_fresh(age=min(ages), limit=trips.stale_after)
-    look = Marker(
-        route=leg.pattern.route,
-        x=0.0,
-        y=0.0,
-        bearing=None,
-        live=live,
-        pinned=True,
-        age=None if live or not ages else min(ages) // 60 * 60,
-    )
+    look = leg_look(legs=legs, leg=leg, trips=trips)
     found = None if ways is None else call_rows(
         pattern=leg.pattern, station_of=trips.station_of, ways=ways,
     )
@@ -445,7 +466,7 @@ def trip_marker(
         ),
         fraction=fraction,
         age=look.age,
-        live=live,
+        live=look.live,
         known=not (
             index == len(leg.pattern.stops) - 2 and fraction >= REACHED
         ),

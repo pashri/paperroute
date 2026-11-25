@@ -17,6 +17,7 @@ from paperroute_testkit.core.factories import (
     vehicle,
 )
 from paperroute_testkit.core.strip_factories import row_named
+from paperroute_transit.core import strip_vehicles, strip_ways
 from paperroute_transit.core.map_view import Marker
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.positions import VehiclePosition
@@ -37,7 +38,6 @@ from paperroute_transit.core.strip_rings import (
     ring_point,
     ring_stop,
 )
-from paperroute_transit.core import strip_vehicles, strip_ways
 from paperroute_transit.core.strip_vehicles import hop_marker
 from paperroute_transit.core.strip_view import build_strip_view
 from paperroute_transit.core.strip_ways import (

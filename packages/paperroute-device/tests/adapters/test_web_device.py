@@ -18,7 +18,6 @@ from paperroute_device.adapters.web_device import RESET_MARK, DevicePages
 from paperroute_device.adapters.web_live import LiveView
 from paperroute_device.adapters.web_shell import web_app
 from paperroute_device.core.app import KIT_RESET_HINT
-from paperroute_device.loading_splash import LoadingHold
 from paperroute_device.core.device_events import (
     ApiKeyChanged,
     ConfirmAsked,
@@ -36,6 +35,7 @@ from paperroute_device.core.device_model import (
     WifiStatus,
 )
 from paperroute_device.core.panel_views import KIT_CONFIRM_COPY, confirm_view
+from paperroute_device.loading_splash import LoadingHold
 from paperroute_device_testkit.device_fakes import FakeAppSwitch, FakeKeys
 from paperroute_device_testkit.device_pages import (
     FACTS,

@@ -373,6 +373,7 @@ def approach_marker(
     )
 
 
+# pylint: disable-next=too-many-locals
 def trip_marker(
     *,
     departure: Departure,

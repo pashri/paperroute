@@ -10,6 +10,8 @@ const POWER_STATUS = {
   poweroff: 'Shutting down...',
   reboot: 'Restarting...',
 };
+const POLL_MS = 3000;
+const GIVE_UP_MS = 120000;
 const NOT_SWITCHED = {
   refused: 'Not switched',
   network: NOT_SENT.network,
@@ -32,6 +34,46 @@ async function postJson(url, body) {
   } catch {
     return 'network';
   }
+}
+
+/**
+ * Find the app the board shows in the Device page's HTML.
+ * @param {string} page - The page text.
+ * @returns {string | null} The key of the app marked showing.
+ */
+function shownApp(page) {
+  const found = /value="([^"]+)"[^>]* disabled/.exec(page);
+  return found ? found[1] : null;
+}
+
+/**
+ * Fetch the Device page past the browser's HTTP cache.
+ * @returns {Promise<string | null>} The app showing, or null on a miss.
+ */
+async function fetchShown() {
+  try {
+    const reply = await fetch('/device', { cache: 'no-store' });
+    return shownApp(await reply.text());
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Poll the Device page until the app showing changes, then reload.
+ * @param {string | undefined} before - The app showing now.
+ * @returns {void}
+ */
+function followSwitch(before) {
+  let waited = 0;
+  const timer = setInterval(async () => {
+    waited += POLL_MS;
+    const now = await fetchShown();
+    if (now && now !== before) location.reload();
+    if ((now && now !== before) || waited >= GIVE_UP_MS) {
+      clearInterval(timer);
+    }
+  }, POLL_MS);
 }
 
 /**
@@ -107,7 +149,10 @@ async function confirmSwitch(event) {
   const dialog = event.currentTarget;
   if (dialog.returnValue !== 'confirm') return;
   const key = dialog.dataset.switch;
+  const before = switchForm
+    .querySelector('input[name="app"]:disabled')?.value;
   const outcome = await postJson('/switch', { app: key });
+  if (outcome === 'ok') followSwitch(before);
   switchStatus.textContent = outcome === 'ok'
     ? `Switching to ${appRadio(key).dataset.name}...`
     : NOT_SWITCHED[outcome];

@@ -19,7 +19,22 @@ const withSwitch = process.argv[3] === 'switch';
 const sent = [];
 const replies = [];
 let release = () => {};
+const gets = [];
+const shown = [];
+const timers = [];
+globalThis.setInterval = (fn) => timers.push({ fn, live: true });
+globalThis.clearInterval = (id) => { timers[id - 1].live = false; };
+let reloads = 0;
+globalThis.location = { reload: () => { reloads += 1; } };
+const device = (key) => ({
+  ok: true,
+  text: async () => `<input name="app" value="${key}" disabled>`,
+});
 globalThis.fetch = (url, init) => {
+  if (init.method !== 'POST') {
+    gets.push([url, init.cache]);
+    return Promise.resolve(device(shown.shift()));
+  }
   sent.push([url, JSON.parse(init.body)]);
   const reply = replies.shift() ?? { ok: true };
   if (reply === 'throw') return Promise.reject(new Error('offline'));
@@ -71,6 +86,7 @@ const switchForm = {
   ...on(),
   querySelector: (selector) => ({
     'input[name="app"]:checked': radios.find((radio) => radio.checked),
+    'input[name="app"]:disabled': radios.find((radio) => radio.disabled),
     'button[type="submit"]': button,
     ...Object.fromEntries(radios.map((radio) => [
       `input[name="app"][value="${radio.value}"]`, radio,
@@ -161,6 +177,37 @@ if (withSwitch) {
   app.rechosen = status.textContent;
 }
 app.status = status.textContent;
+const follow = {};
+if (withSwitch) {
+  timers.length = 0;
+  gets.length = 0;
+  radios[0].checked = false;
+  radios[1].checked = true;
+  radios[0].value = 'old';
+  const step = async (count) => {
+    for (let i = 0; i < count; i += 1) {
+      const timer = timers.at(-1);
+      if (timer.live) await timer.fn();
+    }
+  };
+  shown.push('old', 'old', 'new');
+  replies.push({ ok: true, status: 204 });
+  ask();
+  switchDialog.close('confirm');
+  await tick();
+  await step(5);
+  follow.reloaded = [reloads, gets.length, gets[0]];
+  timers.length = 0;
+  reloads = 0;
+  for (let i = 0; i < 60; i += 1) shown.push('old');
+  replies.push({ ok: true, status: 204 });
+  ask();
+  switchDialog.close('confirm');
+  await tick();
+  await step(60);
+  follow.gaveUp = [reloads, timers.at(-1).live];
+}
+app.follow = follow;
 console.log(JSON.stringify({ power, app }));
 """
 
@@ -225,6 +272,27 @@ def test_switch_refusal_says_not_switched(pages: dict[str, Any]) -> None:
 def test_switch_names_the_app_it_posted(pages: dict[str, Any]) -> None:
     """A radio chosen while the post is out does not change the name."""
     assert pages['switch']['app']['rechosen'] == 'Switching to Demo...'
+
+
+def test_switch_polls_device_then_reloads_on_a_new_city(
+    pages: dict[str, Any],
+) -> None:
+    """Once the board shows a new city, the page reloads once."""
+    reloaded = pages['switch']['app']['follow']['reloaded']
+    assert reloaded[:2] == [1, 3]
+
+
+def test_switch_gives_up_after_two_minutes(pages: dict[str, Any]) -> None:
+    """A city that never changes stops the polling, with no reload."""
+    assert pages['switch']['app']['follow']['gaveUp'] == [0, False]
+
+
+def test_switch_fetches_the_app_section_without_cache(
+    pages: dict[str, Any],
+) -> None:
+    """The poll asks for `/device` past the browser's HTTP cache."""
+    reloaded = pages['switch']['app']['follow']['reloaded']
+    assert reloaded[2] == ['/device', 'no-store']
 
 
 def test_button_names_the_chosen_app(pages: dict[str, Any]) -> None:

@@ -936,7 +936,11 @@ class DevicePages:
         if self._apps is None or app is None:
             return web.Response(status=HTTPStatus.BAD_REQUEST)
         self._draw_loading(key=app.key)
-        accepted = await self._apps.switch(key=app.key)
+        try:
+            accepted = await self._apps.switch(key=app.key)
+        except Exception:  # pylint: disable=broad-exception-caught
+            self._redraw()
+            raise
         if not accepted:
             self._redraw()
         if request.content_type == 'application/json':

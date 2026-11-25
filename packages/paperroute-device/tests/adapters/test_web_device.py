@@ -1,14 +1,16 @@
 """Tests for the web Device page."""
 
 from collections.abc import AsyncIterator
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from http import HTTPStatus
 from pathlib import Path
 
+import numpy as np
 import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
+from numpy.typing import NDArray
 
 from paperroute_device.adapters.device_page import ASKED as DEVICE_ASKED
 from paperroute_device.adapters.device_page import NOT_SWITCHED, ago_text
@@ -16,6 +18,7 @@ from paperroute_device.adapters.web_device import RESET_MARK, DevicePages
 from paperroute_device.adapters.web_live import LiveView
 from paperroute_device.adapters.web_shell import web_app
 from paperroute_device.core.app import KIT_RESET_HINT
+from paperroute_device.loading_splash import LoadingHold
 from paperroute_device.core.device_events import (
     ApiKeyChanged,
     ConfirmAsked,
@@ -872,3 +875,112 @@ async def test_switch_loading_failure_is_logged_and_ignored(
     assert response.status == HTTPStatus.NO_CONTENT
     assert fake.asked == ['demo']
     assert 'no picture for demo' in caplog.text
+
+
+@dataclass
+class Shown:
+    """A display that records each frame shown."""
+
+    frames: list[NDArray[np.uint8]] = field(default_factory=list)
+
+    def show(self, *, frame: NDArray[np.uint8], **_: object) -> None:
+        """
+        Record a frame.
+
+        Parameters
+        ----------
+        frame : NDArray[np.uint8]
+            The frame.
+        **_ : object
+            Ignored.
+        """
+        self.frames.append(frame)
+
+    def settle(self, *, timeout: float) -> bool:
+        """
+        Report the display idle.
+
+        Parameters
+        ----------
+        timeout : float
+            Ignored.
+
+        Returns
+        -------
+        bool
+            Always True.
+        """
+        del timeout
+        return True
+
+
+@dataclass
+class RaisingSwitch(FakeAppSwitch):
+    """An app switch whose switch raises."""
+
+    async def switch(self, *, key: str) -> bool:
+        """
+        Fail the switch.
+
+        Parameters
+        ----------
+        key : str
+            The app.
+
+        Raises
+        ------
+        OSError
+            Always.
+        """
+        raise OSError(f'cannot switch to {key}')
+
+
+async def test_switch_raising_releases_the_loading_hold() -> None:
+    """A switch that raises redraws, so the next board frame is drawn."""
+    calls: list[str] = []
+    fake = RaisingSwitch(apps=APPS)
+    client = await _start(
+        device=DeviceSite(
+            apps=fake,
+            loading=lambda key: calls.append(f'loading {key}'),
+            redraw=lambda: calls.append('redraw'),
+        ),
+    )
+    try:
+        response = await client.post('/switch', json={'app': 'demo'})
+    finally:
+        await client.close()
+    assert response.status == HTTPStatus.INTERNAL_SERVER_ERROR
+    assert calls == ['loading demo', 'redraw']
+
+
+async def test_switch_raising_lets_the_next_board_frame_draw(
+    tmp_path: Path,
+) -> None:
+    """With a real hold, a failed switch leaves the board drawing."""
+    shown = Shown()
+    np.full((480, 800), 85, dtype=np.uint8).tofile(
+        tmp_path / 'loading-sydney.raw',
+    )
+    hold = LoadingHold(display=shown, folder=tmp_path, turned=lambda: False)
+    apps = (
+        InstalledApp(
+            key='paperroute-sydney',
+            card=AppCard(name='Sydney', status='s', wait='w'),
+            active=False,
+        ),
+    )
+    client = await _start(
+        device=DeviceSite(
+            apps=RaisingSwitch(apps=apps),
+            loading=lambda key: hold.load(key=key),
+            redraw=hold.release,
+        ),
+    )
+    try:
+        await client.post('/switch', json={'app': 'paperroute-sydney'})
+    finally:
+        await client.close()
+    hold.show(frame=np.zeros((480, 800), dtype=np.uint8))
+    assert len(shown.frames) == 2
+    assert not shown.frames[-1].any()

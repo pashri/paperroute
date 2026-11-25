@@ -70,6 +70,7 @@ from paperroute_transit.core.positions import (
 from paperroute_transit.core.reach import build_reach
 from paperroute_transit.core.realtime import RealtimeSnapshot
 from paperroute_transit.core.strip_approach import approach_stations, facing_of
+from paperroute_transit.core.strip_hooks import with_road_hooks
 from paperroute_transit.measures import StopMeasures
 from paperroute_transit.ports import (
     GaugeTimetable,
@@ -177,7 +178,8 @@ def strip_built(
     Gather a strip's runs and lay out its reach, logging how long it took.
 
     The data also holds, for a strip fed by both kerbs, the stations facing
-    the stops before its From; none when the pairs read fails.
+    the stops before its From and a hook for each road into it with no
+    rows; none when the pairs read fails.
 
     Parameters
     ----------
@@ -196,6 +198,9 @@ def strip_built(
     if data is not None and effect.key.across is not None:
         try:
             pairs = network.kerb_pairs(stations=approach_stations(data=data))
+            roads = network.approach_roads(
+                stations=(effect.key.station, effect.key.across),
+            )
         except sqlite3.Error:
             logger.warning('reading the kerb pairs failed', exc_info=True)
         else:
@@ -204,7 +209,10 @@ def strip_built(
                     'no kerb pairs for the strip',
                     extra={'station': effect.key.station},
                 )
-            data = replace(data, facing=facing_of(pairs=pairs))
+            data = with_road_hooks(
+                data=replace(data, facing=facing_of(pairs=pairs)),
+                roads=roads,
+            )
     reach = None if data is None else build_reach(data=data)
     elapsed = (time.perf_counter() - started) * MS_PER_SECOND
     logger.info(

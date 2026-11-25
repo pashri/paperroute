@@ -28,6 +28,13 @@ FROM parent_kerbs k JOIN stops s ON s.stop_id = k.stop_id
 WHERE k.station_id IN (SELECT value FROM json_each(:ids))
 ORDER BY k.station_id, k.stop_id
 """
+APPROACH_ROADS: Final[str] = """
+SELECT DISTINCT stop_id, road FROM approach_roads
+WHERE station_id IN (
+  SELECT COALESCE(NULLIF(s.parent_station, ''), s.stop_id) FROM stops s
+  WHERE s.stop_id IN (SELECT value FROM json_each(:ids)))
+ORDER BY stop_id, road
+"""
 RUNS_THROUGH: Final[str] = """
 SELECT r.stations, r.trips, s.pos
 FROM run_stops s JOIN runs r ON r.run_id = s.run_id
@@ -205,6 +212,32 @@ class StationRuns:
             for station, group in grouped.items()
             if len(group) == 2
         }
+
+    def approach_roads(
+        self, *, stations: Collection[str]
+    ) -> dict[str, tuple[str, ...]]:
+        """
+        Read the roads buses arrive at the stations' parents by.
+
+        Parameters
+        ----------
+        stations : Collection[str]
+            Station or kerb IDs; a kerb stands for its parent.
+
+        Returns
+        -------
+        dict[str, tuple[str, ...]]
+            Roads by the place called at just before the parent; empty
+            for an old file.
+        """
+        if not self.has_tables(tables=('approach_roads',)):
+            return {}
+        found: dict[str, tuple[str, ...]] = {}
+        for place, road in self.fetch(
+            sql=APPROACH_ROADS, params={'ids': json.dumps(list(stations))},
+        ):
+            found[str(place)] = (*found.get(str(place), ()), str(road))
+        return found
 
     def tails(
         self, *, station: str, key: StripKey

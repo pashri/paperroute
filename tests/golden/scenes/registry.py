@@ -105,6 +105,9 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     'strip_map_far_kerb_mid': lambda: both_sides_live(
         view=LiveView.STRIP_MAP, share=0.5,
     ),
+    'strip_parent_hook': lambda: both_sides_live(
+        view=LiveView.STRIP, hook=True,
+    ),
     'strip_loop': lambda: detour_scene(
         view=LiveView.STRIP, trip=LOOP_441, origin=3, route='441',
     ),

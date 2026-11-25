@@ -138,6 +138,17 @@ async def test_strip_built_logs_when_no_pairs_are_found(
     assert [r.__dict__['station'] for r in found] == ['C']
 
 
+async def test_strip_built_hangs_a_hook_for_a_road_with_no_rows() -> None:
+    """A both-kerbs strip gets a hook for a place before it off the rows."""
+    data = reach_data()
+    key = replace(STRIP_KEY, across='x2')
+    load = LoadStrip(key=key, origin=data.origin, timetable='v1')
+    network = FakeNetwork(data=data, roads={'far': ('Far Rd',)})
+    [posted] = await posted_by(ports=ports_of(network=network), effects=[load])
+    assert isinstance(posted, StripLoaded) and posted.reach is not None
+    assert posted.reach.hooks == {'far': 'road:Far Rd'}
+
+
 async def test_load_strip_without_runs_posts_no_reach() -> None:
     """A timetable with no run tables loads a strip with no reach."""
     load = LoadStrip(key=STRIP_KEY, origin=stop_at('C'), timetable='v1')

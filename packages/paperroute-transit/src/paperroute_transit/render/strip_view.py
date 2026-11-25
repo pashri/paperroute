@@ -67,6 +67,7 @@ from paperroute_transit.render.strip import (
     draw_strip_markers,
 )
 from paperroute_transit.render.strip_rings import draw_rings, draw_spurs
+from paperroute_transit.render.strip_road_hooks import draw_road_hooks
 
 NAME_X: Final[int] = TRACK_X + int(HALF_WIDE)
 TIME_RIGHT: Final[int] = 424
@@ -627,6 +628,7 @@ def draw_strip(canvas: Canvas, *, view: StripView) -> None:
         )
         draw_rings(canvas, rows=view.rows, columns=columns)
         draw_spurs(canvas, rows=view.rows, columns=columns)
+        draw_road_hooks(canvas, rows=view.rows, columns=columns)
         draw_strip_markers(canvas, markers=view.markers)
         if view.band is not None:
             draw_band(canvas, band=view.band, left=BAND_LEFT, right=BAND_RIGHT)
@@ -858,6 +860,7 @@ def draw_pane(canvas: Canvas, *, view: StripMapView) -> None:
         )
         draw_rings(canvas, rows=view.pane.rows, columns=columns)
         draw_spurs(canvas, rows=view.pane.rows, columns=columns)
+        draw_road_hooks(canvas, rows=view.pane.rows, columns=columns)
         draw_strip_markers(canvas, markers=view.pane.markers)
     draw_short_list(canvas, view=view)
 

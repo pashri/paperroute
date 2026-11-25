@@ -301,6 +301,15 @@ def test_run_parent_kerbs_skips_a_city_without_them(
     assert SYDNEY.timetable.parent_kerbs
 
 
+def test_run_approach_roads_leaves_the_table_empty_on_failure(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failing build logs and leaves no table rows."""
+    with closing(sqlite3.connect(tmp_path / 't.db')) as conn:
+        extras.run_approach_roads(conn=conn, city=SYDNEY)
+    assert 'approach roads failed' in caplog.text
+
+
 def free_pages_after_extras(*, db: Path, compact: bool) -> int:
     """
     Leave free pages in a timetable, run the extras and count them.

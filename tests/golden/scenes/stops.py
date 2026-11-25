@@ -45,6 +45,7 @@ from paperroute_transit.core.saved import LiveView, StopSides, seeded
 from paperroute_transit.core.state_model import RELOAD_BEFORE, State
 from paperroute_transit.core.state_views import LOADING_WAIT
 from paperroute_transit.core.stop_view import HORIZON
+from paperroute_transit.core.strip_hooks import with_road_hooks
 from paperroute_transit.core.strip_state import strip_key
 from tests.core.state.helpers import BUS_POSITIONS, CENTRE, fresh, loaded
 from tests.core.test_stop_hero import FROM, RUN, STAND
@@ -298,9 +299,15 @@ def way_points(*, way: tuple[str, ...], across: bool) -> dict[str, Point]:
     }
 
 
-def both_sides_reach() -> Reach:
+def both_sides_reach(*, hook: bool = False) -> Reach:
     """
     Lay out a street of stops each way past a both-sides From.
+
+    Parameters
+    ----------
+    hook : bool
+        Whether the kerb across's buses arrive by Military Rd, a road
+        with no rows, its stops facing none.
 
     Returns
     -------
@@ -313,7 +320,7 @@ def both_sides_reach() -> Reach:
         for stop, point in way_points(way=way, across=across).items()
         if (name := STREETS.get(stop))
     }
-    return build_reach(data=ReachInput(
+    data = ReachInput(
         origin=BOTH_PIN.origin,
         tails=(RunTail(before=HERE_WAY[:3], after=HERE_WAY[4:], trips=40),),
         places=places,
@@ -322,7 +329,17 @@ def both_sides_reach() -> Reach:
             RunTail(before=ACROSS_WAY[:3], after=ACROSS_WAY[4:], trips=40),
         ),
         facing=FACING,
-    ))
+    )
+    if hook:
+        data = with_road_hooks(
+            data=replace(data, facing={
+                stop: other
+                for stop, other in FACING.items()
+                if stop not in ACROSS_WAY
+            }),
+            roads={'M1': ('Military Rd',)},
+        )
+    return build_reach(data=data)
 
 
 def along(*, one: Point, two: Point, share: float) -> Point:
@@ -349,7 +366,9 @@ def along(*, one: Point, two: Point, share: float) -> Point:
     )
 
 
-def both_sides_live(*, view: LiveView, share: float = 0.0) -> State:
+def both_sides_live(
+    *, view: LiveView, share: float = 0.0, hook: bool = False,
+) -> State:
     """
     Show a both-sides pin on a Map or Strip view, a bus each way.
 
@@ -360,6 +379,9 @@ def both_sides_live(*, view: LiveView, share: float = 0.0) -> State:
     share : float
         Share of its hop from M2 to M1 the far-kerb bus has run; at 0 it
         is at M1.
+    hook : bool
+        Whether the kerb across's buses arrive on a road hook (see
+        `both_sides_reach`).
 
     Returns
     -------
@@ -373,7 +395,9 @@ def both_sides_live(*, view: LiveView, share: float = 0.0) -> State:
     key = strip_key(pin=BOTH_PIN, end_points=end_point_modes(
         modes=city_under_test().modes,
     ))
-    state, _ = step(state, StripLoaded(key=key, reach=both_sides_reach()))
+    state, _ = step(state, StripLoaded(
+        key=key, reach=both_sides_reach(hook=hook),
+    ))
     ways = {False: HERE_WAY, True: ACROSS_WAY}
     points = {
         across: way_points(way=way, across=across)

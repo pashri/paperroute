@@ -259,6 +259,23 @@ def ruled_off(
     )
 
 
+def route_column(*, rows: Iterable[Row]) -> Column:
+    """
+    Make a ROUTE column of chooser_routes rows.
+
+    Parameters
+    ----------
+    rows : Iterable[Row]
+        Route key, number, name and tag of each route.
+
+    Returns
+    -------
+    Column
+        Routes in sort order.
+    """
+    return Column(level=Level.ROUTE, items=route_choices(rows=rows))
+
+
 class SqliteNetworkRepository:
     """
     Read-only chooser and run queries against the timetable file.
@@ -449,9 +466,9 @@ class SqliteNetworkRepository:
             case Level.KIND:
                 return self._kind_next(spec=spec)
             case Level.GROUP:
-                return self.route_column(
+                return route_column(rows=self.fetch(
                     sql=ROUTES_IN_GROUP, params=(kind, key),
-                )
+                ))
             case Level.LINE | Level.STATION if spec.by_line:
                 return self.station_first_column(path=path, kind=kind)
             case Level.REPLACEMENTS | Level.LINE if replacing is not None:
@@ -484,7 +501,9 @@ class SqliteNetworkRepository:
         """
         if level is Level.REPLACEMENTS:
             return self.replacement_lines(spec=spec)
-        return self.route_column(sql=REPLACEMENTS_OF, params=(spec.id, key))
+        return route_column(rows=self.fetch(
+            sql=REPLACEMENTS_OF, params=(spec.id, key),
+        ))
 
     def _kind_next(self, *, spec: ModeSpec) -> Column:
         """
@@ -508,7 +527,9 @@ class SqliteNetworkRepository:
             return self.group_column(kind=spec.id)
         if spec.by_line:
             return self.line_column(kind=spec.id)
-        return self.route_column(sql=ROUTES_OF_KIND, params=(spec.id,))
+        return route_column(rows=self.fetch(
+            sql=ROUTES_OF_KIND, params=(spec.id,),
+        ))
 
     def kind_column(self) -> Column:
         """
@@ -590,25 +611,6 @@ class SqliteNetworkRepository:
             group_of=self.city.catalogue.line_group,
         )
         return Column(level=Level.LINE, items=lines)
-
-    def route_column(self, *, sql: str, params: tuple[object, ...]) -> Column:
-        """
-        A ROUTE column of the chooser_routes rows a query picks.
-
-        Parameters
-        ----------
-        sql : str
-            Query giving route key, number, name and tag.
-        params : tuple[object, ...]
-            Query parameters.
-
-        Returns
-        -------
-        Column
-            Routes in sort order.
-        """
-        rows = self.fetch(sql=sql, params=params)
-        return Column(level=Level.ROUTE, items=route_choices(rows=rows))
 
     def line_column(self, *, kind: str) -> Column:
         """
@@ -732,6 +734,25 @@ class SqliteNetworkRepository:
             Pair by station ID; empty for an old file.
         """
         return self.runs.kerb_pairs(stations=stations)
+
+    def approach_roads(
+        self, *, stations: Collection[str]
+    ) -> dict[str, tuple[str, ...]]:
+        """
+        Read the roads buses arrive at the stations' parents by.
+
+        Parameters
+        ----------
+        stations : Collection[str]
+            Station or kerb IDs; a kerb stands for its parent.
+
+        Returns
+        -------
+        dict[str, tuple[str, ...]]
+            Roads by the place called at just before the parent; empty
+            for an old file.
+        """
+        return self.runs.approach_roads(stations=stations)
 
     def parent_kerbs(
         self, *, stations: Collection[str]

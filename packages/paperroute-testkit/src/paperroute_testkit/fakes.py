@@ -55,6 +55,8 @@ class FakeNetwork:
         The kerbs of each parent station that has them.
     data : ReachInput | None
         The runs through every strip's From.
+    roads : dict[str, tuple[str, ...]]
+        The roads every strip's buses arrive by, by the place before.
     error : sqlite3.Error | None
         Raised by every read when set.
     pairs_error : sqlite3.Error | None
@@ -66,6 +68,7 @@ class FakeNetwork:
     pairs: dict[str, KerbPair] = field(default_factory=dict)
     parents: dict[str, ParentKerbs] = field(default_factory=dict)
     data: ReachInput | None = None
+    roads: dict[str, tuple[str, ...]] = field(default_factory=dict)
     error: sqlite3.Error | None = None
     pairs_error: sqlite3.Error | None = None
 
@@ -127,6 +130,32 @@ class FakeNetwork:
             for station, pair in self.pairs.items()
             if station in stations
         }
+
+    def approach_roads(
+        self, *, stations: Collection[str]
+    ) -> dict[str, tuple[str, ...]]:
+        """
+        Give the fixed approach roads, whatever the stations.
+
+        Parameters
+        ----------
+        stations : Collection[str]
+            Station IDs.
+
+        Returns
+        -------
+        dict[str, tuple[str, ...]]
+            The fixed roads.
+
+        Raises
+        ------
+        sqlite3.Error
+            The pairs error, when set.
+        """
+        self.check()
+        if self.pairs_error is not None:
+            raise self.pairs_error
+        return dict(self.roads)
 
     def parent_kerbs(
         self, *, stations: Collection[str]

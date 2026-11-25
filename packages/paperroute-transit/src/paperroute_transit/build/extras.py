@@ -11,6 +11,10 @@ from importlib import import_module
 from pathlib import Path
 
 from paperroute_device.rss import peak_rss_mb
+from paperroute_transit.build.approach_roads import (
+    APPROACH_ROAD_SCHEMA,
+    load_approach_roads,
+)
 from paperroute_transit.build.catalogue import CATALOGUE_SCHEMA, load_catalogue
 from paperroute_transit.build.handoff import HANDOFF_NAME
 from paperroute_transit.build.pairs import PAIR_SCHEMA, load_pairs
@@ -117,6 +121,23 @@ def run_parent_kerbs(*, conn: sqlite3.Connection, city: City) -> None:
         logger.exception('parent kerbs failed; parent_kerbs left empty')
 
 
+def run_approach_roads(*, conn: sqlite3.Connection, city: City) -> None:
+    """
+    Fill `approach_roads`, leaving it empty when the build fails.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable with the run tables.
+    city : City
+        The city the timetable is for.
+    """
+    try:
+        load_approach_roads(conn=conn, rules=city.name_rules)
+    except sqlite3.Error:
+        logger.exception('approach roads failed; approach_roads left empty')
+
+
 def run_passed(
     *, conn: sqlite3.Connection, city: City, tiles: Path | None,
 ) -> None:
@@ -167,6 +188,7 @@ def run_extras(*, path: Path, city: City, tiles: Path | None) -> None:
         conn.executescript(PAIR_SCHEMA)
         conn.executescript(PARENT_KERB_SCHEMA)
         conn.executescript(TURN_SCHEMA)
+        conn.executescript(APPROACH_ROAD_SCHEMA)
         timed(
             phase='runs',
             step=lambda: load_runs(
@@ -203,6 +225,10 @@ def run_extras(*, path: Path, city: City, tiles: Path | None) -> None:
         timed(
             phase='parent kerbs',
             step=lambda: run_parent_kerbs(conn=conn, city=city),
+        )
+        timed(
+            phase='approach roads',
+            step=lambda: run_approach_roads(conn=conn, city=city),
         )
         conn.commit()
         if city.timetable.compact:

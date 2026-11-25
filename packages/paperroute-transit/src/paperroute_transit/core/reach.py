@@ -63,6 +63,9 @@ class ReachInput:
         The station across the road from each stop the runs call at
         before the From; empty for a strip not fed by both kerbs, or a
         timetable without pairs.
+    hooks : Mapping[str, str]
+        The road hook exit station each place before the From arrives
+        on; empty without road hooks.
     """
 
     origin: StopPlace
@@ -73,6 +76,7 @@ class ReachInput:
     network: TrainNetwork | None = None
     across_tails: tuple[RunTail, ...] = ()
     facing: Mapping[str, str] = field(default_factory=dict)
+    hooks: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -312,6 +316,9 @@ class Reach:
     facing : Mapping[str, str]
         The station across the road from each stop called at before the
         From; empty for a strip not fed by both kerbs.
+    hooks : Mapping[str, str]
+        The road hook exit station each place before the From arrives
+        on; empty without road hooks.
     """
 
     rows: tuple[ReachRow, ...]
@@ -325,6 +332,7 @@ class Reach:
     seq: int | None = None
     above_seq: int | None = None
     facing: Mapping[str, str] = field(default_factory=dict)
+    hooks: Mapping[str, str] = field(default_factory=dict)
 
 
 def approach_rows(*, tails: Sequence[RunTail], placed: set[str]
@@ -503,4 +511,5 @@ def build_reach(*, data: ReachInput) -> Reach:
         station_of=data.station_of,
         source=None if data.network is None else data,
         facing=data.facing,
+        hooks=data.hooks,
     )

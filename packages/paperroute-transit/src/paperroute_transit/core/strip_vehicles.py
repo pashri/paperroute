@@ -13,11 +13,13 @@ from paperroute_transit.core.positions import VehiclePosition
 from paperroute_transit.core.strip_approach import (
     REACHED,
     Approach,
+    approach_calls,
     facing_spot,
     stop_reached,
     toward_from,
 )
 from paperroute_transit.core.strip_badges import Badge, Keepouts, Spot, pushed
+from paperroute_transit.core.strip_hooks import hook_badge
 from paperroute_transit.core.strip_model import ROW_H
 from paperroute_transit.core.strip_times import TripInputs, window_departures
 from paperroute_transit.core.strip_ways import (
@@ -324,7 +326,8 @@ def approach_marker(
     Badge | None
         A badge on the hop on from the stop it is at or last left when
         both of that hop's rows are visible, as for a bus standing at the
-        From; else a facing badge on the track between the rows facing
+        From; else a badge on its road's hook (see `hook_badge`); else a
+        facing badge on the track between the rows facing
         its calls by its progress (see `facing_spot`), its wedge towards
         the From; else None.
     """
@@ -338,6 +341,15 @@ def approach_marker(
         age=look.age,
         live=look.live,
     )
+    calls = approach_calls(
+        departure=departure, pattern=pattern, hop=hop, trips=trips,
+        approach=approach,
+    )
+    if badge is None and calls is not None:
+        badge = hook_badge(
+            pattern=pattern, calls=calls, station_of=trips.station_of,
+            approach=approach, spots=spots, look=look,
+        )
     if badge is not None:
         return badge
     spot = facing_spot(

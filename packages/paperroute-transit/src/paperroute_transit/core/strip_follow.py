@@ -653,6 +653,7 @@ def laid_reach(*, reach: Reach, trips: TripInputs, target: str | None
         trip=first.trip_id,
         day=first.service_day,
         facing=reach.facing,
+        hooks=reach.hooks,
     )
     inputs, same = memo_key(reach=laid, trips=trips, target=target)
     STEADY.put(inputs=inputs, same=same, value=(steady,))

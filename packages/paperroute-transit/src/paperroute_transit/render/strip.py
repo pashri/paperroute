@@ -9,6 +9,7 @@ from paperroute_device.render.canvas import INK, PAPER, Canvas, Face
 from paperroute_transit.core.map_view import Marker
 from paperroute_transit.core.names import NameRules
 from paperroute_transit.core.reach import RowKind
+from paperroute_transit.core.strip_hooks import is_road_hook
 from paperroute_transit.core.strip_model import (
     HOOK_GAP,
     HOOK_LENGTH,
@@ -575,7 +576,8 @@ def name_start(canvas: Canvas, *, row: StripRow, columns: Columns
     tuple[float, Face]
         The name's x, at its `name_after` when that is further right,
         and its face. An exit's arrow goes at its hook's end and its
-        label after the arrow, or at its `name_after` if further right.
+        label after the arrow, or at its `name_after` if further right; a
+        road hook's arrow is left to `strip_road_hooks`.
     """
     if row.kind is not RowKind.EXIT:
         left: float = columns.name_x + INDENT * row.depth
@@ -585,7 +587,11 @@ def name_start(canvas: Canvas, *, row: StripRow, columns: Columns
             left += strip_heading.INDENT
         return max(left, row.name_after or left), name_face(row=row)
     x = columns.track_x + INDENT * row.parent_depth + HOOK_LENGTH
-    label = x + hook_arrow(canvas, x=x, y=row.y)
+    label = (
+        x + HOOK_TIP + HOOK_GAP
+        if is_road_hook(station=row.station)
+        else x + hook_arrow(canvas, x=x, y=row.y)
+    )
     return max(label, row.name_after or label), EXIT_FACE
 
 

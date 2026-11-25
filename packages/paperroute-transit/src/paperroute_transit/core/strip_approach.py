@@ -1,7 +1,7 @@
 """The stations facing the stops a both-sides strip's buses approach by."""
 
 from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Final
 
 from paperroute_transit.core.model import Departure
@@ -38,6 +38,8 @@ class Approach:
         Station IDs of every row above the From, of any kind.
     lower : frozenset[str]
         Station IDs of every row below the From, of any kind.
+    hooks : Mapping[str, str]
+        The road hook row each place before the From arrives on.
     """
 
     origin: str
@@ -46,6 +48,7 @@ class Approach:
     below: tuple[str, ...]
     upper: frozenset[str]
     lower: frozenset[str]
+    hooks: Mapping[str, str] = field(default_factory=dict)
 
 
 def approach_stations(*, data: ReachInput) -> frozenset[str]:
@@ -134,6 +137,7 @@ def approach_of(
         lower=frozenset(
             row.place.stop_id for row in reach.rows[origin + 1:]
         ),
+        hooks=reach.hooks,
     )
 
 
@@ -336,6 +340,46 @@ def between(
     )
 
 
+def approach_calls(
+    *,
+    departure: Departure,
+    pattern: TripPattern,
+    hop: tuple[int, float],
+    trips: TripInputs,
+    approach: Approach,
+) -> tuple[int, int] | None:
+    """
+    Find a bus's call at the From and the call it is at or last left.
+
+    Parameters
+    ----------
+    departure : Departure
+        The bus's departure from the From.
+    pattern : TripPattern
+        Its trip.
+    hop : tuple[int, float]
+        The index of its hop's first call and the share of it run.
+    trips : TripInputs
+        The strip's departures and live data.
+    approach : Approach
+        The rows either side of the From.
+
+    Returns
+    -------
+    tuple[int, int] | None
+        Both calls' indexes (see `stop_reached`); None when the From is
+        not found or the bus is at or past it.
+    """
+    origin = from_call(
+        departure=departure, pattern=pattern, origin=approach.origin,
+        stations=trips.station_of, zone=trips.zone,
+    )
+    at = stop_reached(hop=hop)
+    if origin is None or at >= origin:
+        return None
+    return origin, at
+
+
 def facing_spot(
     *,
     departure: Departure,
@@ -370,13 +414,13 @@ def facing_spot(
         Its point on the track between the rows facing its calls (see
         `facing_rows` and `between`); None at or past the From.
     """
-    origin = from_call(
-        departure=departure, pattern=pattern, origin=approach.origin,
-        stations=trips.station_of, zone=trips.zone,
+    calls = approach_calls(
+        departure=departure, pattern=pattern, hop=hop, trips=trips,
+        approach=approach,
     )
-    at = stop_reached(hop=hop)
-    if origin is None or at >= origin:
+    if calls is None:
         return None
+    origin, at = calls
     rows = facing_rows(
         departure=departure, pattern=pattern, origin=origin, trips=trips,
         approach=approach, drawn=spots.keys(),

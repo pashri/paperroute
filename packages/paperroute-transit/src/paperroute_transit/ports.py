@@ -480,6 +480,24 @@ class NetworkRepository(Protocol):
             Kerbs by station ID; empty for an old file.
         """
 
+    def approach_roads(
+        self, *, stations: Collection[str]
+    ) -> dict[str, tuple[str, ...]]:
+        """
+        Read the roads buses arrive at the stations' parents by.
+
+        Parameters
+        ----------
+        stations : Collection[str]
+            Station or kerb IDs; a kerb stands for its parent.
+
+        Returns
+        -------
+        dict[str, tuple[str, ...]]
+            Roads by the place called at just before the parent; empty
+            for an old file.
+        """
+
     def towards_line(self, *, towards: int) -> tuple[StopPlace, ...] | None:
         """
         The stations of a towards row's busiest stop sequence.

@@ -167,3 +167,34 @@ def test_reach_input_reads_a_parent_once_without_kerb_rows(
     ))
     assert found.tails == tails_from(path=copy, station='C', kind=None)
     assert found.across_tails == ()
+
+
+def test_approach_roads_reads_the_roads_into_a_kerbs_parent(
+    copy: Path,
+) -> None:
+    """A kerb's parent gives its roads by the place before it."""
+    with_parent(path=copy)
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.executemany(
+            'INSERT INTO approach_roads VALUES (?, ?, ?)', [
+                ('C', 'B', 'High St'), ('C', 'B', 'Low Rd'),
+                ('C', 'J', 'Mill Rd'), ('E', 'D', 'Far Rd'),
+            ],
+        )
+        conn.commit()
+    with opened(path=copy) as repo:
+        assert repo.approach_roads(stations=['C_2']) == {
+            'B': ('High St', 'Low Rd'), 'J': ('Mill Rd',),
+        }
+    assert FakeNetwork(roads={'B': ('x',)}).approach_roads(
+        stations=['C'],
+    ) == {'B': ('x',)}
+
+
+def test_approach_roads_reads_nothing_from_an_old_file(copy: Path) -> None:
+    """A file without the table answers empty."""
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute('DROP TABLE IF EXISTS approach_roads')
+        conn.commit()
+    with opened(path=copy) as repo:
+        assert repo.approach_roads(stations=['C']) == {}

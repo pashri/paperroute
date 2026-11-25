@@ -4,6 +4,8 @@ import math
 from datetime import date
 from typing import Final
 
+import pytest
+
 from paperroute_transit.core.geo import Point
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.strip_detours import (
@@ -235,6 +237,56 @@ def test_pair_name_joins_names_that_share_nothing() -> None:
     assert pair_name(
         first='Museum', second='Downing Centre',
     ) == 'Museum / Downing Centre'
+
+
+@pytest.mark.parametrize(
+    ('first', 'second', 'name'),
+    [
+        ('Oxford St At Riley St', 'Oxford St At Palmer St', 'Oxford St'),
+        (
+            'Queen St Opp Phillip St', 'Queen St Opp Charles Hackett Dr',
+            'Queen St',
+        ),
+        (
+            'Anderson Dr After Paston St', 'Anderson Dr After Western Av',
+            'Anderson Dr',
+        ),
+        (
+            'Bennett Rd Before Explorers Way', 'Bennett Rd Before St Clair Av',
+            'Bennett Rd',
+        ),
+    ],
+)
+def test_pair_name_drops_a_trailing_joining_word(
+    first: str, second: str, name: str,
+) -> None:
+    """Two stops on one street at different corners show the street."""
+    assert pair_name(first=first, second=second) == name
+
+
+def test_pair_name_keeps_a_place_ending_in_one_word() -> None:
+    """Names adding one last word each show the shared part."""
+    assert pair_name(first='Oak Way', second='Oak Lane') == 'Oak'
+
+
+@pytest.mark.parametrize(
+    ('first', 'second'),
+    [
+        (
+            "St Finbar's Primary School, Levy St",
+            "St Finabr's Primary School, King St",
+        ),
+        ('Cutrock Park, Cutrock Rd', 'Cutrock Rd Opp Cutrock Park'),
+        ('Gymea Bay Rd Opp Avenel Rd', 'Gymea Bay Oval, Gymea Bay Rd'),
+        ('Bendick Murrell Rd At Dawes Lane', 'Bendick Murrell Coach Stop'),
+        ('Mt Annan After Boronia Av', 'Mt Annan Dr Before Telopea Cct'),
+    ],
+)
+def test_pair_name_joins_names_sharing_only_a_fragment(
+    first: str, second: str,
+) -> None:
+    """A title word or the start of two longer places shows both."""
+    assert pair_name(first=first, second=second) == f'{first} / {second}'
 
 
 def test_detours_of_matches_a_shared_station_under_other_names() -> None:

@@ -16,6 +16,12 @@ MIN_BETWEEN: Final[int] = 2  # stops strictly between for a return to count
 NEAR: Final[float] = 200.0  # metres
 SHORT_HEAD: Final[int] = 2  # characters
 BREAKS: Final[str] = ' ,'  # characters a shared name part may end before
+JOINING: Final[frozenset[str]] = frozenset(
+    {'After', 'Af', 'At', 'Before', 'Bf', 'Near', 'Op', 'Opp', 'Opposite'},
+)  # words placing a stop against a street, as in 'Oxford St At Riley St'
+TITLES: Final[frozenset[str]] = frozenset(
+    {'Mount', 'Mt', 'Saint', 'St', 'Ste'},
+)  # words that start a place's name and are no name on their own
 
 
 class DetourKind(StrEnum):
@@ -303,6 +309,65 @@ def detours_of(*, pattern: TripPattern) -> tuple[Detour, ...]:
     )
 
 
+def shared_words(*, first: str, second: str) -> str:
+    """
+    Find the longest shared start of two names that ends at a word.
+
+    Parameters
+    ----------
+    first : str
+        One name.
+    second : str
+        The other.
+
+    Returns
+    -------
+    str
+        The shared start, ending before a space, a comma or the end of
+        both names, with no trailing joining words or breaks.
+    """
+    shared = 0
+    for one, other in zip(first, second):
+        if one != other:
+            break
+        shared += 1
+    ends = [
+        k for k in range(shared + 1)
+        if all(k == len(name) or name[k] in BREAKS for name in (first, second))
+    ]
+    words = first[:max(ends, default=0)].strip(BREAKS).split(' ')
+    while words and words[-1] in JOINING:
+        words.pop()
+    return ' '.join(words).strip(BREAKS)
+
+
+def ends_a_place(*, part: str, name: str) -> bool:
+    """
+    Tell whether a shared start is a whole place in one name.
+
+    Parameters
+    ----------
+    part : str
+        The shared start.
+    name : str
+        A name starting with it.
+
+    Returns
+    -------
+    bool
+        True when the name ends there, goes on at a comma or a joining
+        word, or adds one last word, as 'Oak' in 'Oak Lane'.
+    """
+    rest = name[len(part):]
+    words = rest.split()
+    return (
+        not words
+        or rest.startswith(',')
+        or words[0] in JOINING
+        or len(words) == 1
+    )
+
+
 def pair_name(*, first: str, second: str) -> str:
     """
     Name a row standing for two calls.
@@ -317,19 +382,18 @@ def pair_name(*, first: str, second: str) -> str:
     Returns
     -------
     str
-        The longest shared start of the two that ends at a word or a
-        comma, trimmed; both joined by ' / ' when they share none.
+        The longest shared start of the two in whole words, without a
+        trailing joining word such as 'At'; both joined by ' / ' when
+        they share none, or only a title word such as 'St', or a start
+        that one of them carries on into a longer place, as 'Cutrock'
+        in 'Cutrock Park, Cutrock Rd' and 'Cutrock Rd Opp Cutrock Park'.
     """
     if first == second:
         return first
-    shared = 0
-    for one, other in zip(first, second):
-        if one != other:
-            break
-        shared += 1
-    ends = [
-        k for k in range(shared + 1)
-        if all(k == len(name) or name[k] in BREAKS for name in (first, second))
-    ]
-    part = first[:max(ends, default=0)].strip(BREAKS)
-    return part or f'{first} / {second}'
+    part = shared_words(first=first, second=second)
+    whole = all(
+        ends_a_place(part=part, name=name) for name in (first, second)
+    )
+    if part and part not in TITLES and whole:
+        return part
+    return f'{first} / {second}'

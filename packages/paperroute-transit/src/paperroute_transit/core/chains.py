@@ -829,16 +829,21 @@ def held_or_fresh(
     Returns
     -------
     Chain
-        The held chain when it misses nothing, or goes on by a later trip
-        arriving no later than the fresh one. Otherwise the fresh chain,
-        carrying the held chain's miss with `leg` at the fresh chain's
-        first new leg (see `first_new_leg`); a fresh chain always reaches
-        the destination, so `later` is True.
+        The held chain when it misses nothing and arrives no later than
+        the fresh one, or goes on by a later trip arriving no later.
+        The fresh chain as found when the held one misses nothing but
+        arrives later. Otherwise the fresh chain, carrying the held
+        chain's miss with `leg` at the fresh chain's first new leg (see
+        `first_new_leg`); a fresh chain always reaches the destination,
+        so `later` is True.
     """
     if held is None:
         return fresh
     missed = held.missed
-    if missed is None or (missed.later and held.arrives <= fresh.arrives):
+    sooner = fresh.arrives < held.arrives
+    if missed is None:
+        return fresh if sooner else held
+    if missed.later and not sooner:
         return held
     offer = kept[trip_key(item=held.legs[0])]
     return replace(
@@ -913,7 +918,9 @@ def chains_of(
         list are not used, first legs that have left or are cancelled
         are dropped, and of chains ending on one trip only the last to
         leave is kept. A held first trip takes the chain its offer
-        gives, and that chain is never dropped. After a missed change,
+        gives, and that chain is never dropped; it gives way to a fresh
+        chain from the same first trip that now arrives sooner. After a
+        missed change,
         that chain gives way to the fresh best chain for its first trip,
         the miss carried over, when it has no onward plan or arrives
         later.

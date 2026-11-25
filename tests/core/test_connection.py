@@ -2,8 +2,12 @@
 
 from collections.abc import Mapping
 from dataclasses import replace
+from datetime import timedelta
 from typing import Final
 
+import pytest
+
+from paperroute_device.core.kit_events import Tick
 from paperroute_sydney.city import SYDNEY, SydneyFeed
 from paperroute_sydney.sydney_feeds import ALERT_FEEDS
 from paperroute_testkit.core.connection_factories import (
@@ -20,6 +24,7 @@ from paperroute_testkit.core.connection_factories import (
 from paperroute_testkit.core.factories import departure, place
 from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.steps import wakeful
+from paperroute_transit.core import connection
 from paperroute_transit.core.alert_match import tie_of
 from paperroute_transit.core.alert_model import (
     Alert,
@@ -29,7 +34,7 @@ from paperroute_transit.core.alert_model import (
     BetweenLoaded,
     Informed,
 )
-from paperroute_transit.core.chains import Missed, Offers
+from paperroute_transit.core.chains import Chain, Missed, Offers, chains_of
 from paperroute_transit.core.connection import (
     chain_legs,
     connection_facts,
@@ -40,6 +45,7 @@ from paperroute_transit.core.messages import (
     DeparturesLoaded,
     FeedFailed,
     FeedFetched,
+    SettingsChanged,
     TimetableSeen,
 )
 from paperroute_transit.core.model import Change, Departure, Pin, Way
@@ -471,3 +477,68 @@ def test_offers_wait_while_a_feed_never_answers() -> None:
     assert state.board.offers.kept == {}
     assert first_trips(state) == ['a0733', 'b0801a']
     assert live_chains(state=state)[0].missed is None
+
+
+def test_live_chains_switch_a_late_held_change_to_a_sooner_route_from_the_same_bus(
+) -> None:
+    """The 665 runs 20 late: the 7:33 takes the 662, arriving 8:02."""
+    state = late_legs(state=answered(), lates={'b0746': 20})
+    assert first_trips(state) == ['a0733', 'b0751']
+    assert live_chains(state=state)[0].missed is None
+
+
+def test_school_setting_change_keeps_held_changes() -> None:
+    """Turning school buses on keeps the changes the board remembers."""
+    state = late_legs(state=answered(), lates={'a0733': 4})
+    offers = state.board.offers
+    state, _ = step(state, SettingsChanged(skip_school_buses=False))
+    state, _ = step(state, DeparturesLoaded(
+        pin=WORK, departures=(), until=at(10, 30), legs=work_legs(),
+        skip_school=False,
+    ))
+    assert state.board.offers == offers
+    assert first_trips(state) == ['a0733', 'b0746']
+
+
+@pytest.fixture(name='searches')
+def _searches(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """
+    Count the chain searches `live_chains` makes.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        The patcher.
+
+    Returns
+    -------
+    list[int]
+        One entry per search.
+    """
+    counted: list[int] = []
+    def counting(**fields: object) -> tuple[Chain, ...]:
+        counted.append(1)
+        return chains_of(**fields)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(connection, 'chains_of', counting)
+    return counted
+
+
+def test_live_chains_searched_once_per_event(searches: list[int]) -> None:
+    """A tick's reduce and its drawn connection view share one search."""
+    state = late_legs(state=answered(), lates={'a0733': 4})
+    searches.clear()
+    step(state, Tick(now=state.now + timedelta(minutes=1)))
+    assert len(searches) == 1
+
+
+def test_live_chains_searched_again_for_a_new_snapshot(
+    searches: list[int],
+) -> None:
+    """A new snapshot misses the memo; the same state hits it."""
+    state = late_legs(state=answered(), lates={'a0733': 4})
+    searches.clear()
+    live_chains(state=state)
+    assert not searches
+    late_legs(state=state, lates={'a0733': 5})
+    assert searches

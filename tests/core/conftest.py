@@ -4,6 +4,7 @@ from collections.abc import Iterator
 
 import pytest
 
+from paperroute_transit.core.connection import CHAINS_MEMO
 from paperroute_transit.core.gauge_buses import HERO_STOPS
 from paperroute_transit.core.live import RESOLVED_MEMO
 from paperroute_transit.core.map_vehicles import HEARD_MEMO
@@ -39,12 +40,14 @@ def _per_poll_memos() -> Iterator[None]:
     None
         Control to the test.
     """
+    CHAINS_MEMO.clear()
     HEARD_MEMO.clear()
     RESOLVED_MEMO.clear()
     STEADY.clear()
     REACHES.clear()
     STOP_VIEWS.clear()
     yield
+    CHAINS_MEMO.clear()
     HEARD_MEMO.clear()
     RESOLVED_MEMO.clear()
     STEADY.clear()

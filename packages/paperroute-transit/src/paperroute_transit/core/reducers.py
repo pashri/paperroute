@@ -261,16 +261,13 @@ def on_loaded(
     """
     if event.until.timestamp() <= state.now.timestamp():
         return replace(state, board=replace(state.board, loading=False)), ()
-    offers = state.board.offers
-    if state.board.loaded_until is None:
-        offers = Offers()
     board = Board(
         departures=event.departures,
         loaded_until=event.until,
         legs=event.legs,
         station=event.station,
         destination_station=event.destination_station,
-        offers=offers,
+        offers=state.board.offers,
     )
     feeds = feeds_of(
         departures=all_departures(
@@ -397,7 +394,8 @@ def on_timetable(
     -------
     tuple[State, tuple[Effect, ...]]
         State with the version recorded, the departures due to reload
-        (a load in flight is forgotten, its reply now stale), no reaches
+        (a load in flight is forgotten, its reply now stale) and the
+        remembered changes forgotten, no reaches
         built or pending, no fold open, the chooser carried over,
         redrawn with the new reach asked for, and a MatchPlaces and a
         LoadHolidays when there is a timetable; unchanged for the version
@@ -407,7 +405,9 @@ def on_timetable(
         return state, ()
     state = replace(
         state,
-        board=replace(state.board, loaded_until=None, loading=False),
+        board=replace(
+            state.board, loaded_until=None, loading=False, offers=Offers(),
+        ),
         saving=replace(
             state.saving, timetable=event.version, match_failed_at=None,
         ),

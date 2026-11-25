@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
+from typing import Final
 
 from paperroute_transit.core.alert_match import (
     BETWEEN_TRIPS,
@@ -20,10 +21,16 @@ from paperroute_transit.core.chains import (
 from paperroute_transit.core.city import City
 from paperroute_transit.core.connection_model import direct_leg
 from paperroute_transit.core.live import LiveDeparture, resolved
+from paperroute_transit.core.memo import SameMemo
 from paperroute_transit.core.model import Departure, Pin, is_connection
 from paperroute_transit.core.places import shown
 from paperroute_transit.core.rhythm import frame_time, stale_after
 from paperroute_transit.core.state_model import Board, State
+
+CHAINS_MEMO_SIZE: Final[int] = 4  # searches held
+CHAINS_MEMO: Final[SameMemo[tuple[Chain, ...]]] = SameMemo(
+    size=CHAINS_MEMO_SIZE,
+)
 
 
 def live_chains(*, state: State) -> tuple[Chain, ...]:
@@ -39,11 +46,49 @@ def live_chains(*, state: State) -> tuple[Chain, ...]:
     -------
     tuple[Chain, ...]
         The workable chains; empty for a plain pin or with no legs loaded.
+        The same search comes back for the same pin, board lists,
+        offers, snapshots and feed plan objects and an equal frame time
+        and staleness limit.
     """
     pin = shown(state=state)
     legs = state.board.legs
     if not is_connection(pin=pin) or legs is None:
         return ()
+    inputs = (
+        pin,
+        legs,
+        state.board.departures,
+        state.board.offers,
+        state.snapshots,
+        state.city,
+    )
+    same = (frame_time(state=state), stale_after(state=state))
+    held = CHAINS_MEMO.get(inputs=inputs, same=same)
+    if held is not None:
+        return held
+    return CHAINS_MEMO.put(inputs=inputs, same=same, value=searched(
+        pin=pin, legs=legs, state=state,
+    ))
+
+
+def searched(*, pin: Pin, legs: Legs, state: State) -> tuple[Chain, ...]:
+    """
+    Search a connection pin's chains with live times.
+
+    Parameters
+    ----------
+    pin : Pin
+        The shown connection pin.
+    legs : Legs
+        Its loaded way legs.
+    state : State
+        State with the board, live snapshots and the time.
+
+    Returns
+    -------
+    tuple[Chain, ...]
+        The workable chains.
+    """
     return chains_of(
         pin=pin,
         lists={
@@ -309,8 +354,9 @@ def with_offers(*, state: State) -> State:
     Remember the chains first offered for the shown connection pin.
 
     The offers are refreshed from the listed chains once every feed the
-    board needs has a snapshot. Before that, or when the offers do not
-    change, the same state comes back. They are forgotten with the board.
+    board needs has a snapshot. Before that, while the board waits to be
+    read again, or when the offers do not change, the same state comes
+    back. They are forgotten with the board.
 
     Parameters
     ----------
@@ -322,7 +368,9 @@ def with_offers(*, state: State) -> State:
     State
         State with the board's offers refreshed.
     """
-    if not all(feed in state.snapshots for feed in state.feeds):
+    if state.board.loaded_until is None or not all(
+        feed in state.snapshots for feed in state.feeds
+    ):
         return state
     offers = offers_after(
         offers=state.board.offers,

@@ -467,6 +467,8 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
         How a plain pin's map is framed.
     stop_sides : StopSides | None
         How the Stop view shows a pin covering both sides of a road.
+    street_group : int | None
+        The fewest neighbouring stops on one street the Strip heads once.
     """
 
     auto_rebuild: bool | None = None
@@ -480,6 +482,7 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
     parked_age: ParkedAge | None = None
     map_framing: MapFraming | None = None
     stop_sides: StopSides | None = None
+    street_group: int | None = None
 
 
 @dataclass(frozen=True)

@@ -151,6 +151,7 @@
       "alert_lookahead": "3d",
       "connection_map": "whole",
       "stop_sides": "time_order",
+      "street_group": 3,
       "skip_school_buses": false,
       "skip_school_on_route_pins": true,
       "parked_age": "off",

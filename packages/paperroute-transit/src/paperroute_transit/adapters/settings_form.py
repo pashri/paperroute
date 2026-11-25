@@ -6,6 +6,7 @@ from typing import Final
 
 from paperroute_device.adapters.device_form import (
     BadInput,
+    UnknownValue,
     clock_text,
     device_values,
     optional_enum,
@@ -34,6 +35,8 @@ BOARD_SWITCHES: Final[tuple[str, ...]] = (
 BOARD_RADIOS: Final[tuple[str, ...]] = (
     'map_framing', 'stop_sides', 'connection_map',
 )
+NUMBERS: Final[tuple[str, ...]] = ('street_group',)
+MIN_STREET_GROUP: Final[int] = 2  # stops
 SLOTS: Final[tuple[str, ...]] = ('peak_1', 'peak_2')
 CHOICES: Final[frozenset[str]] = frozenset(
     {'peak_rate', 'offpeak_rate', 'alert_lookahead', 'parked_age'}
@@ -113,6 +116,7 @@ def board_values(*, settings: BoardSettings) -> dict[str, str]:
         name: getattr(settings, name).value
         for name in (*CHOICES, *BOARD_RADIOS)
     }
+    values |= {name: str(getattr(settings, name)) for name in NUMBERS}
     return values | peak_values(settings=settings)
 
 
@@ -141,6 +145,7 @@ def form_values(*, settings: Settings) -> dict[str, str]:
         *CHOICES,
         *STATUS_RADIOS,
         *STATUS_TIMES,
+        *NUMBERS,
         *peak_values(settings=settings.board),
     )
     return {name: values[name] for name in order}
@@ -186,6 +191,33 @@ def peak_windows_of(*, fields: Mapping[str, str]) -> tuple[Window, ...]:
     return tuple(windows)
 
 
+def street_group_of(*, fields: Mapping[str, str]) -> int | None:
+    """
+    Read the fewest stops on one street the Strip heads once.
+
+    Parameters
+    ----------
+    fields : Mapping[str, str]
+        The posted fields.
+
+    Returns
+    -------
+    int | None
+        The count, or None when it was not posted.
+
+    Raises
+    ------
+    UnknownValue
+        If it is not a whole number of at least `MIN_STREET_GROUP`.
+    """
+    if 'street_group' not in fields:
+        return None
+    text = fields['street_group'].strip()
+    if not text.isdigit() or int(text) < MIN_STREET_GROUP:
+        raise UnknownValue(fields['street_group'])
+    return int(text)
+
+
 def changed_from(*, fields: Mapping[str, str]) -> SettingsChanged | None:
     """
     Turn posted fields into a board settings change.
@@ -206,7 +238,7 @@ def changed_from(*, fields: Mapping[str, str]) -> SettingsChanged | None:
     ------
     UnknownValue
         If a switch, rate, map choice, framing or lookahead holds an unknown
-        value.
+        value, or the street group is under two.
     BadInput
         If a peak time is not `HH:MM` or a peak window is unusable.
     """
@@ -239,6 +271,7 @@ def changed_from(*, fields: Mapping[str, str]) -> SettingsChanged | None:
         parked_age=optional_enum(
             kind=ParkedAge, fields=fields, name='parked_age',
         ),
+        street_group=street_group_of(fields=fields),
     )
     return None if change == SettingsChanged() else change
 

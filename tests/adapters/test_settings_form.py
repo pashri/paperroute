@@ -524,3 +524,22 @@ def test_stop_sides_two_choices() -> None:
         text = _marked(template=template, settings=settings, error=None)
         assert text.count(' checked') == 1
         assert f'<{tag} checked>' in text
+
+
+def test_settings_form_saves_street_group() -> None:
+    """The smallest street group is read, written and shown on the page."""
+    assert _board(fields={'street_group': '4'}) == SettingsChanged(
+        street_group=4,
+    )
+    settings = Settings(board=BoardSettings(street_group=5))
+    assert board_values(settings=settings.board)['street_group'] == '5'
+    assert form_values(settings=settings)['street_group'] == '5'
+    assert 'Group a street from' in _sections()
+    assert 'name="street_group"' in _sections()
+
+
+@pytest.mark.parametrize('bad', ['1', '0', '-3', 'three', ''])
+def test_settings_form_refuses_street_group_below_two(bad: str) -> None:
+    """A group under two stops, or not a number, is refused."""
+    with pytest.raises(UnknownValue):
+        _board(fields={'street_group': bad})

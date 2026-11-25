@@ -208,5 +208,6 @@ def test_v12_file_reaches_13_as_the_board_migrates_it(tmp_path: Path) -> None:
     del written['board']['settings']['parked_age']
     del written['board']['settings']['map_framing']
     del written['board']['settings']['stop_sides']
+    del written['board']['settings']['street_group']
     without_sides(board=written['board'])
     assert json.loads(kit_path.read_text()) == written

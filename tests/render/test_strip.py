@@ -23,6 +23,7 @@ from paperroute_transit.core.strip_model import (
     TRACK_X,
     Band,
     CarryNote,
+    Label,
     StripRow,
 )
 from paperroute_transit.render.kerb_menu import (
@@ -550,7 +551,7 @@ def test_long_name_yields_to_the_note() -> None:
 
 def test_no_note_without_room() -> None:
     """A row whose name starts too near the time draws no note."""
-    row = replace(strip_row(y=FROM_Y), name_after=TIME_RIGHT - 60)
+    row = replace(strip_row(y=FROM_Y), label=Label(after=TIME_RIGHT - 60))
     assert (drawn(rows=(replace(row, note=NOTE),)) == drawn(rows=(row,))).all()
 
 

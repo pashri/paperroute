@@ -749,4 +749,5 @@ def strip_inputs(
         end_points=(
             shown(state=state).kind in end_point_modes(modes=state.city.modes)
         ),
+        street_group=state.settings.board.street_group,
     )

@@ -23,14 +23,16 @@ from paperroute_transit.core.saved import (
 )
 
 MAX_PEAK_WINDOWS: Final[int] = 2
+MIN_STREET_GROUP: Final[int] = 2  # stops
 
 
 class BoardSettingsModel(BaseModel):
     """
     The transit board's Settings page choices as stored.
 
-    The school switches, the parked age, the map framing and the both-sides
-    setting (time order) have defaults, so files stored before them load.
+    The school switches, the parked age, the map framing, the both-sides
+    setting (time order) and the street group (3) have defaults, so files
+    stored before them load.
     """
 
     model_config = ConfigDict(extra='forbid', frozen=True)
@@ -44,6 +46,7 @@ class BoardSettingsModel(BaseModel):
     alert_lookahead: Lookahead
     connection_map: ConnectionMap
     stop_sides: StopSides = StopSides.TIME_ORDER
+    street_group: int = Field(default=3, ge=MIN_STREET_GROUP)
     skip_school_buses: bool = True
     skip_school_on_route_pins: bool = False
     parked_age: ParkedAge = ParkedAge.OFF
@@ -112,6 +115,7 @@ def board_settings_to_model(*, settings: BoardSettings) -> BoardSettingsModel:
         parked_age=settings.parked_age,
         map_framing=settings.map_framing,
         stop_sides=settings.stop_sides,
+        street_group=settings.street_group,
     )
 
 
@@ -143,6 +147,7 @@ def board_settings_from_model(*, model: BoardSettingsModel) -> BoardSettings:
         parked_age=model.parked_age,
         map_framing=model.map_framing,
         stop_sides=model.stop_sides,
+        street_group=model.street_group,
     )
 
 

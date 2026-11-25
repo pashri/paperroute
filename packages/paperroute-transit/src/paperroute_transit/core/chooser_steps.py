@@ -650,6 +650,7 @@ def from_inputs(*, state: State, chooser: ChooserState) -> StripInputs:
     )
     return StripInputs(
         reach=reach,
+        street_group=state.settings.board.street_group,
         unavailable=LINE_FAILED if chooser.failed else None,
         departures=(),
         patterns={},
@@ -764,6 +765,7 @@ def to_inputs(*, state: State, chooser: ChooserState) -> StripInputs:
     built = chooser.key in state.strip.reaches
     return StripInputs(
         reach=reach,
+        street_group=state.settings.board.street_group,
         unavailable=NEEDS_UPDATE if built and reach is None else None,
         departures=resolved(
             departures=chooser.departures,

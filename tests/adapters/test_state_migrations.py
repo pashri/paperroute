@@ -75,6 +75,7 @@ def golden_before_new_settings() -> dict[str, Any]:
     del golden['board']['settings']['parked_age']
     del golden['board']['settings']['map_framing']
     del golden['board']['settings']['stop_sides']
+    del golden['board']['settings']['street_group']
     without_sides(board=golden['board'])
     return golden
 

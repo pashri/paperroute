@@ -325,6 +325,7 @@ FILE_KEYS: Final[frozenset[str]] = frozenset({
     'auto_rebuild', 'peak_rate', 'offpeak_rate', 'peak_windows',
     'alert_lookahead', 'connection_map', 'skip_school_buses',
     'skip_school_on_route_pins', 'parked_age', 'map_framing', 'stop_sides',
+    'street_group',
     'start', 'end',
     'pins', 'current', 'unpinned', 'view', 'quota', 'auto',
     'origin', 'destination', 'kind', 'routes', 'nickname', 'only',

@@ -115,6 +115,8 @@ class BoardSettings:
         How a plain pin's map is framed.
     stop_sides : StopSides
         How the Stop view shows a pin covering both sides of a road.
+    street_group : int
+        The fewest neighbouring stops on one street the Strip heads once.
     """
 
     auto_rebuild: bool = True
@@ -128,6 +130,7 @@ class BoardSettings:
     parked_age: ParkedAge = ParkedAge.OFF
     map_framing: MapFraming = MapFraming.APPROACH
     stop_sides: StopSides = StopSides.TIME_ORDER
+    street_group: int = 3
 
     @property
     def school_off_route_pins(self) -> bool:

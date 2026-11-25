@@ -20,6 +20,7 @@ from paperroute_transit.core.strip_model import (
     StripRow,
 )
 from paperroute_transit.core.strip_rings import handed_rows
+from paperroute_transit.render import strip_heading
 from paperroute_transit.render.chrome import ARROW_WIDTH, arrow
 from paperroute_transit.render.kerb_menu import MARK_RIGHT_GAP, two_way_mark
 from paperroute_transit.render.markers import (
@@ -577,9 +578,11 @@ def name_start(canvas: Canvas, *, row: StripRow, columns: Columns
         label after the arrow, or at its `name_after` if further right.
     """
     if row.kind is not RowKind.EXIT:
-        left = columns.name_x + INDENT * row.depth
+        left: float = columns.name_x + INDENT * row.depth
         if row.kind is RowKind.DASHED:
             left += STUB_INSET
+        if row.short:
+            left += strip_heading.INDENT
         return max(left, row.name_after or left), name_face(row=row)
     x = columns.track_x + INDENT * row.parent_depth + HOOK_LENGTH
     label = x + hook_arrow(canvas, x=x, y=row.y)
@@ -679,7 +682,10 @@ def draw_name(
         canvas.text(
             at=(left, row.y + BASELINE_DROP),
             text=fit_name(
-                text=row.name, face=face, width=edge - left, naming=naming,
+                text=row.short or row.name,
+                face=face,
+                width=edge - left,
+                naming=naming,
             )[0],
             face=face,
             grey=PAPER if row.cursor else INK,
@@ -851,6 +857,7 @@ def draw_rows(
         )
     for row in (each for k, each in enumerate(rows) if k not in marks):
         draw_row(canvas, row=row, columns=columns)
+    strip_heading.draw_headings(canvas, rows=rows, name_x=name_x)
     return columns
 
 

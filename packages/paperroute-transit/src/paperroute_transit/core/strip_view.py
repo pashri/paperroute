@@ -71,6 +71,7 @@ from paperroute_transit.core.strip_slots import (
     slot_y,
     target_of,
 )
+from paperroute_transit.core.strip_streets import headed_rows
 from paperroute_transit.core.strip_times import (
     TripInputs,
     shown_item,
@@ -504,7 +505,31 @@ def strip_rows(*, inputs: StripInputs, reach: Reach
     )
     if band is not None:
         rows = rows[1:] if band.top else rows[:-1]
-    return tuple(rows), band
+    return headed(inputs=inputs, rows=rows), band
+
+
+def headed(*, inputs: StripInputs, rows: Sequence[StripRow]
+           ) -> tuple[StripRow, ...]:
+    """
+    Head the rows' street runs as the board settings say.
+
+    Parameters
+    ----------
+    inputs : StripInputs
+        The view's inputs.
+    rows : Sequence[StripRow]
+        Visible rows, top to bottom.
+
+    Returns
+    -------
+    tuple[StripRow, ...]
+        The rows, headed and moved.
+    """
+    return headed_rows(
+        rows=rows,
+        rules=inputs.stop_view.name_rules,
+        least=inputs.street_group,
+    )
 
 
 def trips_of(*, inputs: StripInputs) -> TripInputs:
@@ -621,7 +646,7 @@ def names_clear(*, rows: Sequence[StripRow], markers: Sequence[Marker],
         those badges end.
     """
     return tuple(
-        replace(row, name_after=max(
+        replace(row, label=replace(row.label, after=max(
             (
                 marker.x + HALF_WIDE
                 for marker in markers
@@ -632,7 +657,7 @@ def names_clear(*, rows: Sequence[StripRow], markers: Sequence[Marker],
                 )
             ),
             default=None,
-        ))
+        )))
         for row in rows
     )
 
@@ -880,6 +905,7 @@ def build_strip_pane(*, inputs: StripInputs) -> StripPane:
         )
         for index in range(first, min(first + window.rows, len(reach.rows)))
     )
+    rows = headed(inputs=inputs, rows=rows)
     rows, markers = with_vehicles(
         inputs=inputs, rows=rows, track_x=PANE_TRACK_X, reach=reach,
     )

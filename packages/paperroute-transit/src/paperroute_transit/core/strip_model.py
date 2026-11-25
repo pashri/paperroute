@@ -96,6 +96,27 @@ class CarryNote:
 
 
 @dataclass(frozen=True)
+class Label:
+    """
+    Where a row's name starts and the street heading it sits under.
+
+    Attributes
+    ----------
+    after : float | None
+        The x the name starts at or right of, past badges beside the
+        row's disc; None for the usual place.
+    short : str
+        The row's own part of its name in a headed run; '' off one.
+    heading : str
+        The street, on the first row of a headed run; '' elsewhere.
+    """
+
+    after: float | None = None
+    short: str = ''
+    heading: str = ''
+
+
+@dataclass(frozen=True)
 class StripRow:
     """
     One station as the strip draws it.
@@ -130,9 +151,8 @@ class StripRow:
         True for the From and the Destination.
     station : str
         The row's station ID.
-    name_after : float | None
-        The x the name starts at or right of, past badges beside the
-        row's disc; None for the usual place.
+    label : Label
+        Where the name starts and its street heading.
     note : CarryNote | None
         The carry-on note drawn on the row, if any.
     names : tuple[str, ...]
@@ -155,11 +175,47 @@ class StripRow:
     cursor: bool
     bold: bool
     station: str
-    name_after: float | None = None
+    label: Label = Label()
     note: CarryNote | None = None
     names: tuple[str, ...] = ()
     paired: bool = False
     detour: DetourPart | None = None
+
+    @property
+    def name_after(self) -> float | None:
+        """
+        Give the x the name starts at or right of.
+
+        Returns
+        -------
+        float | None
+            Past badges beside the row's disc; None for the usual place.
+        """
+        return self.label.after
+
+    @property
+    def short(self) -> str:
+        """
+        Give the row's own part of its name under a street heading.
+
+        Returns
+        -------
+        str
+            The part, or '' off a headed run.
+        """
+        return self.label.short
+
+    @property
+    def heading(self) -> str:
+        """
+        Give the street heading drawn above the row.
+
+        Returns
+        -------
+        str
+            The street on a run's first row, else ''.
+        """
+        return self.label.heading
 
 
 @dataclass(frozen=True)
@@ -387,6 +443,8 @@ class StripInputs:
         for the next train.
     end_points : bool
         Whether the pin's kind is chosen by end points.
+    street_group : int
+        The fewest neighbouring stops on one street given a heading.
     """
 
     reach: Reach | None
@@ -407,6 +465,7 @@ class StripInputs:
     key: StripKey | None = None
     selected: TripDay | None = None
     end_points: bool = False
+    street_group: int = 3
 
 
 @dataclass(frozen=True)

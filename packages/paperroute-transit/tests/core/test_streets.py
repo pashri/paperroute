@@ -22,7 +22,6 @@ def test_street_of_needs_a_joining_word_after_the_first() -> None:
     """Names without a joining word after the first word have no street."""
     assert street_of(name='Histon Road Gilbert Road', rules=PLAIN) is None
     assert street_of(name='Opp Town Hall', rules=JOINED) is None
-    assert street_of(name='Leichhardt PS, Norton St', rules=JOINED) is None
     assert street_of(name='Central Station Platform 3', rules=JOINED) is None
 
 
@@ -35,3 +34,23 @@ def test_cross_street_shortens_the_joining_word_where_the_city_does(
         name='Parramatta Rd Bef Lyons Rd', rules=JOINED,
     ) == 'bef Lyons Rd'
     assert cross_street(name='Histon Road Gilbert Road', rules=PLAIN) is None
+
+
+def test_street_of_reads_the_busway() -> None:
+    """A Busway stop's street is The Busway; the rest is its own part."""
+    assert street_of(name='The Busway New Square', rules=JOINED) == (
+        'The Busway'
+    )
+    assert cross_street(name='The Busway New Square', rules=JOINED) == (
+        'New Square'
+    )
+
+
+def test_street_of_reads_a_street_after_a_comma() -> None:
+    """In 'X, Street' the street is after the comma, shortened."""
+    assert street_of(name='Leichhardt PS, Norton Street', rules=JOINED) == (
+        'Norton St'
+    )
+    assert cross_street(
+        name='Leichhardt PS, Norton Street', rules=JOINED,
+    ) == 'Leichhardt PS'

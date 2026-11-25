@@ -34,7 +34,7 @@ from paperroute_transit.core.saved import (
 
 
 def test_settings_model_keys_unchanged() -> None:
-    """The settings older files kept stay today's eighteen flat keys."""
+    """The settings older files kept stay today's nineteen flat keys."""
     assert set(default_settings(city=SYDNEY)) == {
         'auto_rebuild',
         'peak_rate',
@@ -49,6 +49,7 @@ def test_settings_model_keys_unchanged() -> None:
         'parked_age',
         'map_framing',
         'stop_sides',
+        'street_group',
         'connection_map',
         'skip_school_buses',
         'skip_school_on_route_pins',
@@ -202,5 +203,22 @@ def test_settings_without_stop_sides_load_as_time_order() -> None:
 def test_settings_round_trip_stop_sides() -> None:
     """Settings round trip the both-sides view."""
     settings = BoardSettings(stop_sides=StopSides.EACH_WAY)
+    model = board_settings_to_model(settings=settings)
+    assert board_settings_from_model(model=model) == settings
+
+
+def test_settings_without_street_group_load_as_three() -> None:
+    """Settings stored before street headings group from three stops."""
+    stored = board_settings_to_model(
+        settings=BoardSettings(street_group=5),
+    ).model_dump()
+    del stored['street_group']
+    model = BoardSettingsModel.model_validate(stored)
+    assert board_settings_from_model(model=model).street_group == 3
+
+
+def test_settings_round_trip_street_group() -> None:
+    """Settings round trip the smallest street group."""
+    settings = BoardSettings(street_group=5)
     model = board_settings_to_model(settings=settings)
     assert board_settings_from_model(model=model) == settings

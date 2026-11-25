@@ -325,7 +325,31 @@ def both_sides_reach() -> Reach:
     ))
 
 
-def both_sides_live(*, view: LiveView) -> State:
+def along(*, one: Point, two: Point, share: float) -> Point:
+    """
+    Find a point a share of the way from one point to another.
+
+    Parameters
+    ----------
+    one : Point
+        Start.
+    two : Point
+        End.
+    share : float
+        Share of the way.
+
+    Returns
+    -------
+    Point
+        The point.
+    """
+    return (
+        one[0] + (two[0] - one[0]) * share,
+        one[1] + (two[1] - one[1]) * share,
+    )
+
+
+def both_sides_live(*, view: LiveView, share: float = 0.0) -> State:
     """
     Show a both-sides pin on a Map or Strip view, a bus each way.
 
@@ -333,6 +357,9 @@ def both_sides_live(*, view: LiveView) -> State:
     ----------
     view : LiveView
         The Map, Strip or Strip + map.
+    share : float
+        Share of its hop from M2 to M1 the far-kerb bus has run; at 0 it
+        is at M1.
 
     Returns
     -------
@@ -386,10 +413,15 @@ def both_sides_live(*, view: LiveView) -> State:
             timestamp=int(START.timestamp()),
             trip_id=trip,
             label='370',
-            point=points[across][stop],
+            point=along(
+                one=points[across][stop], two=points[across][after], share=run,
+            ),
         )
-        for trip, across, stop in (
-            ('trip-2', True, 'M1'), ('trip-5', False, 'H2'),
+        for trip, across, stop, after, run in (
+            (
+                'trip-2', True, 'M2' if share else 'M1', 'M1', share,
+            ),
+            ('trip-5', False, 'H2', 'H1', 0.0),
         )
     )
     state, _ = step(state, PositionsFetched(

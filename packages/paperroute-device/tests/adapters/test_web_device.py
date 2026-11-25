@@ -803,3 +803,72 @@ async def test_switch_post_is_refused_without_apps() -> None:
     finally:
         await client.close()
     assert response.status == HTTPStatus.BAD_REQUEST
+
+
+async def _switched(
+    *, fake: FakeAppSwitch, calls: list[str], key: str = 'demo',
+) -> HTTPStatus:
+    """Post a switch with the loading picture and redraw recorded."""
+
+    def loading(app: str) -> None:
+        calls.append(f'loading {app} after {len(fake.asked)}')
+
+    client = await _start(
+        device=DeviceSite(
+            apps=fake,
+            loading=loading,
+            redraw=lambda: calls.append('redraw'),
+        ),
+    )
+    try:
+        response = await client.post('/switch', json={'app': key})
+    finally:
+        await client.close()
+    return HTTPStatus(response.status)
+
+
+async def test_switch_draws_the_loading_picture_before_switching(
+    fake: FakeAppSwitch,
+) -> None:
+    """The picture is asked for once, before the switch starts."""
+    calls: list[str] = []
+    assert await _switched(fake=fake, calls=calls) == HTTPStatus.NO_CONTENT
+    assert calls == ['loading demo after 0']
+    assert fake.asked == ['demo']
+
+
+async def test_switch_refused_redraws_the_board(fake: FakeAppSwitch) -> None:
+    """A refused switch puts the board back."""
+    fake.accepts = False
+    calls: list[str] = []
+    assert await _switched(fake=fake, calls=calls) == HTTPStatus.CONFLICT
+    assert calls == ['loading demo after 0', 'redraw']
+
+
+@pytest.mark.parametrize('key', ['first', 'nosuch'])
+async def test_switch_bad_app_draws_nothing(
+    fake: FakeAppSwitch, key: str,
+) -> None:
+    """No picture for an app not listed or already showing."""
+    calls: list[str] = []
+    status = await _switched(fake=fake, calls=calls, key=key)
+    assert status == HTTPStatus.BAD_REQUEST
+    assert not calls
+
+
+async def test_switch_loading_failure_is_logged_and_ignored(
+    fake: FakeAppSwitch, caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A picture that cannot be drawn does not stop the switch."""
+
+    def broken(app: str) -> None:
+        raise OSError(f'no picture for {app}')
+
+    client = await _start(device=DeviceSite(apps=fake, loading=broken))
+    try:
+        response = await client.post('/switch', json={'app': 'demo'})
+    finally:
+        await client.close()
+    assert response.status == HTTPStatus.NO_CONTENT
+    assert fake.asked == ['demo']
+    assert 'no picture for demo' in caplog.text

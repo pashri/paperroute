@@ -30,6 +30,7 @@ from paperroute_device.boot_splash import (
 )
 from paperroute_device.core.app import App
 from paperroute_device.core.kit_events import QuitRequested
+from paperroute_device.loading_splash import LoadingHold
 from paperroute_device.logs import LastError, configure_logging
 from paperroute_device.ports import (
     AppSwitch,
@@ -45,6 +46,7 @@ from paperroute_device.runtime.loop import run
 from paperroute_device.runtime.ports import KitPorts
 from paperroute_device.runtime.timings import KitTimings
 from paperroute_device.runtime.web_observer import web_observer
+from paperroute_device.screen import read_rotate
 from paperroute_hardware.adapters.knob_lines import GpiodKnobLines
 from paperroute_hardware.adapters.knob_reader import KnobReader
 from paperroute_hardware.adapters.panel_bus import LinuxPanelBus
@@ -630,6 +632,7 @@ def device_pages_for(
     device: DevicePorts,
     knob_state: Callable[[], bool | None] = lambda: None,
     apps: AppSwitch | None = None,
+    hold: LoadingHold | None = None,
 ) -> DevicePages:
     """
     Build the phone setup pages.
@@ -653,6 +656,8 @@ def device_pages_for(
         Whether the knobs are answering, or None when not asked for.
     apps : AppSwitch | None
         The installed apps, or None for no App section.
+    hold : LoadingHold | None
+        Shows the loading picture during a switch; None for no panel.
 
     Returns
     -------
@@ -672,6 +677,8 @@ def device_pages_for(
         sheets=web.sheets,
         data=web.data,
         apps=apps,
+        loading=None if hold is None else (lambda key: hold.load(key=key)),
+        redraw=(lambda: None) if hold is None else hold.release,
     )
 
 
@@ -698,7 +705,11 @@ def web_main(
         opener=LinuxPanelBus.open,
         report=lambda refresh: observer.panel_refreshed(refresh=refresh),
     )
-    shown = [panel] if panel else []
+    hold = None if panel is None else LoadingHold(
+        display=panel,
+        folder=args.splash.parent,
+        turned=lambda: read_rotate(path=args.state),
+    )
     timings.panel = panel_times_for(wanted=args.panel, panel=panel)
     knobs = knobs_for(
         enabled=args.knobs,
@@ -732,9 +743,12 @@ def web_main(
                         wanted=args.knobs, knobs=knobs,
                     ),
                     apps=apps,
+                    hold=hold,
                 )
             ports = KitPorts(
-                display=Displays(displays=[display, *shown]),
+                display=Displays(
+                    displays=[display, *([hold] if hold else [])],
+                ),
                 clock=clock,
                 states=StateFile(path=args.state, app=app),
                 power=power_for(args=args),

@@ -103,6 +103,10 @@ class DeviceSite:
         The Device page's Data section, or None for none.
     apps : AppSwitch | None
         The installed apps, or None for no App section.
+    loading : Callable[[str], None] | None
+        Draws the loading picture for an app key, or None for none.
+    redraw : Callable[[], None]
+        Puts the board back after a refused switch.
     """
 
     status: DeviceStatus | None = STATUS
@@ -122,6 +126,8 @@ class DeviceSite:
     sheets: tuple[str, ...] = ()
     data: Callable[[], str] | None = None
     apps: AppSwitch | None = None
+    loading: Callable[[str], None] | None = None
+    redraw: Callable[[], None] = lambda: None
 
     def pages(self) -> DevicePages:
         """
@@ -155,4 +161,6 @@ class DeviceSite:
             sheets=self.sheets,
             data=self.data,
             apps=self.apps,
+            loading=self.loading,
+            redraw=self.redraw,
         )

@@ -430,8 +430,13 @@ def test_journald_keeps_volatile_storage_with_room_for_a_week() -> None:
 
 
 def test_shipped_screens_are_panel_frames() -> None:
-    """Both pictures load and hold only the panel's four greys."""
-    for name in ('off.raw', 'on.raw'):
+    """Every picture loads and holds only the panel's four greys."""
+    for name in (
+        'off.raw',
+        'on.raw',
+        'loading-cambridge.raw',
+        'loading-sydney.raw',
+    ):
         frame = load_frame(path=DEPLOY / 'screens' / name)
         assert set(np.unique(frame)) <= {0, 85, 170, 255}
 

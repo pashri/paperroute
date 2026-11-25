@@ -269,6 +269,11 @@ class DevicePages:
     apps : AppSwitch | None
         The installed apps and the switch between them; None, or no apps
         listed, leaves the App section out.
+    loading : Callable[[str], None] | None
+        Draws the loading picture for the app being switched to, given
+        its key; must not wait on the panel. None draws nothing.
+    redraw : Callable[[], None]
+        Puts the board back on the panel after a refused switch.
     """
 
     def __init__(  # pylint: disable=too-many-arguments,too-many-locals
@@ -287,6 +292,8 @@ class DevicePages:
         sheets: Sequence[str] = (),
         data: Callable[[], str] | None = None,
         apps: AppSwitch | None = None,
+        loading: Callable[[str], None] | None = None,
+        redraw: Callable[[], None] = lambda: None,
     ) -> None:
         self._status = status
         self._panel = panel
@@ -301,6 +308,8 @@ class DevicePages:
         self._sheets = tuple(sheets)
         self._data = data
         self._apps = apps
+        self._loading = loading
+        self._redraw = redraw
 
     def _routes(self) -> list[web.RouteDef]:
         """
@@ -889,6 +898,22 @@ class DevicePages:
         ).replace('{{text}}', switch_text(app=app, apps=self._installed()))
         return web.Response(text=page, content_type='text/html')
 
+    def _draw_loading(self, *, key: str) -> None:
+        """
+        Ask for the loading picture, logging a failure.
+
+        Parameters
+        ----------
+        key : str
+            The app being switched to.
+        """
+        if self._loading is None:
+            return
+        try:
+            self._loading(key)
+        except (OSError, ValueError) as error:
+            logger.warning('loading picture not drawn: %s', error)
+
     async def _switch(self, request: web.Request) -> web.Response:
         """
         Ask the system to switch to another app.
@@ -910,7 +935,10 @@ class DevicePages:
         app = switchable(apps=self._installed(), key=fields.get('app', ''))
         if self._apps is None or app is None:
             return web.Response(status=HTTPStatus.BAD_REQUEST)
+        self._draw_loading(key=app.key)
         accepted = await self._apps.switch(key=app.key)
+        if not accepted:
+            self._redraw()
         if request.content_type == 'application/json':
             return web.Response(
                 status=HTTPStatus.NO_CONTENT if accepted

@@ -2,7 +2,7 @@
 # requires-python = ">=3.14"
 # dependencies = ["numpy", "pillow"]
 # ///
-"""Draw the panel's OFF and ON pictures as raw 800 x 480 grey frames.
+"""Draw the panel's OFF, ON and loading pictures as raw 800 x 480 frames.
 
 Run from anywhere with ``uv run tools/screens/make_screens.py OUT_DIR``.
 Each word is cut out of the dithered sea photo; the rest is black. The
@@ -26,6 +26,15 @@ OFF_SCALE: Final[float] = 1.2  # letter width as a multiple of the panel
 ON_CAP: Final[float] = 580  # px from baseline to cap top
 ON_ORIGIN: Final[tuple[int, int]] = (-8, 470)  # baseline start, px
 REFERENCE_SIZE: Final[int] = 100  # pt, used to measure the font
+CITIES: Final[tuple[str, ...]] = ('cambridge', 'sydney')
+CITY_SCALE: Final[float] = 1.04  # city name width as a multiple of the panel
+CITY_HEIGHT: Final[int] = 380  # px
+CITY_TOP: Final[int] = 76  # px
+LINE_TEXT: Final[str] = 'SWITCHING TO'  # sets the size of the LOADING letters
+LINE_WIDTH: Final[int] = 520  # px, of LINE_TEXT
+LINE_HEIGHT: Final[int] = 50  # px, of LINE_TEXT
+LINE_ORIGIN: Final[tuple[int, int]] = (16, 12)  # left, top of LOADING, px
+STRETCH_SIZE: Final[int] = 400  # pt, the size words are drawn at to stretch
 
 
 def mask(*, word: str, size: float, x: float, y: float) -> np.ndarray:
@@ -102,9 +111,98 @@ def on_mask() -> np.ndarray:
     )
 
 
+def stretched(*, word: str, width: float, height: float) -> np.ndarray:
+    """
+    Draw a word stretched to fill a box exactly.
+
+    Parameters
+    ----------
+    word : str
+        Text to draw.
+    width : float
+        Width of the letters, in pixels.
+    height : float
+        Height of the letters, in pixels.
+
+    Returns
+    -------
+    np.ndarray
+        Boolean mask the size of the box, true inside the letters.
+    """
+    font = ImageFont.truetype(font=str(FONT), size=STRETCH_SIZE)
+    left, top, right, bottom = font.getbbox(word, anchor='ls')
+    img = Image.new(mode='L', size=(right - left, bottom - top), color=0)
+    ImageDraw.Draw(img).text(
+        xy=(-left, -top),
+        text=word,
+        font=font,
+        fill=255,
+        anchor='ls',
+    )
+    size = (int(width), int(height))
+    return np.asarray(img.resize(size=size)) > 127
+
+
+def placed(*, word: np.ndarray, left: int, top: int) -> np.ndarray:
+    """
+    Put a mask on the screen, cutting off whatever falls outside.
+
+    Parameters
+    ----------
+    word : np.ndarray
+        Boolean mask of the word.
+    left : int
+        Left edge of the mask, in pixels; may be negative.
+    top : int
+        Top edge of the mask, in pixels.
+
+    Returns
+    -------
+    np.ndarray
+        ``HEIGHT`` x ``WIDTH`` boolean mask.
+    """
+    pad = max(word.shape)
+    big = np.zeros((HEIGHT + 2 * pad, WIDTH + 2 * pad), dtype=bool)
+    rows, cols = word.shape
+    big[top + pad:top + pad + rows, left + pad:left + pad + cols] = word
+    return big[pad:pad + HEIGHT, pad:pad + WIDTH]
+
+
+def loading_mask(*, city: str) -> np.ndarray:
+    """
+    Draw LOADING over the city's name, as on the switch mock-up.
+
+    Parameters
+    ----------
+    city : str
+        The city, in capitals.
+
+    Returns
+    -------
+    np.ndarray
+        Boolean mask of both words.
+    """
+    width = WIDTH * CITY_SCALE
+    name = stretched(word=city, width=width, height=CITY_HEIGHT)
+    font = ImageFont.truetype(font=str(FONT), size=STRETCH_SIZE)
+    line = font.getbbox(LINE_TEXT, anchor='ls')
+    word = font.getbbox('LOADING', anchor='ls')
+    loading = stretched(
+        word='LOADING',
+        width=(word[2] - word[0]) * LINE_WIDTH / (line[2] - line[0]),
+        height=(word[3] - word[1]) * LINE_HEIGHT / (line[3] - line[1]),
+    )
+    left, top = LINE_ORIGIN
+    return placed(
+        word=name, left=int(WIDTH / 2 - width / 2), top=CITY_TOP,
+    ) | placed(word=loading, left=left, top=top)
+
+
 def main() -> int:
     """
-    Write ``off.raw`` and ``on.raw``, with PNG previews, to the given folder.
+    Write ``off.raw``, ``on.raw`` and ``loading-<city>.raw`` to a folder.
+
+    Each comes with a PNG preview.
 
     Returns
     -------
@@ -116,7 +214,11 @@ def main() -> int:
         return 2
     out = Path(sys.argv[1])
     sea = np.asarray(Image.open(SEA)).astype(np.uint8) * GREY_STEP
-    for name, word in (('off', off_mask()), ('on', on_mask())):
+    masks = [('off', off_mask()), ('on', on_mask())] + [
+        (f'loading-{city}', loading_mask(city=city.upper()))
+        for city in CITIES
+    ]
+    for name, word in masks:
         frame = np.where(word, sea, 0).astype(np.uint8)
         frame.tofile(out / f'{name}.raw')
         Image.fromarray(frame, mode='L').save(out / f'{name}-preview.png')

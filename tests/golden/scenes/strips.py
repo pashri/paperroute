@@ -316,6 +316,28 @@ SPUR_506: Final[tuple[Call, ...]] = (
     ('2113231', 'Macquarie Hospital, Badajoz Rd', (472.0, 539.0), 22200),
 )  # Sydney 506 towards East Ryde, its From Badajoz Rd Opp Callaghan St;
 # its two Ryde East Public School kerbs share their parent station
+HEADING_665: Final[tuple[Call, ...]] = (
+    ('2153389', 'Norbrik, North West Twy', (-2664.0, 4746.0), 17160),
+    ('2768143', 'Troubadour, North West Twy', (-2468.0, 4189.0), 17220),
+    ('2147369', 'Joseph Banks, North West Twy', (-2251.0, 3716.0), 17220),
+    ('2147367', 'Abbott, North West Twy', (-1934.0, 2900.0), 17280),
+    ('2147365', 'Powers, North West Twy', (-1605.0, 1801.0), 17400),
+    ('2146100', 'Johnstons, North West Twy', (-968.0, 908.0), 17460),
+    ('214698', 'Fitzwilliam, North West Twy', (-478.0, 431.0), 17520),
+    ('214695', 'Constitution Hill, North West Twy', (0.0, 0.0), 17580),
+    ('215246', 'Briens, North West Twy', (601.0, -640.0), 17700),
+    (
+        '2145561', 'Mons Rd Opp Westmead Private Hospital',
+        (400.0, -1153.0), 17760,
+    ),
+    (
+        '2145559', 'Westmead Hospital, North West Twy',
+        (849.0, -1680.0), 17880,
+    ),
+    ('2145557', 'Westmead Station, Alexandra Av', (827.0, -1949.0), 18000),
+    ('2150166', "Argyle St Before O'Connell St", (1862.0, -2754.0), 18240),
+    ('2150114', 'Parramatta Station, Stand A1', (2358.0, -2895.0), 18360),
+)  # Sydney 665 towards Parramatta, its From Constitution Hill
 DETOUR_TRIP: Final[str] = 'detour'
 NEXT_BUS: Final[int] = 20  # minutes between a detour scene's two buses
 

@@ -49,6 +49,7 @@ from tests.golden.scenes.stops import (
 )
 from tests.golden.scenes.strips import (
     EASY_LATES,
+    HEADING_665,
     LOOP_441,
     MISSED_LATES,
     SPUR_18,
@@ -135,6 +136,12 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     ),
     'strip_spur_506': lambda: detour_scene(
         view=LiveView.STRIP, trip=SPUR_506, origin=2, route='506',
+    ),
+    'strip_heading': lambda: detour_scene(
+        view=LiveView.STRIP, trip=HEADING_665, origin=7, route='665',
+    ),
+    'strip_map_heading': lambda: detour_scene(
+        view=LiveView.STRIP_MAP, trip=HEADING_665, origin=7, route='665',
     ),
     'train_strip': lambda: train_strip_scene(destination='Petersham'),
     'train_strip_ends': lambda: train_strip_scene(destination='Lidcombe'),

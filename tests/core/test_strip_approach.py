@@ -5,6 +5,8 @@ from dataclasses import replace
 from datetime import timedelta
 from typing import Final
 
+import pytest
+
 from paperroute_testkit.core.factories import (
     EIGHT,
     START,
@@ -242,9 +244,9 @@ def test_facing_station_prefers_the_partner_then_the_count() -> None:
 
 
 def test_approaching_bus_sits_on_the_row_facing_its_last_stop() -> None:
-    """Past P2 at 8:10, the bus is on P2's partner's row, heading down."""
+    """At P2 at 8:09, the bus is on P2's partner's row, heading down."""
     (marker,), rows = badges_of(
-        inputs=approaching(minutes=10, facing={'P2': 'A1'}),
+        inputs=approaching(minutes=9, facing={'P2': 'A1'}),
     )
     assert (marker.x, marker.y, marker.bearing) == (
         TRACK_X, rows['A1'].y, 180.0,
@@ -253,7 +255,7 @@ def test_approaching_bus_sits_on_the_row_facing_its_last_stop() -> None:
 
 def test_approaching_bus_without_a_partner_counts_its_stops() -> None:
     """With no pairs, P2, two stops out, faces the second row up."""
-    (marker,), rows = badges_of(inputs=approaching(minutes=10))
+    (marker,), rows = badges_of(inputs=approaching(minutes=9))
     assert (marker.y, marker.bearing) == (rows['A2'].y, 180.0)
 
 
@@ -264,11 +266,13 @@ def test_approaching_bus_at_a_stop_sits_facing_it() -> None:
 
 
 def test_approaching_bus_with_neither_sits_between_rows() -> None:
-    """P4 has no partner and no fourth row: midway between its neighbours."""
+    """P4 has no row: a third of P4 to P3 is 2/3 of the way P5 to P3."""
     (marker,), rows = badges_of(
         inputs=approaching(minutes=4, facing={'P5': 'A3', 'P3': 'A2'}),
     )
-    assert marker.y == (rows['A2'].y + rows['A3'].y) / 2
+    assert marker.y == pytest.approx(
+        rows['A3'].y + (rows['A2'].y - rows['A3'].y) * 2 / 3,
+    )
 
 
 def test_approaching_bus_beyond_the_rows_is_not_drawn() -> None:
@@ -284,7 +288,7 @@ def test_single_kerb_strip_draws_no_approaching_bus() -> None:
 
 
 def test_bus_approaching_the_kerb_across_comes_up_from_below() -> None:
-    """A bus one stop short of x2 faces the first row down, heading up."""
+    """A third of the way from Q1 to x2, it rises from B1 towards C."""
     inputs = replace(inputs_of(
         reach=facing_reach(facing={}),
         departures=[live(item=from_across(minutes=6, trip_id='x'))],
@@ -292,7 +296,10 @@ def test_bus_approaching_the_kerb_across_comes_up_from_below() -> None:
         now=START + timedelta(minutes=4),
     ), key=BOTH)
     (marker,), rows = badges_of(inputs=inputs)
-    assert (marker.y, marker.bearing) == (rows['B1'].y, 0.0)
+    assert marker.bearing == 0.0
+    assert marker.y == pytest.approx(
+        rows['B1'].y + (rows['C'].y - rows['B1'].y) / 3,
+    )
 
 
 def test_heard_bus_at_a_stop_sits_facing_that_stop() -> None:
@@ -368,7 +375,7 @@ def test_reached_row_not_drawn_gives_way_to_its_partners_row() -> None:
     assert built is not None
     spot = Spot(x=TRACK_X, y=50.0)
     assert facing_spot(
-        departure=departure, pattern=built, at=1,
+        departure=departure, pattern=built, hop=(1, 0.0),
         trips=trips_of(inputs=inputs),
         approach=approach,
         spots={'A1': spot},
@@ -428,10 +435,17 @@ def test_carry_on_through_the_from_is_not_drawn_approaching() -> None:
     assert not markers
 
 
-def test_approaching_bus_goes_beside_a_departed_one_on_its_row() -> None:
-    """A bus just gone from x2 keeps its hop; the one at P1 goes beside."""
+def departed_and_approaching() -> StripInputs:
+    """
+    Make a bus at P1 at 8:12 and one just gone from x2 towards A1.
+
+    Returns
+    -------
+    StripInputs
+        The inputs.
+    """
     inputs = approaching(minutes=12)
-    inputs = replace(
+    return replace(
         inputs,
         departures=(
             *inputs.departures,
@@ -444,9 +458,42 @@ def test_approaching_bus_goes_beside_a_departed_one_on_its_row() -> None:
             ),
         },
     )
-    markers, rows = badges_of(inputs=inputs)
-    assert [(each.x, each.y, each.bearing) for each in markers] == [
-        (TRACK_X, rows['A1'].y + 12, 0.0),
-        (TRACK_X + SLOT_SPAN, rows['A1'].y, 180.0),
-    ]
-    assert rows['A1'].name_after == TRACK_X + SLOT_SPAN + HALF_WIDE
+
+
+def test_approach_marker_sits_between_the_facing_rows_by_progress() -> None:
+    """A third of P2 to P1, it is a third of the way from A2 to A1."""
+    (marker,), rows = badges_of(
+        inputs=approaching(minutes=10, facing={'P2': 'A2'}),
+    )
+    assert (marker.x, marker.bearing) == (TRACK_X, 180.0)
+    assert marker.y == pytest.approx(
+        rows['A2'].y + (rows['A1'].y - rows['A2'].y) / 3,
+    )
+
+
+def test_approach_marker_never_pushes_a_name() -> None:
+    """Meeting a this-side bus, the names stay where an on-track badge puts
+    them."""
+    _, rows = badges_of(inputs=departed_and_approaching())
+    assert all(
+        row.name_after in (None, TRACK_X + HALF_WIDE)
+        for row in rows.values()
+    )
+
+
+def test_far_kerb_and_this_side_badges_fold_into_a_two_ended_count(
+) -> None:
+    """The far-kerb bus at A1 folds into the one gone from x2."""
+    (marker,), rows = badges_of(inputs=departed_and_approaching())
+    assert (marker.route, marker.x, marker.y, marker.ends) == (
+        '+2', TRACK_X, rows['A1'].y + 12, True,
+    )
+
+
+def test_facing_station_uses_the_kerb_pair_for_hills_road() -> None:
+    """With 063 paired to 060, 063's row is 060, not the count's row."""
+    pair = KerbPair(station='063', other=place('060'), busy=False)
+    assert facing_station(
+        lane=('061', '060'), side=(), facing=facing_of(pairs={'063': pair}),
+        station='063', count=1,
+    ) == '060'

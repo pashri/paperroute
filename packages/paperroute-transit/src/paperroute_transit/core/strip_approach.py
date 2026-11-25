@@ -242,11 +242,105 @@ def facing_row(
     )
 
 
+def facing_rows(
+    *,
+    departure: Departure,
+    pattern: TripPattern,
+    origin: int,
+    trips: TripInputs,
+    approach: Approach,
+    drawn: Collection[str],
+) -> list[str | None]:
+    """
+    Find the row facing each call up to the From (see `facing_row`).
+
+    Parameters
+    ----------
+    departure : Departure
+        The bus's departure from the From.
+    pattern : TripPattern
+        Its trip.
+    origin : int
+        The index of its call at the From.
+    trips : TripInputs
+        The strip's departures and live data.
+    approach : Approach
+        The rows either side of the From.
+    drawn : Collection[str]
+        Station IDs of the visible rows.
+
+    Returns
+    -------
+    list[str | None]
+        Each call's facing station, above the From for the picked kerb's
+        buses and below it for the kerb across's, then the From itself.
+    """
+    across = departure.facts.across
+    side = frozenset(approach.lower if across else approach.upper)
+    return [
+        *(
+            facing_row(
+                pattern=pattern, index=index, origin=origin, trips=trips,
+                lane=approach.below if across else approach.above,
+                side=side & frozenset(drawn),
+                facing=approach.facing,
+            )
+            for index in range(origin)
+        ),
+        approach.origin,
+    ]
+
+
+def between(
+    *, rows: Sequence[str | None], spots: Mapping[str, Spot], place: float,
+) -> Spot | None:
+    """
+    Find the point on the track a share of the way between two rows.
+
+    Parameters
+    ----------
+    rows : Sequence[str | None]
+        Each call's facing station, or None.
+    spots : Mapping[str, Spot]
+        Visible rows' track spots by station.
+    place : float
+        Calls run: the hop's first call's index plus the share run.
+
+    Returns
+    -------
+    Spot | None
+        The spot of the call's row when the bus is at one; else the
+        point between the rows of the nearest calls at or before and
+        after it that have one, by the share of the calls between them
+        run; None when a row needed is missing or not visible.
+    """
+    whole = int(place)
+    later = next(
+        (index for index in range(whole + 1, len(rows)) if rows[index]),
+        None,
+    )
+    earlier = next(
+        (index for index in range(whole, -1, -1) if rows[index]), None,
+    )
+    if place == whole and rows[whole]:
+        later = earlier = whole
+    if earlier is None or later is None:
+        return None
+    one = spots.get(rows[earlier] or '')
+    two = spots.get(rows[later] or '')
+    if one is None or two is None:
+        return None
+    share = 0.0 if later == earlier else (place - earlier) / (later - earlier)
+    return Spot(
+        x=one.x + (two.x - one.x) * share, y=one.y + (two.y - one.y) * share,
+    )
+
+
 def facing_spot(
     *,
     departure: Departure,
     pattern: TripPattern,
-    at: int,
+    hop: tuple[int, float],
     trips: TripInputs,
     approach: Approach,
     spots: Mapping[str, Spot],
@@ -260,8 +354,9 @@ def facing_spot(
         The bus's departure from the From.
     pattern : TripPattern
         Its trip.
-    at : int
-        The index of the call it is at or last left.
+    hop : tuple[int, float]
+        The index of its hop's first call and the share of it run; from
+        `REACHED` on it is at the next call.
     trips : TripInputs
         The strip's departures and live data.
     approach : Approach
@@ -272,40 +367,23 @@ def facing_spot(
     Returns
     -------
     Spot | None
-        The spot of the row facing that call (see `facing_station`),
-        above the From for the picked kerb's buses and below it for the
-        kerb across's; else midway between the rows facing the nearest
-        calls before and after it that have one; None at or past the
-        From, or when a row needed is not visible.
+        Its point on the track between the rows facing its calls (see
+        `facing_rows` and `between`); None at or past the From.
     """
     origin = from_call(
         departure=departure, pattern=pattern, origin=approach.origin,
         stations=trips.station_of, zone=trips.zone,
     )
+    at = stop_reached(hop=hop)
     if origin is None or at >= origin:
         return None
-    drawn = spots.keys()
-    rows = [
-        facing_row(
-            pattern=pattern, index=index, origin=origin, trips=trips,
-            lane=approach.below if departure.facts.across else approach.above,
-            side=(
-                approach.lower if departure.facts.across else approach.upper
-            ) & drawn,
-            facing=approach.facing,
-        )
-        for index in range(origin)
-    ]
-    own = rows[at]
-    if own is not None:
-        return spots.get(own)
-    later = next((row for row in rows[at + 1:] if row), None)
-    earlier = next((row for row in reversed(rows[:at]) if row), None)
-    one = None if later is None else spots.get(later)
-    two = None if earlier is None else spots.get(earlier)
-    if one is None or two is None:
-        return None
-    return Spot(x=one.x, y=(one.y + two.y) / 2)
+    rows = facing_rows(
+        departure=departure, pattern=pattern, origin=origin, trips=trips,
+        approach=approach, drawn=spots.keys(),
+    )
+    return between(
+        rows=rows, spots=spots, place=at if at > hop[0] else at + hop[1],
+    )
 
 
 def toward_from(*, departure: Departure) -> float:

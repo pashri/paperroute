@@ -14,8 +14,6 @@ DISC_REACH: Final[float] = 11.0  # a disc's radius
 AT_REACH: Final[float] = 12.0  # a vehicle this near a disc is at it
 HALF_WIDE: Final[float] = 28.0  # half a five-letter badge, and a pixel
 SLOT_SPAN: Final[float] = 2 * HALF_WIDE  # badge centres side by side
-FACING_CAP: Final[int] = 2  # labelled facing badges beside a count
-FACING_SLOTS: Final[int] = 3  # facing badges a row shows before folding
 
 
 @dataclass(frozen=True)
@@ -57,8 +55,9 @@ class Badge:
         True on the last row into an exit, where it sits fixed on the
         exit hook's straight.
     facing : bool
-        True for a bus approaching a both-sides From, drawn on the row
-        facing its stop; its `low` and `high` are that y.
+        True for a bus approaching a both-sides From on the far kerb,
+        drawn on the track between the rows facing its stops; its `low`
+        and `high` are its y.
     """
 
     marker: Marker
@@ -219,78 +218,39 @@ def as_count(
     )
 
 
-def folded_bearings(
-    *,
-    facing: Sequence[Badge],
-    rows: Sequence[float],
-    ranks: Sequence[int],
-    row: float,
-) -> list[float | None]:
+def folded_in(*, badge: Badge, placed: list[Badge]) -> None:
     """
-    Give the headings of a row's badges that fold into its count.
+    Add a far-kerb badge, folding it into a badge it meets.
 
     Parameters
     ----------
-    facing : Sequence[Badge]
-        The facing badges.
-    rows : Sequence[float]
-        Each one's y.
-    ranks : Sequence[int]
-        Each one's place along its row.
-    row : float
-        The row's y.
-
-    Returns
-    -------
-    list[float | None]
-        Bearings of the badges on the row from `FACING_CAP` on.
+    badge : Badge
+        The far-kerb badge, on the track.
+    placed : list[Badge]
+        Badges already placed; the badge is added, or counted in the
+        first it overlaps, which becomes a '+<n>' with a wedge at each
+        end when their headings differ (see `as_count`).
     """
-    return [
-        each.marker.bearing
-        for each, y, rank in zip(facing, rows, ranks)
-        if y == row and rank >= FACING_CAP
-    ]
-
-
-def capped(*, badges: Sequence[Badge]) -> list[Badge]:
-    """
-    Keep a row's facing badges, folding them past `FACING_SLOTS`.
-
-    Parameters
-    ----------
-    badges : Sequence[Badge]
-        Badges, facing ones among them.
-
-    Returns
-    -------
-    list[Badge]
-        The facing badges in order. A row with up to `FACING_SLOTS`
-        keeps them all. A row with more keeps its first `FACING_CAP` as
-        they are and the next one becomes a '+<n>' counting it and the
-        rest on that row, which are dropped.
-    """
-    facing = [each for each in badges if each.facing]
-    rows = [each.marker.y for each in facing]
-    ranks = [rows[:index].count(y) for index, y in enumerate(rows)]
-    return [
+    host = next(
         (
-            replace(
-                each,
-                marker=as_count(
-                    marker=each.marker,
-                    count=rows.count(y) - FACING_CAP,
-                    bearings=folded_bearings(
-                        facing=facing, rows=rows, ranks=ranks, row=y,
-                    ),
-                ),
-                extra=rows.count(y) - FACING_CAP - 1,
-            )
-            if rows.count(y) > FACING_SLOTS and rank == FACING_CAP
-            else each
-        )
-        for each, y, rank in zip(facing, rows, ranks)
-        if rows.count(y) <= FACING_SLOTS or rank <= FACING_CAP
-    ]
+            index
+            for index, each in enumerate(placed)
+            if overlaps(one=badge.marker, other=each.marker)
+        ),
+        None,
+    )
+    if host is None:
+        placed.append(badge)
+        return
+    extra = placed[host].extra + badge.extra + 1
+    placed[host] = replace(placed[host], extra=extra, marker=counted(
+        marker=placed[host].marker,
+        extra=extra,
+        bearings=[
+            *headings(marker=placed[host].marker),
+            *headings(marker=badge.marker),
+        ],
+    ))
 
 
 def clear_of(*, marker: Marker, disc: Spot) -> bool:
@@ -800,11 +760,9 @@ def pushed(*, badges: Sequence[Badge], keep: Keepouts) -> tuple[Badge, ...]:
         move the least they need to clear the names level with them, the
         discs and each other, top to bottom. One with no room
         on its hop is counted in a badge on the same hop, which becomes a
-        '+<n>', or with none there is drawn on its hop anyway. A facing
-        badge keeps its y and moves right a slot at a time off the
-        badges placed before it; past `FACING_SLOTS` on a row, all but
-        the first `FACING_CAP` become one '+<n>' to the right of them
-        (see `capped`).
+        '+<n>', or with none there is drawn on its hop anyway. A far-kerb
+        badge never moves; one meeting a placed badge folds into it (see
+        `folded_in`).
     """
     order = sorted(
         (
@@ -823,14 +781,9 @@ def pushed(*, badges: Sequence[Badge], keep: Keepouts) -> tuple[Badge, ...]:
         badges=rest, placed=placed, keep=keep, first=len(placed),
     )
     retried(placed=placed, forced=again, keep=keep)
-    last: dict[float, float] = {}
-    for each in capped(badges=badges):
-        y = each.marker.y
-        if each.marker.route.startswith('+') and y in last:
-            each = replace(each, marker=replace(each.marker, x=last[y]))
-        line = off_lined(lineup=[each], lined=placed)
-        placed.extend(line)
-        last[y] = line[0].marker.x
+    for each in badges:
+        if each.facing:
+            folded_in(badge=each, placed=placed)
     return tuple(sorted(
         placed, key=lambda each: (each.marker.x, each.marker.y),
     ))

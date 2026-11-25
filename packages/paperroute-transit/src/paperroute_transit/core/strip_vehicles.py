@@ -324,8 +324,9 @@ def approach_marker(
     Badge | None
         A badge on the hop on from the stop it is at or last left when
         both of that hop's rows are visible, as for a bus standing at the
-        From; else a facing badge on the row facing that stop (see
-        `facing_spot`), its wedge towards the From; else None.
+        From; else a facing badge on the track between the rows facing
+        its calls by its progress (see `facing_spot`), its wedge towards
+        the From; else None.
     """
     at = stop_reached(hop=hop)
     badge = hop_marker(
@@ -340,7 +341,7 @@ def approach_marker(
     if badge is not None:
         return badge
     spot = facing_spot(
-        departure=departure, pattern=pattern, at=at, trips=trips,
+        departure=departure, pattern=pattern, hop=hop, trips=trips,
         approach=approach, spots=spots,
     )
     if spot is None:

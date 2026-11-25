@@ -431,7 +431,6 @@ def test_easy_hero_marks_both_buses() -> None:
     hero = hero_of(Chain(
         legs=(live(item=A0733, late=4), live(item=B0746, late=2)), way=0,
     ))
-    assert hero.mark == '+4'
     assert [line.mark for line in hero.lines] == ['', '', '', '+2']
     assert hero.lines[1] == HeroLine(
         route=None, noun=None,
@@ -620,7 +619,6 @@ def test_direct_trip_without_a_miss_is_unchanged() -> None:
         arrives_at='8:05',
         live=False,
         uncertain=False,
-        mark='',
     )
     assert chain_row(
         chain=DIRECT, pin=WORK, now=at(7, 30), zone=SYDNEY_ZONE,

@@ -88,8 +88,6 @@ class ChainHero:
         True when the first ride has live times.
     uncertain : bool
         True when any ride's estimate is uncertain.
-    mark : str
-        The first ride's lateness mark.
     late : str
         The mark in words, drawn under the countdown; empty for none.
     """
@@ -100,7 +98,6 @@ class ChainHero:
     arrives_at: str
     live: bool
     uncertain: bool = False
-    mark: str = ''
     late: str = ''
 
 
@@ -461,7 +458,6 @@ def chain_hero(
         arrives_at=arrival_text(chain=chain, zone=zone),
         live=chain.legs[0].live,
         uncertain=any(leg.uncertain for leg in chain.legs),
-        mark=leg_mark(item=chain.legs[0]),
         late=late_words(mark=leg_mark(item=chain.legs[0])),
     )
 

@@ -547,7 +547,6 @@ def test_late_connection_scenes_build_their_views() -> None:
     """Marks on each bus; tight and missed changes say so."""
     easy = view_of(state=SCENES['connection_easy']())
     assert isinstance(easy, ConnectionView) and easy.hero is not None
-    assert easy.hero.mark == '+4'
     assert [line.mark for line in easy.hero.lines] == ['', '', '', '+2']
     assert easy.hero.lines[1].text == (
         'change at Constitution Hill, North West Twy 7:48'

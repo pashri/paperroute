@@ -18,17 +18,21 @@ from paperroute_transit.core.connection_view import (
 )
 from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.render.connection_view import (
+    COUNT_Y,
     FIRST_Y,
     FOOTER_RULE,
     HERO_LEFT,
     HERO_RIGHT,
     LABEL_Y,
+    LAST_Y,
+    LATE_SHIFT,
     STEP_BOLD,
     STEP_FACE,
     badge_line,
     draw_connection_view,
     hero_footer,
     hero_steps,
+    line_centres,
     step_text,
 )
 from paperroute_transit.render.pair_list import draw_pair_list
@@ -165,23 +169,28 @@ def test_uncertain_hero_says_so_after_its_count() -> None:
     assert found[:, 0].max() < HEADER + FIRST_Y - 12
 
 
-def test_hero_mark_follows_the_count_and_pushes_uncertain_right() -> None:
-    """The mark sits after the count; uncertain starts after the mark."""
+def test_hero_late_words_sit_under_the_count_and_not_the_lines() -> None:
+    """The words draw between the count and the first line."""
     assert VIEW.hero is not None
-    hero = replace(VIEW.hero, live=True, mark='+4')
-    plain = draw_connection_view(
-        view=replace(VIEW, hero=replace(hero, mark='')),
+    hero = replace(VIEW.hero, live=True)
+    plain = draw_connection_view(view=replace(VIEW, hero=hero))
+    late = draw_connection_view(
+        view=replace(VIEW, hero=replace(hero, late='4 minutes late')),
     )
-    marked = draw_connection_view(view=replace(VIEW, hero=hero))
-    both = draw_connection_view(
-        view=replace(VIEW, hero=replace(hero, uncertain=True)),
-    )
-    mark = np.argwhere(plain != marked)
-    word = np.argwhere(marked != both)
-    assert mark.size and word.size
-    assert mark[:, 1].min() > HERO_LEFT + 60
-    assert mark[:, 0].max() < HEADER + FIRST_Y - 12
-    assert word[:, 1].min() > mark[:, 1].max()
+    rows = slice(None, HEADER + FIRST_Y - 4)
+    found = np.argwhere(plain[rows] != late[rows])
+    assert found.size
+    assert found[:, 1].min() >= HERO_LEFT
+    assert found[:, 0].min() > HEADER + COUNT_Y
+
+
+def test_hero_lines_move_down_under_a_late_mark() -> None:
+    """Every line sits lower, in order, so no two boxes overlap."""
+    plain = line_centres(count=4)
+    moved = line_centres(count=4, shift=LATE_SHIFT)
+    assert all(m > p for m, p in zip(moved, plain, strict=True))
+    assert all(b - a >= 14 for a, b in zip(moved, moved[1:]))
+    assert moved[-1] <= LAST_Y
 
 
 def test_second_bus_mark_ends_at_the_hero_edge() -> None:
@@ -226,21 +235,17 @@ def test_stranded_hero_draws_no_arrival() -> None:
 
 
 def test_missed_stay_on_line_is_drawn_whole_and_bold() -> None:
-    """'change missed · stay on' ends the hero, in the bold step face."""
+    """'change missed' is drawn whole in the bold step face."""
     hero = hero_of(folded_chain())
-    last = hero.lines[-1]
-    assert last.bold and last.route is None
+    missed = hero.lines[-2]
+    assert missed.bold and missed.route is None
     plain = replace(
-        hero, lines=(*hero.lines[:-1], replace(last, bold=False)),
+        hero, lines=(*hero.lines[:-2], replace(missed, bold=False),
+                     hero.lines[-1]),
     )
     canvas, regular = Recording(), Canvas()
     hero_steps(canvas, hero=hero, top=HEADER)
     hero_steps(regular, hero=plain, top=HEADER)
-    assert canvas.drawn[-1] == 'change missed · stay on'
-    changed = np.argwhere(canvas.grey() != regular.grey())
-    assert changed.size
-    bold = canvas.grey() < 128
-    assert bold.sum() > (regular.grey() < 128).sum()
-    assert changed[:, 1].max() < HERO_LEFT + canvas.length(
-        text=last.text, face=STEP_BOLD,
-    ) + 2
+    assert canvas.drawn[-2:] == ['change missed', 'stay on to Westmead']
+    assert np.argwhere(canvas.grey() != regular.grey()).size
+    assert (canvas.grey() < 128).sum() > (regular.grey() < 128).sum()

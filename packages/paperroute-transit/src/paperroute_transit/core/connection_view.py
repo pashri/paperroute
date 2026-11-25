@@ -19,7 +19,7 @@ from paperroute_transit.core.connection_late import (
 )
 from paperroute_transit.core.connection_model import change_walk
 from paperroute_transit.core.model import Pin
-from paperroute_transit.core.names import NameRules
+from paperroute_transit.core.names import NameRules, name_forms
 from paperroute_transit.core.rides import Ride, rides_of
 from paperroute_transit.core.stop_view import (
     HORIZON_TEXT,
@@ -90,6 +90,8 @@ class ChainHero:
         True when any ride's estimate is uncertain.
     mark : str
         The first ride's lateness mark.
+    late : str
+        The mark in words, drawn under the countdown; empty for none.
     """
 
     countdown: str
@@ -99,6 +101,7 @@ class ChainHero:
     live: bool
     uncertain: bool = False
     mark: str = ''
+    late: str = ''
 
 
 @dataclass(frozen=True)
@@ -282,6 +285,53 @@ def change_lines(
     return at, HeroLine(route=None, noun=None, text=f'walk {metres} m')
 
 
+def stay_on_lines(*, pin: Pin, city: City) -> tuple[HeroLine, ...]:
+    """
+    Spell out a missed change that is stayed on through.
+
+    Parameters
+    ----------
+    pin : Pin
+        Connection pin.
+    city : City
+        The city, which holds the name rules.
+
+    Returns
+    -------
+    tuple[HeroLine, ...]
+        'change missed' in bold, then 'stay on to {To}' with the To
+        shortened by the city's name rules and cut at its first comma.
+    """
+    name = '' if pin.destination is None else pin.destination.name
+    forms = name_forms(name=name, rules=city.name_rules)
+    to = forms[-1].split(',')[0].strip()
+    return (
+        HeroLine(route=None, noun=None, text=MISSED, bold=True),
+        HeroLine(route=None, noun=None, text=f'stay on to {to}'),
+    )
+
+
+def late_words(*, mark: str) -> str:
+    """
+    Spell a lateness mark out in words.
+
+    Parameters
+    ----------
+    mark : str
+        The mark, such as ``+4`` or ``+4?``.
+
+    Returns
+    -------
+    str
+        For example ``4 minutes late``; empty unless the mark is a plus.
+    """
+    minutes = mark.removeprefix('+').removesuffix('?')
+    if minutes == mark or not minutes.isdigit():
+        return ''
+    unit = 'minute' if minutes == '1' else 'minutes'
+    return f'{minutes} {unit} late'
+
+
 def hero_lines(
     *, chain: Chain, pin: Pin, zone: tzinfo, city: City,
 ) -> tuple[HeroLine, ...]:
@@ -322,10 +372,7 @@ def hero_lines(
                 mark=leg_mark(item=ride.item) if index else '',
             ),
             *(
-                (HeroLine(
-                    route=None, noun=None, text=f'{MISSED}{DOT}stay on',
-                    bold=True,
-                ),)
+                stay_on_lines(pin=pin, city=city)
                 if index == folded else ()
             ),
         )
@@ -415,6 +462,7 @@ def chain_hero(
         live=chain.legs[0].live,
         uncertain=any(leg.uncertain for leg in chain.legs),
         mark=leg_mark(item=chain.legs[0]),
+        late=late_words(mark=leg_mark(item=chain.legs[0])),
     )
 
 

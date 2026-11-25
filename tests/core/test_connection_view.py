@@ -33,7 +33,9 @@ from paperroute_transit.core.connection_view import (
     chain_hero,
     chain_row,
     change_lines,
+    late_words,
     route_chips,
+    stay_on_lines,
     via_text,
 )
 from paperroute_transit.core.model import Change, Pin
@@ -478,12 +480,13 @@ def test_stranded_hero_says_change_missed_and_no_arrival() -> None:
     assert hero.arrives_at == ''
 
 
-def test_missed_stay_on_hero_says_so_in_bold() -> None:
-    """Missed stay on hero says so in bold."""
+def test_hero_lines_split_change_missed_from_stay_on() -> None:
+    """Change missed, then stay on to the To, in two lines."""
     hero = hero_of(folded_chain())
-    assert [line.text for line in hero.lines][-1] == 'change missed · stay on'
-    assert hero.lines[-1].bold
-    assert not any(line.text.startswith('stay on') for line in hero.lines)
+    assert [line.text for line in hero.lines][-2:] == [
+        'change missed', 'stay on to Westmead',
+    ]
+    assert hero.lines[-2].bold
 
 
 def test_rows_carry_the_mark_the_word_and_the_struck_arrival() -> None:
@@ -585,11 +588,10 @@ MISSED_DIRECT: Final[Chain] = replace(
 def test_missed_direct_hero_says_so_in_bold() -> None:
     """Missed direct hero says so in bold."""
     hero = hero_of(MISSED_DIRECT)
-    assert hero.lines[1:] == (
-        HeroLine(
-            route=None, noun=None, text='change missed · stay on', bold=True,
-        ),
-    )
+    assert [line.text for line in hero.lines[1:]] == [
+        'change missed', 'stay on to Westmead',
+    ]
+    assert hero.lines[1].bold
 
 
 def test_missed_direct_row_keeps_direct_and_strikes_the_old_arrival() -> None:
@@ -667,10 +669,11 @@ def test_missed_second_change_folded_into_a_stay_on_says_so() -> None:
         chain=chain, pin=TWO_PIN, now=at(7, 30), zone=SYDNEY_ZONE, city=SYDNEY,
     )
     texts = [line.text for line in hero.lines]
-    assert texts.count('change missed · stay on') == 1
-    line = hero.lines[texts.index('change missed · stay on')]
-    assert line.bold
-    assert hero.lines[texts.index('change missed · stay on') - 1].mark == '+7'
+    assert texts.count('change missed') == 1
+    at_miss = texts.index('change missed')
+    assert hero.lines[at_miss].bold
+    assert texts[at_miss + 1].startswith('stay on to ')
+    assert hero.lines[at_miss - 1].mark == '+7'
     row = chain_row(
         chain=chain, pin=TWO_PIN, now=at(7, 30), zone=SYDNEY_ZONE,
     )
@@ -689,3 +692,22 @@ def test_fresh_plan_after_a_missed_change_shows_its_arrival_unstruck() -> None:
         chain=chain, pin=TWO_PIN, now=at(7, 30), zone=SYDNEY_ZONE,
     )
     assert (row.arrives_at, row.was) == ('8:08', '')
+
+
+def test_stay_on_lines_cut_the_to_at_its_first_comma() -> None:
+    """The To is shortened by the city's rules, then cut at a comma."""
+    assert WORK.destination is not None
+    pin = replace(WORK, destination=replace(
+        WORK.destination, name='Parramatta, Church St Stand A',
+    ))
+    lines = stay_on_lines(pin=pin, city=SYDNEY)
+    assert lines[1].text == 'stay on to Parramatta'
+
+
+def test_hero_late_mark_reads_in_words() -> None:
+    """The mark is spelt out as minutes late."""
+    assert late_words(mark='+4') == '4 minutes late'
+    assert late_words(mark='+1') == '1 minute late'
+    assert late_words(mark='+4?') == '4 minutes late'
+    assert late_words(mark='') == ''
+    assert late_words(mark='\u22123') == ''

@@ -51,7 +51,9 @@ SMALL_BOLD: Final[Face] = Face(weight=700, px=12)
 LINE_FACE: Final[Face] = Face(weight=400, px=18)
 STEP_FACE: Final[Face] = Face(weight=400, px=17)
 BADGE_PX: Final[int] = 18
-HERO_MARK_PX: Final[int] = 24
+LATE_DROP: Final[int] = 24  # countdown baseline to the late words
+LATE_SHIFT: Final[int] = 22  # room the late words take from the lines
+LATE_FACE: Final[Face] = Face(weight=700, px=17)
 STEP_BOLD: Final[Face] = Face(weight=700, px=17)
 
 
@@ -82,10 +84,11 @@ def hero_countdown(canvas: Canvas, *, hero: ChainHero, top: int) -> None:
         used += 8 + canvas.text(
             at=(HERO_LEFT + 8 + used, y), text='min', face=unit, grey=INK,
         )
-    used += raised_mark(
-        canvas, mark=hero.mark, at=(HERO_LEFT + used, y), face=big,
-        mark_face=Face(weight=700, px=HERO_MARK_PX // (1 + tight)),
-    )
+    if hero.late:
+        canvas.text(
+            at=(HERO_LEFT, y + LATE_DROP), text=hero.late, face=LATE_FACE,
+            grey=INK,
+        )
     if hero.uncertain:
         canvas.text(
             at=(HERO_LEFT + used + NOTE_GAP, y), text=UNCERTAIN,
@@ -139,7 +142,7 @@ def badge_line(
         )
 
 
-def line_centres(*, count: int) -> tuple[int, ...]:
+def line_centres(*, count: int, shift: int = 0) -> tuple[int, ...]:
     """
     Place the hero's lines below the countdown.
 
@@ -147,6 +150,8 @@ def line_centres(*, count: int) -> tuple[int, ...]:
     ----------
     count : int
         Number of lines.
+    shift : int
+        Pixels the first line moves down, to clear the late words.
 
     Returns
     -------
@@ -155,7 +160,7 @@ def line_centres(*, count: int) -> tuple[int, ...]:
         when they would pass `LAST_Y`, and starting higher below the
         smaller countdown of a long hero.
     """
-    first = TIGHT_FIRST_Y if count > ROOMY_LINES else FIRST_Y
+    first = (TIGHT_FIRST_Y if count > ROOMY_LINES else FIRST_Y) + shift
     pitch = min(PITCH, (LAST_Y - first) // max(1, count - 1))
     return tuple(first + index * pitch for index in range(count))
 
@@ -230,7 +235,9 @@ def hero_steps(canvas: Canvas, *, hero: ChainHero, top: int) -> None:
         Top of the panel.
     """
     px = TIGHT_BADGE_PX if len(hero.lines) > ROOMY_LINES else BADGE_PX
-    centres = line_centres(count=len(hero.lines))
+    centres = line_centres(
+        count=len(hero.lines), shift=LATE_SHIFT if hero.late else 0,
+    )
     for line, y in zip(hero.lines, centres, strict=True):
         hero_line(canvas, line=line, y=top + y, px=px)
 

@@ -766,7 +766,10 @@ def test_deploy_stops_when_before_release_fails(
     status, calls, _ = run_deploy(repo=deploy_repo)
     assert status == 3
     assert calls[-1] == 'hook host'
-    assert not any('install-release' in call for call in calls[1:])
+    assert not any(
+        'sudo -n /usr/local/sbin/paperroute-install-release' in call
+        for call in calls
+    )
 
 
 def test_deploy_without_before_release_skips_tiles(

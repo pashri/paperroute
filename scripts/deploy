@@ -35,6 +35,10 @@ sha=$(git rev-parse --short HEAD)
     printf 'deploy: unexpected sha\n' >&2
     exit 1
 }
+if ! ssh -o ConnectTimeout=10 -- "$host" true >/dev/null 2>&1; then
+    printf 'deploy: cannot reach %s (off the network, or on a VPN?)\n' "$host" >&2
+    exit 1
+fi
 if ! ssh -- "$host" sudo -n -l "$INSTALL" >/dev/null 2>&1; then
     printf 'deploy: run scripts/provision first\n' >&2
     exit 1

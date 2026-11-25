@@ -355,3 +355,12 @@ async def test_end_group_ignores_a_permission_error(
     process = await asyncio.create_subprocess_exec('true')
     await app_switch.end_group(process=process)
     assert process.returncode == 0
+
+
+async def test_installed_reads_the_active_card_fresh(box: Box) -> None:
+    """The active app's card is asked again, not kept from the refresh."""
+    cards = [AppCard(name='First', status='old')]
+    box.switch.own = lambda: cards[-1]
+    await box.switch.refresh()
+    cards.append(AppCard(name='First', status='new'))
+    assert box.switch.installed()[-1].card.status == 'new'

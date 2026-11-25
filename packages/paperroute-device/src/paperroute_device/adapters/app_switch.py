@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import dataclasses
 import json
 import logging
 import os
@@ -269,7 +270,8 @@ class SystemAppSwitch:
         -------
         tuple[InstalledApp, ...]
             The apps the last refresh found, in key order; empty before
-            the first.
+            the first. The active app's card is asked for again, so it
+            follows changes in the app since the refresh.
         """
         stale = (
             self.refreshed_at is None
@@ -277,7 +279,10 @@ class SystemAppSwitch:
         )
         if stale and (self.task is None or self.task.done()):
             self.task = asyncio.create_task(self.refresh())
-        return self.apps
+        return tuple(
+            dataclasses.replace(app, card=self.own()) if app.active else app
+            for app in self.apps
+        )
 
     async def switch(self, *, key: str) -> bool:
         """

@@ -175,6 +175,10 @@ class Pin:
         towards, then the place the kerb across's buses run towards,
         '' where none was named; empty otherwise. Not part of the pin's
         identity.
+    parent : StopPlace | None
+        The parent station the pin was converted from to show both
+        kerbs, or None. The pin is named after it. Not part of the
+        pin's identity.
     """
 
     origin: StopPlace
@@ -189,6 +193,7 @@ class Pin:
     never: tuple[str, ...] = ()
     opposite: StopPlace | None = None
     towards: tuple[str, ...] = ()
+    parent: StopPlace | None = None
 
 
 def is_connection(*, pin: Pin) -> bool:

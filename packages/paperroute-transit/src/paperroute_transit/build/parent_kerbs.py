@@ -84,7 +84,7 @@ def close_pairs(
     -------
     list[tuple[str, str, str]]
         The pairs whose kerbs are close; a kerb with no coordinates
-        keeps its pair.
+        drops its pair.
     """
     spots = {
         stop_id: Spot(name=stop_id, lat=lat, lon=lon)
@@ -96,9 +96,9 @@ def close_pairs(
     return [
         (station, one, two)
         for station, one, two in pairs
-        if one not in spots
-        or two not in spots
-        or metres_apart(first=spots[one], second=spots[two]) <= KERBS_APART
+        if one in spots
+        and two in spots
+        and metres_apart(first=spots[one], second=spots[two]) <= KERBS_APART
     ]
 
 

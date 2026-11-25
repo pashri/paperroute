@@ -190,6 +190,15 @@ def test_pin_round_trips_its_opposite_kerb() -> None:
     assert pin_from_model(model=pin_to_model(pin=BOTH)) == BOTH
 
 
+def test_state_file_round_trips_a_pin_parent() -> None:
+    """A converted pin keeps the parent it came from."""
+    converted = replace(BOTH, parent=ACROSS)
+    assert pin_from_model(model=pin_to_model(pin=converted)) == converted
+    stored = pin_to_model(pin=converted).model_dump()
+    del stored['parent']
+    assert pin_from_model(model=PinModel.model_validate(stored)) == BOTH
+
+
 def test_pin_from_model_drops_an_opposite_beside_a_destination() -> None:
     """A stored pin with a Destination and a kerb across loads one kerb."""
     routed = replace(BOTH, destination=ACROSS)

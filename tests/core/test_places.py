@@ -327,6 +327,20 @@ def test_paired_turns_a_parent_pin_into_both_sides() -> None:
     assert paired(state=state, parents={'first': FIRST_KERBS}) == state
 
 
+def test_paired_unconverts_a_pin_whose_parent_no_longer_qualifies() -> None:
+    """A converted pin goes back to its parent when it stops qualifying."""
+    converted = paired(state=state_with(), parents={'first': FIRST_KERBS})
+    assert converted.places.pins[0].parent == FIRST.origin
+    for parents in ({}, {'other': FIRST_KERBS}):
+        back = paired(state=converted, parents=parents)
+        assert back.places.pins == (FIRST, SECOND, THIRD)
+    unpinned = paired(
+        state=state_with(pins=(SECOND, THIRD), unpinned=FIRST),
+        parents={'first': FIRST_KERBS},
+    )
+    assert paired(state=unpinned, parents={}).places.unpinned == FIRST
+
+
 def test_paired_turns_the_unpinned_place_too() -> None:
     """The unpinned place on a parent takes its two kerbs too."""
     state = paired(

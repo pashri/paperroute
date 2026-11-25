@@ -193,11 +193,13 @@ def pin_title(*, pin: Pin) -> str:
     Returns
     -------
     str
-        The From name, with the both-sides suffix when the pin is
+        The name of the parent the pin was converted from, else the
+        From name, with the both-sides suffix when the pin is
         both-sides.
     """
     suffix = BOTH_SUFFIX if both_sides(pin=pin) else ''
-    return f'{pin.origin.name}{suffix}'
+    named = pin.origin if pin.parent is None else pin.parent
+    return f'{named.name}{suffix}'
 
 
 def kept_sides(*, old: Pin | None, new: Pin) -> Pin:

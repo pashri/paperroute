@@ -216,3 +216,15 @@ def test_load_parent_kerbs_marks_a_busy_pair(
     assert list(conn.execute(
         'SELECT stop_id, trips, busy FROM parent_kerbs ORDER BY stop_id',
     )) == [('pa', 4, 1), ('pb', 4, 1)]
+
+
+def test_load_parent_kerbs_skips_a_kerb_with_no_coordinates(
+    conn: sqlite3.Connection,
+) -> None:
+    """Load parent kerbs skips a parent whose kerb has no position."""
+    add_trip(conn=conn, trip_id='t0', route='6', way=0, stops=('pa', 'end1'))
+    add_trip(conn=conn, trip_id='t1', route='6', way=1, stops=('pb', 'end2'))
+    conn.execute(
+        'UPDATE stops SET lat = NULL, lon = NULL WHERE stop_id = ?', ('pb',),
+    )
+    assert not kerb_rows(conn=conn)

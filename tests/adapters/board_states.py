@@ -136,7 +136,7 @@ class BoardStates:
 
 def without_sides(*, board: dict[str, Any]) -> None:
     """
-    Remove the both-sides keys from a board's stored pins.
+    Remove the both-sides and parent keys from a board's stored pins.
 
     Parameters
     ----------
@@ -150,3 +150,4 @@ def without_sides(*, board: dict[str, Any]) -> None:
     for stored in places:
         stored.pop('opposite', None)
         stored.pop('towards', None)
+        stored.pop('parent', None)

@@ -95,7 +95,8 @@
         ],
         "never": [],
         "opposite": null,
-        "towards": []
+        "towards": [],
+        "parent": null
       },
       {
         "origin": {
@@ -132,7 +133,8 @@
           "660"
         ],
         "opposite": null,
-        "towards": []
+        "towards": [],
+        "parent": null
       }
     ],
     "current": 1,
@@ -245,7 +247,8 @@
           ],
           "never": [],
           "opposite": null,
-          "towards": []
+          "towards": [],
+          "parent": null
         },
         "pinned": true
       },

@@ -202,7 +202,37 @@ def parent_pin(*, pin: Pin, parents: Mapping[str, ParentKerbs]) -> Pin:
         return pin
     here, other = busier(parents=parents[pin.origin.stop_id])
     return replace(
-        pin, origin=here.place, opposite=other.place, towards=('', ''),
+        pin,
+        origin=here.place,
+        opposite=other.place,
+        towards=('', ''),
+        parent=pin.origin,
+    )
+
+
+def unconverted(*, pin: Pin, parents: Mapping[str, ParentKerbs]) -> Pin:
+    """
+    Turn a converted pin back into a plain pin on its parent.
+
+    Parameters
+    ----------
+    pin : Pin
+        Pin.
+    parents : Mapping[str, ParentKerbs]
+        Parent stations' kerbs by station ID.
+
+    Returns
+    -------
+    Pin
+        The pin on its parent with no opposite kerb, when it was
+        converted from a parent that is no longer in `parents`; the pin
+        itself otherwise.
+    """
+    parent = pin.parent
+    if parent is None or parent.stop_id in parents:
+        return pin
+    return replace(
+        pin, origin=parent, opposite=None, towards=(), parent=None,
     )
 
 
@@ -228,7 +258,9 @@ def parent_pins(
     keys = [pin_key(pin=pin) for pin in pins]
     result: list[Pin] = []
     for index, pin in enumerate(pins):
-        changed = parent_pin(pin=pin, parents=parents)
+        changed = parent_pin(
+            pin=unconverted(pin=pin, parents=parents), parents=parents,
+        )
         others = keys[:index] + keys[index + 1:]
         taken = changed is not pin and pin_key(pin=changed) in others
         result.append(pin if taken else changed)

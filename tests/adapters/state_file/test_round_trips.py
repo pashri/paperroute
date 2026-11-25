@@ -329,7 +329,7 @@ FILE_KEYS: Final[frozenset[str]] = frozenset({
     'start', 'end',
     'pins', 'current', 'unpinned', 'view', 'quota', 'auto',
     'origin', 'destination', 'kind', 'routes', 'nickname', 'only',
-    'opposite', 'towards',
+    'opposite', 'towards', 'parent',
     'windows', 'ways', 'never', 'stop_id', 'name', 'x', 'y', 'days',
     'changes', 'ticked', 'alight', 'allow',
     'day', 'calls', 'occurrence', 'before', 'overridden_at', 'ref',
@@ -390,6 +390,7 @@ def test_file_holds_no_secret_keys(path: Path) -> None:
         'never',
         'opposite',
         'towards',
+        'parent',
     }
 
 

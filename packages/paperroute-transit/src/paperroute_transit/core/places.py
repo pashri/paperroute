@@ -38,7 +38,11 @@ from paperroute_transit.core.model import (
     pin_key,
     same_place,
 )
-from paperroute_transit.core.parent_sides import parent_pin, parent_pins
+from paperroute_transit.core.parent_sides import (
+    parent_pin,
+    parent_pins,
+    unconverted,
+)
 from paperroute_transit.core.saved import Saved
 from paperroute_transit.core.sides import ParentKerbs, pin_places
 from paperroute_transit.core.state_model import (
@@ -517,8 +521,14 @@ def rematched(*, pin: Pin, found: Mapping[str, StopPlace | None]) -> Pin:
         if pin.opposite is None
         else looked_up(stop=pin.opposite, found=found)
     )
+    parent = (
+        None
+        if pin.parent is None
+        else looked_up(stop=pin.parent, found=found)
+    )
     return replace(
         pin,
+        parent=parent if opposite is not None else None,
         origin=origin,
         destination=destination,
         opposite=opposite,
@@ -606,15 +616,20 @@ def paired(*, state: State, parents: Mapping[str, ParentKerbs]) -> State:
     Returns
     -------
     State
-        State with each plain pin on a parent made a both-sides pin; the
-        state itself when there are no parents.
+        State with each plain pin on a parent made a both-sides pin, and
+        each converted pin whose parent is not in `parents` made plain
+        again; the state itself when there is nothing to change.
     """
-    if not parents:
-        return state
     places = state.places
+    if not parents and not any(
+        pin.parent for pin in (*places.pins, places.unpinned) if pin
+    ):
+        return state
     unpinned = places.unpinned
     if unpinned is not None:
-        unpinned = parent_pin(pin=unpinned, parents=parents)
+        unpinned = parent_pin(
+            pin=unconverted(pin=unpinned, parents=parents), parents=parents,
+        )
     pins = parent_pins(pins=places.pins, parents=parents)
     return replace(state, places=replace(places, pins=pins, unpinned=unpinned))
 

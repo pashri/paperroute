@@ -110,6 +110,7 @@ class PinModel(BaseModel):
     never: tuple[str, ...]
     opposite: StopModel | None = None
     towards: tuple[str, ...] = Field(default=(), max_length=2)
+    parent: StopModel | None = None
 
 
 class BeforeModel(BaseModel):
@@ -285,6 +286,9 @@ def pin_to_model(*, pin: Pin) -> PinModel:
             else stop_to_model(place=pin.opposite)
         ),
         towards=pin.towards,
+        parent=(
+            None if pin.parent is None else stop_to_model(place=pin.parent)
+        ),
     )
 
 
@@ -335,6 +339,11 @@ def pin_from_model(*, model: PinModel) -> Pin:
             else stop_from_model(model=opposite)
         ),
         towards=model.towards if kept else (),
+        parent=(
+            None
+            if model.parent is None or not kept
+            else stop_from_model(model=model.parent)
+        ),
     )
 
 

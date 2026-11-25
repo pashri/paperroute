@@ -18,6 +18,7 @@ from paperroute_transit.core.sides import (
     ParentKerb,
     ParentKerbs,
     both_sides,
+    pin_title,
 )
 from tests.core.chooser_walks import (
     KERB_LINE,
@@ -177,6 +178,18 @@ def test_parent_pin_takes_the_busier_kerb() -> None:
     assert both_sides(pin=pin) and pin.kind == 'bus'
 
 
+def test_parent_pin_is_named_after_the_parent() -> None:
+    """The converted pin records its parent and is titled by its name."""
+    stand = replace(PARENT_KERBS.kerbs[0].place, name='Stand A Opp')
+    kerbs = replace(PARENT_KERBS, kerbs=(
+        replace(PARENT_KERBS.kerbs[0], place=stand), PARENT_KERBS.kerbs[1],
+    ))
+    pin = parent_pin(pin=ON_PARENT, parents={'s2': kerbs})
+    assert pin.parent == ON_PARENT.origin
+    assert pin.origin.name == 'Stand A Opp'
+    assert pin_title(pin=pin).startswith('Orchard Close')
+
+
 def test_parent_pin_breaks_a_tie_by_stop_id() -> None:
     """Kerbs with as many trips are ordered by stop ID."""
     even = replace(PARENT_KERBS, kerbs=(
@@ -242,5 +255,5 @@ def test_parent_pins_keeps_nickname_and_place_in_the_list() -> None:
     )
     assert pins[0] is before and pins[2] is after
     assert pins[1] == replace(
-        named, origin=S2A, opposite=S2B, towards=('', ''),
+        named, origin=S2A, opposite=S2B, towards=('', ''), parent=named.origin,
     )

@@ -2,6 +2,8 @@
 
 from typing import Final
 
+import pytest
+
 from paperroute_device.core.text import PLANE
 from paperroute_transit.core.names import (
     JOINING_WORDS,
@@ -29,6 +31,34 @@ def test_without_platform_drops_a_trailing_platform() -> None:
 def test_base_name_keeps_a_bare_bus_station() -> None:
     """A stop named just 'Bus Station' keeps its suffix."""
     assert base_name(name='Bus Station') == 'Bus Station'
+
+
+@pytest.mark.parametrize(
+    'name',
+    [
+        'Railway Station',
+        'Cambridge North Railway Station',
+        'Soham Railway Station',
+        'The Busway Railway Station',
+        'Luton Airport Parkway Rail Station',
+    ],
+)
+def test_base_name_keeps_station_after_railway_or_rail(name: str) -> None:
+    """Station stays when the word before it is Railway or Rail."""
+    assert base_name(name=name) == name
+
+
+@pytest.mark.parametrize(
+    ('name', 'expected'),
+    [
+        ('Central Station', 'Central'),
+        ('Fire Station', 'Fire'),
+        ('BP Filling Station', 'BP Filling'),
+    ],
+)
+def test_base_name_still_drops_station(name: str, expected: str) -> None:
+    """Other trailing Station words are still dropped."""
+    assert base_name(name=name) == expected
 
 
 def test_base_name_drops_the_platform_and_a_trailing_station() -> None:

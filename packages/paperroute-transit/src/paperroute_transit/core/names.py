@@ -60,6 +60,7 @@ JOINING_WORDS: Final[Pairs] = (
 PLATFORM: Final[re.Pattern[str]] = re.compile(r',? Platform \S+$')
 STATION_SUFFIX: Final[str] = ' Station'
 BUS_END: Final[str] = ' Bus'
+RAIL_ENDS: Final[tuple[str, ...]] = ('Railway', 'Rail')
 
 
 @dataclass(frozen=True)
@@ -211,7 +212,8 @@ def base_name(*, name: str) -> str:
     """
     Drop a trailing platform and a trailing Station from a name.
 
-    A name that would be left ending in a bare Bus keeps its Station.
+    A name that would be left ending in a bare Bus, Railway or Rail keeps
+    its Station.
 
     Parameters
     ----------
@@ -228,7 +230,8 @@ def base_name(*, name: str) -> str:
         return text
     stem = text[: -len(STATION_SUFFIX)]
     bus = stem == BUS_END.strip() or stem.endswith(BUS_END)
-    return text if bus else stem
+    rail = stem.split(' ')[-1] in RAIL_ENDS
+    return text if bus or rail else stem
 
 
 def from_end(

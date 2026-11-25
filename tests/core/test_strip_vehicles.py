@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import timedelta
+from typing import Any
 
 import pytest
 
@@ -36,6 +37,7 @@ from paperroute_transit.core.strip_rings import (
     ring_point,
     ring_stop,
 )
+from paperroute_transit.core import strip_vehicles, strip_ways
 from paperroute_transit.core.strip_vehicles import hop_marker
 from paperroute_transit.core.strip_view import build_strip_view
 from paperroute_transit.core.strip_ways import (
@@ -498,3 +500,21 @@ def test_from_on_a_ring_is_replaced_by_the_bus_badge() -> None:
     assert hidden.covered and not shown.covered
     assert (covered[place].bold, covered[place].time) == (True, '8:00')
     assert covered[:place] == ways.rows[:place]
+
+
+def test_one_bus_maps_its_calls_to_rows_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A bus's badge and path share one mapping of calls to rows."""
+    calls: list[int] = []
+    real = strip_ways.call_rows
+
+    def counted(**kwargs: Any) -> list[int | None]:
+        calls.append(1)
+        return real(**kwargs)
+
+    monkeypatch.setattr(strip_ways, 'call_rows', counted)
+    monkeypatch.setattr(strip_vehicles, 'call_rows', counted)
+    marker, _ = badge_at(minutes=9, next_loaded=False)
+    assert marker is not None
+    assert len(calls) == 1

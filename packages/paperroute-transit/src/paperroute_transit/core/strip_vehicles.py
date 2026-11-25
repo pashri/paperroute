@@ -25,6 +25,7 @@ from paperroute_transit.core.strip_times import TripInputs, window_departures
 from paperroute_transit.core.strip_ways import (
     Way,
     Ways,
+    call_rows,
     hop_ends,
     hop_way,
     way_badge,
@@ -252,6 +253,7 @@ def hop_spots(
     trips: TripInputs,
     spots: Mapping[str, Spot],
     ways: Ways | None = None,
+    found: Sequence[int | None] | None = None,
 ) -> tuple[Spot | None, ...]:
     """
     Find the spots of a hop's two stops.
@@ -269,6 +271,8 @@ def hop_spots(
     ways : Ways | None
         The visible rows in order, or None to look each station up in
         `spots`.
+    found : Sequence[int | None] | None
+        The trip's `call_rows` with `ways`, or None to work them out.
 
     Returns
     -------
@@ -280,7 +284,7 @@ def hop_spots(
     if ways is not None:
         return hop_ends(
             pattern=pattern, index=index, station_of=trips.station_of,
-            ways=ways,
+            ways=ways, found=found,
         )
     return tuple(
         spots.get(trips.station_of.get(stop.station, stop.station))
@@ -429,11 +433,14 @@ def trip_marker(
         pinned=True,
         age=None if live or not ages else min(ages) // 60 * 60,
     )
+    found = None if ways is None else call_rows(
+        pattern=leg.pattern, station_of=trips.station_of, ways=ways,
+    )
     badge = hop_marker(
         route=look.route,
         ends=hop_spots(
             pattern=leg.pattern, index=index, trips=trips, spots=spots,
-            ways=ways,
+            ways=ways, found=found,
         ),
         fraction=fraction,
         age=look.age,
@@ -443,7 +450,7 @@ def trip_marker(
         ),
         way=None if ways is None else hop_way(
             pattern=leg.pattern, index=index, station_of=trips.station_of,
-            ways=ways,
+            ways=ways, found=found,
         ),
     )
     if badge is not None or approach is None or leg is not legs[0]:

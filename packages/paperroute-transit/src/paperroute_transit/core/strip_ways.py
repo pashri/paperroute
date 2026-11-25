@@ -181,6 +181,7 @@ def hop_ends(
     index: int,
     station_of: Mapping[str, str],
     ways: Ways,
+    found: Sequence[int | None] | None = None,
 ) -> tuple[Spot | None, ...]:
     """
     Find the spots of a hop's two stops, each visit on its own row.
@@ -195,6 +196,8 @@ def hop_ends(
         Strip station by stop ID.
     ways : Ways
         The strip's rows.
+    found : Sequence[int | None] | None
+        The trip's `call_rows`, or None to work them out.
 
     Returns
     -------
@@ -202,7 +205,8 @@ def hop_ends(
         Each stop's spot (see `call_rows`), None when not a visible row;
         one or none past the trip's last stop.
     """
-    found = call_rows(pattern=pattern, station_of=station_of, ways=ways)
+    if found is None:
+        found = call_rows(pattern=pattern, station_of=station_of, ways=ways)
     return tuple(
         None if row is None else ways.spots[row]
         for row in found[index:index + 2]
@@ -362,6 +366,7 @@ def hop_way(
     index: int,
     station_of: Mapping[str, str],
     ways: Ways,
+    found: Sequence[int | None] | None = None,
 ) -> Way | None:
     """
     Find the ring or spur a trip's hop runs along.
@@ -376,6 +381,8 @@ def hop_way(
         Strip station by stop ID.
     ways : Ways
         The strip's rows, rings and spurs.
+    found : Sequence[int | None] | None
+        The trip's `call_rows`, or None to work them out.
 
     Returns
     -------
@@ -383,7 +390,10 @@ def hop_way(
         The hop's ring or spur stretch, or None on the trunk or with an
         end not on a visible row.
     """
-    found = call_rows(pattern=pattern, station_of=station_of, ways=ways)
+    if not ways.rings and not ways.spurs:
+        return None
+    if found is None:
+        found = call_rows(pattern=pattern, station_of=station_of, ways=ways)
     ends = found[index:index + 2]
     if len(ends) != 2 or ends[0] is None or ends[1] is None:
         return None
